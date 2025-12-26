@@ -1,7 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X } from 'lucide-react'
+import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video } from 'lucide-react'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
+import VideoCallButton from './VideoCallButton'
+import CoffeeChatsView from './CoffeeChatsView'
 
 export default function MainApp({ currentUser, onSignOut, supabase }) {
   const [currentView, setCurrentView] = useState('home')
@@ -12,16 +16,20 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
   const [showEditMeetup, setShowEditMeetup] = useState(false)
   const [editedProfile, setEditedProfile] = useState(null)
   const [newMeetup, setNewMeetup] = useState({ date: '', time: '', location: '' })
+  const [selectedDate, setSelectedDate] = useState(null) // For DatePicker
   const [editingMeetup, setEditingMeetup] = useState(null)
   const [meetups, setMeetups] = useState([])
   const [loadingMeetups, setLoadingMeetups] = useState(true)
   const [signups, setSignups] = useState({}) // Store signups by meetup_id
   const [userSignups, setUserSignups] = useState([]) // Store current user's signups
+  const [connections, setConnections] = useState([]) // Store user connections
 
   // Load meetups from Supabase on component mount
   useEffect(() => {
     loadMeetupsFromDatabase()
     loadUserSignups()
+    loadConnections()
+    updateAttendedCount()
   }, [])
 
   const loadMeetupsFromDatabase = async () => {
@@ -129,6 +137,151 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     }
   }
 
+  const loadConnections = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('connections')
+        .select(`
+          *,
+          connected_user:profiles!connected_user_id(id, name, career, city, state)
+        `)
+        .eq('user_id', currentUser.id)
+
+      if (error) {
+        console.error('Error loading connections:', error)
+      } else {
+        setConnections(data || [])
+      }
+    } catch (err) {
+      console.error('Error:', err)
+    }
+  }
+
+  const updateAttendedCount = async () => {
+    try {
+      // Get user's signups with meetup dates
+      const { data: signups, error } = await supabase
+        .from('meetup_signups')
+        .select(`
+          meetup_id,
+          meetups (date, time)
+        `)
+        .eq('user_id', currentUser.id)
+      
+      if (error || !signups) {
+        console.log('No signups found or error:', error)
+        return
+      }
+      
+      console.log('Found signups:', signups)
+      
+      // Count how many meetups are in the past
+      const now = new Date()
+      const attendedCount = signups.filter(signup => {
+        try {
+          if (!signup.meetups) return false
+          
+          // Parse date - same logic as HomeView filter
+          let dateStr = signup.meetups.date
+          
+          // Remove day of week if present
+          dateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+          
+          // Add current year if not present
+          if (!dateStr.includes('2024') && !dateStr.includes('2025')) {
+            dateStr = `${dateStr}, ${new Date().getFullYear()}`
+          }
+          
+          const meetupDate = new Date(dateStr)
+          
+          // Check if valid date and in the past
+          if (isNaN(meetupDate.getTime())) {
+            console.log('Invalid date:', signup.meetups.date)
+            return false
+          }
+          
+          const isPast = meetupDate < now
+          console.log(`Meetup ${signup.meetups.date}: ${isPast ? 'PAST' : 'FUTURE'}`)
+          
+          return isPast
+        } catch (err) {
+          console.error('Error parsing date:', err)
+          return false
+        }
+      }).length
+      
+      console.log(`Attended count: ${attendedCount}, Current: ${currentUser.meetups_attended}`)
+      
+      // Update profile if count changed
+      if (attendedCount !== currentUser.meetups_attended) {
+        console.log(`Updating meetups_attended from ${currentUser.meetups_attended} to ${attendedCount}`)
+        
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ meetups_attended: attendedCount })
+          .eq('id', currentUser.id)
+        
+        if (!updateError) {
+          // Update local state
+          currentUser.meetups_attended = attendedCount
+          console.log(`✅ Updated meetups_attended to ${attendedCount}`)
+          // Force re-render
+          window.location.reload()
+        } else {
+          console.error('Error updating profile:', updateError)
+        }
+      } else {
+        console.log('✅ Attended count already correct')
+      }
+    } catch (err) {
+      console.error('Error updating attended count:', err)
+    }
+  }
+
+  // Helper function to format time from 24hr to 12hr
+  const formatTime = (time24) => {
+    if (!time24) return ''
+    try {
+      const [hours, minutes] = time24.split(':')
+      const hour = parseInt(hours)
+      const ampm = hour >= 12 ? 'PM' : 'AM'
+      const hour12 = hour % 12 || 12
+      return `${hour12}:${minutes} ${ampm}`
+    } catch {
+      return time24 // Return original if parsing fails
+    }
+  }
+
+  // Helper function to format date from ISO to friendly display
+  const formatDate = (dateStr) => {
+    if (!dateStr) return ''
+    try {
+      // Handle both ISO format (2024-12-28) and old format (Wednesday, Dec 3)
+      let date
+      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // ISO format
+        date = new Date(dateStr)
+      } else {
+        // Old format - clean and parse
+        const cleanDateStr = dateStr
+          .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*/i, '')
+          .trim()
+        date = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
+      }
+      
+      if (isNaN(date.getTime())) return dateStr // Return original if can't parse
+      
+      return date.toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
   // Safety check - if currentUser is not loaded yet, show loading
   if (!currentUser) {
     return (
@@ -143,29 +296,6 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
 
   // Demo data - will be replaced with Supabase data later
   const upcomingMeetups = meetups
-
-  const connections = [
-    {
-      id: 1,
-      name: 'Jessica Lee',
-      career: 'Data Scientist',
-      age: 30,
-      bio: 'Love solving complex problems with data. Coffee enthusiast.',
-      metAt: 'Nov 12 Meetup',
-      mutualInterest: true,
-      chatStatus: 'active'
-    },
-    {
-      id: 2,
-      name: 'Amanda Torres',
-      career: 'Startup Founder',
-      age: 27,
-      bio: 'Building the future of sustainability tech.',
-      metAt: 'Nov 19 Meetup',
-      mutualInterest: false,
-      chatStatus: 'none'
-    }
-  ]
 
   const chats = [
     {
@@ -399,85 +529,145 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     )
   }
 
-  const HomeView = () => (
-    <div className="space-y-6">
-      {/* Progress Card */}
-      <div className="bg-gradient-to-r from-rose-50 to-pink-50 rounded-lg p-6 border border-rose-200">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">Your Journey</h3>
-            <p className="text-sm text-gray-600">Complete 5 meetups to unlock 1-on-1 chats</p>
-          </div>
-          <div className="text-3xl font-bold text-rose-500">{currentUser.meetups_attended}/5</div>
-        </div>
-        <ProgressBar current={currentUser.meetups_attended} total={5} />
-        {currentUser.meetups_attended >= 5 && (
-          <div className="mt-4 flex items-center text-green-600">
-            <Star className="w-5 h-5 mr-2 fill-current" />
-            <span className="font-medium">Unlocked! You can now request 1-on-1 coffee chats</span>
-          </div>
-        )}
-      </div>
+  const HomeView = () => {
+    // Filter to only show UPCOMING meetups (not past ones)
+    const now = new Date()
+    const upcomingMeetups = meetups.filter(meetup => {
+      try {
+        let meetupDate
+        const dateStr = meetup.date
+        
+        // Check if ISO format (YYYY-MM-DD)
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          // ISO format - super easy!
+          meetupDate = new Date(dateStr)
+        } else {
+          // Old format like "Wednesday, Dec 3" - remove day name
+          const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+          meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
+        }
+        
+        // If can't parse, show it
+        if (isNaN(meetupDate.getTime())) {
+          console.log('Could not parse date:', meetup.date)
+          return true
+        }
+        
+        // Compare dates (ignore time)
+        const meetupDay = new Date(
+          meetupDate.getFullYear(), 
+          meetupDate.getMonth(), 
+          meetupDate.getDate()
+        )
+        const today = new Date(
+          now.getFullYear(), 
+          now.getMonth(), 
+          now.getDate()
+        )
+        
+        // Show if today or future
+        const isUpcoming = meetupDay >= today
+        
+        if (!isUpcoming) {
+          console.log(`Filtering out past meetup: ${meetup.date}`)
+        }
+        
+        return isUpcoming
+        
+      } catch (err) {
+        console.error('Error parsing date:', meetup.date, err)
+        return true
+      }
+    })
 
-      {/* Upcoming Meetups */}
-      <div>
-        <h3 className="text-xl font-bold text-gray-800 mb-4">Upcoming Meetups</h3>
-        {loadingMeetups ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading meetups...</p>
+    return (
+      <div className="space-y-6">
+        {/* Progress Card */}
+        <div className="bg-gradient-to-r from-rose-50 to-pink-50 rounded-lg p-6 border border-rose-200">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">Your Journey</h3>
+              <p className="text-sm text-gray-600">Complete 5 meetups to unlock 1-on-1 chats</p>
+            </div>
+            <div className="text-3xl font-bold text-rose-500">{currentUser.meetups_attended}/5</div>
           </div>
-        ) : meetups.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center">
-            <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-600">No upcoming meetups yet</p>
-            <p className="text-sm text-gray-500 mt-2">Check back soon!</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {meetups.map(meetup => (
-              <div key={meetup.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
-                <div className="mb-4">
-                  <div className="flex items-center text-gray-800 font-semibold mb-1">
-                    <Calendar className="w-5 h-5 mr-2 text-rose-500" />
-                    {meetup.date}
-                  </div>
-                  <div className="flex items-center text-gray-600 text-sm ml-7">
-                    <Clock className="w-4 h-4 mr-2" />
-                    {meetup.time}
-                  </div>
-                  <div className="text-xs text-gray-500 ml-7 mt-1">
-                    Location near {currentUser.city}, {currentUser.state}
-                  </div>
-                </div>
-                
-                {userSignups.includes(meetup.id) ? (
-                  <div className="space-y-2">
-                    <div className="bg-green-50 border border-green-200 rounded px-4 py-2 text-green-700 text-sm font-medium">
-                      ✓ You're signed up! Details will be sent the morning of the meetup
+          <ProgressBar current={currentUser.meetups_attended} total={5} />
+          {currentUser.meetups_attended >= 5 && (
+            <div className="mt-4 flex items-center text-green-600">
+              <Star className="w-5 h-5 mr-2 fill-current" />
+              <span className="font-medium">Unlocked! You can now schedule 1-on-1 coffee chats</span>
+            </div>
+          )}
+        </div>
+
+        {/* Upcoming Meetups */}
+        <div>
+          <h3 className="text-xl font-bold text-gray-800 mb-4">Upcoming Meetups</h3>
+          {loadingMeetups ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center">
+              <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading meetups...</p>
+            </div>
+          ) : upcomingMeetups.length === 0 ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center">
+              <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-600">No upcoming meetups</p>
+              <p className="text-sm text-gray-500 mt-2">
+                {currentUser.meetups_attended > 0 
+                  ? `You've attended ${currentUser.meetups_attended} meetup${currentUser.meetups_attended > 1 ? 's' : ''}! Check back for new events.`
+                  : 'Check back soon for new events!'
+                }
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {upcomingMeetups.map(meetup => (
+                <div key={meetup.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
+                  <div className="mb-4">
+                    <div className="flex items-center text-gray-800 font-semibold mb-1">
+                      <Calendar className="w-5 h-5 mr-2 text-rose-500" />
+                      {formatDate(meetup.date)}
                     </div>
-                    <button 
-                      onClick={() => handleCancelSignup(meetup.id)}
-                      className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded transition-colors border border-red-200 text-sm"
-                    >
-                      Cancel Signup
-                    </button>
+                    <div className="flex items-center text-gray-600 text-sm ml-7">
+                      <Clock className="w-4 h-4 mr-2" />
+                      {formatTime(meetup.time)}
+                    </div>
+                    <div className="text-xs text-gray-500 ml-7 mt-1">
+                      Location near {currentUser.city}, {currentUser.state}
+                    </div>
                   </div>
-                ) : (
-                  <button 
-                    onClick={() => handleSignUp(meetup.id)}
-                    className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors"
-                  >
-                    Sign Up
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                  
+                  {userSignups.includes(meetup.id) ? (
+                    <div className="space-y-2">
+                      <div className="bg-green-50 border border-green-200 rounded px-4 py-2 text-green-700 text-sm font-medium">
+                        ✓ You're signed up! Details will be sent the morning of the meetup
+                      </div>
+                      
+                      <VideoCallButton meetup={meetup} />
+                      
+                      <button 
+                        onClick={() => handleCancelSignup(meetup.id)}
+                        className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded transition-colors border border-red-200 text-sm"
+                      >
+                        Cancel Signup
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => handleSignUp(meetup.id)}
+                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors"
+                    >
+                      Sign Up
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const ConnectionsView = () => (
     <div className="space-y-6">
@@ -495,50 +685,55 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       )}
 
       <div className="space-y-4">
-        {connections.map(connection => (
-          <div key={connection.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
-            <div className="flex justify-between items-start mb-3">
-              <div className="flex-1">
-                <div className="flex items-center mb-1">
-                  <h4 className="font-semibold text-gray-800 text-lg">{connection.name}</h4>
-                  {connection.mutualInterest && (
-                    <div className="ml-2 bg-rose-100 text-rose-600 text-xs px-2 py-1 rounded-full flex items-center">
-                      <Heart className="w-3 h-3 mr-1 fill-current" />
-                      Mutual
-                    </div>
-                  )}
-                </div>
-                <p className="text-sm text-gray-600 mb-2">{connection.career} • Age {connection.age}</p>
-                <p className="text-sm text-gray-700 mb-2">{connection.bio}</p>
-                <p className="text-xs text-gray-500">Met at: {connection.metAt}</p>
-              </div>
-            </div>
-            
-            {currentUser.meetups_attended >= 5 ? (
-              <>
-                {connection.chatStatus === 'active' && (
-                  <button 
-                    onClick={() => setShowChatModal(true)}
-                    className="w-full bg-green-500 hover:bg-green-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
-                  >
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Open Chat
-                  </button>
-                )}
-                {connection.chatStatus === 'none' && (
-                  <button className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center">
-                    <MessageCircle className="w-4 h-4 mr-2" />
-                    Request 1-on-1 Coffee Chat
-                  </button>
-                )}
-              </>
-            ) : (
-              <button disabled className="w-full bg-gray-300 text-gray-500 font-medium py-2 rounded cursor-not-allowed">
-                🔒 Complete more meetups to unlock
-              </button>
-            )}
+        {connections.length === 0 ? (
+          <div className="bg-gray-50 rounded-lg p-8 text-center">
+            <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-600">No connections yet</p>
+            <p className="text-sm text-gray-500 mt-2">Meet people at meetups to build your network!</p>
           </div>
-        ))}
+        ) : (
+          connections.map(connection => {
+            const person = connection.connected_user || connection;
+            return (
+              <div key={connection.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex-1">
+                    <div className="flex items-center mb-1">
+                      <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
+                      {connection.mutual_interest && (
+                        <div className="ml-2 bg-rose-100 text-rose-600 text-xs px-2 py-1 rounded-full flex items-center">
+                          <Heart className="w-3 h-3 mr-1 fill-current" />
+                          Mutual
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 mb-2">{person.career}</p>
+                    {person.city && person.state && (
+                      <p className="text-xs text-gray-500">{person.city}, {person.state}</p>
+                    )}
+                    {connection.met_at && (
+                      <p className="text-xs text-purple-600 mt-1">Met at: {connection.met_at}</p>
+                    )}
+                  </div>
+                </div>
+                
+                {currentUser.meetups_attended >= 5 ? (
+                  <button 
+                    onClick={() => setCurrentView('coffeeChats')}
+                    className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
+                  >
+                    <Video className="w-4 h-4 mr-2" />
+                    Schedule Video Chat
+                  </button>
+                ) : (
+                  <button disabled className="w-full bg-gray-300 text-gray-500 font-medium py-2 rounded cursor-not-allowed">
+                    🔒 Complete more meetups to unlock
+                  </button>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   )
@@ -771,6 +966,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       {/* Main Content */}
       <div className="max-w-4xl mx-auto p-6">
         {currentView === 'home' && <HomeView />}
+        {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} connections={connections} supabase={supabase} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'messages' && <MessagesView />}
         {currentView === 'profile' && <ProfileView />}
@@ -923,40 +1119,69 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
             </div>
             
             <div className="space-y-4">
+              {/* DATE PICKER */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
-                <input
-                  type="text"
-                  value={newMeetup.date}
-                  onChange={(e) => setNewMeetup({ ...newMeetup, date: e.target.value })}
-                  placeholder="e.g., Saturday, Dec 14"
-                  className="w-full border border-gray-300 rounded p-3 focus:outline-none focus:border-purple-500"
+                <DatePicker
+                  selected={selectedDate}
+                  onChange={(date) => {
+                    setSelectedDate(date)
+                    if (date) {
+                      // Convert to ISO format for database
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      setNewMeetup({ ...newMeetup, date: `${year}-${month}-${day}` })
+                    } else {
+                      setNewMeetup({ ...newMeetup, date: '' })
+                    }
+                  }}
+                  minDate={new Date()}
+                  dateFormat="MMMM d, yyyy"
+                  placeholderText="Click to select a date"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500 cursor-pointer"
+                  wrapperClassName="w-full"
+                  showPopperArrow={false}
+                  required
                 />
               </div>
 
+              {/* TIME PICKER */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
                 <input
-                  type="text"
+                  type="time"
                   value={newMeetup.time}
                   onChange={(e) => setNewMeetup({ ...newMeetup, time: e.target.value })}
-                  placeholder="e.g., 10:00 AM"
-                  className="w-full border border-gray-300 rounded p-3 focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  required
                 />
               </div>
 
+              {/* LOCATION */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Location (Optional)</label>
                 <input
                   type="text"
                   value={newMeetup.location}
                   onChange={(e) => setNewMeetup({ ...newMeetup, location: e.target.value })}
-                  placeholder="Can be set later"
-                  className="w-full border border-gray-300 rounded p-3 focus:outline-none focus:border-purple-500"
+                  placeholder="e.g., Starbucks on Main St"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">You can set the location after seeing who signs up</p>
               </div>
             </div>
+
+            {/* PREVIEW */}
+            {newMeetup.date && (
+              <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <p className="text-sm text-purple-800 font-medium">Preview:</p>
+                <p className="text-sm text-purple-700">
+                  {formatDate(newMeetup.date)}
+                  {newMeetup.time && ` at ${formatTime(newMeetup.time)}`}
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-3 mt-6">
               <button
@@ -989,28 +1214,42 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
             </div>
             
             <div className="space-y-4">
+              {/* DATE PICKER */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
-                <input
-                  type="text"
-                  value={editingMeetup.date}
-                  onChange={(e) => setEditingMeetup({ ...editingMeetup, date: e.target.value })}
-                  placeholder="e.g., Saturday, Dec 14"
-                  className="w-full border border-gray-300 rounded p-3 focus:outline-none focus:border-purple-500"
+                <DatePicker
+                  selected={editingMeetup.date ? new Date(editingMeetup.date) : null}
+                  onChange={(date) => {
+                    if (date) {
+                      const year = date.getFullYear()
+                      const month = String(date.getMonth() + 1).padStart(2, '0')
+                      const day = String(date.getDate()).padStart(2, '0')
+                      setEditingMeetup({ ...editingMeetup, date: `${year}-${month}-${day}` })
+                    }
+                  }}
+                  minDate={new Date()}
+                  dateFormat="MMMM d, yyyy"
+                  placeholderText="Click to select a date"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500 cursor-pointer"
+                  wrapperClassName="w-full"
+                  showPopperArrow={false}
+                  required
                 />
               </div>
 
+              {/* TIME PICKER */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
                 <input
-                  type="text"
+                  type="time"
                   value={editingMeetup.time}
                   onChange={(e) => setEditingMeetup({ ...editingMeetup, time: e.target.value })}
-                  placeholder="e.g., 10:00 AM"
-                  className="w-full border border-gray-300 rounded p-3 focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  required
                 />
               </div>
 
+              {/* LOCATION */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
                 <input
@@ -1018,10 +1257,21 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
                   value={editingMeetup.location || ''}
                   onChange={(e) => setEditingMeetup({ ...editingMeetup, location: e.target.value })}
                   placeholder="e.g., Blue Bottle Coffee, 123 Main St"
-                  className="w-full border border-gray-300 rounded p-3 focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
                 />
               </div>
             </div>
+
+            {/* PREVIEW */}
+            {editingMeetup.date && (
+              <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <p className="text-sm text-purple-800 font-medium">Preview:</p>
+                <p className="text-sm text-purple-700">
+                  {formatDate(editingMeetup.date)}
+                  {editingMeetup.time && ` at ${formatTime(editingMeetup.time)}`}
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-3 mt-6">
               <button
@@ -1047,7 +1297,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
         <div className="max-w-4xl mx-auto flex justify-around py-3">
           <button
             onClick={() => setCurrentView('home')}
-            className={`flex flex-col items-center px-6 py-2 ${
+            className={`flex flex-col items-center px-4 py-2 ${
               currentView === 'home' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
@@ -1055,23 +1305,32 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
             <span className="text-xs font-medium">Meetups</span>
           </button>
           <button
+            onClick={() => setCurrentView('coffeeChats')}
+            className={`flex flex-col items-center px-4 py-2 ${
+              currentView === 'coffeeChats' ? 'text-rose-500' : 'text-gray-500'
+            }`}
+          >
+            <Video className="w-6 h-6 mb-1" />
+            <span className="text-xs font-medium">Chats</span>
+          </button>
+          <button
             onClick={() => setCurrentView('connections')}
-            className={`flex flex-col items-center px-6 py-2 ${
+            className={`flex flex-col items-center px-4 py-2 ${
               currentView === 'connections' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
             <Users className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Connections</span>
+            <span className="text-xs font-medium">Network</span>
           </button>
           <button
             onClick={() => setCurrentView('messages')}
-            className={`flex flex-col items-center px-6 py-2 relative ${
+            className={`flex flex-col items-center px-4 py-2 relative ${
               currentView === 'messages' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
             <MessageCircle className="w-6 h-6 mb-1" />
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-4 bg-rose-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+              <span className="absolute top-1 right-2 bg-rose-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                 {unreadCount}
               </span>
             )}
@@ -1080,7 +1339,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           {currentUser.role === 'admin' && (
             <button
               onClick={() => setCurrentView('admin')}
-              className={`flex flex-col items-center px-6 py-2 ${
+              className={`flex flex-col items-center px-4 py-2 ${
                 currentView === 'admin' ? 'text-rose-500' : 'text-gray-500'
               }`}
             >
@@ -1090,7 +1349,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           )}
           <button
             onClick={() => setCurrentView('profile')}
-            className={`flex flex-col items-center px-6 py-2 ${
+            className={`flex flex-col items-center px-4 py-2 ${
               currentView === 'profile' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
@@ -1102,3 +1361,4 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     </div>
   )
 }
+
