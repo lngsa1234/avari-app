@@ -30,6 +30,47 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     loadUserSignups()
     loadConnections()
     updateAttendedCount()
+
+    // Set up real-time subscription for meetups
+    const meetupsSubscription = supabase
+      .channel('meetups_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public', 
+          table: 'meetups'
+        }, 
+        (payload) => {
+          console.log('Meetup changed:', payload)
+          // Reload meetups when any change occurs
+          loadMeetupsFromDatabase()
+        }
+      )
+      .subscribe()
+
+    // Set up real-time subscription for signups
+    const signupsSubscription = supabase
+      .channel('signups_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*',
+          schema: 'public', 
+          table: 'meetup_signups'
+        }, 
+        (payload) => {
+          console.log('Signup changed:', payload)
+          // Reload signups and user signups
+          loadMeetupsFromDatabase()
+          loadUserSignups()
+        }
+      )
+      .subscribe()
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      meetupsSubscription.unsubscribe()
+      signupsSubscription.unsubscribe()
+    }
   }, [])
 
   const loadMeetupsFromDatabase = async () => {
@@ -382,9 +423,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error creating meetup: ' + error.message)
       } else {
-        // Reload meetups from database
-        await loadMeetupsFromDatabase()
+        // Real-time subscription will automatically reload meetups
         setNewMeetup({ date: '', time: '', location: '' })
+        setSelectedDate(null)
         setShowCreateMeetup(false)
         alert('Meetup created successfully!')
       }
@@ -418,8 +459,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error updating meetup: ' + error.message)
       } else {
-        // Reload meetups from database
-        await loadMeetupsFromDatabase()
+        // Real-time subscription will automatically reload meetups
         setShowEditMeetup(false)
         setEditingMeetup(null)
         alert('Meetup updated successfully!')
@@ -443,8 +483,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error deleting meetup: ' + error.message)
       } else {
-        // Reload meetups from database
-        await loadMeetupsFromDatabase()
+        // Real-time subscription will automatically reload meetups
         alert('Meetup deleted successfully!')
       }
     } catch (err) {
@@ -470,8 +509,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error setting location: ' + error.message)
       } else {
-        // Reload meetups from database
-        await loadMeetupsFromDatabase()
+        // Real-time subscription will automatically reload meetups
         alert('Location set successfully!')
       }
     } catch (err) {
@@ -1361,4 +1399,3 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     </div>
   )
 }
-
