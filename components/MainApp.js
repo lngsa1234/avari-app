@@ -577,8 +577,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
         
         // Check if ISO format (YYYY-MM-DD)
         if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          // ISO format - super easy!
-          meetupDate = new Date(dateStr)
+          // ISO format - parse as local timezone to avoid UTC issues
+          const [year, month, day] = dateStr.split('-').map(Number)
+          meetupDate = new Date(year, month - 1, day) // month is 0-indexed
         } else {
           // Old format like "Wednesday, Dec 3" - remove day name
           const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
@@ -591,7 +592,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           return true
         }
         
-        // Compare dates (ignore time)
+        // Compare dates at midnight (ignore time)
         const meetupDay = new Date(
           meetupDate.getFullYear(), 
           meetupDate.getMonth(), 
@@ -608,6 +609,8 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
         
         if (!isUpcoming) {
           console.log(`Filtering out past meetup: ${meetup.date}`)
+        } else {
+          console.log(`Showing upcoming meetup: ${meetup.date}`)
         }
         
         return isUpcoming
