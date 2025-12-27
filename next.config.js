@@ -1,6 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  async redirects() {
+    // Disable redirects in development
+    if (process.env.NODE_ENV === 'development') {
+      return []
+    }
+    return []
+  }
 }
 
 module.exports = nextConfig

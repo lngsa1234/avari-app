@@ -8,8 +8,8 @@ import VideoCallButton from './VideoCallButton'
 import CoffeeChatsView from './CoffeeChatsView'
 
 export default function MainApp({ currentUser, onSignOut, supabase }) {
-  // At the top of MainApp component
-  console.log('🔥 MainApp loaded - UPDATED VERSION')
+  console.log('🔥 MainApp loaded - UPDATED VERSION with TIME ORDERING')
+  
   const [currentView, setCurrentView] = useState('home')
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
@@ -596,25 +596,19 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           return true
         }
         
-        // Compare dates at midnight (ignore time)
-        const meetupDay = new Date(
-          meetupDate.getFullYear(), 
-          meetupDate.getMonth(), 
-          meetupDate.getDate()
-        )
-        const today = new Date(
-          now.getFullYear(), 
-          now.getMonth(), 
-          now.getDate()
-        )
+        // Add time to the meetup date for accurate comparison
+        if (meetup.time) {
+          const [hours, minutes] = meetup.time.split(':').map(Number)
+          meetupDate.setHours(hours, minutes, 0, 0)
+        }
         
-        // Show if today or future
-        const isUpcoming = meetupDay >= today
+        // Compare full datetime (date + time)
+        const isUpcoming = meetupDate > now
         
         if (!isUpcoming) {
-          console.log(`Filtering out past meetup: ${meetup.date}`)
+          console.log(`Filtering out past meetup: ${meetup.date} at ${meetup.time}`)
         } else {
-          console.log(`Showing upcoming meetup: ${meetup.date}`)
+          console.log(`Showing upcoming meetup: ${meetup.date} at ${meetup.time}`)
         }
         
         return isUpcoming
