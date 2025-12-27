@@ -8,6 +8,8 @@ import VideoCallButton from './VideoCallButton'
 import CoffeeChatsView from './CoffeeChatsView'
 
 export default function MainApp({ currentUser, onSignOut, supabase }) {
+  // At the top of MainApp component
+  console.log('🔥 MainApp loaded - UPDATED VERSION')
   const [currentView, setCurrentView] = useState('home')
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
@@ -79,7 +81,8 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       const { data, error } = await supabase
         .from('meetups')
         .select('*')
-        .order('created_at', { ascending: false })
+        .order('date', { ascending: true })
+        .order('time', { ascending: true })
 
       if (error) {
         console.error('Error loading meetups:', error)
@@ -300,8 +303,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       // Handle both ISO format (2024-12-28) and old format (Wednesday, Dec 3)
       let date
       if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        // ISO format
-        date = new Date(dateStr)
+        // ISO format - parse as local timezone to avoid UTC issues
+        const [year, month, day] = dateStr.split('-').map(Number)
+        date = new Date(year, month - 1, day) // month is 0-indexed
       } else {
         // Old format - clean and parse
         const cleanDateStr = dateStr
@@ -913,7 +917,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
                   <div className="flex-1">
                     <div className="flex items-center text-gray-800 font-semibold mb-1">
                       <Calendar className="w-5 h-5 mr-2 text-purple-500" />
-                      {meetup.date} at {meetup.time}
+                      {formatDate(meetup.date)} at {formatTime(meetup.time)}
                     </div>
                     {meetup.location && (
                       <div className="flex items-center text-gray-600 text-sm ml-7 mt-1">
