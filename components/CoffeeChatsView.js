@@ -16,9 +16,10 @@ import {
 import VideoCallButton from './VideoCallButton';
 
 export default function CoffeeChatsView({ currentUser, connections, supabase }) {
-  const [activeTab, setActiveTab] = useState('schedule'); // schedule, upcoming, requests
+  const [activeTab, setActiveTab] = useState('schedule'); // schedule, upcoming, requests, sent
   const [coffeeChats, setCoffeeChats] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
+  const [sentRequests, setSentRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
@@ -29,15 +30,18 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
   useEffect(() => {
     loadCoffeeChats();
     loadPendingRequests();
+    loadSentRequests();
   }, []);
 
   const loadCoffeeChats = async () => {
     setLoading(true);
     try {
+      console.log('📋 Loading coffee chats...');
       const chats = await getMyCoffeeChats();
+      console.log('✅ Loaded chats:', chats);
       setCoffeeChats(chats);
     } catch (error) {
-      console.error('Error loading chats:', error);
+      console.error('❌ Error loading chats:', error);
     } finally {
       setLoading(false);
     }
@@ -49,6 +53,30 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
       setPendingRequests(requests);
     } catch (error) {
       console.error('Error loading requests:', error);
+    }
+  };
+
+  const loadSentRequests = async () => {
+    try {
+      console.log('📤 Loading sent requests...');
+      
+      const { data, error } = await supabase
+        .from('coffee_chats')
+        .select(`
+          *,
+          recipient:profiles!coffee_chats_recipient_id_fkey(id, name, career, city, state)
+        `)
+        .eq('requester_id', currentUser.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      console.log('✅ Loaded', data?.length || 0, 'sent requests');
+      setSentRequests(data || []);
+    } catch (error) {
+      console.error('Error loading sent requests:', error);
+      setSentRequests([]);
     }
   };
 
@@ -72,13 +100,17 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
         notes: notes
       });
 
-      alert(`✅ Coffee chat requested with ${selectedConnection.connected_user?.name || selectedConnection.name}!`);
+      alert(`✅ Video chat requested with ${selectedConnection.connected_user?.name || selectedConnection.name}!`);
       
       setShowScheduleModal(false);
       setScheduledDate('');
       setScheduledTime('');
       setNotes('');
       loadCoffeeChats();
+      loadSentRequests();
+      
+      // Switch to sent requests tab to see the request
+      setActiveTab('sent');
     } catch (error) {
       alert('Error: ' + error.message);
     }
@@ -87,16 +119,20 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
   const handleAccept = async (chatId) => {
     try {
       await acceptCoffeeChat(chatId);
-      alert('✅ Coffee chat accepted! Video room created.');
-      loadCoffeeChats();
-      loadPendingRequests();
+      alert('✅ Video chat accepted! Video room created.');
+      await loadCoffeeChats();
+      await loadPendingRequests();
+      await loadSentRequests();
+      
+      // Switch to upcoming tab to see the accepted chat
+      setActiveTab('upcoming');
     } catch (error) {
       alert('Error: ' + error.message);
     }
   };
 
   const handleDecline = async (chatId) => {
-    if (!confirm('Decline this coffee chat request?')) return;
+    if (!confirm('Decline this video chat request?')) return;
     
     try {
       await declineCoffeeChat(chatId);
@@ -107,11 +143,12 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
   };
 
   const handleCancel = async (chatId) => {
-    if (!confirm('Cancel this coffee chat?')) return;
+    if (!confirm('Cancel this video chat?')) return;
     
     try {
       await cancelCoffeeChat(chatId);
       loadCoffeeChats();
+      loadSentRequests();
     } catch (error) {
       alert('Error: ' + error.message);
     }
@@ -136,7 +173,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading coffee chats...</p>
+          <p className="text-gray-600">Loading video chats...</p>
         </div>
       </div>
     );
@@ -148,10 +185,10 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
       <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
         <div className="flex items-center mb-2">
           <Video className="w-6 h-6 mr-2 text-purple-600" />
-          <h3 className="text-lg font-semibold text-gray-800">1:1 Coffee Chats</h3>
+          <h3 className="text-lg font-semibold text-gray-800">1:1 Video Chats</h3>
         </div>
         <p className="text-sm text-gray-600">
-          Schedule virtual coffee chats with people you've connected with at meetups
+          Schedule virtual video chats with people you've connected with at meetups
         </p>
       </div>
 
@@ -207,6 +244,16 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
               {pendingRequests.length}
             </span>
           )}
+        </button>
+        <button
+          onClick={() => setActiveTab('sent')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'sent'
+              ? 'text-purple-600 border-b-2 border-purple-600'
+              : 'text-gray-600 hover:text-gray-800'
+          }`}
+        >
+          Sent ({sentRequests.length})
         </button>
       </div>
 
@@ -314,7 +361,16 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
 
                   {chat.video_link && (
                     <div className="space-y-2">
-                      <VideoCallButton meetup={chat} />
+                      <div className="mb-2 p-2 bg-blue-50 rounded text-xs">
+                        <strong>Debug:</strong> Room URL: {chat.video_link}
+                      </div>
+                      <VideoCallButton key={`video-${chat.id}`} meetup={chat} />
+                    </div>
+                  )}
+
+                  {!chat.video_link && (
+                    <div className="mb-2 p-2 bg-yellow-50 rounded text-xs text-yellow-800">
+                      ⚠️ No video link yet - try refreshing the page
                     </div>
                   )}
 
@@ -322,7 +378,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
                     onClick={() => handleCancel(chat.id)}
                     className="w-full mt-2 bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded-lg transition-colors text-sm"
                   >
-                    Cancel Chat
+                    Cancel Video Chat
                   </button>
                 </div>
               );
@@ -405,13 +461,85 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
         </div>
       )}
 
+      {/* Sent Requests Tab */}
+      {activeTab === 'sent' && (
+        <div className="space-y-4">
+          {sentRequests.length === 0 ? (
+            <div className="bg-gray-50 rounded-lg p-8 text-center">
+              <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-600">No sent requests</p>
+              <p className="text-sm text-gray-500 mt-2">
+                Schedule a video chat to send a request
+              </p>
+            </div>
+          ) : (
+            sentRequests.map(request => {
+              const recipient = request.recipient;
+              const requestDate = new Date(request.scheduled_time);
+
+              return (
+                <div key={request.id} className="bg-white rounded-lg shadow p-5 border-2 border-yellow-200">
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <div className="bg-yellow-100 rounded-full p-2 mr-3">
+                          <User className="w-5 h-5 text-yellow-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800">{recipient.name}</h4>
+                          <p className="text-sm text-gray-600">{recipient.career}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full font-medium">
+                        Pending
+                      </span>
+                    </div>
+                    
+                    <div className="bg-yellow-50 rounded-lg p-3 mt-3">
+                      <div className="flex items-center text-sm text-gray-700 mb-1">
+                        <Calendar className="w-4 h-4 mr-2 text-yellow-600" />
+                        {requestDate.toLocaleDateString('en-US', { 
+                          weekday: 'long', 
+                          month: 'short', 
+                          day: 'numeric' 
+                        })}
+                      </div>
+                      <div className="flex items-center text-sm text-gray-700">
+                        <Clock className="w-4 h-4 mr-2 text-yellow-600" />
+                        {requestDate.toLocaleTimeString('en-US', { 
+                          hour: 'numeric', 
+                          minute: '2-digit' 
+                        })}
+                      </div>
+                    </div>
+
+                    {request.notes && (
+                      <div className="mt-3 bg-gray-50 rounded-lg p-3">
+                        <p className="text-sm text-gray-700 italic">"{request.notes}"</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleCancel(request.id)}
+                    className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded-lg transition-colors"
+                  >
+                    Cancel Request
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
       {/* Schedule Modal */}
       {showScheduleModal && selectedConnection && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg max-w-md w-full p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800">
-                Schedule Coffee Chat
+                Schedule Video Chat
               </h3>
               <button 
                 onClick={() => setShowScheduleModal(false)} 

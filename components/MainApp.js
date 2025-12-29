@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import VideoCallButton from './VideoCallButton'
 import CoffeeChatsView from './CoffeeChatsView'
 
 export default function MainApp({ currentUser, onSignOut, supabase }) {
@@ -24,13 +23,18 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
   const [loadingMeetups, setLoadingMeetups] = useState(true)
   const [signups, setSignups] = useState({}) // Store signups by meetup_id
   const [userSignups, setUserSignups] = useState([]) // Store current user's signups
-  const [connections, setConnections] = useState([]) // Store user connections
+  const [connections, setConnections] = useState([]) // Store mutual matches
+  const [potentialConnections, setPotentialConnections] = useState([]) // People from same meetups
+  const [myInterests, setMyInterests] = useState([]) // People current user is interested in
+  const [meetupPeople, setMeetupPeople] = useState({}) // People grouped by meetup
 
   // Load meetups from Supabase on component mount
   useEffect(() => {
     loadMeetupsFromDatabase()
     loadUserSignups()
     loadConnections()
+    loadMyInterests()
+    loadMeetupPeople()
     updateAttendedCount()
 
     // Set up real-time subscription for meetups
@@ -64,6 +68,25 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           // Reload signups and user signups
           loadMeetupsFromDatabase()
           loadUserSignups()
+          loadMeetupPeople() // Reload meetup people
+        }
+      )
+      .subscribe()
+
+    // Set up real-time subscription for interests
+    const interestsSubscription = supabase
+      .channel('interests_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*',
+          schema: 'public', 
+          table: 'user_interests'
+        }, 
+        (payload) => {
+          console.log('Interest changed:', payload)
+          loadConnections() // Reload to check for new mutual matches
+          loadMyInterests()
+          loadMeetupPeople()
         }
       )
       .subscribe()
@@ -72,6 +95,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     return () => {
       meetupsSubscription.unsubscribe()
       signupsSubscription.unsubscribe()
+      interestsSubscription.unsubscribe()
     }
   }, [])
 
@@ -183,21 +207,267 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
 
   const loadConnections = async () => {
     try {
-      const { data, error } = await supabase
-        .from('connections')
-        .select(`
-          *,
-          connected_user:profiles!connected_user_id(id, name, career, city, state)
-        `)
-        .eq('user_id', currentUser.id)
+      console.log('🔍 Loading connections (mutual matches)...')
+      // Get mutual matches using the database function
+      const { data: matches, error } = await supabase
+        .rpc('get_mutual_matches', { for_user_id: currentUser.id })
 
       if (error) {
-        console.error('Error loading connections:', error)
-      } else {
-        setConnections(data || [])
+        console.error('💥 Error calling get_mutual_matches:', error)
+        throw error
       }
+
+      console.log('📊 Raw mutual matches result:', matches)
+
+      if (!matches || matches.length === 0) {
+        console.log('⚠️ No mutual matches found')
+        setConnections([])
+        return
+      }
+
+      // Get profile details for matched users
+      const matchedUserIds = matches.map(m => m.matched_user_id)
+      console.log('👥 Matched user IDs:', matchedUserIds)
+      
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, career, city, state, bio')
+        .in('id', matchedUserIds)
+
+      if (profileError) throw profileError
+
+      // Combine matches with profile data
+      const connectionsWithProfiles = matches.map(match => {
+        const profile = profiles.find(p => p.id === match.matched_user_id)
+        return {
+          id: match.matched_user_id,
+          connected_user: profile,
+          matched_at: match.matched_at
+        }
+      })
+
+      setConnections(connectionsWithProfiles)
+      console.log('✅ Loaded mutual matches:', connectionsWithProfiles.length, 'connections')
     } catch (err) {
-      console.error('Error:', err)
+      console.error('💥 Error loading connections:', err)
+      setConnections([])
+    }
+  }
+
+  const loadMyInterests = async () => {
+    try {
+      console.log('🔍 Loading my interests...')
+      // Get people current user has expressed interest in
+      const { data: interests, error } = await supabase
+        .from('user_interests')
+        .select('interested_in_user_id')
+        .eq('user_id', currentUser.id)
+
+      if (error) throw error
+
+      const interestIds = (interests || []).map(i => i.interested_in_user_id)
+      setMyInterests(interestIds)
+      console.log('✅ Loaded my interests:', interestIds.length, 'people -', interestIds)
+    } catch (err) {
+      console.error('💥 Error loading interests:', err)
+      setMyInterests([])
+    }
+  }
+
+  const loadMeetupPeople = async () => {
+    try {
+      console.log('🔍 Loading meetup people...')
+      
+      // Get meetups current user attended
+      const { data: mySignups, error: signupsError } = await supabase
+        .from('meetup_signups')
+        .select('meetup_id')
+        .eq('user_id', currentUser.id)
+
+      if (signupsError) throw signupsError
+
+      const myMeetupIds = mySignups.map(s => s.meetup_id)
+      console.log('📋 User attended', myMeetupIds.length, 'meetups')
+
+      if (myMeetupIds.length === 0) {
+        console.log('❌ No meetups attended')
+        setMeetupPeople({})
+        return
+      }
+
+      // ✅ FIX: Get meetup details for attended meetups
+      const { data: allMeetupsData, error: meetupsError } = await supabase
+        .from('meetups')
+        .select('*')
+        .in('id', myMeetupIds)
+        .order('date', { ascending: false })
+
+      if (meetupsError) throw meetupsError
+
+      // ✅ FIX: Filter to ONLY PAST meetups (date + time check)
+      const now = new Date()
+      const meetupsData = allMeetupsData.filter(meetup => {
+        // Combine date and time into a single datetime for comparison
+        const meetupDateTime = new Date(`${meetup.date}T${meetup.time}`)
+        const isPast = meetupDateTime < now
+        
+        console.log(`📅 Meetup: ${meetup.date} ${meetup.time} - Is Past? ${isPast}`)
+        return isPast
+      })
+
+      // ✅ FIX: Check if we have any past meetups
+      if (!meetupsData || meetupsData.length === 0) {
+        console.log('⚠️ No PAST meetups found (based on date + time)')
+        setMeetupPeople({})
+        return
+      }
+
+      console.log('✅ Loaded', meetupsData.length, 'PAST meetup details (date + time verified)')
+
+      // For each meetup, get other attendees (that's it - no filtering!)
+      const meetupPeopleMap = {}
+
+      for (const meetup of meetupsData) {
+        console.log('🔎 Checking past meetup:', meetup.date, meetup.time, '- Meetup ID:', meetup.id)
+        
+        // Get attendee user_ids for this meetup
+        const { data: signups, error: signupsError } = await supabase
+          .from('meetup_signups')
+          .select('user_id')
+          .eq('meetup_id', meetup.id)
+          .neq('user_id', currentUser.id)
+
+        console.log('🔍 Raw signups query result:', signups)
+        console.log('🔍 Current user ID:', currentUser.id)
+
+        if (signupsError) {
+          console.error('❌ Error loading signups:', signupsError)
+          continue
+        }
+
+        if (!signups || signups.length === 0) {
+          console.log('⚠️ No other attendees at this meetup')
+          console.log('💡 Check: Did other users actually sign up for meetup ID:', meetup.id, '?')
+          continue
+        }
+
+        console.log('👥 Found', signups.length, 'other attendees')
+
+        // Get profile data for these user_ids
+        const userIds = signups.map(s => s.user_id)
+        
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, name, career, city, state, bio')
+          .in('id', userIds)
+
+        if (profilesError) {
+          console.error('❌ Error loading profiles:', profilesError)
+          continue
+        }
+
+        // Combine into people array
+        const people = profiles.map(profile => ({
+          id: profile.id,
+          user: profile
+        }))
+
+        console.log('✅ Available people:', people.length)
+
+        if (people.length > 0) {
+          meetupPeopleMap[meetup.id] = {
+            meetup: meetup,
+            people: people
+          }
+        }
+      }
+
+      setMeetupPeople(meetupPeopleMap)
+      console.log('🎉 Final result:', Object.keys(meetupPeopleMap).length, 'meetups with people')
+      
+      // Log summary
+      const totalPeople = Object.values(meetupPeopleMap).reduce((sum, mp) => sum + mp.people.length, 0)
+      console.log('👥 Total people to discover:', totalPeople)
+    } catch (err) {
+      console.error('💥 Error loading meetup people:', err)
+      setMeetupPeople({})
+    }
+  }
+
+  const loadPotentialConnections = async () => {
+    try {
+      // Get meetups current user attended
+      const { data: mySignups, error: signupsError } = await supabase
+        .from('meetup_signups')
+        .select('meetup_id')
+        .eq('user_id', currentUser.id)
+
+      if (signupsError) throw signupsError
+
+      const myMeetupIds = mySignups.map(s => s.meetup_id)
+
+      if (myMeetupIds.length === 0) {
+        setPotentialConnections([])
+        return
+      }
+
+      // Get other people who attended the same meetups
+      const { data: otherSignups, error: othersError } = await supabase
+        .from('meetup_signups')
+        .select(`
+          user_id,
+          meetup_id,
+          profiles:user_id (
+            id,
+            name,
+            career,
+            city,
+            state,
+            bio
+          )
+        `)
+        .in('meetup_id', myMeetupIds)
+        .neq('user_id', currentUser.id)
+
+      if (othersError) throw othersError
+
+      // Get mutual matches to filter them out
+      const { data: matches, error: matchError } = await supabase
+        .rpc('get_mutual_matches', { for_user_id: currentUser.id })
+
+      if (matchError) throw matchError
+
+      const matchedUserIds = new Set((matches || []).map(m => m.matched_user_id))
+
+      // Group by user and count shared meetups, excluding already matched
+      const potentialMap = {}
+      otherSignups.forEach(signup => {
+        const userId = signup.user_id
+        
+        // Skip if already matched
+        if (matchedUserIds.has(userId)) return
+
+        if (!potentialMap[userId]) {
+          potentialMap[userId] = {
+            id: userId,
+            user: signup.profiles,
+            shared_meetups: [],
+            meetup_count: 0
+          }
+        }
+        potentialMap[userId].shared_meetups.push(signup.meetup_id)
+        potentialMap[userId].meetup_count++
+      })
+
+      // Convert to array and sort by most shared meetups
+      const potentialArray = Object.values(potentialMap)
+        .sort((a, b) => b.meetup_count - a.meetup_count)
+
+      setPotentialConnections(potentialArray)
+      console.log('Loaded potential connections:', potentialArray.length)
+    } catch (err) {
+      console.error('Error loading potential connections:', err)
+      setPotentialConnections([])
     }
   }
 
@@ -554,6 +824,81 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     }
   }
 
+  const handleShowInterest = async (userId, userName) => {
+    try {
+      console.log('🔔 Showing interest in:', userName, userId)
+      
+      const { error } = await supabase
+        .from('user_interests')
+        .insert([{
+          user_id: currentUser.id,
+          interested_in_user_id: userId
+        }])
+
+      if (error) {
+        if (error.code === '23505') {
+          alert('You already showed interest in this person')
+        } else {
+          console.error('Error inserting interest:', error)
+          alert('Error: ' + error.message)
+        }
+        return
+      }
+
+      console.log('✅ Interest inserted successfully')
+      
+      // Check if this creates a mutual match
+      const { data: mutualCheck, error: mutualError } = await supabase
+        .rpc('check_mutual_interest', { 
+          user1_id: currentUser.id, 
+          user2_id: userId 
+        })
+
+      if (mutualError) {
+        console.error('Error checking mutual interest:', mutualError)
+        console.log('⚠️ Mutual check failed, but interest was recorded')
+      } else {
+        console.log('🔍 Mutual check result:', mutualCheck)
+        
+        if (mutualCheck) {
+          alert(`🎉 It's a match! You and ${userName} are now connected!`)
+        } else {
+          alert(`✓ Interest shown in ${userName}`)
+        }
+      }
+      
+      // Reload data
+      console.log('🔄 Reloading interests and connections...')
+      await loadMyInterests()
+      await loadConnections()
+      await loadMeetupPeople()
+      console.log('✅ Data reloaded')
+    } catch (err) {
+      console.error('💥 Error in handleShowInterest:', err)
+      alert('Error: ' + err.message)
+    }
+  }
+
+  const handleRemoveInterest = async (userId) => {
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('interested_in_user_id', userId)
+
+      if (error) {
+        alert('Error: ' + error.message)
+      } else {
+        alert('Interest removed')
+        loadMyInterests()
+        loadMeetupPeople()
+      }
+    } catch (err) {
+      alert('Error: ' + err.message)
+    }
+  }
+
   const openEditProfile = () => {
     setEditedProfile({ ...currentUser })
     setShowEditProfile(true)
@@ -660,7 +1005,17 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
             </div>
           ) : (
             <div className="space-y-4">
-              {upcomingMeetups.map(meetup => (
+              {upcomingMeetups.map(meetup => {
+                // Check if we should show participants (12 hours before event)
+                const meetupDateTime = new Date(`${meetup.date}T${meetup.time}`)
+                const now = new Date()
+                const hoursUntilMeetup = (meetupDateTime - now) / (1000 * 60 * 60) // difference in hours
+                const showParticipants = hoursUntilMeetup <= 12 && hoursUntilMeetup > 0
+                
+                const meetupSignups = signups[meetup.id] || []
+                const participantCount = meetupSignups.length
+                
+                return (
                 <div key={meetup.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
                   <div className="mb-4">
                     <div className="flex items-center text-gray-800 font-semibold mb-1">
@@ -676,13 +1031,42 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
                     </div>
                   </div>
                   
+                  {/* Show participants 12 hours before event */}
+                  {showParticipants && participantCount > 0 && (
+                    <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                      <p className="text-sm font-medium text-purple-800 mb-2">
+                        👥 {participantCount} {participantCount === 1 ? 'person' : 'people'} joining:
+                      </p>
+                      <div className="space-y-1">
+                        {meetupSignups.map((signup, idx) => (
+                          <div key={signup.id || idx} className="text-sm text-purple-700">
+                            • {signup.profiles?.career || 'Professional'}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-purple-600 mt-2">
+                        💡 You'll meet everyone in person at the event
+                      </p>
+                    </div>
+                  )}
+                  
+                  {/* Don't show participants yet if more than 12 hours away */}
+                  {!showParticipants && hoursUntilMeetup > 12 && participantCount > 0 && (
+                    <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <p className="text-sm text-gray-600">
+                        👥 {participantCount} {participantCount === 1 ? 'person has' : 'people have'} signed up
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Participants will be visible 12 hours before the event
+                      </p>
+                    </div>
+                  )}
+                  
                   {userSignups.includes(meetup.id) ? (
                     <div className="space-y-2">
                       <div className="bg-green-50 border border-green-200 rounded px-4 py-2 text-green-700 text-sm font-medium">
-                        ✓ You're signed up! Details will be sent the morning of the meetup
+                        ✓ You're signed up! Location details will be sent the morning of the meetup
                       </div>
-                      
-                      <VideoCallButton meetup={meetup} />
                       
                       <button 
                         onClick={() => handleCancelSignup(meetup.id)}
@@ -700,7 +1084,8 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
                     </button>
                   )}
                 </div>
-              ))}
+              )
+            })}
             </div>
           )}
         </div>
@@ -708,74 +1093,215 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     )
   }
 
-  const ConnectionsView = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">Your Network</h3>
-        <p className="text-sm text-gray-600">People you've connected with at meetups</p>
-      </div>
+  const ConnectionsView = () => {
+    const [activeTab, setActiveTab] = useState('network') // network, discover
+    const [expandedMeetup, setExpandedMeetup] = useState(null) // Track which meetup is expanded
 
-      {currentUser.meetups_attended < 5 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <p className="text-sm text-amber-800">
-            🔒 Complete {5 - currentUser.meetups_attended} more meetups to unlock 1-on-1 chat requests
-          </p>
+    const toggleMeetup = (meetupId) => {
+      setExpandedMeetup(expandedMeetup === meetupId ? null : meetupId)
+    }
+
+    const meetupPeopleArray = Object.entries(meetupPeople).map(([meetupId, data]) => ({
+      meetupId,
+      ...data
+    }))
+
+    const totalPeopleCount = meetupPeopleArray.reduce((sum, mp) => sum + mp.people.length, 0)
+
+    return (
+      <div className="space-y-6">
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Your Network</h3>
+          <p className="text-sm text-gray-600">Show interest privately - connect when it's mutual! ❤️</p>
         </div>
-      )}
 
-      <div className="space-y-4">
-        {connections.length === 0 ? (
-          <div className="bg-gray-50 rounded-lg p-8 text-center">
-            <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-600">No connections yet</p>
-            <p className="text-sm text-gray-500 mt-2">Meet people at meetups to build your network!</p>
+        {currentUser.meetups_attended < 5 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-sm text-amber-800">
+              🔒 Complete {5 - currentUser.meetups_attended} more meetups to unlock 1-on-1 video chats
+            </p>
           </div>
-        ) : (
-          connections.map(connection => {
-            const person = connection.connected_user || connection;
-            return (
-              <div key={connection.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center mb-1">
-                      <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
-                      {connection.mutual_interest && (
-                        <div className="ml-2 bg-rose-100 text-rose-600 text-xs px-2 py-1 rounded-full flex items-center">
-                          <Heart className="w-3 h-3 mr-1 fill-current" />
-                          Mutual
+        )}
+
+        {/* Tabs */}
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab('network')}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === 'network'
+                ? 'text-purple-600 border-b-2 border-purple-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            My Connections ({connections.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('discover')}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === 'discover'
+                ? 'text-purple-600 border-b-2 border-purple-600'
+                : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Discover People ({totalPeopleCount})
+          </button>
+        </div>
+
+        {/* My Connections Tab */}
+        {activeTab === 'network' && (
+          <div className="space-y-4">
+            {connections.length === 0 ? (
+              <div className="bg-gray-50 rounded-lg p-8 text-center">
+                <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-600">No connections yet</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Show interest in people from "Discover" tab to match!
+                </p>
+              </div>
+            ) : (
+              connections.map(connection => {
+                const person = connection.connected_user
+                return (
+                  <div key={connection.id} className="bg-white rounded-lg shadow p-5 border border-green-200">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center mb-1">
+                          <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
+                          <div className="ml-2 bg-green-100 text-green-600 text-xs px-2 py-1 rounded-full flex items-center">
+                            <Heart className="w-3 h-3 mr-1 fill-current" />
+                            Mutual Match
+                          </div>
                         </div>
-                      )}
+                        <p className="text-sm text-gray-600 mb-2">{person.career}</p>
+                        {person.city && person.state && (
+                          <p className="text-xs text-gray-500">{person.city}, {person.state}</p>
+                        )}
+                        {person.bio && (
+                          <p className="text-sm text-gray-700 mt-2 italic">"{person.bio}"</p>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-600 mb-2">{person.career}</p>
-                    {person.city && person.state && (
-                      <p className="text-xs text-gray-500">{person.city}, {person.state}</p>
-                    )}
-                    {connection.met_at && (
-                      <p className="text-xs text-purple-600 mt-1">Met at: {connection.met_at}</p>
+                    
+                    {currentUser.meetups_attended >= 5 ? (
+                      <button 
+                        onClick={() => setCurrentView('coffeeChats')}
+                        className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
+                      >
+                        <Video className="w-4 h-4 mr-2" />
+                        Schedule Video Chat
+                      </button>
+                    ) : (
+                      <button disabled className="w-full bg-gray-300 text-gray-500 font-medium py-2 rounded cursor-not-allowed">
+                        🔒 Complete more meetups to unlock
+                      </button>
                     )}
                   </div>
-                </div>
-                
-                {currentUser.meetups_attended >= 5 ? (
-                  <button 
-                    onClick={() => setCurrentView('coffeeChats')}
-                    className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
-                  >
-                    <Video className="w-4 h-4 mr-2" />
-                    Schedule Video Chat
-                  </button>
-                ) : (
-                  <button disabled className="w-full bg-gray-300 text-gray-500 font-medium py-2 rounded cursor-not-allowed">
-                    🔒 Complete more meetups to unlock
-                  </button>
-                )}
+                )
+              })
+            )}
+          </div>
+        )}
+
+        {/* Discover Tab - Grouped by Meetups */}
+        {activeTab === 'discover' && (
+          <div className="space-y-4">
+            {meetupPeopleArray.length === 0 ? (
+              <div className="bg-gray-50 rounded-lg p-8 text-center">
+                <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-600">No one to discover yet</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Attend more meetups to meet new people!
+                </p>
               </div>
-            );
-          })
+            ) : (
+              meetupPeopleArray.map(({ meetupId, meetup, people }) => {
+                const isExpanded = expandedMeetup === meetupId
+                
+                return (
+                  <div key={meetupId} className="bg-white rounded-lg shadow border border-gray-200">
+                    {/* Meetup Header - Clickable to expand/collapse */}
+                    <button
+                      onClick={() => toggleMeetup(meetupId)}
+                      className="w-full p-5 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center mb-1">
+                            <Calendar className="w-5 h-5 mr-2 text-purple-500" />
+                            <h3 className="font-semibold text-gray-800">{formatDate(meetup.date)}</h3>
+                          </div>
+                          <div className="flex items-center text-sm text-gray-600 ml-7">
+                            <Clock className="w-4 h-4 mr-2" />
+                            {formatTime(meetup.time)}
+                          </div>
+                          <div className="flex items-center text-sm text-purple-600 ml-7 mt-1">
+                            <Users className="w-4 h-4 mr-1" />
+                            {people.length} {people.length === 1 ? 'person' : 'people'} to discover
+                          </div>
+                        </div>
+                        <div className="text-gray-400">
+                          {isExpanded ? '▼' : '▶'}
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* People List - Show when expanded */}
+                    {isExpanded && (
+                      <div className="border-t border-gray-200 p-4 space-y-3 bg-gray-50">
+                        {people.map(personData => {
+                          const person = personData.user
+                          const hasShownInterest = myInterests.includes(personData.id)
+                          
+                          return (
+                            <div key={personData.id} className="bg-white rounded-lg p-4 border border-gray-200">
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex-1">
+                                  <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
+                                  <p className="text-sm text-gray-600 mb-1">{person.career}</p>
+                                  {person.city && person.state && (
+                                    <p className="text-xs text-gray-500">{person.city}, {person.state}</p>
+                                  )}
+                                  {person.bio && (
+                                    <p className="text-sm text-gray-700 mt-2 italic">"{person.bio}"</p>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              {hasShownInterest ? (
+                                <div className="space-y-2">
+                                  <div className="bg-purple-50 border border-purple-200 rounded px-4 py-2 text-purple-700 text-sm font-medium text-center">
+                                    ✓ Interest shown - waiting for mutual match
+                                  </div>
+                                  <button 
+                                    onClick={() => handleRemoveInterest(personData.id)}
+                                    className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 rounded transition-colors text-sm"
+                                  >
+                                    Remove Interest
+                                  </button>
+                                </div>
+                              ) : (
+                                <button 
+                                  onClick={() => handleShowInterest(personData.id, person.name)}
+                                  className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
+                                >
+                                  <Heart className="w-4 h-4 mr-2" />
+                                  Show Interest
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
         )}
       </div>
-    </div>
-  )
+    )
+  }
 
   const MessagesView = () => (
     <div className="space-y-6">
