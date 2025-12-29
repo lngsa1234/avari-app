@@ -23,6 +23,7 @@ export default function VideoCallButton({ meetup }) {
   const peerConnectionRef = useRef(null);
   const channelRef = useRef(null); // Store channel reference
   const isMountedRef = useRef(true); // Track if component is mounted
+  const processedSignalsRef = useRef(new Set()); // Track processed signal IDs
   const roomId = meetup.id;
 
   // ICE servers configuration (STUN servers for NAT traversal)
@@ -38,6 +39,22 @@ export default function VideoCallButton({ meetup }) {
     try {
       setIsConnecting(true);
       console.log('🎥 Starting call for room:', roomId);
+
+      // Clear old signals from previous calls
+      console.log('🧹 Cleaning up old signals...');
+      const { error: deleteError } = await supabase
+        .from('video_signals')
+        .delete()
+        .eq('room_id', roomId);
+      
+      if (deleteError) {
+        console.warn('⚠️ Could not clean old signals:', deleteError);
+      } else {
+        console.log('✅ Old signals cleared');
+      }
+
+      // Reset processed signals tracker
+      processedSignalsRef.current.clear();
 
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
@@ -131,6 +148,13 @@ export default function VideoCallButton({ meetup }) {
           return;
         }
 
+        // Check if peer connection is still valid
+        if (!peerConnectionRef.current || peerConnectionRef.current.signalingState === 'closed') {
+          console.warn('⚠️ Peer connection closed, stopping polling');
+          clearInterval(pollInterval);
+          return;
+        }
+
         try {
           // Get new signals since we started
           const { data: signals, error } = await supabase
@@ -143,25 +167,33 @@ export default function VideoCallButton({ meetup }) {
           if (error) throw error;
 
           for (const signal of signals || []) {
-            console.log('📨 Received signal:', signal.type);
+            // Skip if already processed
+            if (processedSignalsRef.current.has(signal.id)) {
+              continue;
+            }
+
+            console.log('📨 Received NEW signal:', signal.type, 'ID:', signal.id);
 
             try {
-              // Check if peer connection is still valid
+              // Double-check peer connection is still valid
               if (!peerConnectionRef.current || peerConnectionRef.current.signalingState === 'closed') {
-                console.warn('⚠️ Peer connection is closed, ignoring signal');
-                continue;
+                console.warn('⚠️ Peer connection is closed, stopping signal processing');
+                break;
               }
 
-              if (signal.type === 'offer' && !isCaller && peerConnectionRef.current.signalingState === 'stable') {
+              const currentState = peerConnectionRef.current.signalingState;
+              console.log('📡 Current signaling state:', currentState);
+
+              if (signal.type === 'offer' && !isCaller && currentState === 'stable') {
                 // Answerer receives offer
-                console.log('📥 Setting remote description (offer)');
+                console.log('📥 Processing offer...');
                 await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(signal.data));
                 
-                console.log('📤 Creating answer');
+                console.log('📤 Creating answer...');
                 const answer = await peerConnectionRef.current.createAnswer();
                 await peerConnectionRef.current.setLocalDescription(answer);
                 
-                console.log('📤 Sending answer');
+                console.log('📤 Sending answer to Supabase...');
                 await supabase
                   .from('video_signals')
                   .insert({
@@ -170,16 +202,27 @@ export default function VideoCallButton({ meetup }) {
                     data: answer,
                     sender_id: user.id
                   });
-              } else if (signal.type === 'answer' && isCaller && peerConnectionRef.current.signalingState === 'have-local-offer') {
+                
+                processedSignalsRef.current.add(signal.id);
+                console.log('✅ Offer processed successfully');
+              } else if (signal.type === 'answer' && isCaller && currentState === 'have-local-offer') {
                 // Caller receives answer
-                console.log('📥 Setting remote description (answer)');
+                console.log('📥 Processing answer...');
                 await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(signal.data));
+                processedSignalsRef.current.add(signal.id);
+                console.log('✅ Answer processed successfully');
               } else if (signal.type === 'ice-candidate') {
-                console.log('🧊 Adding ICE candidate');
+                console.log('🧊 Adding ICE candidate...');
                 await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(signal.data));
+                processedSignalsRef.current.add(signal.id);
+                console.log('✅ ICE candidate added');
+              } else {
+                console.log('⏭️ Skipping signal (wrong state or role):', signal.type, 'State:', currentState);
+                processedSignalsRef.current.add(signal.id); // Mark as processed to skip next time
               }
             } catch (err) {
               console.error('❌ Error handling signal:', err);
+              processedSignalsRef.current.add(signal.id); // Mark as processed even on error
             }
           }
         } catch (err) {
