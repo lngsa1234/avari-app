@@ -364,7 +364,11 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
                       <div className="mb-2 p-2 bg-blue-50 rounded text-xs">
                         <strong>Debug:</strong> Room URL: {chat.video_link}
                       </div>
-                      <VideoCallButton key={`video-${chat.id}`} meetup={chat} />
+                      <VideoCallButton 
+                        key={`video-${chat.id}`} 
+                        meetup={chat} 
+                        currentUserId={currentUser.id}
+                      />
                     </div>
                   )}
 
