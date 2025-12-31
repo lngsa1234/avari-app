@@ -37,7 +37,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     setLoading(true);
     try {
       console.log('📋 Loading coffee chats...');
-      const chats = await getMyCoffeeChats(supabase);
+      const chats = await getMyCoffeeChats();
       console.log('✅ Loaded chats:', chats);
       setCoffeeChats(chats);
     } catch (error) {
@@ -49,7 +49,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
 
   const loadPendingRequests = async () => {
     try {
-      const requests = await getPendingRequests(supabase);
+      const requests = await getPendingRequests();
       setPendingRequests(requests);
     } catch (error) {
       console.error('Error loading requests:', error);
@@ -94,7 +94,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     try {
       const dateTime = new Date(`${scheduledDate}T${scheduledTime}`);
       
-      await requestCoffeeChat(supabase, {
+      await requestCoffeeChat({
         recipientId: selectedConnection.connected_user_id || selectedConnection.id,
         scheduledTime: dateTime,
         notes: notes
@@ -118,7 +118,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
 
   const handleAccept = async (chatId) => {
     try {
-      await acceptCoffeeChat(supabase, chatId);
+      await acceptCoffeeChat(chatId);
       alert('✅ Video chat accepted! Video room created.');
       await loadCoffeeChats();
       await loadPendingRequests();
@@ -135,7 +135,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     if (!confirm('Decline this video chat request?')) return;
     
     try {
-      await declineCoffeeChat(supabase, chatId);
+      await declineCoffeeChat(chatId);
       loadPendingRequests();
     } catch (error) {
       alert('Error: ' + error.message);
@@ -146,7 +146,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     if (!confirm('Cancel this video chat?')) return;
     
     try {
-      await cancelCoffeeChat(supabase, chatId);
+      await cancelCoffeeChat(chatId);
       loadCoffeeChats();
       loadSentRequests();
     } catch (error) {
@@ -209,10 +209,10 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
       )}
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="flex gap-2 border-b border-gray-200 overflow-x-auto scrollbar-hide">
         <button
           onClick={() => setActiveTab('schedule')}
-          className={`px-4 py-2 font-medium transition-colors ${
+          className={`px-4 py-2 font-medium transition-colors whitespace-nowrap flex-shrink-0 whitespace-nowrap flex-shrink-0 ${
             activeTab === 'schedule'
               ? 'text-purple-600 border-b-2 border-purple-600'
               : 'text-gray-600 hover:text-gray-800'
@@ -222,7 +222,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
         </button>
         <button
           onClick={() => setActiveTab('upcoming')}
-          className={`px-4 py-2 font-medium transition-colors ${
+          className={`px-4 py-2 font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
             activeTab === 'upcoming'
               ? 'text-purple-600 border-b-2 border-purple-600'
               : 'text-gray-600 hover:text-gray-800'
@@ -232,7 +232,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
         </button>
         <button
           onClick={() => setActiveTab('requests')}
-          className={`px-4 py-2 font-medium transition-colors relative ${
+          className={`px-4 py-2 font-medium transition-colors whitespace-nowrap flex-shrink-0 relative ${
             activeTab === 'requests'
               ? 'text-purple-600 border-b-2 border-purple-600'
               : 'text-gray-600 hover:text-gray-800'
@@ -247,7 +247,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
         </button>
         <button
           onClick={() => setActiveTab('sent')}
-          className={`px-4 py-2 font-medium transition-colors ${
+          className={`px-4 py-2 font-medium transition-colors whitespace-nowrap flex-shrink-0 ${
             activeTab === 'sent'
               ? 'text-purple-600 border-b-2 border-purple-600'
               : 'text-gray-600 hover:text-gray-800'
