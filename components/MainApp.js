@@ -5,6 +5,7 @@ import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircl
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import CoffeeChatsView from './CoffeeChatsView'
+import MessagesView from './MessagesView'
 
 export default function MainApp({ currentUser, onSignOut, supabase }) {
   console.log('🔥 MainApp loaded - UPDATED VERSION with TIME ORDERING')
@@ -27,6 +28,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
   const [potentialConnections, setPotentialConnections] = useState([]) // People from same meetups
   const [myInterests, setMyInterests] = useState([]) // People current user is interested in
   const [meetupPeople, setMeetupPeople] = useState({}) // People grouped by meetup
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0) // Unread messages from database
 
   // Load meetups from Supabase on component mount
   useEffect(() => {
@@ -36,6 +38,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     loadMyInterests()
     loadMeetupPeople()
     updateAttendedCount()
+    loadUnreadMessageCount()
 
     // Set up real-time subscription for meetups
     const meetupsSubscription = supabase
@@ -91,11 +94,29 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       )
       .subscribe()
 
+    // Set up real-time subscription for messages
+    const messagesSubscription = supabase
+      .channel('messages_changes')
+      .on('postgres_changes', 
+        { 
+          event: '*',
+          schema: 'public', 
+          table: 'messages',
+          filter: `receiver_id=eq.${currentUser.id}`
+        }, 
+        (payload) => {
+          console.log('Message changed:', payload)
+          loadUnreadMessageCount()
+        }
+      )
+      .subscribe()
+
     // Cleanup subscriptions on unmount
     return () => {
       meetupsSubscription.unsubscribe()
       signupsSubscription.unsubscribe()
       interestsSubscription.unsubscribe()
+      messagesSubscription.unsubscribe()
     }
   }, [])
 
@@ -394,6 +415,22 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     }
   }
 
+  const loadUnreadMessageCount = async () => {
+    try {
+      const { count, error } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('receiver_id', currentUser.id)
+        .eq('read', false)
+
+      if (error) throw error
+      setUnreadMessageCount(count || 0)
+    } catch (error) {
+      console.error('Error loading unread message count:', error)
+      setUnreadMessageCount(0)
+    }
+  }
+
   const loadPotentialConnections = async () => {
     try {
       // Get meetups current user attended
@@ -612,17 +649,8 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
   // Demo data - will be replaced with Supabase data later
   const upcomingMeetups = meetups
 
-  const chats = [
-    {
-      id: 1,
-      name: 'Jessica Lee',
-      lastMessage: 'How about next Tuesday at 3pm?',
-      timestamp: '10 min ago',
-      unread: 2
-    }
-  ]
-
-  const unreadCount = chats.reduce((sum, chat) => sum + chat.unread, 0)
+  // Use database unread count instead of hardcoded chats
+  const unreadCount = unreadMessageCount
 
   const handleSignUp = async (meetupId) => {
     try {
@@ -1303,48 +1331,6 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     )
   }
 
-  const MessagesView = () => (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg p-6 border border-blue-200">
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">Messages</h3>
-        <p className="text-sm text-gray-600">Chat with your connections</p>
-      </div>
-
-      {chats.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
-          <MessageCircle className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <p className="text-gray-600">No active chats yet</p>
-          <p className="text-sm text-gray-500 mt-2">Request a 1-on-1 from your Connections</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {chats.map(chat => (
-            <div 
-              key={chat.id}
-              onClick={() => setShowChatModal(true)}
-              className="bg-white rounded-lg shadow p-4 border border-gray-200 cursor-pointer hover:border-rose-300 transition-colors"
-            >
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center mb-1">
-                    <h4 className="font-semibold text-gray-800">{chat.name}</h4>
-                    {chat.unread > 0 && (
-                      <span className="ml-2 bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full">
-                        {chat.unread}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-600 truncate">{chat.lastMessage}</p>
-                </div>
-                <span className="text-xs text-gray-500 ml-2">{chat.timestamp}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-
   const ProfileView = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-lg shadow p-6">
@@ -1533,7 +1519,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
         {currentView === 'home' && <HomeView />}
         {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} connections={connections} supabase={supabase} />}
         {currentView === 'connections' && <ConnectionsView />}
-        {currentView === 'messages' && <MessagesView />}
+        {currentView === 'messages' && <MessagesView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'profile' && <ProfileView />}
         {currentView === 'admin' && currentUser.role === 'admin' && <AdminDashboard />}
       </div>
