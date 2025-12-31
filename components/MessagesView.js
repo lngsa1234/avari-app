@@ -542,8 +542,10 @@ export default function MessagesView({ currentUser, supabase }) {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Conversations List - Hidden on mobile when chat is selected */}
-        <div className={`w-full md:w-96 bg-white border-r border-gray-200 flex flex-col ${
-          selectedConversation ? 'hidden md:flex' : 'flex'
+        <div className={`bg-white border-r border-gray-200 flex flex-col ${
+          selectedConversation 
+            ? 'hidden md:flex md:w-96' 
+            : 'w-full md:w-96 flex'
         }`}>
           {/* Search */}
           <div className="p-4 border-b border-gray-200">
@@ -624,9 +626,7 @@ export default function MessagesView({ currentUser, supabase }) {
             </div>
           </div>
         ) : (
-          <div className={`flex-1 flex flex-col bg-white ${
-            selectedConversation ? 'block' : 'hidden md:flex'
-          }`}>
+          <div className="flex-1 flex flex-col bg-white">
             {/* Chat Header */}
             <div className="p-4 border-b border-gray-200 bg-white shadow-sm">
               <div className="flex items-center">
