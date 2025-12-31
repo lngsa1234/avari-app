@@ -783,7 +783,10 @@ function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error creating meetup: ' + error.message)
       } else {
-        // Real-time subscription will automatically reload meetups
+        // Manually add to state since real-time is disabled
+        if (data && data[0]) {
+          setMeetups(prev => [...prev, data[0]])
+        }
         setNewMeetup({ date: '', time: '', location: '' })
         setSelectedDate(null)
         setShowCreateMeetup(false)
@@ -819,7 +822,8 @@ function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error updating meetup: ' + error.message)
       } else {
-        // Real-time subscription will automatically reload meetups
+        // Reload meetups to get updated data
+        await loadMeetupsFromDatabase()
         setShowEditMeetup(false)
         setEditingMeetup(null)
         alert('Meetup updated successfully!')
@@ -1564,8 +1568,8 @@ function MainApp({ currentUser, onSignOut, supabase }) {
   return (
     <div className="min-h-screen bg-gray-50 pb-28">
       {/* Header */}
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white p-6 shadow-lg">
-        <div className="max-w-4xl mx-auto">
+      <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg">
+        <div className="max-w-4xl mx-auto p-6">
           <h1 className="text-3xl font-bold flex items-center">
             <Coffee className="mr-3" />
             Avari
