@@ -51,13 +51,22 @@ export const useSignaling = (
     console.log('[Avari] Connecting to:', serverUrl);
     setIsConnecting(true);
     
+    // Detect if mobile
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    console.log('[Avari] Device type:', isMobile ? 'Mobile' : 'Desktop');
+    
     const socket = io(serverUrl, {
-      transports: ['websocket', 'polling'], // WebSocket first, fallback to polling
+      transports: ['polling', 'websocket'], // Polling first on mobile for reliability
       reconnection: true,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-      timeout: 20000,
+      reconnectionDelay: isMobile ? 500 : 1000, // Faster reconnect on mobile
+      reconnectionDelayMax: isMobile ? 3000 : 5000,
+      reconnectionAttempts: isMobile ? 10 : 5, // More attempts on mobile
+      timeout: isMobile ? 30000 : 20000, // Longer timeout for mobile networks
+      forceNew: false,
+      upgrade: true, // Allow upgrading from polling to websocket
+      rememberUpgrade: true,
+      path: '/socket.io/',
+      autoConnect: true,
     });
 
     socketRef.current = socket;
@@ -209,11 +218,63 @@ export const useSignaling = (
     });
 
     // ================================================
+    // MOBILE: HANDLE VISIBILITY CHANGES
+    // ================================================
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log('[Avari] App went to background (mobile)');
+        // Don't disconnect, but log it
+      } else {
+        console.log('[Avari] App came to foreground (mobile)');
+        // Reconnect if disconnected
+        if (!socket.connected) {
+          console.log('[Avari] Reconnecting after coming to foreground');
+          socket.connect();
+        }
+      }
+    };
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted && !socket.connected) {
+        console.log('[Avari] Page restored from cache, reconnecting');
+        socket.connect();
+      }
+    };
+
+    // Mobile-specific event listeners
+    if (isMobile) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('pageshow', handlePageShow as any);
+      
+      // Keep connection alive with heartbeat
+      const heartbeatInterval = setInterval(() => {
+        if (socket.connected) {
+          socket.emit('heartbeat', { userId, matchId });
+        }
+      }, 5000); // Every 5 seconds
+
+      // Store for cleanup
+      (socket as any)._heartbeatInterval = heartbeatInterval;
+    }
+
+    // ================================================
     // CLEANUP
     // ================================================
 
     return () => {
       console.log('[Avari] Cleaning up socket connection');
+      
+      // Clean up mobile event listeners
+      if (isMobile) {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('pageshow', handlePageShow as any);
+        
+        if ((socket as any)._heartbeatInterval) {
+          clearInterval((socket as any)._heartbeatInterval);
+        }
+      }
+      
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useIceServers } from '@/hooks/useIceServers';
+import { useWakeLock } from '@/hooks/useWakeLock';
 
 interface VideoCallProps {
   matchId: string;
@@ -32,6 +33,9 @@ export default function VideoCall({
 
   // Hooks
   const { iceServers, loading: iceServersLoading } = useIceServers();
+  
+  // Keep screen awake during call (mobile)
+  useWakeLock(true);
   
   const {
     isConnected,
@@ -172,6 +176,10 @@ export default function VideoCall({
 
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        // Force video to play
+        localVideoRef.current.play().catch(err => {
+          console.log('[Avari] Video autoplay prevented (normal):', err);
+        });
       }
 
       // Add tracks to peer connection
@@ -419,10 +427,12 @@ export default function VideoCall({
         <div className="absolute top-4 right-4 w-48 h-36 bg-gray-900 rounded-lg overflow-hidden shadow-xl">
           <video
             ref={localVideoRef}
+            key={localStreamRef.current ? 'has-stream' : 'no-stream'}
             autoPlay
             playsInline
             muted
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover mirror"
+            style={{ transform: 'scaleX(-1)' }}
           />
         </div>
 
