@@ -1905,10 +1905,10 @@ function MainApp({ currentUser, onSignOut, supabase }) {
 
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
-        <div className="max-w-4xl mx-auto flex justify-around py-3">
+        <div className="max-w-4xl mx-auto flex justify-around py-3 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setCurrentView('home')}
-            className={`flex flex-col items-center px-4 py-2 ${
+            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
               currentView === 'home' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
@@ -1917,7 +1917,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
           </button>
           <button
             onClick={() => setCurrentView('coffeeChats')}
-            className={`flex flex-col items-center px-4 py-2 ${
+            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
               currentView === 'coffeeChats' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
@@ -1926,7 +1926,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
           </button>
           <button
             onClick={() => setCurrentView('connections')}
-            className={`flex flex-col items-center px-4 py-2 ${
+            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
               currentView === 'connections' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
@@ -1935,7 +1935,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
           </button>
           <button
             onClick={() => setCurrentView('messages')}
-            className={`flex flex-col items-center px-4 py-2 relative ${
+            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 relative ${
               currentView === 'messages' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
@@ -1947,10 +1947,19 @@ function MainApp({ currentUser, onSignOut, supabase }) {
             )}
             <span className="text-xs font-medium">Messages</span>
           </button>
+          <button
+            onClick={() => setCurrentView('profile')}
+            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
+              currentView === 'profile' ? 'text-rose-500' : 'text-gray-500'
+            }`}
+          >
+            <User className="w-6 h-6 mb-1" />
+            <span className="text-xs font-medium">Profile</span>
+          </button>
           {currentUser.role === 'admin' && (
             <button
               onClick={() => setCurrentView('admin')}
-              className={`flex flex-col items-center px-4 py-2 ${
+              className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
                 currentView === 'admin' ? 'text-rose-500' : 'text-gray-500'
               }`}
             >
@@ -1958,15 +1967,6 @@ function MainApp({ currentUser, onSignOut, supabase }) {
               <span className="text-xs font-medium">Admin</span>
             </button>
           )}
-          <button
-            onClick={() => setCurrentView('profile')}
-            className={`flex flex-col items-center px-4 py-2 ${
-              currentView === 'profile' ? 'text-rose-500' : 'text-gray-500'
-            }`}
-          >
-            <User className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Profile</span>
-          </button>
         </div>
       </div>
     </div>
