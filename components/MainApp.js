@@ -783,10 +783,8 @@ function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error creating meetup: ' + error.message)
       } else {
-        // Manually add to state since real-time is disabled
-        if (data && data[0]) {
-          setMeetups(prev => [...prev, data[0]])
-        }
+        // Reload meetups from database to ensure consistency
+        await loadMeetupsFromDatabase()
         setNewMeetup({ date: '', time: '', location: '' })
         setSelectedDate(null)
         setShowCreateMeetup(false)
@@ -847,7 +845,8 @@ function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error deleting meetup: ' + error.message)
       } else {
-        // Real-time subscription will automatically reload meetups
+        // Reload meetups from database
+        await loadMeetupsFromDatabase()
         alert('Meetup deleted successfully!')
       }
     } catch (err) {
@@ -873,7 +872,8 @@ function MainApp({ currentUser, onSignOut, supabase }) {
       if (error) {
         alert('Error setting location: ' + error.message)
       } else {
-        // Real-time subscription will automatically reload meetups
+        // Reload meetups from database
+        await loadMeetupsFromDatabase()
         alert('Location set successfully!')
       }
     } catch (err) {
@@ -1833,7 +1833,11 @@ function MainApp({ currentUser, onSignOut, supabase }) {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
                 <DatePicker
-                  selected={editingMeetup.date ? new Date(editingMeetup.date) : null}
+                  selected={editingMeetup.date ? (() => {
+                    // Parse date string in LOCAL timezone to avoid day shift
+                    const [year, month, day] = editingMeetup.date.split('-').map(Number)
+                    return new Date(year, month - 1, day)
+                  })() : null}
                   onChange={(date) => {
                     if (date) {
                       const year = date.getFullYear()
