@@ -37,7 +37,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     setLoading(true);
     try {
       console.log('📋 Loading coffee chats...');
-      const chats = await getMyCoffeeChats();
+      const chats = await getMyCoffeeChats(supabase);
       console.log('✅ Loaded chats:', chats);
       setCoffeeChats(chats);
     } catch (error) {
@@ -49,7 +49,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
 
   const loadPendingRequests = async () => {
     try {
-      const requests = await getPendingRequests();
+      const requests = await getPendingRequests(supabase);
       setPendingRequests(requests);
     } catch (error) {
       console.error('Error loading requests:', error);
@@ -94,7 +94,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     try {
       const dateTime = new Date(`${scheduledDate}T${scheduledTime}`);
       
-      await requestCoffeeChat({
+      await requestCoffeeChat(supabase, {
         recipientId: selectedConnection.connected_user_id || selectedConnection.id,
         scheduledTime: dateTime,
         notes: notes
@@ -118,7 +118,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
 
   const handleAccept = async (chatId) => {
     try {
-      await acceptCoffeeChat(chatId);
+      await acceptCoffeeChat(supabase, chatId);
       alert('✅ Video chat accepted! Video room created.');
       await loadCoffeeChats();
       await loadPendingRequests();
@@ -135,7 +135,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     if (!confirm('Decline this video chat request?')) return;
     
     try {
-      await declineCoffeeChat(chatId);
+      await declineCoffeeChat(supabase, chatId);
       loadPendingRequests();
     } catch (error) {
       alert('Error: ' + error.message);
@@ -146,7 +146,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
     if (!confirm('Cancel this video chat?')) return;
     
     try {
-      await cancelCoffeeChat(chatId);
+      await cancelCoffeeChat(supabase, chatId);
       loadCoffeeChats();
       loadSentRequests();
     } catch (error) {

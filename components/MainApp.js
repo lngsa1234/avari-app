@@ -1,14 +1,24 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import CoffeeChatsView from './CoffeeChatsView'
 import MessagesView from './MessagesView'
 
-export default function MainApp({ currentUser, onSignOut, supabase }) {
+function MainApp({ currentUser, onSignOut, supabase }) {
+  // DEBUGGING: Track renders vs mounts
+  const renderCountRef = useRef(0)
+  renderCountRef.current++
+  
+  const mountTimeRef = useRef(Date.now())
+  const componentIdRef = useRef(Math.random().toString(36).substring(7))
+  
   console.log('🔥 MainApp loaded - UPDATED VERSION with TIME ORDERING')
+  console.log(`🔁 Render #${renderCountRef.current} | Component ID: ${componentIdRef.current} | Age: ${Date.now() - mountTimeRef.current}ms`)
+  console.log(`👤 currentUser.id: ${currentUser?.id}`)
+  console.log(`🔑 Props changed: currentUser=${!!currentUser}, onSignOut=${!!onSignOut}, supabase=${!!supabase}`)
   
   const [currentView, setCurrentView] = useState('home')
   const [showChatModal, setShowChatModal] = useState(false)
@@ -30,9 +40,47 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
   const [meetupPeople, setMeetupPeople] = useState({}) // People grouped by meetup
   const [unreadMessageCount, setUnreadMessageCount] = useState(0) // Unread messages from database
 
+  // DEBUGGING: Detect prop changes
+  const prevPropsRef = useRef({ currentUser, onSignOut, supabase })
+  useEffect(() => {
+    const prev = prevPropsRef.current
+    if (prev.currentUser !== currentUser) {
+      console.log('⚠️ currentUser prop CHANGED!')
+    }
+    if (prev.onSignOut !== onSignOut) {
+      console.log('⚠️ onSignOut prop CHANGED!')
+    }
+    if (prev.supabase !== supabase) {
+      console.log('⚠️ supabase prop CHANGED!')
+    }
+    prevPropsRef.current = { currentUser, onSignOut, supabase }
+  })
+
+  // Guard to prevent multiple loads
+  const hasLoadedRef = useRef(false)
+
+  // DEBUGGING: Detect mount/unmount cycles
+  useEffect(() => {
+    console.log(`🧨 MainApp MOUNTED (Component ID: ${componentIdRef.current})`)
+    return () => {
+      console.log(`🧹 MainApp UNMOUNTED (Component ID: ${componentIdRef.current})`)
+      console.log(`⚠️ This component lived for ${Date.now() - mountTimeRef.current}ms`)
+    }
+  }, [])
+
   // Load meetups from Supabase on component mount
   useEffect(() => {
+    // CRITICAL: Only run once, ignore React Strict Mode double-render
+    if (hasLoadedRef.current) {
+      console.log('⏭️ useEffect already ran, skipping to prevent duplicates')
+      return
+    }
+    
+    console.log('🚀 useEffect running for the FIRST time')
+    hasLoadedRef.current = true
+    
     loadMeetupsFromDatabase()
+    loadSignupsForMeetups([]) // Load all signups
     loadUserSignups()
     loadConnections()
     loadMyInterests()
@@ -40,14 +88,16 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     updateAttendedCount()
     loadUnreadMessageCount()
 
+    // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
+    // Re-enable after adding useCallback to all functions
+    /*
     // Set up real-time subscription for meetups
     const meetupsSubscription = supabase
       .channel('meetups_changes')
       .on('postgres_changes', 
         { 
           event: '*', // Listen to INSERT, UPDATE, DELETE
-          schema: 'public', 
-          table: 'meetups'
+          schema: 'public', \n          table: 'meetups'
         }, 
         (payload) => {
           console.log('Meetup changed:', payload)
@@ -118,9 +168,10 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       interestsSubscription.unsubscribe()
       messagesSubscription.unsubscribe()
     }
-  }, [])
+    */
+  }, []) // Empty array - functions are defined below and stable due to useCallback
 
-  const loadMeetupsFromDatabase = async () => {
+  const loadMeetupsFromDatabase = useCallback(async () => {
     try {
       setLoadingMeetups(true)
       const { data, error } = await supabase
@@ -133,17 +184,17 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
         console.error('Error loading meetups:', error)
       } else {
         setMeetups(data || [])
-        // Load signups for all meetups
-        await loadSignupsForMeetups(data || [])
+        // Note: loadSignupsForMeetups will be called separately in useEffect
       }
     } catch (err) {
       console.error('Error:', err)
     } finally {
       setLoadingMeetups(false)
     }
-  }
+  }, [supabase])
 
-  const loadSignupsForMeetups = async (meetupsList) => {
+
+  const loadSignupsForMeetups = useCallback(async (meetupsList) => {
     try {
       console.log('Loading signups...')
       
@@ -207,9 +258,10 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     } catch (err) {
       console.error('Error loading signups:', err)
     }
-  }
+  }, [supabase])
 
-  const loadUserSignups = async () => {
+
+  const loadUserSignups = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('meetup_signups')
@@ -224,9 +276,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     } catch (err) {
       console.error('Error:', err)
     }
-  }
+  }, [currentUser.id, supabase])
 
-  const loadConnections = async () => {
+  const loadConnections = useCallback(async () => {
     try {
       console.log('🔍 Loading connections (mutual matches)...')
       // Get mutual matches using the database function
@@ -273,9 +325,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       console.error('💥 Error loading connections:', err)
       setConnections([])
     }
-  }
+  }, [currentUser.id, supabase])
 
-  const loadMyInterests = async () => {
+  const loadMyInterests = useCallback(async () => {
     try {
       console.log('🔍 Loading my interests...')
       // Get people current user has expressed interest in
@@ -293,9 +345,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       console.error('💥 Error loading interests:', err)
       setMyInterests([])
     }
-  }
+  }, [currentUser.id, supabase])
 
-  const loadMeetupPeople = async () => {
+  const loadMeetupPeople = useCallback(async () => {
     try {
       console.log('🔍 Loading meetup people...')
       
@@ -413,9 +465,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       console.error('💥 Error loading meetup people:', err)
       setMeetupPeople({})
     }
-  }
+  }, [currentUser.id, supabase])
 
-  const loadUnreadMessageCount = async () => {
+  const loadUnreadMessageCount = useCallback(async () => {
     try {
       const { count, error } = await supabase
         .from('messages')
@@ -429,9 +481,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       console.error('Error loading unread message count:', error)
       setUnreadMessageCount(0)
     }
-  }
+  }, [currentUser.id, supabase])
 
-  const loadPotentialConnections = async () => {
+  const loadPotentialConnections = useCallback(async () => {
     try {
       // Get meetups current user attended
       const { data: mySignups, error: signupsError } = await supabase
@@ -506,9 +558,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
       console.error('Error loading potential connections:', err)
       setPotentialConnections([])
     }
-  }
+  }, [currentUser.id, supabase])
 
-  const updateAttendedCount = async () => {
+  const updateAttendedCount = useCallback(async () => {
     try {
       // Get user's signups with meetup dates
       const { data: signups, error } = await supabase
@@ -545,14 +597,20 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           
           const meetupDate = new Date(dateStr)
           
-          // Check if valid date and in the past
+          // Check if valid date
           if (isNaN(meetupDate.getTime())) {
             console.log('Invalid date:', signup.meetups.date)
             return false
           }
           
+          // CRITICAL: Add TIME to the date
+          const meetupTime = signup.meetups.time || '00:00'
+          const [hours, minutes] = meetupTime.split(':').map(Number)
+          meetupDate.setHours(hours, minutes, 0, 0)
+          
+          // Now compare full datetime
           const isPast = meetupDate < now
-          console.log(`Meetup ${signup.meetups.date}: ${isPast ? 'PAST' : 'FUTURE'}`)
+          console.log(`Meetup ${signup.meetups.date} ${meetupTime}: ${isPast ? 'PAST' : 'FUTURE'}`)
           
           return isPast
         } catch (err) {
@@ -587,7 +645,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     } catch (err) {
       console.error('Error updating attended count:', err)
     }
-  }
+  }, [currentUser.id, supabase])
 
   // Helper function to format time from 24hr to 12hr
   const formatTime = (time24) => {
@@ -933,7 +991,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
   }
 
   const ProgressBar = ({ current, total }) => {
-    const percentage = (current / total) * 100
+    const percentage = Math.min((current / total) * 100, 100) // Cap at 100%
     return (
       <div className="w-full bg-gray-200 rounded-full h-3">
         <div 
@@ -946,51 +1004,53 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
 
   const HomeView = () => {
     // Filter to only show UPCOMING meetups (not past ones)
-    const now = new Date()
-    const upcomingMeetups = meetups.filter(meetup => {
-      try {
-        let meetupDate
-        const dateStr = meetup.date
-        
-        // Check if ISO format (YYYY-MM-DD)
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          // ISO format - parse as local timezone to avoid UTC issues
-          const [year, month, day] = dateStr.split('-').map(Number)
-          meetupDate = new Date(year, month - 1, day) // month is 0-indexed
-        } else {
-          // Old format like "Wednesday, Dec 3" - remove day name
-          const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
-          meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
-        }
-        
-        // If can't parse, show it
-        if (isNaN(meetupDate.getTime())) {
-          console.log('Could not parse date:', meetup.date)
+    // WRAPPED IN useMemo to prevent infinite re-render loop!
+    const upcomingMeetups = useMemo(() => {
+      const now = new Date()
+      return meetups.filter(meetup => {
+        try {
+          let meetupDate
+          const dateStr = meetup.date
+          
+          // Check if ISO format (YYYY-MM-DD)
+          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // ISO format - parse as local timezone to avoid UTC issues
+            const [year, month, day] = dateStr.split('-').map(Number)
+            meetupDate = new Date(year, month - 1, day) // month is 0-indexed
+          } else {
+            // Old format like "Wednesday, Dec 3" - remove day name
+            const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+            meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
+          }
+          
+          // If can't parse, show it
+          if (isNaN(meetupDate.getTime())) {
+            console.log('Could not parse date:', meetup.date)
+            return true
+          }
+          
+          // Add time to the meetup date for accurate comparison
+          if (meetup.time) {
+            const [hours, minutes] = meetup.time.split(':').map(Number)
+            meetupDate.setHours(hours, minutes, 0, 0)
+          }
+          
+          // Compare full datetime (date + time)
+          const isUpcoming = meetupDate > now
+          
+          // Removed console.logs to reduce spam
+          // if (!isUpcoming) {
+          //   console.log(`Filtering out past meetup: ${meetup.date} at ${meetup.time}`)
+          // }
+          
+          return isUpcoming
+          
+        } catch (err) {
+          console.error('Error parsing date:', meetup.date, err)
           return true
         }
-        
-        // Add time to the meetup date for accurate comparison
-        if (meetup.time) {
-          const [hours, minutes] = meetup.time.split(':').map(Number)
-          meetupDate.setHours(hours, minutes, 0, 0)
-        }
-        
-        // Compare full datetime (date + time)
-        const isUpcoming = meetupDate > now
-        
-        if (!isUpcoming) {
-          console.log(`Filtering out past meetup: ${meetup.date} at ${meetup.time}`)
-        } else {
-          console.log(`Showing upcoming meetup: ${meetup.date} at ${meetup.time}`)
-        }
-        
-        return isUpcoming
-        
-      } catch (err) {
-        console.error('Error parsing date:', meetup.date, err)
-        return true
-      }
-    })
+      })
+    }, [meetups]) // Only re-filter when meetups array changes
 
     return (
       <div className="space-y-6">
@@ -999,12 +1059,12 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">Your Journey</h3>
-              <p className="text-sm text-gray-600">Complete 5 meetups to unlock 1-on-1 chats</p>
+              <p className="text-sm text-gray-600">Complete 3 meetups to unlock 1-on-1 video chat</p>
             </div>
-            <div className="text-3xl font-bold text-rose-500">{currentUser.meetups_attended}/5</div>
+            <div className="text-3xl font-bold text-rose-500">{currentUser.meetups_attended}/3</div>
           </div>
-          <ProgressBar current={currentUser.meetups_attended} total={5} />
-          {currentUser.meetups_attended >= 5 && (
+          <ProgressBar current={currentUser.meetups_attended} total={3} />
+          {currentUser.meetups_attended >= 3 && (
             <div className="mt-4 flex items-center text-green-600">
               <Star className="w-5 h-5 mr-2 fill-current" />
               <span className="font-medium">Unlocked! You can now schedule 1-on-1 coffee chats</span>
@@ -1143,10 +1203,10 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
           <p className="text-sm text-gray-600">Show interest privately - connect when it's mutual! ❤️</p>
         </div>
 
-        {currentUser.meetups_attended < 5 && (
+        {currentUser.meetups_attended < 3 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <p className="text-sm text-amber-800">
-              🔒 Complete {5 - currentUser.meetups_attended} more meetups to unlock 1-on-1 video chats
+              🔒 Complete {3 - currentUser.meetups_attended} more meetups to unlock 1-on-1 video chats
             </p>
           </div>
         )}
@@ -1210,7 +1270,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
                       </div>
                     </div>
                     
-                    {currentUser.meetups_attended >= 5 ? (
+                    {currentUser.meetups_attended >= 3 ? (
                       <button 
                         onClick={() => setCurrentView('coffeeChats')}
                         className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
@@ -1220,7 +1280,7 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
                       </button>
                     ) : (
                       <button disabled className="w-full bg-gray-300 text-gray-500 font-medium py-2 rounded cursor-not-allowed">
-                        🔒 Complete more meetups to unlock
+                        🔒 Complete {3 - currentUser.meetups_attended} more meetups to unlock
                       </button>
                     )}
                   </div>
@@ -1912,3 +1972,9 @@ export default function MainApp({ currentUser, onSignOut, supabase }) {
     </div>
   )
 }
+
+// Memoize MainApp to prevent re-renders unless userId actually changes
+export default React.memo(MainApp, (prevProps, nextProps) => {
+  // Only re-render if user ID changes (ignore function reference changes)
+  return prevProps.currentUser?.id === nextProps.currentUser?.id
+})

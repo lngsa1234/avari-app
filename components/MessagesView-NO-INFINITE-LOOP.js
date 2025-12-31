@@ -138,9 +138,7 @@ export default function MessagesView({ currentUser, supabase }) {
           });
         }
       )
-      // DISABLED: UPDATE listener causes infinite loop
-      // Read receipts feature temporarily disabled until database issue is resolved
-      /*
+      // Listen for messages being marked as read (so sender sees double checkmark)
       .on(
         'postgres_changes',
         {
@@ -179,7 +177,6 @@ export default function MessagesView({ currentUser, supabase }) {
           });
         }
       )
-      */
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           console.log('✅ Real-time subscription active (INSERT + UPDATE)');
