@@ -993,7 +993,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
   const ProgressBar = ({ current, total }) => {
     const percentage = Math.min((current / total) * 100, 100) // Cap at 100%
     return (
-      <div className="w-full bg-gray-200 rounded-full h-3">
+      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
         <div 
           className="bg-rose-500 h-3 rounded-full transition-all duration-300"
           style={{ width: `${percentage}%` }}
@@ -1562,7 +1562,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-28">
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white p-6 shadow-lg">
         <div className="max-w-4xl mx-auto">
@@ -1904,38 +1904,39 @@ function MainApp({ currentUser, onSignOut, supabase }) {
       )}
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
-        <div className="max-w-4xl mx-auto flex justify-around py-3 overflow-x-auto scrollbar-hide">
+      <div className="fixed bottom-0 left-0 right-0 bg-white pb-safe-bottom border-t border-gray-200 shadow-lg">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex justify-around overflow-x-auto snap-x snap-mandatory scrollbar-hide">
           <button
             onClick={() => setCurrentView('home')}
-            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
+            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
               currentView === 'home' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
             <Calendar className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Meetups</span>
+            <span className="text-sm font-medium">Meetups</span>
           </button>
           <button
             onClick={() => setCurrentView('coffeeChats')}
-            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
+            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
               currentView === 'coffeeChats' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
             <Video className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Chats</span>
+            <span className="text-sm font-medium">Chats</span>
           </button>
           <button
             onClick={() => setCurrentView('connections')}
-            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
+            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
               currentView === 'connections' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
             <Users className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Network</span>
+            <span className="text-sm font-medium">Network</span>
           </button>
           <button
             onClick={() => setCurrentView('messages')}
-            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 relative ${
+            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start relative ${
               currentView === 'messages' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
@@ -1945,29 +1946,34 @@ function MainApp({ currentUser, onSignOut, supabase }) {
                 {unreadCount}
               </span>
             )}
-            <span className="text-xs font-medium">Messages</span>
+            <span className="text-sm font-medium">Messages</span>
           </button>
           <button
             onClick={() => setCurrentView('profile')}
-            className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
+            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
               currentView === 'profile' ? 'text-rose-500' : 'text-gray-500'
             }`}
           >
             <User className="w-6 h-6 mb-1" />
-            <span className="text-xs font-medium">Profile</span>
+            <span className="text-sm font-medium">Profile</span>
           </button>
           {currentUser.role === 'admin' && (
             <button
               onClick={() => setCurrentView('admin')}
-              className={`flex flex-col items-center px-4 py-2 flex-shrink-0 ${
+              className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
                 currentView === 'admin' ? 'text-rose-500' : 'text-gray-500'
               }`}
             >
               <Coffee className="w-6 h-6 mb-1" />
-              <span className="text-xs font-medium">Admin</span>
+              <span className="text-sm font-medium">Admin</span>
             </button>
           )}
+          </div>
         </div>
+        {/* Scroll indicator for admin users on mobile */}
+        {currentUser.role === 'admin' && (
+          <div className="absolute right-0 top-0 bottom-0 w-16 bg-gradient-to-l from-white via-white/80 to-transparent pointer-events-none md:hidden" />
+        )}
       </div>
     </div>
   )

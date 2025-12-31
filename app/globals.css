@@ -11,6 +11,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
 /* React DatePicker Styles */
 .react-datepicker-wrapper {
   width: 100%;
@@ -27,4 +28,33 @@ body {
   background-color: #a855f7 !important;
   color: white !important;
   font-weight: 600;
+}
+
+/* iPhone Safe Area Support */
+/* Adds padding for iPhone X+ home indicator */
+.pb-safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Combined padding - regular padding + safe area */
+.pb-safe {
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px)); /* 20px + safe area */
+}
+
+/* For bottom navigation specifically */
+.bottom-nav-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* For content that should avoid bottom nav + safe area */
+.pb-nav-safe {
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); /* 80px nav + safe area */
+}
+
+/* All safe area insets (if needed) */
+.p-safe-all {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
 }
