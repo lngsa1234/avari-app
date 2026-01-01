@@ -30,22 +30,29 @@ export function AuthProvider({ children }) {
     lastLoadedUserIdRef.current = userId
     setProfileLoading(true)
     
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
 
-    if (error) {
-      console.error('❌ AuthProvider: Error loading profile:', error)
+      if (error) {
+        console.error('❌ AuthProvider: Error loading profile:', error)
+        setProfile(null)
+      } else {
+        console.log('✅ AuthProvider: Profile loaded:', data)
+        setProfile(data)
+      }
+    } catch (error) {
+      console.error('💥 AuthProvider: Unexpected error loading profile:', error)
       setProfile(null)
-    } else {
-      console.log('✅ AuthProvider: Profile loaded')
-      setProfile(data)
+    } finally {
+      // CRITICAL: Always clear loading state
+      setProfileLoading(false)
+      loadingProfileRef.current = false
+      console.log('🏁 AuthProvider: Profile loading complete')
     }
-    
-    setProfileLoading(false)
-    loadingProfileRef.current = false
   }, [])
 
   // Set up auth listener - runs ONCE
@@ -54,7 +61,7 @@ export function AuthProvider({ children }) {
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('🔐 AuthProvider: Initial session:', session?.user?.id || 'none')
+      console.log('📱 AuthProvider: Initial session:', session?.user?.id || 'none')
       setUser(session?.user ?? null)
       
       if (session?.user) {
@@ -70,9 +77,9 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 AuthProvider: Auth event:', event)
       
-      // Ignore duplicate INITIAL_SESSION events
-      if (event === 'INITIAL_SESSION') {
-        console.log('⏭️ AuthProvider: Ignoring INITIAL_SESSION duplicate')
+      // CRITICAL FIX: Ignore events that don't require profile reload
+      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
+        console.log('⏭️ AuthProvider: Ignoring', event, '- no action needed')
         return
       }
       
@@ -108,26 +115,32 @@ export function AuthProvider({ children }) {
     if (!user) return
 
     console.log('💾 AuthProvider: Saving profile')
-    const { data, error } = await supabase
-      .from('profiles')
-      .upsert({
-        id: user.id,
-        email: user.email,
-        ...profileData,
-        role: 'user',
-        meetups_attended: 0,
-        onboarding_complete: true  // Mark onboarding as complete
-      })
-      .select()
-      .single()
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .upsert({
+          id: user.id,
+          email: user.email,
+          ...profileData,
+          role: 'user',
+          meetups_attended: 0,
+          onboarding_complete: true  // Mark onboarding as complete
+        })
+        .select()
+        .single()
 
-    if (error) {
-      console.error('❌ AuthProvider: Error saving profile:', error)
-      throw error
-    } else {
+      if (error) {
+        console.error('❌ AuthProvider: Error saving profile:', error)
+        throw error
+      }
+      
       console.log('✅ AuthProvider: Profile saved with onboarding complete')
       setProfile(data)
       return data
+    } catch (error) {
+      console.error('💥 AuthProvider: Unexpected error saving profile:', error)
+      throw error
     }
   }, [user])
 

@@ -68,7 +68,7 @@ export default function AppContainer() {
   // CRITICAL: Wait for BOTH auth AND profile to be ready
   // This prevents the "flash" during signup
   if (authLoading || (user && profileLoading)) {
-    console.log('⏳ AppContainer: Loading... (auth:', authLoading, 'profile:', profileLoading, ')')
+    console.log('⏳ AppContainer: Loading... (auth:', authLoading, 'profile:', profileLoading, 'user:', !!user, ')')
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100">
         <div className="text-center">
