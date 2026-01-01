@@ -351,7 +351,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
     try {
       console.log('🔍 Loading meetup people...')
       
-      // Get meetups current user attended
+      // STEP 1: Get meetups current user attended
       const { data: mySignups, error: signupsError } = await supabase
         .from('meetup_signups')
         .select('meetup_id')
@@ -368,7 +368,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
         return
       }
 
-      // ✅ FIX: Get meetup details for attended meetups
+      // STEP 2: Get meetup details for attended meetups
       const { data: allMeetupsData, error: meetupsError } = await supabase
         .from('meetups')
         .select('*')
@@ -377,10 +377,9 @@ function MainApp({ currentUser, onSignOut, supabase }) {
 
       if (meetupsError) throw meetupsError
 
-      // ✅ FIX: Filter to ONLY PAST meetups (date + time check)
+      // STEP 3: Filter to ONLY PAST meetups (date + time check)
       const now = new Date()
       const meetupsData = allMeetupsData.filter(meetup => {
-        // Combine date and time into a single datetime for comparison
         const meetupDateTime = new Date(`${meetup.date}T${meetup.time}`)
         const isPast = meetupDateTime < now
         
@@ -388,7 +387,6 @@ function MainApp({ currentUser, onSignOut, supabase }) {
         return isPast
       })
 
-      // ✅ FIX: Check if we have any past meetups
       if (!meetupsData || meetupsData.length === 0) {
         console.log('⚠️ No PAST meetups found (based on date + time)')
         setMeetupPeople({})
@@ -397,7 +395,31 @@ function MainApp({ currentUser, onSignOut, supabase }) {
 
       console.log('✅ Loaded', meetupsData.length, 'PAST meetup details (date + time verified)')
 
-      // For each meetup, get other attendees (that's it - no filtering!)
+      // STEP 4: 🔥 NEW - Get existing connections to exclude them
+      const { data: existingConnections, error: connectionsError } = await supabase
+        .from('user_interests')
+        .select('user_id, interested_in_user_id')
+        .or(`and(user_id.eq.${currentUser.id},mutual_match.eq.true),and(interested_in_user_id.eq.${currentUser.id},mutual_match.eq.true)`)
+
+      if (connectionsError) {
+        console.error('⚠️ Error loading connections for filtering:', connectionsError)
+      }
+
+      // Build a Set of connected user IDs for fast lookup
+      const connectedUserIds = new Set()
+      if (existingConnections) {
+        existingConnections.forEach(conn => {
+          if (conn.user_id === currentUser.id) {
+            connectedUserIds.add(conn.interested_in_user_id)
+          } else {
+            connectedUserIds.add(conn.user_id)
+          }
+        })
+      }
+
+      console.log('🚫 Excluding', connectedUserIds.size, 'existing connections:', Array.from(connectedUserIds))
+
+      // STEP 5: For each meetup, get other attendees and FILTER OUT connections
       const meetupPeopleMap = {}
 
       for (const meetup of meetupsData) {
@@ -411,7 +433,6 @@ function MainApp({ currentUser, onSignOut, supabase }) {
           .neq('user_id', currentUser.id)
 
         console.log('🔍 Raw signups query result:', signups)
-        console.log('🔍 Current user ID:', currentUser.id)
 
         if (signupsError) {
           console.error('❌ Error loading signups:', signupsError)
@@ -420,15 +441,22 @@ function MainApp({ currentUser, onSignOut, supabase }) {
 
         if (!signups || signups.length === 0) {
           console.log('⚠️ No other attendees at this meetup')
-          console.log('💡 Check: Did other users actually sign up for meetup ID:', meetup.id, '?')
           continue
         }
 
-        console.log('👥 Found', signups.length, 'other attendees')
+        // 🔥 CRITICAL FIX: Filter out existing connections
+        const userIds = signups
+          .map(s => s.user_id)
+          .filter(userId => !connectedUserIds.has(userId))
+
+        console.log('👥 Found', signups.length, 'total attendees,', userIds.length, 'after filtering connections')
+
+        if (userIds.length === 0) {
+          console.log('✨ All attendees are already connections - nothing to discover here')
+          continue
+        }
 
         // Get profile data for these user_ids
-        const userIds = signups.map(s => s.user_id)
-        
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
           .select('id, name, career, city, state, bio')
@@ -445,7 +473,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
           user: profile
         }))
 
-        console.log('✅ Available people:', people.length)
+        console.log('✅ Available people to discover:', people.length)
 
         if (people.length > 0) {
           meetupPeopleMap[meetup.id] = {

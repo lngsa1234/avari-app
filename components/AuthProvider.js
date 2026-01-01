@@ -12,6 +12,8 @@ export function AuthProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true)
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
+  const [initialized, setInitialized] = useState(false) // 🔥 NEW - Track if auth has initialized
+  const [profileStatus, setProfileStatus] = useState('idle') // 🔥 NEW - 'idle' | 'loading' | 'ready' | 'missing'
   
   // Prevent duplicate profile loads
   const loadingProfileRef = useRef(false)
@@ -25,10 +27,17 @@ export function AuthProvider({ children }) {
       return
     }
 
+    // Guard: Don't reload if profile already exists for this user
+    if (profile && profile.id === userId && profileStatus === 'ready') {
+      console.log('✅ AuthProvider: Profile already loaded for', userId)
+      return
+    }
+
     console.log('🔄 AuthProvider: Loading profile for', userId)
     loadingProfileRef.current = true
     lastLoadedUserIdRef.current = userId
     setProfileLoading(true)
+    setProfileStatus('loading')
     
     try {
       const { data, error } = await supabase
@@ -38,22 +47,33 @@ export function AuthProvider({ children }) {
         .single()
 
       if (error) {
+        // Check if error is "no rows found" (PGRST116)
+        if (error.code === 'PGRST116') {
+          console.log('⚠️ AuthProvider: No profile found - user needs to create one')
+          setProfile(null)
+          setProfileStatus('missing')
+          return
+        }
+        
         console.error('❌ AuthProvider: Error loading profile:', error)
         setProfile(null)
+        setProfileStatus('missing')
       } else {
         console.log('✅ AuthProvider: Profile loaded:', data)
         setProfile(data)
+        setProfileStatus('ready')
       }
     } catch (error) {
       console.error('💥 AuthProvider: Unexpected error loading profile:', error)
       setProfile(null)
+      setProfileStatus('missing')
     } finally {
       // CRITICAL: Always clear loading state
       setProfileLoading(false)
       loadingProfileRef.current = false
-      console.log('🏁 AuthProvider: Profile loading complete')
+      console.log('🏁 AuthProvider: Profile loading complete, status:', profileStatus)
     }
-  }, [])
+  }, [profile, profileStatus, supabase])
 
   // Set up auth listener - runs ONCE
   useEffect(() => {
@@ -66,10 +86,13 @@ export function AuthProvider({ children }) {
       
       if (session?.user) {
         loadUserProfile(session.user.id).finally(() => {
-          setAuthLoading(false) // Set after profile loads
+          setAuthLoading(false)
+          setInitialized(true) // 🔥 Mark as initialized
         })
       } else {
-        setAuthLoading(false) // No user, done loading
+        setAuthLoading(false)
+        setInitialized(true) // 🔥 Mark as initialized
+        setProfileStatus('idle')
       }
     })
 
@@ -77,38 +100,56 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('🔐 AuthProvider: Auth event:', event)
       
-      // CRITICAL FIX: Ignore events that don't require profile reload
+      // 🔥 CRITICAL FIX: Ignore events that don't require action
       if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
         console.log('⏭️ AuthProvider: Ignoring', event, '- no action needed')
         return
       }
       
+      // Only handle real auth changes (SIGNED_IN, SIGNED_OUT, USER_UPDATED)
       setUser(session?.user ?? null)
       
       if (session?.user) {
-        await loadUserProfile(session.user.id)
+        // Only load profile if not already initialized or on explicit sign-in
+        if (!initialized || event === 'SIGNED_IN') {
+          await loadUserProfile(session.user.id)
+        }
       } else {
         setProfile(null)
         setProfileLoading(false)
+        setProfileStatus('idle')
         lastLoadedUserIdRef.current = null
       }
       
       setAuthLoading(false)
+      if (!initialized) {
+        setInitialized(true)
+      }
     })
 
     return () => {
       console.log('🧹 AuthProvider: Cleaning up auth listener')
       subscription.unsubscribe()
     }
-  }, [loadUserProfile])
+  }, [loadUserProfile, initialized])
 
   // MEMOIZED sign out
   const signOut = useCallback(async () => {
     console.log('👋 AuthProvider: Signing out')
-    await supabase.auth.signOut()
+    
+    // 🔥 Use 'global' scope to clear session from all tabs/windows (important for Safari)
+    await supabase.auth.signOut({ scope: 'global' })
+    
+    // 🔥 Clear all local state
     setUser(null)
     setProfile(null)
-  }, [])
+    setProfileStatus('idle')
+    
+    // 🔥 Optional: Clear storage to ensure clean slate on Safari
+    // Uncomment if you want to clear all app data on sign out
+    // localStorage.clear()
+    // sessionStorage.clear()
+  }, [supabase])
 
   // MEMOIZED save profile
   const saveProfile = useCallback(async (profileData) => {
@@ -137,18 +178,21 @@ export function AuthProvider({ children }) {
       
       console.log('✅ AuthProvider: Profile saved with onboarding complete')
       setProfile(data)
+      setProfileStatus('ready') // 🔥 Mark profile as ready
       return data
     } catch (error) {
       console.error('💥 AuthProvider: Unexpected error saving profile:', error)
       throw error
     }
-  }, [user])
+  }, [user, supabase])
 
   const value = {
     user,
     profile,
     authLoading,
     profileLoading,
+    initialized,
+    profileStatus,
     signOut,
     saveProfile
   }

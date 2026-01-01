@@ -8,14 +8,17 @@ import ProfileSetup from '@/components/ProfileSetup'
 import MainApp from '@/components/MainApp'
 
 export default function AppContainer() {
-  const { user, profile, authLoading, profileLoading, signOut, saveProfile } = useAuth()
+  const { user, profile, authLoading, profileLoading, initialized, profileStatus, signOut, saveProfile } = useAuth()
 
   // MEMOIZED auth handlers
   const handleGoogleSignIn = useCallback(async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}`
+        redirectTo: `${window.location.origin}`,
+        queryParams: {
+          prompt: 'select_account' // 🔥 Force account chooser on Safari
+        }
       }
     })
 
@@ -29,7 +32,11 @@ export default function AppContainer() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}`
+        emailRedirectTo: `${window.location.origin}`,
+        data: {
+          // Ensure fresh session
+          prompt: 'consent'
+        }
       }
     })
 
@@ -65,15 +72,28 @@ export default function AppContainer() {
     }
   }, [saveProfile])
 
-  // CRITICAL: Wait for BOTH auth AND profile to be ready
-  // This prevents the "flash" during signup
-  if (authLoading || (user && profileLoading)) {
-    console.log('⏳ AppContainer: Loading... (auth:', authLoading, 'profile:', profileLoading, 'user:', !!user, ')')
+  // 🔥 CRITICAL FIX: Only show loading during INITIAL hydration
+  // After initialization, never show loading screen again (prevents focus/tab switch issues)
+  if (!initialized) {
+    console.log('⏳ AppContainer: Initializing auth...')
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 🔥 NEW: Show loading while profile is being fetched (prevents flicker)
+  if (user && profileStatus === 'loading') {
+    console.log('⏳ AppContainer: Loading profile...')
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your profile...</p>
         </div>
       </div>
     )
@@ -91,9 +111,9 @@ export default function AppContainer() {
     )
   }
 
-  // LOGGED IN BUT NO PROFILE (or onboarding not complete)
-  if (!profile || !profile.onboarding_complete) {
-    console.log('📝 AppContainer: Rendering ProfileSetup (user exists, profile:', !!profile, 'onboarding:', profile?.onboarding_complete)
+  // 🔥 LOGGED IN BUT PROFILE MISSING (user needs to create profile)
+  if (profileStatus === 'missing' || !profile || !profile.onboarding_complete) {
+    console.log('📝 AppContainer: Rendering ProfileSetup (profileStatus:', profileStatus, 'profile:', !!profile, 'onboarding:', profile?.onboarding_complete, ')')
     return (
       <ProfileSetup
         session={{ user }}
@@ -102,8 +122,8 @@ export default function AppContainer() {
     )
   }
 
-  // LOGGED IN WITH COMPLETE PROFILE - MainApp stays mounted!
-  console.log('✅ AppContainer: Rendering MainApp (user + complete profile)')
+  // ✅ LOGGED IN WITH COMPLETE PROFILE - MainApp stays mounted!
+  console.log('✅ AppContainer: Rendering MainApp (profileStatus:', profileStatus, ')')
   return (
     <MainApp
       currentUser={profile}
