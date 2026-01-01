@@ -123,12 +123,31 @@ export default function AppContainer() {
   }
 
   // ✅ LOGGED IN WITH COMPLETE PROFILE - MainApp stays mounted!
-  console.log('✅ AppContainer: Rendering MainApp (profileStatus:', profileStatus, ')')
+  if (profileStatus === 'ready' && profile && profile.onboarding_complete) {
+    console.log('✅ AppContainer: Rendering MainApp (profileStatus:', profileStatus, ')')
+    return (
+      <MainApp
+        currentUser={profile}
+        onSignOut={signOut}
+        supabase={supabase}
+      />
+    )
+  }
+
+  // 🔥 DEFENSIVE: If we get here, something unexpected happened
+  // This should never happen, but it's a safety net
+  console.warn('⚠️ AppContainer: Unexpected state, rendering Landing', {
+    user: !!user,
+    profile: !!profile,
+    profileStatus,
+    initialized
+  })
+  
   return (
-    <MainApp
-      currentUser={profile}
-      onSignOut={signOut}
-      supabase={supabase}
+    <LandingPage
+      onGoogleSignIn={handleGoogleSignIn}
+      onEmailSignUp={handleEmailSignUp}
+      onEmailSignIn={handleEmailSignIn}
     />
   )
 }

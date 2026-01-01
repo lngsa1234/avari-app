@@ -20,6 +20,25 @@ function MainApp({ currentUser, onSignOut, supabase }) {
   console.log(`👤 currentUser.id: ${currentUser?.id}`)
   console.log(`🔑 Props changed: currentUser=${!!currentUser}, onSignOut=${!!onSignOut}, supabase=${!!supabase}`)
   
+  // 🔥 WRAPPER for sign out with debugging
+  const handleSignOut = useCallback(async () => {
+    console.log('🚨 MainApp: Sign out button clicked!')
+    console.log('🚨 MainApp: onSignOut function exists?', typeof onSignOut)
+    
+    if (!onSignOut) {
+      console.error('❌ MainApp: onSignOut function is undefined!')
+      return
+    }
+    
+    try {
+      console.log('🚨 MainApp: Calling onSignOut...')
+      await onSignOut()
+      console.log('✅ MainApp: onSignOut completed')
+    } catch (error) {
+      console.error('❌ MainApp: Error in onSignOut:', error)
+    }
+  }, [onSignOut])
+  
   const [currentView, setCurrentView] = useState('home')
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
@@ -395,11 +414,10 @@ function MainApp({ currentUser, onSignOut, supabase }) {
 
       console.log('✅ Loaded', meetupsData.length, 'PAST meetup details (date + time verified)')
 
-      // STEP 4: 🔥 NEW - Get existing connections to exclude them
+      // STEP 4: 🔥 Get existing connections to exclude them
+      // Use the same RPC function as loadConnections
       const { data: existingConnections, error: connectionsError } = await supabase
-        .from('user_interests')
-        .select('user_id, interested_in_user_id')
-        .or(`and(user_id.eq.${currentUser.id},mutual_match.eq.true),and(interested_in_user_id.eq.${currentUser.id},mutual_match.eq.true)`)
+        .rpc('get_mutual_matches', { for_user_id: currentUser.id })
 
       if (connectionsError) {
         console.error('⚠️ Error loading connections for filtering:', connectionsError)
@@ -408,12 +426,9 @@ function MainApp({ currentUser, onSignOut, supabase }) {
       // Build a Set of connected user IDs for fast lookup
       const connectedUserIds = new Set()
       if (existingConnections) {
-        existingConnections.forEach(conn => {
-          if (conn.user_id === currentUser.id) {
-            connectedUserIds.add(conn.interested_in_user_id)
-          } else {
-            connectedUserIds.add(conn.user_id)
-          }
+        existingConnections.forEach(match => {
+          // The RPC returns matched_user_id
+          connectedUserIds.add(match.matched_user_id)
         })
       }
 
@@ -1470,7 +1485,7 @@ function MainApp({ currentUser, onSignOut, supabase }) {
           </button>
 
           <button 
-            onClick={onSignOut}
+            onClick={handleSignOut}
             className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded transition-colors border border-red-200"
           >
             Log Out

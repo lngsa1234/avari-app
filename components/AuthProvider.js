@@ -106,7 +106,13 @@ export function AuthProvider({ children }) {
         return
       }
       
-      // Only handle real auth changes (SIGNED_IN, SIGNED_OUT, USER_UPDATED)
+      // 🔥 Handle SIGNED_OUT - do nothing, let the redirect happen
+      if (event === 'SIGNED_OUT') {
+        console.log('👋 AuthProvider: User signed out - redirect will handle cleanup')
+        return
+      }
+      
+      // Only handle real auth changes (SIGNED_IN, USER_UPDATED)
       setUser(session?.user ?? null)
       
       if (session?.user) {
@@ -137,18 +143,36 @@ export function AuthProvider({ children }) {
   const signOut = useCallback(async () => {
     console.log('👋 AuthProvider: Signing out')
     
-    // 🔥 Use 'global' scope to clear session from all tabs/windows (important for Safari)
-    await supabase.auth.signOut({ scope: 'global' })
-    
-    // 🔥 Clear all local state
-    setUser(null)
-    setProfile(null)
-    setProfileStatus('idle')
-    
-    // 🔥 Optional: Clear storage to ensure clean slate on Safari
-    // Uncomment if you want to clear all app data on sign out
-    // localStorage.clear()
-    // sessionStorage.clear()
+    try {
+      // 🔥 Step 1: Clear Supabase session
+      console.log('⏳ AuthProvider: Calling Supabase sign out...')
+      const { error } = await supabase.auth.signOut({ scope: 'global' })
+      
+      if (error) {
+        console.error('❌ AuthProvider: Sign out error:', error)
+      } else {
+        console.log('✅ AuthProvider: Supabase sign out successful')
+      }
+      
+      // 🔥 Step 2: Clear ALL local storage to prevent session resurrection
+      console.log('🧹 AuthProvider: Clearing local storage...')
+      localStorage.clear()
+      sessionStorage.clear()
+      
+      console.log('🚀 AuthProvider: Redirecting to /')
+      
+      // 🔥 Step 3: Force hard redirect WITHOUT setting state
+      // Don't set state here - just redirect immediately
+      // This prevents React from re-rendering before redirect completes
+      window.location.replace('/')
+      
+    } catch (error) {
+      console.error('💥 AuthProvider: Unexpected error during sign out:', error)
+      // Force redirect anyway
+      localStorage.clear()
+      sessionStorage.clear()
+      window.location.replace('/')
+    }
   }, [supabase])
 
   // MEMOIZED save profile
