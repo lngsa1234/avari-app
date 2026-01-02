@@ -1,44 +1,36 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { supabase } from '../lib/supabase'
 
-const AuthContext = createContext({})
-
-export const useAuth = () => useContext(AuthContext)
+const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [authLoading, setAuthLoading] = useState(true)
   const [profile, setProfile] = useState(null)
-  const [profileLoading, setProfileLoading] = useState(false)
-  const [initialized, setInitialized] = useState(false) // 🔥 NEW - Track if auth has initialized
-  const [profileStatus, setProfileStatus] = useState('idle') // 🔥 NEW - 'idle' | 'loading' | 'ready' | 'missing'
+  const [status, setStatus] = useState('initializing')
   
-  // Prevent duplicate profile loads
-  const loadingProfileRef = useRef(false)
-  const lastLoadedUserIdRef = useRef(null)
+  const loadingUserIdRef = useRef(null)
+  const mountedRef = useRef(true)
 
-  // Load user profile - MEMOIZED and GUARDED
-  const loadUserProfile = useCallback(async (userId) => {
-    // Guard: Don't reload if already loading this user
-    if (loadingProfileRef.current && lastLoadedUserIdRef.current === userId) {
-      console.log('⏭️ AuthProvider: Already loading profile for', userId)
+  // Stable profile loader
+  const loadProfileRef = useRef(null)
+  
+  loadProfileRef.current = async (userId) => {
+    if (loadingUserIdRef.current === userId) {
+      console.log('⏭️ Profile already loading for', userId)
       return
     }
 
-    // Guard: Don't reload if profile already exists for this user
-    if (profile && profile.id === userId && profileStatus === 'ready') {
-      console.log('✅ AuthProvider: Profile already loaded for', userId)
+    if (profile?.id === userId && status === 'ready') {
+      console.log('✅ Profile already loaded for', userId)
       return
     }
 
-    console.log('🔄 AuthProvider: Loading profile for', userId)
-    loadingProfileRef.current = true
-    lastLoadedUserIdRef.current = userId
-    setProfileLoading(true)
-    setProfileStatus('loading')
-    
+    console.log('🔄 Loading profile for', userId)
+    loadingUserIdRef.current = userId
+    setStatus('loading_profile')
+
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -46,184 +38,192 @@ export function AuthProvider({ children }) {
         .eq('id', userId)
         .single()
 
+      if (!mountedRef.current) return
+
       if (error) {
-        // Check if error is "no rows found" (PGRST116)
-        if (error.code === 'PGRST116') {
-          console.log('⚠️ AuthProvider: No profile found - user needs to create one')
-          setProfile(null)
-          setProfileStatus('missing')
-          return
-        }
-        
-        console.error('❌ AuthProvider: Error loading profile:', error)
+        console.error('❌ Profile error:', error.code)
+        setStatus(error.code === 'PGRST116' ? 'profile_missing' : 'signed_out')
         setProfile(null)
-        setProfileStatus('missing')
-      } else {
-        console.log('✅ AuthProvider: Profile loaded:', data)
+      } else if (data) {
+        console.log('✅ Profile loaded:', data.name || data.id)
         setProfile(data)
-        setProfileStatus('ready')
+        setStatus('ready')
       }
-    } catch (error) {
-      console.error('💥 AuthProvider: Unexpected error loading profile:', error)
+    } catch (err) {
+      if (!mountedRef.current) return
+      console.error('❌ Exception:', err.message)
+      setStatus('signed_out')
       setProfile(null)
-      setProfileStatus('missing')
     } finally {
-      // CRITICAL: Always clear loading state
-      setProfileLoading(false)
-      loadingProfileRef.current = false
-      console.log('🏁 AuthProvider: Profile loading complete, status:', profileStatus)
+      loadingUserIdRef.current = null
     }
-  }, [profile, profileStatus, supabase])
-
-  // Set up auth listener - runs ONCE
-  useEffect(() => {
-    console.log('🔐 AuthProvider: Setting up auth listener')
-
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('📱 AuthProvider: Initial session:', session?.user?.id || 'none')
-      setUser(session?.user ?? null)
-      
-      if (session?.user) {
-        loadUserProfile(session.user.id).finally(() => {
-          setAuthLoading(false)
-          setInitialized(true) // 🔥 Mark as initialized
-        })
-      } else {
-        setAuthLoading(false)
-        setInitialized(true) // 🔥 Mark as initialized
-        setProfileStatus('idle')
-      }
-    })
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔐 AuthProvider: Auth event:', event)
-      
-      // 🔥 CRITICAL FIX: Ignore events that don't require action
-      if (event === 'INITIAL_SESSION' || event === 'TOKEN_REFRESHED') {
-        console.log('⏭️ AuthProvider: Ignoring', event, '- no action needed')
-        return
-      }
-      
-      // 🔥 Handle SIGNED_OUT - do nothing, let the redirect happen
-      if (event === 'SIGNED_OUT') {
-        console.log('👋 AuthProvider: User signed out - redirect will handle cleanup')
-        return
-      }
-      
-      // Only handle real auth changes (SIGNED_IN, USER_UPDATED)
-      setUser(session?.user ?? null)
-      
-      if (session?.user) {
-        // Only load profile if not already initialized or on explicit sign-in
-        if (!initialized || event === 'SIGNED_IN') {
-          await loadUserProfile(session.user.id)
-        }
-      } else {
-        setProfile(null)
-        setProfileLoading(false)
-        setProfileStatus('idle')
-        lastLoadedUserIdRef.current = null
-      }
-      
-      setAuthLoading(false)
-      if (!initialized) {
-        setInitialized(true)
-      }
-    })
-
-    return () => {
-      console.log('🧹 AuthProvider: Cleaning up auth listener')
-      subscription.unsubscribe()
-    }
-  }, [loadUserProfile, initialized])
-
-  // MEMOIZED sign out
-  const signOut = useCallback(async () => {
-    console.log('👋 AuthProvider: Signing out')
-    
-    try {
-      // 🔥 Step 1: Clear Supabase session
-      console.log('⏳ AuthProvider: Calling Supabase sign out...')
-      const { error } = await supabase.auth.signOut({ scope: 'global' })
-      
-      if (error) {
-        console.error('❌ AuthProvider: Sign out error:', error)
-      } else {
-        console.log('✅ AuthProvider: Supabase sign out successful')
-      }
-      
-      // 🔥 Step 2: Clear ALL local storage to prevent session resurrection
-      console.log('🧹 AuthProvider: Clearing local storage...')
-      localStorage.clear()
-      sessionStorage.clear()
-      
-      console.log('🚀 AuthProvider: Redirecting to /')
-      
-      // 🔥 Step 3: Force hard redirect WITHOUT setting state
-      // Don't set state here - just redirect immediately
-      // This prevents React from re-rendering before redirect completes
-      window.location.replace('/')
-      
-    } catch (error) {
-      console.error('💥 AuthProvider: Unexpected error during sign out:', error)
-      // Force redirect anyway
-      localStorage.clear()
-      sessionStorage.clear()
-      window.location.replace('/')
-    }
-  }, [supabase])
-
-  // MEMOIZED save profile
-  const saveProfile = useCallback(async (profileData) => {
-    if (!user) return
-
-    console.log('💾 AuthProvider: Saving profile')
-    
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email,
-          ...profileData,
-          role: 'user',
-          meetups_attended: 0,
-          onboarding_complete: true  // Mark onboarding as complete
-        })
-        .select()
-        .single()
-
-      if (error) {
-        console.error('❌ AuthProvider: Error saving profile:', error)
-        throw error
-      }
-      
-      console.log('✅ AuthProvider: Profile saved with onboarding complete')
-      setProfile(data)
-      setProfileStatus('ready') // 🔥 Mark profile as ready
-      return data
-    } catch (error) {
-      console.error('💥 AuthProvider: Unexpected error saving profile:', error)
-      throw error
-    }
-  }, [user, supabase])
-
-  const value = {
-    user,
-    profile,
-    authLoading,
-    profileLoading,
-    initialized,
-    profileStatus,
-    signOut,
-    saveProfile
   }
 
+  // ============================================================
+  // AUTH ACTIONS
+  // ============================================================
+
+  const signInWithGoogle = useCallback(async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}`,
+          queryParams: {
+            prompt: 'select_account'
+          }
+        }
+      })
+      if (error) throw error
+    } catch (error) {
+      console.error('Google sign in error:', error)
+      throw error
+    }
+  }, [])
+
+  const signInWithEmail = useCallback(async (email, password) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+      if (error) throw error
+      console.log('✅ Email login successful')
+    } catch (error) {
+      console.error('Email login error:', error)
+      throw error
+    }
+  }, [])
+
+  const signUpWithEmail = useCallback(async (email, password) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}`,
+          data: {
+            prompt: 'consent'
+          }
+        }
+      })
+      
+      if (error) throw error
+      
+      if (data?.user?.identities?.length === 0) {
+        throw new Error('This email is already registered. Please log in instead.')
+      } else if (data?.session) {
+        console.log('✅ Account created with session')
+        if (data.user) {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              email,
+            })
+          
+          if (profileError) {
+            console.error('Profile creation error:', profileError)
+          }
+        }
+      } else {
+        throw new Error('Check your email for verification link!')
+      }
+    } catch (error) {
+      console.error('Signup error:', error)
+      throw error
+    }
+  }, [])
+
+  const signOut = useCallback(async () => {
+    console.log('🚪 Signing out...')
+    
+    try {
+      await supabase.auth.signOut()
+      // Don't use window.location.replace - let auth state handle it
+      // The SIGNED_OUT event will update the state automatically
+    } catch (error) {
+      console.error('❌ Sign out error:', error)
+    }
+  }, [])
+
+  const refreshProfile = useCallback(async () => {
+    if (user?.id) {
+      console.log('🔄 Refreshing profile')
+      loadingUserIdRef.current = null
+      await loadProfileRef.current(user.id)
+    }
+  }, [user?.id])
+
+  // Auth listener
+  useEffect(() => {
+    console.log('🔐 Setting up auth listener')
+    mountedRef.current = true
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        console.log('📱 Initial session found:', session.user.id)
+        setUser(session.user)
+        loadProfileRef.current(session.user.id)
+      } else {
+        console.log('📱 No initial session')
+        setStatus('signed_out')
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('🔐 Auth event:', event)
+
+        if (event === 'SIGNED_IN' && session?.user) {
+          setUser(session.user)
+          loadProfileRef.current(session.user.id)
+        } else if (event === 'SIGNED_OUT') {
+          console.log('👋 Signed out - updating state')
+          setUser(null)
+          setProfile(null)
+          setStatus('signed_out')
+          loadingUserIdRef.current = null
+        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+          setUser(session.user)
+        } else if (event === 'INITIAL_SESSION') {
+          console.log('⏭️ Ignoring INITIAL_SESSION - already handled by getSession()')
+        }
+      }
+    )
+
+    return () => {
+      console.log('🧹 Cleaning up auth listener')
+      mountedRef.current = false
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const contextValue = useMemo(
+    () => ({
+      user,
+      profile,
+      status,
+      signInWithGoogle,
+      signInWithEmail,
+      signUpWithEmail,
+      signOut,
+      refreshProfile,
+    }),
+    [user, profile, status, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, refreshProfile]
+  )
+
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   )
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider')
+  }
+  return context
 }

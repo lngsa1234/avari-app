@@ -1,5 +1,6 @@
 'use client'
 
+import { supabase } from '@/lib/supabase'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video } from 'lucide-react'
 import DatePicker from 'react-datepicker'
@@ -7,7 +8,7 @@ import 'react-datepicker/dist/react-datepicker.css'
 import CoffeeChatsView from './CoffeeChatsView'
 import MessagesView from './MessagesView'
 
-function MainApp({ currentUser, onSignOut, supabase }) {
+function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
   const renderCountRef = useRef(0)
   renderCountRef.current++

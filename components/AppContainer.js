@@ -1,153 +1,73 @@
 'use client'
 
-import { useCallback } from 'react'
-import { useAuth } from '@/components/AuthProvider'
-import { supabase } from '@/lib/supabase'
-import LandingPage from '@/components/LandingPage'
-import ProfileSetup from '@/components/ProfileSetup'
-import MainApp from '@/components/MainApp'
+import { useAuth } from './AuthProvider'
+import MainApp from './MainApp'
+import LandingPage from './LandingPage'
 
 export default function AppContainer() {
-  const { user, profile, authLoading, profileLoading, initialized, profileStatus, signOut, saveProfile } = useAuth()
+  const {
+    user,
+    profile,
+    status,
+    signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
+    signOut
+  } = useAuth()
 
-  // MEMOIZED auth handlers
-  const handleGoogleSignIn = useCallback(async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}`,
-        queryParams: {
-          prompt: 'select_account' // 🔥 Force account chooser on Safari
-        }
+  switch (status) {
+    case 'initializing':
+    case 'loading_profile':
+      if (user) {
+        return (
+          <div className="flex items-center justify-center min-h-screen bg-gray-50">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
+              <p className="text-gray-600">Loading...</p>
+            </div>
+          </div>
+        )
       }
-    })
+      break
 
-    if (error) {
-      alert('Error signing in: ' + error.message)
-    }
-  }, [])
-
-  const handleEmailSignUp = useCallback(async (email, password) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}`,
-        data: {
-          // Ensure fresh session
-          prompt: 'consent'
-        }
-      }
-    })
-
-    if (error) {
-      alert('Error signing up: ' + error.message)
-    } else {
-      if (data?.user?.identities?.length === 0) {
-        alert('This email is already registered. Please log in instead.')
-      } else if (data?.session) {
-        alert('Account created! Setting up your profile...')
-      } else {
-        alert('Check your email for verification link!')
-      }
-    }
-  }, [])
-
-  const handleEmailSignIn = useCallback(async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      alert('Error signing in: ' + error.message)
-    }
-  }, [])
-
-  const handleSaveProfile = useCallback(async (profileData) => {
-    try {
-      await saveProfile(profileData)
-    } catch (error) {
-      alert('Error saving profile: ' + error.message)
-    }
-  }, [saveProfile])
-
-  // 🔥 CRITICAL FIX: Only show loading during INITIAL hydration
-  // After initialization, never show loading screen again (prevents focus/tab switch issues)
-  if (!initialized) {
-    console.log('⏳ AppContainer: Initializing auth...')
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+    case 'profile_missing':
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-gray-50">
+          <div className="text-center max-w-md p-8 bg-white rounded-lg shadow-md">
+            <div className="text-5xl mb-4">👋</div>
+            <h2 className="text-2xl font-bold mb-4">Welcome to Avari!</h2>
+            <p className="text-gray-600 mb-6">
+              Let's set up your profile to start connecting with people from your meetups.
+            </p>
+            <a 
+              href="/profile/new"
+              className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Create Profile
+            </a>
+          </div>
         </div>
-      </div>
-    )
-  }
+      )
 
-  // 🔥 NEW: Show loading while profile is being fetched (prevents flicker)
-  if (user && profileStatus === 'loading') {
-    console.log('⏳ AppContainer: Loading profile...')
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your profile...</p>
-        </div>
-      </div>
-    )
-  }
+    case 'ready':
+      if (profile) {
+        return (
+          <MainApp
+            currentUser={profile}
+            onSignOut={signOut}
+          />
+        )
+      }
+      break
 
-  // NOT LOGGED IN
-  if (!user) {
-    console.log('🔓 AppContainer: Rendering Landing (no user)')
-    return (
-      <LandingPage
-        onGoogleSignIn={handleGoogleSignIn}
-        onEmailSignUp={handleEmailSignUp}
-        onEmailSignIn={handleEmailSignIn}
-      />
-    )
+    case 'signed_out':
+    default:
+      return (
+        <LandingPage
+          onGoogleSignIn={signInWithGoogle}
+          onEmailSignUp={signUpWithEmail}
+          onEmailSignIn={signInWithEmail}
+        />
+      )
   }
-
-  // 🔥 LOGGED IN BUT PROFILE MISSING (user needs to create profile)
-  if (profileStatus === 'missing' || !profile || !profile.onboarding_complete) {
-    console.log('📝 AppContainer: Rendering ProfileSetup (profileStatus:', profileStatus, 'profile:', !!profile, 'onboarding:', profile?.onboarding_complete, ')')
-    return (
-      <ProfileSetup
-        session={{ user }}
-        onSave={handleSaveProfile}
-      />
-    )
-  }
-
-  // ✅ LOGGED IN WITH COMPLETE PROFILE - MainApp stays mounted!
-  if (profileStatus === 'ready' && profile && profile.onboarding_complete) {
-    console.log('✅ AppContainer: Rendering MainApp (profileStatus:', profileStatus, ')')
-    return (
-      <MainApp
-        currentUser={profile}
-        onSignOut={signOut}
-        supabase={supabase}
-      />
-    )
-  }
-
-  // 🔥 DEFENSIVE: If we get here, something unexpected happened
-  // This should never happen, but it's a safety net
-  console.warn('⚠️ AppContainer: Unexpected state, rendering Landing', {
-    user: !!user,
-    profile: !!profile,
-    profileStatus,
-    initialized
-  })
-  
-  return (
-    <LandingPage
-      onGoogleSignIn={handleGoogleSignIn}
-      onEmailSignUp={handleEmailSignUp}
-      onEmailSignIn={handleEmailSignIn}
-    />
-  )
 }
