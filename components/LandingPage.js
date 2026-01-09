@@ -1,13 +1,144 @@
 'use client'
 
 import { useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSignIn }) {
   const [showLogin, setShowLogin] = useState(false)
   const [showEmailSignup, setShowEmailSignup] = useState(false)
+  const [showForgotPassword, setShowForgotPassword] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [message, setMessage] = useState(null)
 
+  const handleEmailSignUp = async () => {
+    setMessage(null)
+    try {
+      const result = await onEmailSignUp(email, password)
+      
+      if (result?.needsVerification) {
+        setMessage({
+          type: 'success',
+          text: `Check your email! We sent a verification link to ${result.email || email}.`
+        })
+        setEmail('')
+        setPassword('')
+      }
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.message
+      })
+    }
+  }
+
+  const handleEmailSignIn = async () => {
+    setMessage(null)
+    try {
+      await onEmailSignIn(email, password)
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.message
+      })
+    }
+  }
+
+  const handleGoogleSignIn = async () => {
+    setMessage(null)
+    try {
+      await onGoogleSignIn()
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.message
+      })
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    setMessage(null)
+    if (!email) {
+      setMessage({
+        type: 'error',
+        text: 'Please enter your email address'
+      })
+      return
+    }
+
+    try {
+      const { error } = await import('@/lib/supabase').then(mod => 
+        mod.supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`
+        })
+      )
+      
+      if (error) throw error
+      
+      setMessage({
+        type: 'success',
+        text: `Password reset link sent to ${email}. Check your inbox!`
+      })
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.message
+      })
+    }
+  }
+
+  // Forgot Password Screen
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Reset Password</h2>
+            <p className="text-gray-600">Enter your email to receive a password reset link</p>
+          </div>
+
+          {message && (
+            <div className={`mb-4 p-3 rounded-lg ${
+              message.type === 'error' 
+                ? 'bg-red-50 text-red-700 border border-red-200' 
+                : 'bg-green-50 text-green-700 border border-green-200'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg p-3"
+            />
+            <button
+              onClick={handleForgotPassword}
+              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
+            >
+              Send Reset Link
+            </button>
+            <button
+              onClick={() => {
+                setShowForgotPassword(false)
+                setShowLogin(true)
+                setMessage(null)
+              }}
+              className="w-full text-gray-600 hover:text-gray-800 text-sm"
+            >
+              Back to Login
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Login Screen
   if (showLogin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
@@ -16,6 +147,17 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome Back</h2>
             <p className="text-gray-600">Log in to your Avari account</p>
           </div>
+
+          {message && (
+            <div className={`mb-4 p-3 rounded-lg ${
+              message.type === 'error' 
+                ? 'bg-red-50 text-red-700 border border-red-200' 
+                : 'bg-green-50 text-green-700 border border-green-200'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
           <div className="space-y-4">
             <input
               type="email"
@@ -24,21 +166,44 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border border-gray-300 rounded-lg p-3"
             />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleEmailSignIn()}
+                className="w-full border border-gray-300 rounded-lg p-3 pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
             <button
-              onClick={() => onEmailSignIn(email, password)}
+              onClick={handleEmailSignIn}
               className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
             >
               Log In
             </button>
             <button
-              onClick={() => setShowLogin(false)}
+              onClick={() => {
+                setShowForgotPassword(true)
+                setShowLogin(false)
+                setMessage(null)
+              }}
+              className="w-full text-rose-500 hover:text-rose-600 text-sm"
+            >
+              Forgot password?
+            </button>
+            <button
+              onClick={() => {
+                setShowLogin(false)
+                setMessage(null)
+              }}
               className="w-full text-gray-600 hover:text-gray-800 text-sm"
             >
               Back
@@ -49,6 +214,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
     )
   }
 
+  // Signup Screen
   if (showEmailSignup) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
@@ -56,6 +222,17 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Sign Up with Email</h2>
           </div>
+
+          {message && (
+            <div className={`mb-4 p-3 rounded-lg ${
+              message.type === 'error' 
+                ? 'bg-red-50 text-red-700 border border-red-200' 
+                : 'bg-green-50 text-green-700 border border-green-200'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
           <div className="space-y-4">
             <input
               type="email"
@@ -64,21 +241,34 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border border-gray-300 rounded-lg p-3"
             />
-            <input
-              type="password"
-              placeholder="Password (min 8 characters)"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password (min 6 characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleEmailSignUp()}
+                className="w-full border border-gray-300 rounded-lg p-3 pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+              >
+                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+              </button>
+            </div>
             <button
-              onClick={() => onEmailSignUp(email, password)}
+              onClick={handleEmailSignUp}
               className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
             >
               Sign Up
             </button>
             <button
-              onClick={() => setShowEmailSignup(false)}
+              onClick={() => {
+                setShowEmailSignup(false)
+                setMessage(null)
+              }}
               className="w-full text-gray-600 hover:text-gray-800 text-sm"
             >
               Back
@@ -89,6 +279,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
     )
   }
 
+  // Main Landing Page
   return (
     <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
@@ -98,9 +289,19 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
           <p className="text-gray-600">Connect & Grow Through Coffee</p>
         </div>
 
+        {message && (
+          <div className={`mb-4 p-3 rounded-lg ${
+            message.type === 'error' 
+              ? 'bg-red-50 text-red-700 border border-red-200' 
+              : 'bg-green-50 text-green-700 border border-green-200'
+          }`}>
+            {message.text}
+          </div>
+        )}
+
         <div className="space-y-4">
           <button
-            onClick={onGoogleSignIn}
+            onClick={handleGoogleSignIn}
             className="w-full bg-white border-2 border-gray-300 hover:border-rose-400 text-gray-700 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-3"
           >
             <svg className="w-6 h-6" viewBox="0 0 24 24">

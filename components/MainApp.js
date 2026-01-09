@@ -7,6 +7,7 @@ import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import CoffeeChatsView from './CoffeeChatsView'
 import MessagesView from './MessagesView'
+import { createAgoraRoom, hasAgoraRoom } from '@/lib/agoraHelpers'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -1033,6 +1034,53 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }
 
+  const handleJoinVideoCall = async (meetupId) => {
+    try {
+      console.log('📹 Creating/joining video call for meetup:', meetupId);
+
+      // Check Agora App ID is configured
+      const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
+      if (!appId) {
+        alert('❌ Agora not configured\n\nPlease add NEXT_PUBLIC_AGORA_APP_ID to your .env.local file and restart the server.\n\nSee AGORA_SETUP.md for instructions.');
+        return;
+      }
+
+      // Check if room already exists
+      const exists = await hasAgoraRoom(meetupId);
+
+      if (!exists) {
+        // Create new Agora room
+        console.log('🎥 Creating new Agora room...');
+        const { channelName, link } = await createAgoraRoom(meetupId);
+        console.log('✅ Video room created:', link);
+      } else {
+        console.log('✅ Video room already exists');
+      }
+
+      // Navigate to the video call
+      const channelName = `meetup-${meetupId}`;
+      window.location.href = `/group-meeting/${channelName}`;
+    } catch (error) {
+      console.error('❌ Error joining video call:', error);
+
+      let errorMsg = '❌ Could not join video call\n\n';
+
+      if (error.message.includes('agora_rooms')) {
+        errorMsg += 'Database table not found.\n\n';
+        errorMsg += 'Please run the database migration:\n';
+        errorMsg += '1. Open Supabase SQL Editor\n';
+        errorMsg += '2. Run database-migration-agora.sql\n\n';
+        errorMsg += 'See AGORA_SETUP.md for details.';
+      } else if (error.message.includes('Not authenticated')) {
+        errorMsg += 'You must be logged in to join video calls.';
+      } else {
+        errorMsg += error.message;
+      }
+
+      alert(errorMsg);
+    }
+  }
+
   const openEditProfile = () => {
     setEditedProfile({ ...currentUser })
     setShowEditProfile(true)
@@ -1201,10 +1249,42 @@ function MainApp({ currentUser, onSignOut }) {
                   {userSignups.includes(meetup.id) ? (
                     <div className="space-y-2">
                       <div className="bg-green-50 border border-green-200 rounded px-4 py-2 text-green-700 text-sm font-medium">
-                        ✓ You're signed up! Location details will be sent the morning of the meetup
+                        ✓ You're signed up!
                       </div>
-                      
-                      <button 
+
+                      {/* Hybrid Options: In-Person + Video */}
+                      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-3">
+                        <p className="text-xs font-medium text-purple-900 mb-2">Choose how to attend:</p>
+                        <div className="space-y-2">
+                          <div className="flex items-start">
+                            <MapPin className="w-4 h-4 mr-2 text-purple-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-sm text-purple-900 font-medium">In-Person</p>
+                              <p className="text-xs text-purple-700">
+                                {meetup.location || `Location near ${currentUser.city}, ${currentUser.state}`}
+                              </p>
+                              <p className="text-xs text-purple-600 mt-1">
+                                Details will be sent the morning of the event
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-purple-200 pt-2">
+                            <button
+                              onClick={() => handleJoinVideoCall(meetup.id)}
+                              className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center text-sm"
+                            >
+                              <Video className="w-4 h-4 mr-2" />
+                              Join Video Call
+                            </button>
+                            <p className="text-xs text-center text-purple-600 mt-1">
+                              Can't make it in person? Join virtually!
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
                         onClick={() => handleCancelSignup(meetup.id)}
                         className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded transition-colors border border-red-200 text-sm"
                       >
@@ -1212,7 +1292,7 @@ function MainApp({ currentUser, onSignOut }) {
                       </button>
                     </div>
                   ) : (
-                    <button 
+                    <button
                       onClick={() => handleSignUp(meetup.id)}
                       className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors"
                     >
@@ -1444,10 +1524,10 @@ function MainApp({ currentUser, onSignOut }) {
       <div className="bg-white rounded-lg shadow p-6">
         <div className="flex items-center mb-6">
           <div className="w-20 h-20 bg-rose-200 rounded-full flex items-center justify-center text-3xl text-rose-600 font-bold">
-            {currentUser.name.charAt(0)}
+            {(currentUser.name || currentUser.email?.split('@')[0] || 'User').charAt(0)}
           </div>
           <div className="ml-4">
-            <h3 className="text-2xl font-bold text-gray-800">{currentUser.name}</h3>
+            <h3 className="text-2xl font-bold text-gray-800">{currentUser.name || currentUser.email?.split('@')[0] || 'User'}</h3>
             <p className="text-gray-600">{currentUser.career} • Age {currentUser.age}</p>
             <p className="text-sm text-gray-500">{currentUser.city}, {currentUser.state}</p>
             {currentUser.role === 'admin' && (
@@ -1618,7 +1698,7 @@ function MainApp({ currentUser, onSignOut }) {
             <Coffee className="mr-3" />
             Avari
           </h1>
-          <p className="text-rose-100 mt-1">Welcome back, {currentUser.name}!</p>
+          <p className="text-rose-100 mt-1">Welcome back, {currentUser.name || currentUser.email?.split('@')[0] || 'User'}!</p>
         </div>
       </div>
 

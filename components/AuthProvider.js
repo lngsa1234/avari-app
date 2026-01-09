@@ -13,10 +13,10 @@ export function AuthProvider({ children }) {
   const loadingUserIdRef = useRef(null)
   const mountedRef = useRef(true)
 
-  // Stable profile loader
+  // Stable profile loader with auto-creation
   const loadProfileRef = useRef(null)
   
-  loadProfileRef.current = async (userId) => {
+  loadProfileRef.current = async (userId, userEmail = null, userName = null) => {
     if (loadingUserIdRef.current === userId) {
       console.log('⏭️ Profile already loading for', userId)
       return
@@ -41,11 +41,42 @@ export function AuthProvider({ children }) {
       if (!mountedRef.current) return
 
       if (error) {
-        console.error('❌ Profile error:', error.code)
-        setStatus(error.code === 'PGRST116' ? 'profile_missing' : 'signed_out')
-        setProfile(null)
+        if (error.code === 'PGRST116') {
+          // Profile doesn't exist - create it automatically
+          console.log('📝 Profile not found, creating...')
+          
+          // Extract first name from email or use default
+          const defaultName = userEmail 
+            ? userEmail.split('@')[0].split('.')[0] 
+            : 'User'
+          
+          const { data: newProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              id: userId,
+              email: userEmail || user?.email,
+              name: userName || defaultName, // ← Add name field!
+            })
+            .select()
+            .single()
+
+          if (createError) {
+            console.error('❌ Profile creation error:', createError)
+            // If auto-creation fails, show profile setup screen
+            setStatus('profile_missing')
+            setProfile(null)
+          } else {
+            console.log('✅ Profile created:', newProfile.email)
+            setProfile(newProfile)
+            setStatus('ready')
+          }
+        } else {
+          console.error('❌ Profile error:', error.code)
+          setStatus('signed_out')
+          setProfile(null)
+        }
       } else if (data) {
-        console.log('✅ Profile loaded:', data.name || data.id)
+        console.log('✅ Profile loaded:', data.name || data.email)
         setProfile(data)
         setStatus('ready')
       }
@@ -113,21 +144,12 @@ export function AuthProvider({ children }) {
       if (data?.user?.identities?.length === 0) {
         throw new Error('This email is already registered. Please log in instead.')
       } else if (data?.session) {
+        // Immediate sign in - profile will be created by auth listener
         console.log('✅ Account created with session')
-        if (data.user) {
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-              id: data.user.id,
-              email,
-            })
-          
-          if (profileError) {
-            console.error('Profile creation error:', profileError)
-          }
-        }
-      } else {
-        throw new Error('Check your email for verification link!')
+        return { needsVerification: false }
+      } else if (data?.user && !data?.session) {
+        console.log('✅ Signup successful - verification email sent')
+        return { needsVerification: true, email: data.user.email }
       }
     } catch (error) {
       console.error('Signup error:', error)
@@ -140,8 +162,6 @@ export function AuthProvider({ children }) {
     
     try {
       await supabase.auth.signOut()
-      // Don't use window.location.replace - let auth state handle it
-      // The SIGNED_OUT event will update the state automatically
     } catch (error) {
       console.error('❌ Sign out error:', error)
     }
@@ -151,9 +171,9 @@ export function AuthProvider({ children }) {
     if (user?.id) {
       console.log('🔄 Refreshing profile')
       loadingUserIdRef.current = null
-      await loadProfileRef.current(user.id)
+      await loadProfileRef.current(user.id, user.email, user.user_metadata?.name)
     }
-  }, [user?.id])
+  }, [user?.id, user?.email, user?.user_metadata?.name])
 
   // Auth listener
   useEffect(() => {
@@ -164,7 +184,11 @@ export function AuthProvider({ children }) {
       if (session?.user) {
         console.log('📱 Initial session found:', session.user.id)
         setUser(session.user)
-        loadProfileRef.current(session.user.id)
+        loadProfileRef.current(
+          session.user.id, 
+          session.user.email,
+          session.user.user_metadata?.name || session.user.user_metadata?.full_name
+        )
       } else {
         console.log('📱 No initial session')
         setStatus('signed_out')
@@ -177,7 +201,11 @@ export function AuthProvider({ children }) {
 
         if (event === 'SIGNED_IN' && session?.user) {
           setUser(session.user)
-          loadProfileRef.current(session.user.id)
+          loadProfileRef.current(
+            session.user.id, 
+            session.user.email,
+            session.user.user_metadata?.name || session.user.user_metadata?.full_name
+          )
         } else if (event === 'SIGNED_OUT') {
           console.log('👋 Signed out - updating state')
           setUser(null)
