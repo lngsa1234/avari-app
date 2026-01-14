@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useIceServers } from '@/hooks/useIceServers';
 import { useWakeLock } from '@/hooks/useWakeLock';
+import { useRecording } from '@/hooks/useRecording';
+import { supabase } from '@/lib/supabase';
+import CallRecap from '@/components/CallRecap';
 
 interface VideoCallProps {
   matchId: string;
@@ -9,6 +12,15 @@ interface VideoCallProps {
   otherUserId: string;
   otherUserName: string;
   onEndCall: () => void;
+}
+
+interface Message {
+  id: string;
+  channel_name: string;
+  user_id: string;
+  user_name: string;
+  message: string;
+  created_at: string;
 }
 
 export default function VideoCall({
@@ -23,19 +35,38 @@ export default function VideoCall({
   const [error, setError] = useState<string | null>(null);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
+  const [showRecap, setShowRecap] = useState(false);
+  const [callStartTime, setCallStartTime] = useState<string | null>(null);
+  const [otherUserProfile, setOtherUserProfile] = useState<any>(null);
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const screenStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Hooks
   const { iceServers, loading: iceServersLoading } = useIceServers();
-  
+
   // Keep screen awake during call (mobile)
   useWakeLock(true);
+
+  // Recording hook
+  const {
+    isRecording,
+    recordingTime,
+    startRecording,
+    stopRecording,
+    formatTime
+  } = useRecording();
   
   const {
     isConnected,
@@ -120,6 +151,10 @@ export default function VideoCall({
       console.log('[Avari] Received remote track:', event.track.kind);
       if (remoteVideoRef.current && event.streams[0]) {
         remoteVideoRef.current.srcObject = event.streams[0];
+        // Force play for Safari compatibility
+        remoteVideoRef.current.play().catch(err => {
+          console.log('[Avari] Remote video autoplay prevented (will retry):', err);
+        });
       }
     };
 
@@ -130,6 +165,9 @@ export default function VideoCall({
       if (peerConnection.connectionState === 'connected') {
         setCallState('connected');
         setError(null);
+        if (!callStartTime) {
+          setCallStartTime(new Date().toISOString());
+        }
       } else if (
         peerConnection.connectionState === 'failed' ||
         peerConnection.connectionState === 'disconnected'
@@ -309,13 +347,160 @@ export default function VideoCall({
     }
   };
 
+  // Toggle screen sharing
+  const toggleScreenShare = async () => {
+    try {
+      if (isScreenSharing) {
+        // Stop screen sharing
+        if (screenStreamRef.current) {
+          screenStreamRef.current.getTracks().forEach(track => track.stop());
+          screenStreamRef.current = null;
+        }
+
+        // Replace with camera
+        if (peerConnectionRef.current && localStreamRef.current) {
+          const videoTrack = localStreamRef.current.getVideoTracks()[0];
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(videoTrack);
+          }
+        }
+
+        setIsScreenSharing(false);
+      } else {
+        // Start screen sharing
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: {
+            cursor: 'always'
+          },
+          audio: false
+        });
+
+        screenStreamRef.current = screenStream;
+
+        // Replace camera with screen
+        if (peerConnectionRef.current) {
+          const screenTrack = screenStream.getVideoTracks()[0];
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(screenTrack);
+          }
+        }
+
+        // Handle user stopping share via browser button
+        screenStream.getVideoTracks()[0].onended = () => {
+          toggleScreenShare();
+        };
+
+        setIsScreenSharing(true);
+      }
+    } catch (error) {
+      console.error('[Avari] Error toggling screen share:', error);
+      setError('Failed to share screen');
+    }
+  };
+
+  // Toggle recording
+  const toggleRecording = async () => {
+    try {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        // Get stream to record (local video)
+        if (localStreamRef.current) {
+          await startRecording(localStreamRef.current);
+        }
+      }
+    } catch (error) {
+      console.error('[Avari] Error toggling recording:', error);
+      setError('Failed to start recording');
+    }
+  };
+
+  // Send message
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('call_messages')
+        .insert({
+          channel_name: `video-${matchId}`,
+          user_id: userId,
+          user_name: currentUserName,
+          message: newMessage.trim()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setNewMessage('');
+
+      // Manually add if real-time doesn't work
+      if (data) {
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === data.id);
+          if (!exists) {
+            return [...prev, data];
+          }
+          return prev;
+        });
+      }
+    } catch (error) {
+      console.error('[Avari] Error sending message:', error);
+    }
+  };
+
   // Handle end call
   const handleEndCall = () => {
     console.log('[Avari] Ending call');
+
+    // Stop recording if active
+    if (isRecording) {
+      stopRecording();
+    }
+
+    // Stop screen sharing if active
+    if (isScreenSharing) {
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(track => track.stop());
+        screenStreamRef.current = null;
+      }
+    }
+
     endSignalingCall(otherUserId);
     setCallState('ended');
     cleanup();
+
+    // Show recap instead of immediately ending
+    setShowRecap(true);
+  };
+
+  // Handle recap close
+  const handleRecapClose = () => {
+    setShowRecap(false);
     onEndCall();
+  };
+
+  // Handle connect from recap
+  const handleConnectFromRecap = async (targetUserId: string) => {
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .insert({
+          user_id: userId,
+          interested_in_user_id: targetUserId
+        });
+
+      if (error && error.code !== '23505') {
+        console.error('Error expressing interest:', error);
+      }
+      alert('Connection request sent!');
+    } catch (err) {
+      console.error('Error connecting:', err);
+    }
   };
 
   // Handle reject call
@@ -390,6 +575,91 @@ export default function VideoCall({
     autoStartCall();
   }, [isConnected, iceServersLoading]);
 
+  // Load current user name and other user profile
+  useEffect(() => {
+    const loadUserName = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, email')
+          .eq('id', user.id)
+          .single();
+
+        setCurrentUserName(profile?.name || profile?.email || 'Anonymous');
+      }
+    };
+
+    const loadOtherUserProfile = async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, name, email, profile_picture, career')
+        .eq('id', otherUserId)
+        .single();
+
+      if (profile) {
+        setOtherUserProfile(profile);
+      }
+    };
+
+    loadUserName();
+    loadOtherUserProfile();
+  }, [otherUserId]);
+
+  // Load and subscribe to messages
+  useEffect(() => {
+    const channelName = `video-${matchId}`;
+
+    // Load existing messages
+    const loadMessages = async () => {
+      const { data } = await supabase
+        .from('call_messages')
+        .select('*')
+        .eq('channel_name', channelName)
+        .order('created_at', { ascending: true })
+        .limit(100);
+
+      if (data) {
+        setMessages(data);
+      }
+    };
+
+    loadMessages();
+
+    // Subscribe to new messages
+    const channel = supabase
+      .channel(`call-messages-${channelName}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'call_messages',
+          filter: `channel_name=eq.${channelName}`
+        },
+        (payload) => {
+          console.log('[Avari] New message:', payload.new);
+          setMessages(prev => {
+            const exists = prev.some(m => m.id === payload.new.id);
+            if (!exists) {
+              return [...prev, payload.new as Message];
+            }
+            return prev;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [matchId]);
+
+  // Auto-scroll chat to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -414,7 +684,7 @@ export default function VideoCall({
       )}
 
       {/* Video containers */}
-      <div className="flex-1 relative">
+      <div className={`flex-1 relative transition-all duration-300 ${showChat ? 'md:mr-80' : ''}`}>
         {/* Remote video (full screen) */}
         <video
           ref={remoteVideoRef}
@@ -452,7 +722,15 @@ export default function VideoCall({
 
       {/* Controls */}
       <div className="bg-gray-900 p-6">
-        <div className="max-w-md mx-auto flex items-center justify-center gap-4">
+        {/* Recording indicator */}
+        {isRecording && (
+          <div className="absolute bottom-24 left-4 flex items-center text-red-500 text-sm bg-black bg-opacity-75 px-3 py-2 rounded">
+            <span className="animate-pulse mr-2">⏺</span>
+            {formatTime(recordingTime)}
+          </div>
+        )}
+
+        <div className="max-w-2xl mx-auto flex items-center justify-center gap-4">
           {callState === 'ringing' ? (
             <>
               <button
@@ -484,13 +762,7 @@ export default function VideoCall({
                 }`}
                 title={isAudioEnabled ? 'Mute' : 'Unmute'}
               >
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {isAudioEnabled ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                  )}
-                </svg>
+                {isAudioEnabled ? '🎤' : '🔇'}
               </button>
 
               {/* Camera toggle */}
@@ -501,13 +773,45 @@ export default function VideoCall({
                 }`}
                 title={isVideoEnabled ? 'Turn off camera' : 'Turn on camera'}
               >
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {isVideoEnabled ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                  )}
-                </svg>
+                📹
+              </button>
+
+              {/* Screen share toggle */}
+              <button
+                onClick={toggleScreenShare}
+                className={`p-4 rounded-full transition ${
+                  isScreenSharing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+                title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+              >
+                🖥️
+              </button>
+
+              {/* Recording toggle */}
+              <button
+                onClick={toggleRecording}
+                className={`p-4 rounded-full transition ${
+                  isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+                title={isRecording ? 'Stop recording' : 'Start recording'}
+              >
+                ⏺
+              </button>
+
+              {/* Chat toggle */}
+              <button
+                onClick={() => setShowChat(!showChat)}
+                className={`p-4 rounded-full transition relative ${
+                  showChat ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-700 hover:bg-gray-600'
+                }`}
+                title="Toggle chat"
+              >
+                💬
+                {messages.length > 0 && !showChat && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1.5 rounded-full">
+                    {messages.length}
+                  </span>
+                )}
               </button>
 
               {/* End call */}
@@ -525,12 +829,94 @@ export default function VideoCall({
         </div>
       </div>
 
+      {/* Chat Panel */}
+      {showChat && (
+        <div className="fixed right-0 top-0 bottom-0 w-full md:w-80 bg-gray-800 border-l border-gray-700 flex flex-col z-50">
+          {/* Chat Header */}
+          <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+            <h3 className="text-white font-semibold">Chat</h3>
+            <button
+              onClick={() => setShowChat(false)}
+              className="text-gray-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {messages.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center mt-8">
+                No messages yet. Start the conversation!
+              </p>
+            ) : (
+              messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`${
+                    msg.user_id === userId
+                      ? 'ml-auto bg-purple-600'
+                      : 'mr-auto bg-gray-700'
+                  } max-w-[85%] rounded-lg p-3`}
+                >
+                  <p className="text-xs text-gray-300 mb-1">
+                    {msg.user_id === userId ? 'You' : msg.user_name}
+                  </p>
+                  <p className="text-white text-sm break-words">{msg.message}</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {new Date(msg.created_at).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </p>
+                </div>
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Message Input */}
+          <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                maxLength={500}
+              />
+              <button
+                type="submit"
+                disabled={!newMessage.trim()}
+                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition"
+              >
+                Send
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Connection indicator */}
       <div className="absolute bottom-24 left-4 text-white text-sm bg-black bg-opacity-50 px-3 py-2 rounded">
         {!isConnected && <p>⚠️ {isConnecting ? 'Connecting...' : 'Disconnected'}</p>}
         {isConnected && callState === 'calling' && <p>📞 Calling...</p>}
         {isConnected && callState === 'connected' && <p>✅ Connected</p>}
       </div>
+
+      {/* Post-Call Recap */}
+      {showRecap && (
+        <CallRecap
+          channelName={`video-${matchId}`}
+          startedAt={callStartTime}
+          endedAt={new Date().toISOString()}
+          participants={otherUserProfile ? [otherUserProfile] : [{ id: otherUserId, name: otherUserName }]}
+          currentUserId={userId}
+          onClose={handleRecapClose}
+          onConnect={handleConnectFromRecap}
+        />
+      )}
     </div>
   );
 }

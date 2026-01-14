@@ -5,7 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAgora } from '@/hooks/useAgora';
 import { useRecording } from '@/hooks/useRecording';
-import { getAgoraRoomByChannel, startAgoraRoom, endAgoraRoom, getCallRecapData } from '@/lib/agoraHelpers';
+import {
+  getConnectionGroupRoomByChannel,
+  startConnectionGroupRoom,
+  endConnectionGroupRoom,
+  getConnectionGroupRecapData
+} from '@/lib/connectionGroupHelpers';
 import CallRecap from '@/components/CallRecap';
 
 /**
@@ -34,13 +39,6 @@ function RemoteVideoPlayer({ remoteUser }) {
   useEffect(() => {
     if (videoRef.current && remoteUser.videoTrack) {
       console.log('🎬 Playing remote video for user:', remoteUser.uid);
-      console.log('Remote video container:', videoRef.current);
-      console.log('Container dimensions:', {
-        width: videoRef.current.offsetWidth,
-        height: videoRef.current.offsetHeight,
-        parentWidth: videoRef.current.parentElement?.offsetWidth,
-        parentHeight: videoRef.current.parentElement?.offsetHeight
-      });
       remoteUser.videoTrack.play(videoRef.current);
     }
 
@@ -108,10 +106,10 @@ function RemoteVideoPlayerLarge({ remoteUser }) {
   );
 }
 
-export default function GroupVideoMeeting() {
+export default function ConnectionGroupVideoCall() {
   const params = useParams();
   const router = useRouter();
-  const channelName = params.id; // This will be like "meetup-123"
+  const channelName = params.id; // This will be like "connection-group-123"
 
   const {
     localAudioTrack,
@@ -137,7 +135,7 @@ export default function GroupVideoMeeting() {
   } = useRecording();
 
   const [user, setUser] = useState(null);
-  const [meetupInfo, setMeetupInfo] = useState(null);
+  const [groupInfo, setGroupInfo] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [participantCount, setParticipantCount] = useState(0);
@@ -213,12 +211,12 @@ export default function GroupVideoMeeting() {
 
   const initializeGroupCall = async () => {
     try {
-      console.log('🎥 Initializing group video call for channel:', channelName);
+      console.log('🎥 Initializing connection group video call for channel:', channelName);
 
-      // Get room and meetup info
-      const room = await getAgoraRoomByChannel(channelName);
-      if (room && room.meetups) {
-        setMeetupInfo(room.meetups);
+      // Get room and group info
+      const room = await getConnectionGroupRoomByChannel(channelName);
+      if (room && room.group) {
+        setGroupInfo(room.group);
       }
 
       // Get Agora App ID from environment
@@ -269,12 +267,12 @@ export default function GroupVideoMeeting() {
       await join(appId, channelName, null, numericUid);
 
       // Mark room as started
-      await startAgoraRoom(channelName);
+      await startConnectionGroupRoom(channelName);
 
-      console.log('✅ Successfully joined group call');
+      console.log('✅ Successfully joined connection group call');
 
     } catch (error) {
-      console.error('❌ Error initializing group call:', error);
+      console.error('❌ Error initializing connection group call:', error);
       console.error('Error details:', {
         name: error.name,
         message: error.message,
@@ -309,7 +307,7 @@ export default function GroupVideoMeeting() {
   };
 
   const handleLeaveCall = async () => {
-    console.log('👋 Leaving group call...');
+    console.log('👋 Leaving connection group call...');
 
     // Stop recording if active
     if (isRecording) {
@@ -321,15 +319,15 @@ export default function GroupVideoMeeting() {
       await stopScreenShare();
     }
 
-    await endAgoraRoom(channelName);
+    await endConnectionGroupRoom(channelName);
     await leave();
 
     // Get recap data and show recap screen
-    const meetupId = meetupInfo?.id || channelName.replace('meetup-', '');
-    const recap = await getCallRecapData(channelName, meetupId);
+    const groupId = groupInfo?.id || channelName.replace('connection-group-', '');
+    const recap = await getConnectionGroupRecapData(channelName, groupId);
     setRecapData({
       ...recap,
-      startedAt: recap.startedAt || meetupInfo?.started_at,
+      startedAt: recap.startedAt || groupInfo?.started_at,
       endedAt: new Date().toISOString()
     });
     setShowRecap(true);
@@ -511,16 +509,16 @@ export default function GroupVideoMeeting() {
       `}</style>
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-4 flex-shrink-0">
+      <div className="bg-gradient-to-r from-purple-500 to-indigo-500 p-4 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">☕</span>
+            <span className="text-3xl">👥</span>
             <div>
-              <h1 className="text-white font-bold text-xl">Avari Group Meetup</h1>
-              <p className="text-rose-100 text-sm">
-                {meetupInfo ? `${meetupInfo.date} at ${meetupInfo.time}` : 'Loading...'}
+              <h1 className="text-white font-bold text-xl">Connection Group</h1>
+              <p className="text-purple-100 text-sm">
+                {groupInfo ? groupInfo.name : 'Loading...'}
               </p>
-              <p className="text-rose-100 text-xs">
+              <p className="text-purple-100 text-xs">
                 {participantCount} {participantCount === 1 ? 'participant' : 'participants'}
               </p>
             </div>
@@ -551,17 +549,13 @@ export default function GroupVideoMeeting() {
               participantCount === 1 ? 'grid-cols-1' :
               participantCount === 2 ? 'grid-cols-2' :
               participantCount <= 4 ? 'grid-cols-2' :
-              participantCount <= 6 ? 'grid-cols-3' :
-              participantCount <= 9 ? 'grid-cols-3' :
-              'grid-cols-4'
+              'grid-cols-3'
             }`}
             style={{
               gridTemplateRows: participantCount === 1 ? '1fr' :
                                participantCount === 2 ? '1fr' :
                                participantCount <= 4 ? 'repeat(2, 1fr)' :
-                               participantCount <= 6 ? 'repeat(2, 1fr)' :
-                               participantCount <= 9 ? 'repeat(3, 1fr)' :
-                               'repeat(4, 1fr)',
+                               'repeat(2, 1fr)',
               minHeight: 0
             }}
           >
@@ -574,7 +568,7 @@ export default function GroupVideoMeeting() {
               {isVideoOff && (
                 <div className="absolute inset-0 bg-gray-700 flex items-center justify-center z-10">
                   <div className="text-center">
-                    <div className="w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
                       <span className="text-2xl text-white">
                         {user?.email?.charAt(0).toUpperCase()}
                       </span>
@@ -599,10 +593,6 @@ export default function GroupVideoMeeting() {
         ) : (
           // Speaker View - Main speaker + thumbnails
           <div className="h-full flex flex-col gap-2">
-            {/* Debug info */}
-            {console.log('🔍 Speaker View - Remote users:', remoteUsersList.length)}
-            {console.log('🔍 Remote users list:', remoteUsersList.map(u => ({ uid: u.uid, hasVideo: !!u.videoTrack })))}
-
             {/* Main Speaker (first remote user or local) */}
             <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden relative">
               {remoteUsersList.length > 0 ? (
@@ -632,7 +622,7 @@ export default function GroupVideoMeeting() {
                   {isVideoOff ? (
                     <div className="w-full h-full bg-gray-700 flex items-center justify-center">
                       <div className="text-center">
-                        <div className="w-32 h-32 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <div className="w-32 h-32 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
                           <span className="text-5xl text-white">
                             {user?.email?.charAt(0).toUpperCase()}
                           </span>
@@ -661,7 +651,7 @@ export default function GroupVideoMeeting() {
                   {isVideoOff ? (
                     <div className="w-full h-full bg-gray-700 flex items-center justify-center">
                       <div className="text-center">
-                        <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-1">
+                        <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-1">
                           <span className="text-lg text-white">
                             {user?.email?.charAt(0).toUpperCase()}
                           </span>
