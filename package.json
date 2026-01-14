@@ -9,8 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@livekit/components-react": "^2.9.17",
     "@supabase/supabase-js": "^2.39.0",
     "agora-rtc-sdk-ng": "^4.24.2",
+    "livekit-client": "^2.17.0",
+    "livekit-server-sdk": "^2.15.0",
     "lucide-react": "^0.263.1",
     "next": "14.0.4",
     "react": "18.2.0",
