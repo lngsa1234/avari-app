@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useRecording } from '@/hooks/useRecording';
@@ -9,6 +9,155 @@ import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 import { getAgoraRoomByChannel, startAgoraRoom, endAgoraRoom, getCallRecapData } from '@/lib/agoraHelpers';
 import { saveCallRecap, saveProviderMetrics } from '@/lib/callRecapHelpers';
 import CallRecap from '@/components/CallRecap';
+
+/**
+ * Remote Video Player Component - Memoized to prevent re-renders
+ * Defined outside main component to maintain stable refs
+ */
+const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const attachedVideoTrackRef = useRef(null);
+  const attachedAudioTrackRef = useRef(null);
+  const videoTrackSid = useRef(null);
+  const audioTrackSid = useRef(null);
+
+  // Handle video track - use track SID for stable comparison
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    const track = participant.videoTrack;
+    const trackSid = track?.sid || track?.mediaStreamTrack?.id;
+
+    // Skip if no video element or same track already attached
+    if (!videoElement) return;
+    if (trackSid && trackSid === videoTrackSid.current) return;
+
+    // Detach previous track if different
+    if (attachedVideoTrackRef.current && attachedVideoTrackRef.current !== track) {
+      try {
+        attachedVideoTrackRef.current.detach(videoElement);
+      } catch (e) {
+        // Ignore detach errors
+      }
+      attachedVideoTrackRef.current = null;
+      videoTrackSid.current = null;
+    }
+
+    // Attach new track
+    if (track && track !== attachedVideoTrackRef.current) {
+      try {
+        track.attach(videoElement);
+        attachedVideoTrackRef.current = track;
+        videoTrackSid.current = trackSid;
+
+        // Safari needs explicit play() call - only call once
+        videoElement.play().catch(() => {
+          videoElement.muted = true;
+          videoElement.play().catch(() => {});
+        });
+      } catch (e) {
+        console.error('[LiveKit] Error attaching video track:', e);
+      }
+    }
+
+    return () => {
+      if (attachedVideoTrackRef.current && videoElement) {
+        try {
+          attachedVideoTrackRef.current.detach(videoElement);
+        } catch (e) {
+          // Ignore detach errors
+        }
+        attachedVideoTrackRef.current = null;
+        videoTrackSid.current = null;
+      }
+    };
+  }, [participant.videoTrack]);
+
+  // Handle audio track
+  useEffect(() => {
+    const audioElement = audioRef.current;
+    const track = participant.audioTrack;
+    const trackSid = track?.sid || track?.mediaStreamTrack?.id;
+
+    // Skip if no audio element or same track already attached
+    if (!audioElement) return;
+    if (trackSid && trackSid === audioTrackSid.current) return;
+
+    // Detach previous track if different
+    if (attachedAudioTrackRef.current && attachedAudioTrackRef.current !== track) {
+      try {
+        attachedAudioTrackRef.current.detach(audioElement);
+      } catch (e) {
+        // Ignore detach errors
+      }
+      attachedAudioTrackRef.current = null;
+      audioTrackSid.current = null;
+    }
+
+    // Attach new track
+    if (track && track !== attachedAudioTrackRef.current) {
+      try {
+        track.attach(audioElement);
+        attachedAudioTrackRef.current = track;
+        audioTrackSid.current = trackSid;
+      } catch (e) {
+        console.error('[LiveKit] Error attaching audio track:', e);
+      }
+    }
+
+    return () => {
+      if (attachedAudioTrackRef.current && audioElement) {
+        try {
+          attachedAudioTrackRef.current.detach(audioElement);
+        } catch (e) {
+          // Ignore detach errors
+        }
+        attachedAudioTrackRef.current = null;
+        audioTrackSid.current = null;
+      }
+    };
+  }, [participant.audioTrack]);
+
+  return (
+    <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
+      <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
+      {participant.hasVideo ? (
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted={false}
+          className="w-full h-full object-cover"
+          style={{ backgroundColor: '#1f2937' }}
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
+              <span className="text-2xl text-white">
+                {(participant.name || '?').charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <p className="text-white text-sm">{participant.name}</p>
+            <p className="text-white text-xs opacity-70">Camera off</p>
+          </div>
+        </div>
+      )}
+      <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
+        {participant.name} {participant.isSpeaking && '🔊'}
+      </div>
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if these change
+  return (
+    prevProps.participant.id === nextProps.participant.id &&
+    prevProps.participant.hasVideo === nextProps.participant.hasVideo &&
+    prevProps.participant.hasAudio === nextProps.participant.hasAudio &&
+    prevProps.participant.videoTrack === nextProps.participant.videoTrack &&
+    prevProps.participant.audioTrack === nextProps.participant.audioTrack
+  );
+});
 
 /**
  * Group Video Meeting - Uses LiveKit for large meetups
@@ -56,6 +205,8 @@ export default function GroupVideoMeeting() {
   const messagesEndRef = useRef(null);
   const roomRef = useRef(null);
   const participantTracksRef = useRef(new Map()); // Stable track storage
+  const callStartTimeRef = useRef(null); // Store start time in ref for reliable access
+  const updateDebounceRef = useRef(null); // Debounce timer for participant updates
 
   const {
     isRecording,
@@ -89,6 +240,7 @@ export default function GroupVideoMeeting() {
   const {
     isListening: isSpeechListening,
     isSupported: isSpeechSupported,
+    isSafari,
     error: speechError,
     startListening,
     stopListening
@@ -217,7 +369,9 @@ export default function GroupVideoMeeting() {
       await newRoom.connect(liveKitUrl, token);
 
       setLocalParticipant(newRoom.localParticipant);
-      setCallStartTime(new Date().toISOString());
+      const startTime = new Date().toISOString();
+      setCallStartTime(startTime);
+      callStartTimeRef.current = startTime; // Also store in ref for reliable access
 
       // Enable camera and microphone
       console.log('[LiveKit] Enabling camera and microphone...');
@@ -239,6 +393,17 @@ export default function GroupVideoMeeting() {
       await startAgoraRoom(channelName);
 
       console.log('[LiveKit] Successfully joined group call');
+
+      // Auto-enable transcription for recap summary (skip Safari - doesn't work well)
+      if (isSpeechSupported && !isSafari) {
+        const started = startListening();
+        if (started) {
+          setIsTranscribing(true);
+          console.log('[Transcription] Auto-started for recap');
+        }
+      } else if (isSafari) {
+        console.log('[Transcription] Skipped auto-start on Safari (limited support)');
+      }
 
     } catch (error) {
       console.error('[LiveKit] Error initializing call:', error);
@@ -337,9 +502,9 @@ export default function GroupVideoMeeting() {
     });
   };
 
-  const updateParticipantsList = useCallback((room) => {
+  // Core function to update participants list
+  const doUpdateParticipantsList = useCallback((room) => {
     if (!room || room.state === 'disconnected') {
-      console.log('[LiveKit] Skipping participant update - room disconnected');
       return;
     }
 
@@ -374,9 +539,46 @@ export default function GroupVideoMeeting() {
       }
     }
 
-    setRemoteParticipants(participants);
+    // Only update state if participants actually changed to prevent video flickering
+    setRemoteParticipants(prev => {
+      // Check if participant list changed
+      if (prev.length !== participants.length) {
+        return participants;
+      }
+
+      // Check if any participant's key properties changed
+      const hasChanges = participants.some((p, i) => {
+        const existing = prev[i];
+        return !existing ||
+               existing.id !== p.id ||
+               existing.hasVideo !== p.hasVideo ||
+               existing.hasAudio !== p.hasAudio;
+      });
+
+      return hasChanges ? participants : prev;
+    });
+
     setParticipantCount(participants.length + 1);
   }, []);
+
+  // Debounced wrapper to batch rapid track events
+  const updateParticipantsList = useCallback((room) => {
+    if (!room || room.state === 'disconnected') {
+      console.log('[LiveKit] Skipping participant update - room disconnected');
+      return;
+    }
+
+    // Clear any pending update
+    if (updateDebounceRef.current) {
+      clearTimeout(updateDebounceRef.current);
+    }
+
+    // Debounce updates to prevent flickering during initial connection
+    updateDebounceRef.current = setTimeout(() => {
+      doUpdateParticipantsList(room);
+      updateDebounceRef.current = null;
+    }, 100); // 100ms debounce
+  }, [doUpdateParticipantsList]);
 
   const handlePermissionError = (permError) => {
     let errorMsg = 'Camera/Microphone Access Denied\n\n';
@@ -396,6 +598,12 @@ export default function GroupVideoMeeting() {
 
   const leaveCall = async () => {
     console.log('[LiveKit] Leaving call, cleaning up...');
+
+    // Clear any pending debounced update
+    if (updateDebounceRef.current) {
+      clearTimeout(updateDebounceRef.current);
+      updateDebounceRef.current = null;
+    }
 
     if (roomRef.current) {
       try {
@@ -466,8 +674,11 @@ export default function GroupVideoMeeting() {
       setIsTranscribing(false);
     }
 
-    // Capture LiveKit participants BEFORE leaving the call
-    const liveKitParticipantIds = remoteParticipants.map(p => p.id);
+    // Capture LiveKit participants BEFORE leaving the call (include current user)
+    const liveKitParticipantIds = [
+      user?.id,  // Include current user
+      ...remoteParticipants.map(p => p.id)
+    ].filter(Boolean);
     console.log('[LiveKit] Captured participant IDs for recap:', liveKitParticipantIds);
 
     await endAgoraRoom(channelName);
@@ -501,12 +712,17 @@ export default function GroupVideoMeeting() {
 
     const endTime = new Date().toISOString();
 
+    // Use ref value for reliable start time (state might be stale in closure)
+    const actualStartTime = callStartTimeRef.current || callStartTime || recap.startedAt;
+    console.log('[Recap] Start time:', actualStartTime, 'End time:', endTime);
+    console.log('[Recap] Transcript entries:', transcript.length);
+
     setRecapData({
       ...recap,
       participants: allParticipants,
       callType: 'meetup',
       provider: 'livekit',
-      startedAt: callStartTime || recap.startedAt,
+      startedAt: actualStartTime,
       endedAt: endTime,
       transcript: transcript,
       metrics: metrics
@@ -519,7 +735,7 @@ export default function GroupVideoMeeting() {
         channelName,
         callType: 'meetup',
         provider: 'livekit',
-        startedAt: callStartTime,
+        startedAt: actualStartTime,
         endedAt: endTime,
         participants: allParticipants,
         transcript: transcript,
@@ -538,7 +754,7 @@ export default function GroupVideoMeeting() {
         const participantIds = allParticipants.map(p => p.id).filter(Boolean);
         const { data: fullProfiles } = await supabase
           .from('profiles')
-          .select('id, name, email, career, bio, interests, profile_picture')
+          .select('id, name, email, career, bio, profile_picture')
           .in('id', participantIds);
 
         // Fetch existing connection groups for join recommendations
@@ -717,140 +933,6 @@ export default function GroupVideoMeeting() {
     };
   }, [localVideoTrack, isVideoOff]);
 
-  // Remote Video Player Component with Safari support
-  const RemoteVideoPlayer = ({ participant }) => {
-    const videoRef = useRef(null);
-    const audioRef = useRef(null);
-    const attachedVideoTrackRef = useRef(null);
-    const attachedAudioTrackRef = useRef(null);
-
-    // Handle video track
-    useEffect(() => {
-      const videoElement = videoRef.current;
-      const track = participant.videoTrack;
-
-      // Skip if no video element
-      if (!videoElement) return;
-
-      // Detach previous track if different
-      if (attachedVideoTrackRef.current && attachedVideoTrackRef.current !== track) {
-        try {
-          attachedVideoTrackRef.current.detach(videoElement);
-        } catch (e) {
-          console.log('[LiveKit] Error detaching previous video track:', e);
-        }
-        attachedVideoTrackRef.current = null;
-      }
-
-      // Attach new track
-      if (track && track !== attachedVideoTrackRef.current) {
-        try {
-          console.log('[LiveKit] Attaching video track for:', participant.name);
-          track.attach(videoElement);
-          attachedVideoTrackRef.current = track;
-
-          // Safari needs explicit play() call
-          const playPromise = videoElement.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(e => {
-              console.log('[LiveKit] Video autoplay prevented:', e);
-              // Try muted autoplay for Safari
-              videoElement.muted = true;
-              videoElement.play().catch(() => {});
-            });
-          }
-        } catch (e) {
-          console.error('[LiveKit] Error attaching video track:', e);
-        }
-      }
-
-      return () => {
-        if (attachedVideoTrackRef.current && videoElement) {
-          try {
-            attachedVideoTrackRef.current.detach(videoElement);
-          } catch (e) {
-            console.log('[LiveKit] Error detaching video on cleanup:', e);
-          }
-          attachedVideoTrackRef.current = null;
-        }
-      };
-    }, [participant.videoTrack, participant.name]);
-
-    // Handle audio track
-    useEffect(() => {
-      const audioElement = audioRef.current;
-      const track = participant.audioTrack;
-
-      // Skip if no audio element
-      if (!audioElement) return;
-
-      // Detach previous track if different
-      if (attachedAudioTrackRef.current && attachedAudioTrackRef.current !== track) {
-        try {
-          attachedAudioTrackRef.current.detach(audioElement);
-        } catch (e) {
-          console.log('[LiveKit] Error detaching previous audio track:', e);
-        }
-        attachedAudioTrackRef.current = null;
-      }
-
-      // Attach new track
-      if (track && track !== attachedAudioTrackRef.current) {
-        try {
-          console.log('[LiveKit] Attaching audio track for:', participant.name);
-          track.attach(audioElement);
-          attachedAudioTrackRef.current = track;
-        } catch (e) {
-          console.error('[LiveKit] Error attaching audio track:', e);
-        }
-      }
-
-      return () => {
-        if (attachedAudioTrackRef.current && audioElement) {
-          try {
-            attachedAudioTrackRef.current.detach(audioElement);
-          } catch (e) {
-            console.log('[LiveKit] Error detaching audio on cleanup:', e);
-          }
-          attachedAudioTrackRef.current = null;
-        }
-      };
-    }, [participant.audioTrack, participant.name]);
-
-    return (
-      <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
-        {/* Hidden audio element for remote participant */}
-        <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
-
-        {participant.hasVideo ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted={false}
-            className="w-full h-full object-cover"
-            style={{ backgroundColor: '#1f2937' }}
-          />
-        ) : (
-          <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                <span className="text-2xl text-white">
-                  {(participant.name || '?').charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <p className="text-white text-sm">{participant.name}</p>
-              <p className="text-white text-xs opacity-70">Camera off</p>
-            </div>
-          </div>
-        )}
-        <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
-          {participant.name} {participant.isSpeaking && '🔊'}
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* Header */}
@@ -1018,13 +1100,21 @@ export default function GroupVideoMeeting() {
             {/* Transcription toggle */}
             {isSpeechSupported && (
               <button
-                onClick={toggleTranscription}
-                className={`${isTranscribing ? 'bg-green-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
-                title={isTranscribing ? 'Stop transcription' : 'Start transcription'}
+                onClick={() => {
+                  if (isSafari && !isTranscribing) {
+                    alert('⚠️ Safari has limited speech recognition support. Transcription may not work properly. For best results, use Chrome.');
+                  }
+                  toggleTranscription();
+                }}
+                className={`${isTranscribing ? 'bg-green-600' : isSafari ? 'bg-yellow-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
+                title={isSafari ? 'Transcription (limited on Safari)' : isTranscribing ? 'Stop transcription' : 'Start transcription'}
               >
                 📝
                 {isTranscribing && (
                   <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
+                )}
+                {isSafari && !isTranscribing && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full" title="Limited support on Safari"></span>
                 )}
               </button>
             )}

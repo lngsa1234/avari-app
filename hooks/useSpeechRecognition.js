@@ -7,6 +7,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
  *
  * Supports Chrome, Safari, and Edge browsers
  * Falls back gracefully if not supported
+ *
+ * Note: Safari has limited support - continuous mode doesn't work well
  */
 export default function useSpeechRecognition({
   onTranscript,
@@ -17,18 +19,30 @@ export default function useSpeechRecognition({
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
   const [error, setError] = useState(null);
+  const [isSafari, setIsSafari] = useState(false);
 
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
   const restartTimeoutRef = useRef(null);
 
-  // Check browser support
+  // Check browser support and detect Safari
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    // Detect Safari
+    const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    setIsSafari(isSafariBrowser);
+
+    if (isSafariBrowser) {
+      console.log('[SpeechRecognition] Safari detected - continuous mode disabled');
+    }
+
     setIsSupported(!!SpeechRecognition);
 
     if (!SpeechRecognition) {
       console.log('[SpeechRecognition] Not supported in this browser');
+    } else {
+      console.log('[SpeechRecognition] Supported in this browser');
     }
   }, []);
 
@@ -37,14 +51,18 @@ export default function useSpeechRecognition({
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return null;
 
+    // Detect Safari for special handling
+    const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
     const recognition = new SpeechRecognition();
-    recognition.continuous = continuous;
+    // Safari doesn't support continuous mode well, so disable it
+    recognition.continuous = isSafariBrowser ? false : continuous;
     recognition.interimResults = interimResults;
     recognition.lang = language;
     recognition.maxAlternatives = 1;
 
     recognition.onstart = () => {
-      console.log('[SpeechRecognition] Started');
+      console.log('[SpeechRecognition] Started - continuous:', recognition.continuous);
       setIsListening(true);
       isListeningRef.current = true;
       setError(null);
@@ -112,6 +130,7 @@ export default function useSpeechRecognition({
 
       // Call the callback with transcript data
       if (finalTranscript && onTranscript) {
+        console.log('[SpeechRecognition] Final transcript:', finalTranscript.trim());
         onTranscript({
           text: finalTranscript.trim(),
           isFinal: true,
@@ -121,6 +140,7 @@ export default function useSpeechRecognition({
 
       // Optionally send interim results too
       if (interimTranscript && onTranscript && interimResults) {
+        console.log('[SpeechRecognition] Interim transcript:', interimTranscript.trim());
         onTranscript({
           text: interimTranscript.trim(),
           isFinal: false,
@@ -212,6 +232,7 @@ export default function useSpeechRecognition({
   return {
     isListening,
     isSupported,
+    isSafari,
     error,
     startListening,
     stopListening

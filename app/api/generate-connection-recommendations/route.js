@@ -55,10 +55,20 @@ export async function POST(request) {
     );
 
     // Save recommendations to database
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('[Recommendations] Missing Supabase configuration');
+      return NextResponse.json({
+        success: false,
+        error: 'Database not configured',
+        connectionCount: connectionRecs.length,
+        groupCount: groupRecs.length
+      });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Save connection recommendations
     if (connectionRecs.length > 0) {
@@ -82,6 +92,10 @@ export async function POST(request) {
 
       if (connError) {
         console.error('[Recommendations] Error saving connections:', connError);
+        // Check if table doesn't exist
+        if (connError.code === '42P01' || connError.message?.includes('does not exist')) {
+          console.error('[Recommendations] connection_recommendations table does not exist. Run database-migration-connection-recommendations.sql');
+        }
       }
     }
 
@@ -108,6 +122,10 @@ export async function POST(request) {
 
       if (groupError) {
         console.error('[Recommendations] Error saving groups:', groupError);
+        // Check if table doesn't exist
+        if (groupError.code === '42P01' || groupError.message?.includes('does not exist')) {
+          console.error('[Recommendations] group_recommendations table does not exist. Run database-migration-connection-recommendations.sql');
+        }
       }
     }
 
