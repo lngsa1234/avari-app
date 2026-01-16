@@ -20,7 +20,7 @@ import {
   deleteGroupMessage
 } from '@/lib/connectionGroupHelpers';
 
-export default function ConnectionGroupsView({ currentUser, supabase }) {
+export default function ConnectionGroupsView({ currentUser, supabase, onNavigate }) {
   const [activeTab, setActiveTab] = useState('groups'); // groups, invitations
   const [connectionGroups, setConnectionGroups] = useState([]);
 
@@ -388,12 +388,48 @@ export default function ConnectionGroupsView({ currentUser, supabase }) {
       {activeTab === 'groups' && (
         <div className="space-y-4">
           {connectionGroups.length === 0 ? (
-            <div className="bg-gray-50 rounded-lg p-8 text-center">
-              <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-600">No groups yet</p>
-              <p className="text-sm text-gray-500 mt-2">
-                Create a group to start video chatting with your connections!
-              </p>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 text-center">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-8 h-8 text-blue-600" />
+              </div>
+              <h4 className="font-semibold text-blue-800 text-lg mb-2">No groups yet</h4>
+              {eligibleConnections.length >= 2 ? (
+                <>
+                  <p className="text-blue-700 mb-2">
+                    You have {eligibleConnections.length} connections ready to form a group!
+                  </p>
+                  <div className="bg-white/60 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>Why groups?</strong> Regular video chats with a small cohort build deeper relationships than one-time meetups.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+                  >
+                    Create Your First Group
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-blue-700 mb-2">
+                    You need at least 2 connections to form a group.
+                  </p>
+                  <div className="bg-white/60 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-800">
+                      <strong>How to get there:</strong> Attend meetups → Connect with people you meet → Form groups together!
+                    </p>
+                  </div>
+                  {onNavigate && (
+                    <button
+                      onClick={() => onNavigate('home')}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+                    >
+                      Find Meetups to Join
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             connectionGroups.map(group => {

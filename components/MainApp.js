@@ -12,6 +12,9 @@ import MessagesView from './MessagesView'
 import CallHistoryView from './CallHistoryView'
 import FeedbackButton from './FeedbackButton'
 import AdminFeedbackView from './AdminFeedbackView'
+import Onboarding from './Onboarding'
+import JourneyProgress from './JourneyProgress'
+import NextStepPrompt from './NextStepPrompt'
 import { createAgoraRoom, hasAgoraRoom } from '@/lib/agoraHelpers'
 
 function MainApp({ currentUser, onSignOut }) {
@@ -66,6 +69,10 @@ function MainApp({ currentUser, onSignOut }) {
   const [myInterests, setMyInterests] = useState([]) // People current user is interested in
   const [meetupPeople, setMeetupPeople] = useState({}) // People grouped by meetup
   const [unreadMessageCount, setUnreadMessageCount] = useState(0) // Unread messages from database
+  const [showOnboarding, setShowOnboarding] = useState(false) // Onboarding for new users
+  const [groupsCount, setGroupsCount] = useState(0) // Number of groups user is in
+  const [coffeeChatsCount, setCoffeeChatsCount] = useState(0) // Number of 1:1 coffee chats completed
+  const [nextStepPrompt, setNextStepPrompt] = useState(null) // { type, data } for post-action prompts
 
   // DEBUGGING: Detect prop changes
   const prevPropsRef = useRef({ currentUser, onSignOut, supabase })
@@ -95,6 +102,28 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [])
 
+  // Check if user needs onboarding
+  useEffect(() => {
+    if (!currentUser?.id) return
+
+    const onboardingKey = `avari_onboarding_complete_${currentUser.id}`
+    const hasCompletedOnboarding = localStorage.getItem(onboardingKey)
+
+    if (!hasCompletedOnboarding) {
+      // Show onboarding for new users
+      setShowOnboarding(true)
+    }
+  }, [currentUser?.id])
+
+  // Handle onboarding completion
+  const handleOnboardingComplete = useCallback(() => {
+    if (!currentUser?.id) return
+
+    const onboardingKey = `avari_onboarding_complete_${currentUser.id}`
+    localStorage.setItem(onboardingKey, 'true')
+    setShowOnboarding(false)
+  }, [currentUser?.id])
+
   // Load meetups from Supabase on component mount
   useEffect(() => {
     // CRITICAL: Only run once, ignore React Strict Mode double-render
@@ -114,6 +143,8 @@ function MainApp({ currentUser, onSignOut }) {
     loadMeetupPeople()
     updateAttendedCount()
     loadUnreadMessageCount()
+    loadGroupsCount()
+    loadCoffeeChatsCount()
 
     // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
     // Re-enable after adding useCallback to all functions
@@ -374,10 +405,50 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [currentUser.id, supabase])
 
+  // Load groups count for journey progress
+  const loadGroupsCount = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('connection_group_members')
+        .select('id', { count: 'exact' })
+        .eq('user_id', currentUser.id)
+        .eq('status', 'accepted')
+
+      if (error) throw error
+      setGroupsCount(data?.length || 0)
+    } catch (err) {
+      console.error('Error loading groups count:', err)
+      setGroupsCount(0)
+    }
+  }, [currentUser.id, supabase])
+
+  // Load coffee chats count (1:1 calls completed)
+  const loadCoffeeChatsCount = useCallback(async () => {
+    try {
+      // Count call recaps where this user participated in a 1:1 call
+      const { data, error } = await supabase
+        .from('call_recaps')
+        .select('id', { count: 'exact' })
+        .eq('call_type', '1on1')
+        .or(`caller_id.eq.${currentUser.id},callee_id.eq.${currentUser.id}`)
+
+      if (error) {
+        // Table might not exist, that's okay
+        console.log('Coffee chats count not available:', error.message)
+        setCoffeeChatsCount(0)
+        return
+      }
+      setCoffeeChatsCount(data?.length || 0)
+    } catch (err) {
+      console.error('Error loading coffee chats count:', err)
+      setCoffeeChatsCount(0)
+    }
+  }, [currentUser.id, supabase])
+
   const loadMeetupPeople = useCallback(async () => {
     try {
       console.log('🔍 Loading meetup people...')
-      
+
       // STEP 1: Get meetups current user attended
       const { data: mySignups, error: signupsError } = await supabase
         .from('meetup_signups')
@@ -781,7 +852,18 @@ function MainApp({ currentUser, onSignOut }) {
       } else {
         await loadUserSignups()
         await loadMeetupsFromDatabase()
-        alert('Successfully signed up for meetup!')
+
+        // Find the meetup to get its date
+        const meetup = meetups.find(m => m.id === meetupId)
+        const isFirstMeetup = userSignups.length === 0
+
+        // Show appropriate next step prompt
+        setNextStepPrompt({
+          type: isFirstMeetup ? 'first_meetup' : 'meetup_signup',
+          data: {
+            meetupDate: meetup ? formatDate(meetup.date) : null
+          }
+        })
       }
     } catch (err) {
       alert('Error: ' + err.message)
@@ -1227,23 +1309,14 @@ function MainApp({ currentUser, onSignOut }) {
           </button>
         </div>
 
-        {/* Progress Card */}
-        <div className="bg-gradient-to-r from-rose-50 to-pink-50 rounded-lg p-6 border border-rose-200">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800">Your Journey</h3>
-              <p className="text-sm text-gray-600">Complete 3 meetups to unlock 1-on-1 video chat</p>
-            </div>
-            <div className="text-3xl font-bold text-rose-500">{currentUser.meetups_attended}/3</div>
-          </div>
-          <ProgressBar current={currentUser.meetups_attended} total={3} />
-          {currentUser.meetups_attended >= 3 && (
-            <div className="mt-4 flex items-center text-green-600">
-              <Star className="w-5 h-5 mr-2 fill-current" />
-              <span className="font-medium">Unlocked! You can now schedule 1-on-1 coffee chats</span>
-            </div>
-          )}
-        </div>
+        {/* Journey Progress - Happy Path Guide */}
+        <JourneyProgress
+          meetupsAttended={currentUser.meetups_attended || 0}
+          connectionsCount={connections.length}
+          groupsCount={groupsCount}
+          coffeeChatsCount={coffeeChatsCount}
+          onNavigate={setCurrentView}
+        />
 
         {/* Propose Meetup CTA */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
@@ -1666,6 +1739,14 @@ function MainApp({ currentUser, onSignOut }) {
             Edit Profile
           </button>
 
+          <button
+            onClick={() => setShowOnboarding(true)}
+            className="w-full bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium py-2 rounded transition-colors border border-blue-200 flex items-center justify-center"
+          >
+            <span className="mr-2">&#128218;</span>
+            View App Tutorial
+          </button>
+
           {/* Admin Dashboard Link */}
           {currentUser.role === 'admin' && (
             <button
@@ -1822,6 +1903,27 @@ function MainApp({ currentUser, onSignOut }) {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-28">
+      {/* Onboarding for new users */}
+      {showOnboarding && (
+        <Onboarding
+          onComplete={handleOnboardingComplete}
+          userName={currentUser.name || currentUser.email?.split('@')[0]}
+        />
+      )}
+
+      {/* Post-action prompts */}
+      {nextStepPrompt && (
+        <NextStepPrompt
+          type={nextStepPrompt.type}
+          data={nextStepPrompt.data}
+          onAction={(action) => {
+            setNextStepPrompt(null)
+            setCurrentView(action)
+          }}
+          onDismiss={() => setNextStepPrompt(null)}
+        />
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg">
         <div className="max-w-4xl mx-auto p-6">
@@ -1836,8 +1938,8 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Main Content */}
       <div className="max-w-4xl mx-auto p-6">
         {currentView === 'home' && <HomeView />}
-        {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} connections={connections} supabase={supabase} />}
-        {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} />}
+        {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} connections={connections} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'messages' && <MessagesView currentUser={currentUser} supabase={supabase} onUnreadCountChange={loadUnreadMessageCount} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}

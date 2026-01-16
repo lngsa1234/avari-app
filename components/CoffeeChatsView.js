@@ -16,7 +16,7 @@ import {
 } from '@/lib/coffeeChatHelpers';
 import VideoCallButton from './VideoCallButton';
 
-export default function CoffeeChatsView({ currentUser, connections, supabase }) {
+export default function CoffeeChatsView({ currentUser, connections, supabase, onNavigate }) {
   const [activeTab, setActiveTab] = useState('schedule'); // schedule, upcoming, requests, sent
   const [coffeeChats, setCoffeeChats] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -297,15 +297,27 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
       {activeTab === 'schedule' && (
         <div className="space-y-4">
           {connections.length === 0 ? (
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
-              <User className="w-12 h-12 text-amber-600 mx-auto mb-3" />
-              <h4 className="font-semibold text-amber-800 mb-2">No connections yet</h4>
-              <p className="text-sm text-amber-700 mb-4">
-                Attend in-person meetups to make connections first!
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-6 text-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <User className="w-8 h-8 text-amber-600" />
+              </div>
+              <h4 className="font-semibold text-amber-800 text-lg mb-2">No connections yet</h4>
+              <p className="text-amber-700 mb-2">
+                To schedule 1:1 coffee chats, you first need to make connections.
               </p>
-              <button className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg transition-colors">
-                Browse Meetups
-              </button>
+              <div className="bg-white/60 rounded-lg p-3 mb-4">
+                <p className="text-sm text-amber-800">
+                  <strong>How it works:</strong> Attend a group meetup → Meet people → Express interest → Mutual matches become connections!
+                </p>
+              </div>
+              {onNavigate && (
+                <button
+                  onClick={() => onNavigate('home')}
+                  className="bg-amber-500 hover:bg-amber-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+                >
+                  Find Meetups to Join
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -349,10 +361,38 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
       {activeTab === 'upcoming' && (
         <div className="space-y-4">
           {upcomingChats.length === 0 ? (
-            <div className="bg-gray-50 rounded-lg p-8 text-center">
-              <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-600">No upcoming coffee chats</p>
-              <p className="text-sm text-gray-500 mt-2">Schedule one with your connections!</p>
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-xl p-6 text-center">
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Calendar className="w-8 h-8 text-purple-600" />
+              </div>
+              <h4 className="font-semibold text-purple-800 text-lg mb-2">No upcoming coffee chats</h4>
+              {connections.length > 0 ? (
+                <>
+                  <p className="text-purple-700 mb-4">
+                    You have {connections.length} connection{connections.length > 1 ? 's' : ''}! Schedule a 1:1 chat to get to know them better.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('schedule')}
+                    className="bg-purple-500 hover:bg-purple-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+                  >
+                    Schedule a Coffee Chat
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-purple-700 mb-4">
+                    Make connections at meetups first, then come back to schedule 1:1 chats!
+                  </p>
+                  {onNavigate && (
+                    <button
+                      onClick={() => onNavigate('home')}
+                      className="bg-purple-500 hover:bg-purple-600 text-white font-medium px-6 py-2.5 rounded-lg transition-colors"
+                    >
+                      Find Meetups
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             upcomingChats.map(chat => {

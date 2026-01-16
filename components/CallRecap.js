@@ -49,6 +49,7 @@ export default function CallRecap({
   const [groupRecs, setGroupRecs] = useState([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState({}); // Cache for suggested member profiles
+  const [connectedUserIds, setConnectedUserIds] = useState(new Set()); // Already connected users
 
   // Calculate duration
   const getDuration = () => {
@@ -148,6 +149,28 @@ export default function CallRecap({
     const timer = setTimeout(loadRecommendations, 1000);
     return () => clearTimeout(timer);
   }, [channelName, currentUserId]);
+
+  // Load existing connections to check if users are already connected
+  useEffect(() => {
+    const loadExistingConnections = async () => {
+      if (!currentUserId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('user_interests')
+          .select('interested_in_user_id')
+          .eq('user_id', currentUserId);
+
+        if (!error && data) {
+          setConnectedUserIds(new Set(data.map(c => c.interested_in_user_id)));
+        }
+      } catch (err) {
+        console.error('Error loading existing connections:', err);
+      }
+    };
+
+    loadExistingConnections();
+  }, [currentUserId]);
 
   // Internal function to generate AI summary
   const generateAiSummaryInternal = async (loadedMessages) => {
@@ -446,9 +469,17 @@ export default function CallRecap({
                             )}
                           </div>
                         </div>
-                        {onConnect && (
+                        {connectedUserIds.has(participant.id) ? (
+                          <span className="text-green-400 text-sm flex items-center gap-1">
+                            <span>&#10003;</span> Connected
+                          </span>
+                        ) : onConnect && (
                           <button
-                            onClick={() => onConnect(participant.id)}
+                            onClick={() => {
+                              onConnect(participant.id);
+                              // Update local state immediately
+                              setConnectedUserIds(prev => new Set([...prev, participant.id]));
+                            }}
                             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
                           >
                             Connect
