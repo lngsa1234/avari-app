@@ -2,24 +2,30 @@
 
 import { useState } from 'react';
 import VideoCall from './VideoCall';
+import CallRecap from './CallRecap';
+import { supabase } from '@/lib/supabase';
+import { saveCallRecap } from '@/lib/callRecapHelpers';
 
 /**
  * VideoCallButton - Socket.IO Version
- * 
+ *
  * Displays button to initiate 1:1 video calls
  * Uses Socket.IO backend for real-time WebRTC signaling
- * 
+ * Handles recap at this level so it persists after call ends
+ *
  * @param {Object} meetup - Coffee chat/meetup object with user IDs
  * @param {string} currentUserId - Currently logged-in user's ID
  */
 export default function VideoCallButton({ meetup, currentUserId }) {
   const [showVideoCall, setShowVideoCall] = useState(false);
+  const [showRecap, setShowRecap] = useState(false);
+  const [recapData, setRecapData] = useState(null);
 
   // Validate required props
   if (!meetup || !currentUserId) {
-    console.warn('VideoCallButton: Missing required props', { 
-      hasMeetup: !!meetup, 
-      hasCurrentUserId: !!currentUserId 
+    console.warn('VideoCallButton: Missing required props', {
+      hasMeetup: !!meetup,
+      hasCurrentUserId: !!currentUserId
     });
     return null;
   }
@@ -27,18 +33,21 @@ export default function VideoCallButton({ meetup, currentUserId }) {
   // Determine the other user in the chat
   const isRequester = meetup.requester_id === currentUserId;
   const otherUserId = isRequester ? meetup.recipient_id : meetup.requester_id;
-  
+
   // Get other user's name
-  const otherUserName = isRequester 
+  const otherUserName = isRequester
     ? (meetup.recipient?.name || 'Other User')
     : (meetup.requester?.name || 'Other User');
+
+  // Get other user profile for recap
+  const otherUserProfile = isRequester ? meetup.recipient : meetup.requester;
 
   // Validate other user exists
   if (!otherUserId) {
     console.warn('VideoCallButton: Cannot determine other user', { meetup });
     return (
       <div className="p-2 bg-yellow-100 border border-yellow-400 rounded text-xs">
-        ⚠️ Video calling unavailable (user not found)
+        Video calling unavailable (user not found)
       </div>
     );
   }
@@ -49,12 +58,103 @@ export default function VideoCallButton({ meetup, currentUserId }) {
     return null;
   }
 
-  console.log('✅ VideoCallButton ready:', {
+  console.log('VideoCallButton ready:', {
     matchId: meetup.id,
     currentUserId,
     otherUserId,
-    otherUserName
+    otherUserName,
+    isRequester,
+    meetupRequester: meetup.requester,
+    meetupRecipient: meetup.recipient,
+    otherUserProfile
   });
+
+  // Handle call end with recap data
+  const handleCallEnd = async (data) => {
+    console.log('Call ended, showing recap:', data);
+    setShowVideoCall(false);
+
+    if (data) {
+      const participants = data.participants || (otherUserProfile ? [otherUserProfile] : [{ id: otherUserId, name: otherUserName }]);
+      const recapInfo = {
+        channelName: `video-${meetup.id}`,
+        callType: '1on1',
+        provider: 'webrtc',
+        startedAt: data.startedAt,
+        endedAt: data.endedAt || new Date().toISOString(),
+        participants,
+        transcript: data.transcript || [],
+        messages: data.messages || [],
+        metrics: data.metrics
+      };
+
+      setRecapData(recapInfo);
+      setShowRecap(true);
+
+      // Save recap to database for call history
+      try {
+        await saveCallRecap({
+          channelName: recapInfo.channelName,
+          callType: recapInfo.callType,
+          provider: recapInfo.provider,
+          startedAt: recapInfo.startedAt,
+          endedAt: recapInfo.endedAt,
+          participants: participants,
+          transcript: recapInfo.transcript,
+          metrics: recapInfo.metrics,
+          userId: currentUserId
+        });
+        console.log('Recap saved to database');
+      } catch (err) {
+        console.error('Failed to save recap:', err);
+      }
+    }
+  };
+
+  // Handle recap close
+  const handleRecapClose = () => {
+    setShowRecap(false);
+    setRecapData(null);
+  };
+
+  // Handle connect from recap
+  const handleConnectFromRecap = async (targetUserId) => {
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .insert({
+          user_id: currentUserId,
+          interested_in_user_id: targetUserId
+        });
+
+      if (error && error.code !== '23505') {
+        console.error('Error expressing interest:', error);
+      }
+      alert('Connection request sent!');
+    } catch (err) {
+      console.error('Error connecting:', err);
+    }
+  };
+
+  // Show recap screen (persists even after VideoCall unmounts)
+  if (showRecap && recapData) {
+    return (
+      <CallRecap
+        channelName={recapData.channelName}
+        callType={recapData.callType}
+        provider={recapData.provider}
+        startedAt={recapData.startedAt}
+        endedAt={recapData.endedAt}
+        participants={recapData.participants}
+        currentUserId={currentUserId}
+        transcript={recapData.transcript}
+        messages={recapData.messages}
+        metrics={recapData.metrics}
+        onClose={handleRecapClose}
+        onConnect={handleConnectFromRecap}
+      />
+    );
+  }
 
   // Show full-screen video call interface
   if (showVideoCall) {
@@ -64,10 +164,7 @@ export default function VideoCallButton({ meetup, currentUserId }) {
         userId={currentUserId}
         otherUserId={otherUserId}
         otherUserName={otherUserName}
-        onEndCall={() => {
-          console.log('📞 Call ended');
-          setShowVideoCall(false);
-        }}
+        onEndCall={handleCallEnd}
       />
     );
   }
@@ -76,7 +173,7 @@ export default function VideoCallButton({ meetup, currentUserId }) {
   return (
     <button
       onClick={() => {
-        console.log('🎥 Starting video call:', {
+        console.log('Starting video call:', {
           matchId: meetup.id,
           from: currentUserId,
           to: otherUserId
@@ -86,17 +183,17 @@ export default function VideoCallButton({ meetup, currentUserId }) {
       className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center shadow-lg"
       title={`Start video call with ${otherUserName}`}
     >
-      <svg 
-        className="w-5 h-5 mr-2" 
-        fill="none" 
-        stroke="currentColor" 
+      <svg
+        className="w-5 h-5 mr-2"
+        fill="none"
+        stroke="currentColor"
         viewBox="0 0 24 24"
       >
-        <path 
-          strokeLinecap="round" 
-          strokeLinejoin="round" 
-          strokeWidth={2} 
-          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" 
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
         />
       </svg>
       Join Video Call

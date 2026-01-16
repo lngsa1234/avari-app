@@ -15,14 +15,14 @@ export function AuthProvider({ children }) {
 
   // Stable profile loader with auto-creation
   const loadProfileRef = useRef(null)
-  
-  loadProfileRef.current = async (userId, userEmail = null, userName = null) => {
+
+  loadProfileRef.current = async (userId, userEmail = null, userName = null, force = false) => {
     if (loadingUserIdRef.current === userId) {
       console.log('⏭️ Profile already loading for', userId)
       return
     }
 
-    if (profile?.id === userId && status === 'ready') {
+    if (!force && profile?.id === userId && status === 'ready') {
       console.log('✅ Profile already loaded for', userId)
       return
     }
@@ -169,9 +169,10 @@ export function AuthProvider({ children }) {
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      console.log('🔄 Refreshing profile')
+      console.log('🔄 Refreshing profile - forcing reload')
       loadingUserIdRef.current = null
-      await loadProfileRef.current(user.id, user.email, user.user_metadata?.name)
+      setStatus('loading_profile')
+      await loadProfileRef.current(user.id, user.email, user.user_metadata?.name, true)
     }
   }, [user?.id, user?.email, user?.user_metadata?.name])
 

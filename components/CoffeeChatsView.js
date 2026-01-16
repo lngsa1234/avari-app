@@ -5,13 +5,14 @@
 
 import { useState, useEffect } from 'react';
 import { Video, Calendar, Clock, User, Check, X, MessageCircle } from 'lucide-react';
-import { 
-  requestCoffeeChat, 
-  acceptCoffeeChat, 
-  declineCoffeeChat, 
+import {
+  requestCoffeeChat,
+  acceptCoffeeChat,
+  declineCoffeeChat,
   cancelCoffeeChat,
   getMyCoffeeChats,
-  getPendingRequests 
+  getPendingRequests,
+  getSentRequests
 } from '@/lib/coffeeChatHelpers';
 import VideoCallButton from './VideoCallButton';
 
@@ -106,22 +107,8 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
 
   const loadSentRequests = async () => {
     try {
-      console.log('📤 Loading sent requests...');
-      
-      const { data, error } = await supabase
-        .from('coffee_chats')
-        .select(`
-          *,
-          recipient:profiles!coffee_chats_recipient_id_fkey(id, name, career, city, state)
-        `)
-        .eq('requester_id', currentUser.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      console.log('✅ Loaded', data?.length || 0, 'sent requests');
-      setSentRequests(data || []);
+      const requests = await getSentRequests(supabase);
+      setSentRequests(requests);
     } catch (error) {
       console.error('Error loading sent requests:', error);
       setSentRequests([]);
@@ -204,7 +191,8 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
 
   const getPartnerInfo = (chat) => {
     const isRequester = chat.requester_id === currentUser.id;
-    return isRequester ? chat.recipient : chat.requester;
+    const partner = isRequester ? chat.recipient : chat.requester;
+    return partner || { name: 'Unknown User', career: 'No career info', email: '' };
   };
 
   const upcomingChats = coffeeChats.filter(
@@ -449,7 +437,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
             </div>
           ) : (
             pendingRequests.map(request => {
-              const requester = request.requester;
+              const requester = request.requester || {};
               const requestDate = new Date(request.scheduled_time);
 
               return (
@@ -460,8 +448,8 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
                         <User className="w-5 h-5 text-purple-600" />
                       </div>
                       <div className="flex-1">
-                        <h4 className="font-semibold text-gray-800">{requester.name}</h4>
-                        <p className="text-sm text-gray-600">{requester.career}</p>
+                        <h4 className="font-semibold text-gray-800">{requester.name || 'Unknown User'}</h4>
+                        <p className="text-sm text-gray-600">{requester.career || 'No career info'}</p>
                       </div>
                     </div>
                     
@@ -526,7 +514,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
             </div>
           ) : (
             sentRequests.map(request => {
-              const recipient = request.recipient;
+              const recipient = request.recipient || {};
               const requestDate = new Date(request.scheduled_time);
 
               return (
@@ -538,8 +526,8 @@ export default function CoffeeChatsView({ currentUser, connections, supabase }) 
                           <User className="w-5 h-5 text-yellow-600" />
                         </div>
                         <div className="flex-1">
-                          <h4 className="font-semibold text-gray-800">{recipient.name}</h4>
-                          <p className="text-sm text-gray-600">{recipient.career}</p>
+                          <h4 className="font-semibold text-gray-800">{recipient.name || 'Unknown User'}</h4>
+                          <p className="text-sm text-gray-600">{recipient.career || 'No career info'}</p>
                         </div>
                       </div>
                       <span className="text-xs bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full font-medium">

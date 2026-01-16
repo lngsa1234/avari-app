@@ -10,7 +10,11 @@
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.17",
+    "@livekit/track-processors": "^0.7.0",
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/selfie_segmentation": "^0.1.1675465747",
     "@supabase/supabase-js": "^2.39.0",
+    "agora-extension-virtual-background": "^2.1.0",
     "agora-rtc-sdk-ng": "^4.24.2",
     "livekit-client": "^2.17.0",
     "livekit-server-sdk": "^2.15.0",

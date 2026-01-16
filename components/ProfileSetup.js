@@ -1,23 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export default function ProfileSetup({ session, onSave }) {
   const [profile, setProfile] = useState({
     name: '',
     career: '',
-    age: '',
     city: '',
     state: '',
     bio: ''
   })
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = () => {
-    if (profile.name && profile.career && profile.age && profile.city && profile.state) {
-      onSave({
-        ...profile,
-        age: parseInt(profile.age)
-      })
+  // Pre-fill name from existing profile
+  useEffect(() => {
+    if (session?.profile?.name) {
+      setProfile(prev => ({
+        ...prev,
+        name: session.profile.name
+      }))
+    }
+  }, [session?.profile?.name])
+
+  const handleSubmit = async () => {
+    if (profile.name && profile.career && profile.city && profile.state) {
+      setIsLoading(true)
+      try {
+        await onSave(profile)
+      } catch (error) {
+        console.error('Error saving profile:', error)
+        alert('Failed to save profile. Please try again.')
+      } finally {
+        setIsLoading(false)
+      }
     } else {
       alert('Please fill in all required fields')
     }
@@ -46,13 +61,6 @@ export default function ProfileSetup({ session, onSave }) {
             onChange={(e) => setProfile({...profile, career: e.target.value})}
             className="w-full border border-gray-300 rounded-lg p-3"
           />
-          <input
-            type="number"
-            placeholder="Age *"
-            value={profile.age}
-            onChange={(e) => setProfile({...profile, age: e.target.value})}
-            className="w-full border border-gray-300 rounded-lg p-3"
-          />
           <div className="grid grid-cols-2 gap-3">
             <input
               type="text"
@@ -78,9 +86,17 @@ export default function ProfileSetup({ session, onSave }) {
           />
           <button
             onClick={handleSubmit}
-            className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
+            disabled={isLoading}
+            className="w-full bg-rose-500 hover:bg-rose-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
           >
-            Complete Profile
+            {isLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                Saving...
+              </>
+            ) : (
+              'Complete Profile'
+            )}
           </button>
         </div>
       </div>

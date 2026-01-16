@@ -2,6 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import {
+  getRecommendationsForCall,
+  updateConnectionRecommendationStatus,
+  updateGroupRecommendationStatus,
+  createGroupFromRecommendation,
+  requestToJoinGroup,
+  createConnectionFromRecommendation,
+  fetchSuggestedMemberProfiles
+} from '@/lib/connectionRecommendationHelpers';
 
 /**
  * CallRecap - Enhanced post-call summary with transcription and metrics
@@ -13,6 +22,7 @@ import { supabase } from '@/lib/supabase';
  * - Performance metrics (connection quality, latency)
  * - Chat highlights
  * - Connection suggestions
+ * - AI-powered connection and group recommendations
  */
 export default function CallRecap({
   channelName,
@@ -25,13 +35,20 @@ export default function CallRecap({
   transcript = [], // Array of { speakerId, speakerName, text, timestamp }
   metrics = null, // { latency, packetLoss, connectionQuality }
   onClose,
-  onConnect
+  onConnect,
+  meetupId // For fetching recommendations
 }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aiSummary, setAiSummary] = useState(null);
   const [generatingSummary, setGeneratingSummary] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'transcript', 'metrics'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'transcript', 'metrics', 'recommendations'
+
+  // Recommendations state
+  const [connectionRecs, setConnectionRecs] = useState([]);
+  const [groupRecs, setGroupRecs] = useState([]);
+  const [loadingRecs, setLoadingRecs] = useState(false);
+  const [memberProfiles, setMemberProfiles] = useState({}); // Cache for suggested member profiles
 
   // Calculate duration
   const getDuration = () => {
@@ -69,6 +86,10 @@ export default function CallRecap({
 
         if (!error && data) {
           setMessages(data);
+          // Auto-generate summary after messages are loaded
+          if (data.length > 0 || transcript.length > 0) {
+            generateAiSummaryInternal(data);
+          }
         }
       } catch (err) {
         console.error('Error loading recap messages:', err);
@@ -81,12 +102,58 @@ export default function CallRecap({
       loadMessages();
     } else {
       setLoading(false);
+      // Still try to generate summary if we have transcript
+      if (transcript.length > 0) {
+        generateAiSummaryInternal([]);
+      }
     }
   }, [channelName]);
 
-  // Generate AI summary if transcript is available
-  const generateAiSummary = async () => {
-    if (transcript.length === 0 && messages.length === 0) return;
+  // Load recommendations for this call
+  useEffect(() => {
+    const loadRecommendations = async () => {
+      if (!channelName || !currentUserId) return;
+
+      setLoadingRecs(true);
+      try {
+        const { connectionRecs: connRecs, groupRecs: grpRecs } = await getRecommendationsForCall(
+          supabase,
+          channelName,
+          currentUserId
+        );
+
+        setConnectionRecs(connRecs || []);
+        setGroupRecs(grpRecs || []);
+
+        // Load member profiles for form_new recommendations
+        const formNewRecs = (grpRecs || []).filter(r => r.recommendation_type === 'form_new');
+        if (formNewRecs.length > 0) {
+          const allMemberIds = formNewRecs.flatMap(r => r.suggested_members || []);
+          const uniqueMemberIds = [...new Set(allMemberIds)];
+          if (uniqueMemberIds.length > 0) {
+            const profiles = await fetchSuggestedMemberProfiles(supabase, uniqueMemberIds);
+            const profileMap = {};
+            profiles.forEach(p => { profileMap[p.id] = p; });
+            setMemberProfiles(profileMap);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading recommendations:', err);
+      } finally {
+        setLoadingRecs(false);
+      }
+    };
+
+    // Delay slightly to allow recommendations to be generated
+    const timer = setTimeout(loadRecommendations, 1000);
+    return () => clearTimeout(timer);
+  }, [channelName, currentUserId]);
+
+  // Internal function to generate AI summary
+  const generateAiSummaryInternal = async (loadedMessages) => {
+    const msgs = loadedMessages || messages;
+    if (transcript.length === 0 && msgs.length === 0) return;
+    if (generatingSummary || aiSummary) return; // Prevent duplicate calls
 
     setGeneratingSummary(true);
     try {
@@ -95,7 +162,7 @@ export default function CallRecap({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           transcript,
-          messages,
+          messages: msgs,
           participants,
           duration: getDurationSeconds()
         })
@@ -110,6 +177,73 @@ export default function CallRecap({
     } finally {
       setGeneratingSummary(false);
     }
+  };
+
+  // Public function for manual regeneration
+  const generateAiSummary = () => generateAiSummaryInternal(messages);
+
+  // Handle connection recommendation actions
+  const handleConnectFromRec = async (rec) => {
+    const result = await createConnectionFromRecommendation(supabase, rec);
+    if (result.success) {
+      setConnectionRecs(prev => prev.map(r =>
+        r.id === rec.id ? { ...r, status: 'connected' } : r
+      ));
+      // Also trigger the original onConnect if provided
+      if (onConnect) {
+        onConnect(rec.recommended_user_id);
+      }
+    }
+  };
+
+  const handleDismissConnectionRec = async (recId) => {
+    await updateConnectionRecommendationStatus(supabase, recId, 'dismissed');
+    setConnectionRecs(prev => prev.filter(r => r.id !== recId));
+  };
+
+  // Handle group recommendation actions
+  const handleCreateGroup = async (rec) => {
+    const result = await createGroupFromRecommendation(supabase, rec, currentUserId);
+    if (result.success) {
+      setGroupRecs(prev => prev.map(r =>
+        r.id === rec.id ? { ...r, status: 'acted', result_group_id: result.group.id } : r
+      ));
+      alert(`Group "${rec.suggested_name}" created! Invitations sent to members.`);
+    } else {
+      alert('Failed to create group. Please try again.');
+    }
+  };
+
+  const handleJoinGroup = async (rec) => {
+    const result = await requestToJoinGroup(supabase, rec.suggested_group_id, currentUserId);
+    if (result.success) {
+      await updateGroupRecommendationStatus(supabase, rec.id, 'acted', rec.suggested_group_id);
+      setGroupRecs(prev => prev.map(r =>
+        r.id === rec.id ? { ...r, status: 'acted' } : r
+      ));
+      alert('Join request sent! The group admin will review your request.');
+    } else {
+      alert(result.error || 'Failed to join group. Please try again.');
+    }
+  };
+
+  const handleDismissGroupRec = async (recId) => {
+    await updateGroupRecommendationStatus(supabase, recId, 'dismissed');
+    setGroupRecs(prev => prev.filter(r => r.id !== recId));
+  };
+
+  // Helper to get display name for a participant
+  const getDisplayName = (participant) => {
+    if (participant.name && participant.name !== 'Unknown' && !participant.name.includes('-')) {
+      return participant.name;
+    }
+    if (participant.email) {
+      // If email, show the part before @
+      const emailPart = participant.email.split('@')[0];
+      // Capitalize first letter
+      return emailPart.charAt(0).toUpperCase() + emailPart.slice(1);
+    }
+    return 'Participant';
   };
 
   // Get unique participants from messages if not provided
@@ -127,9 +261,13 @@ export default function CallRecap({
     return Array.from(uniqueUsers.values());
   };
 
-  const displayParticipants = participants.length > 0
+  const displayParticipants = (participants.length > 0
     ? participants.filter(p => p.id !== currentUserId)
-    : getParticipantsFromMessages();
+    : getParticipantsFromMessages()
+  ).map(p => ({
+    ...p,
+    displayName: getDisplayName(p)
+  }));
 
   const chatHighlights = messages.slice(0, 5);
 
@@ -204,6 +342,17 @@ export default function CallRecap({
               Metrics
             </button>
           )}
+          {(connectionRecs.length > 0 || groupRecs.length > 0 || loadingRecs) && (
+            <button
+              onClick={() => setActiveTab('recommendations')}
+              className={`flex-1 py-3 text-sm font-medium transition ${
+                activeTab === 'recommendations' ? 'text-white border-b-2 border-rose-500' : 'text-gray-400'
+              }`}
+            >
+              <span className="mr-1">&#10024;</span>
+              Suggestions {connectionRecs.length + groupRecs.length > 0 && `(${connectionRecs.length + groupRecs.length})`}
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -235,21 +384,25 @@ export default function CallRecap({
                       <span className="text-xl">&#129302;</span>
                       <p className="text-gray-400 text-sm">AI Summary</p>
                     </div>
-                    {!aiSummary && (
+                    {aiSummary && !generatingSummary && (
                       <button
                         onClick={generateAiSummary}
-                        disabled={generatingSummary}
-                        className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 text-white px-3 py-1 rounded-lg text-xs font-medium transition"
+                        className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded-lg text-xs font-medium transition"
                       >
-                        {generatingSummary ? 'Generating...' : 'Generate'}
+                        Regenerate
                       </button>
                     )}
                   </div>
-                  {aiSummary ? (
+                  {generatingSummary ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-gray-400 text-sm">Generating summary...</p>
+                    </div>
+                  ) : aiSummary ? (
                     <p className="text-white text-sm">{aiSummary}</p>
                   ) : (
                     <p className="text-gray-500 text-sm italic">
-                      Click 'Generate' to create an AI summary of this call
+                      No summary available
                     </p>
                   )}
                 </div>
@@ -274,19 +427,19 @@ export default function CallRecap({
                           {participant.profile_picture ? (
                             <img
                               src={participant.profile_picture}
-                              alt={participant.name}
+                              alt={participant.displayName}
                               className="w-10 h-10 rounded-full object-cover"
                             />
                           ) : (
                             <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
                               <span className="text-white font-semibold">
-                                {(participant.name || participant.email || '?').charAt(0).toUpperCase()}
+                                {participant.displayName.charAt(0).toUpperCase()}
                               </span>
                             </div>
                           )}
                           <div>
                             <p className="text-white font-medium">
-                              {participant.name || participant.email || 'Unknown'}
+                              {participant.displayName}
                             </p>
                             {participant.career && (
                               <p className="text-gray-400 text-sm">{participant.career}</p>
@@ -423,6 +576,73 @@ export default function CallRecap({
               </div>
             </div>
           )}
+
+          {/* Recommendations Tab */}
+          {activeTab === 'recommendations' && (
+            <div className="space-y-6">
+              {loadingRecs ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="ml-2 text-gray-400">Loading suggestions...</span>
+                </div>
+              ) : (
+                <>
+                  {/* Connection Recommendations */}
+                  {connectionRecs.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-xl">&#129309;</span>
+                        <h3 className="text-white font-semibold">People to Connect</h3>
+                        <span className="text-gray-400 text-sm">Based on your conversation</span>
+                      </div>
+                      <div className="space-y-3">
+                        {connectionRecs.map(rec => (
+                          <ConnectionRecommendationCard
+                            key={rec.id}
+                            recommendation={rec}
+                            onConnect={() => handleConnectFromRec(rec)}
+                            onDismiss={() => handleDismissConnectionRec(rec.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Group Recommendations */}
+                  {groupRecs.length > 0 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <span className="text-xl">&#128101;</span>
+                        <h3 className="text-white font-semibold">Groups for You</h3>
+                        <span className="text-gray-400 text-sm">Form cohorts or join existing</span>
+                      </div>
+                      <div className="space-y-3">
+                        {groupRecs.map(rec => (
+                          <GroupRecommendationCard
+                            key={rec.id}
+                            recommendation={rec}
+                            memberProfiles={memberProfiles}
+                            onCreateGroup={() => handleCreateGroup(rec)}
+                            onJoinGroup={() => handleJoinGroup(rec)}
+                            onDismiss={() => handleDismissGroupRec(rec.id)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {connectionRecs.length === 0 && groupRecs.length === 0 && (
+                    <div className="text-center py-8 text-gray-400">
+                      <span className="text-4xl block mb-2">&#129302;</span>
+                      <p>No suggestions yet.</p>
+                      <p className="text-sm mt-1">AI recommendations will appear here after the call.</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -434,6 +654,211 @@ export default function CallRecap({
             Done
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Connection Recommendation Card Component
+ */
+function ConnectionRecommendationCard({ recommendation, onConnect, onDismiss }) {
+  const user = recommendation.recommended_user;
+  const matchPercent = Math.round((recommendation.match_score || 0) * 100);
+
+  const getDisplayName = (u) => {
+    if (u?.name && u.name !== 'Unknown') return u.name;
+    if (u?.email) return u.email.split('@')[0];
+    return 'User';
+  };
+
+  return (
+    <div className="bg-gray-700 rounded-xl p-4">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-3">
+          {user?.profile_picture ? (
+            <img
+              src={user.profile_picture}
+              alt={getDisplayName(user)}
+              className="w-12 h-12 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center">
+              <span className="text-white font-semibold text-lg">
+                {getDisplayName(user).charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <div>
+            <h4 className="text-white font-medium">{getDisplayName(user)}</h4>
+            {user?.career && (
+              <p className="text-gray-400 text-sm">{user.career}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Match Score Badge */}
+        <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+          matchPercent >= 80 ? 'bg-green-600 text-white' :
+          matchPercent >= 60 ? 'bg-blue-600 text-white' :
+          'bg-gray-600 text-gray-300'
+        }`}>
+          {matchPercent}% match
+        </div>
+      </div>
+
+      {/* AI Reason */}
+      <p className="text-gray-300 text-sm mt-3 mb-2">
+        <span className="text-purple-400">Why connect: </span>
+        {recommendation.reason}
+      </p>
+
+      {/* Shared Topics */}
+      {recommendation.shared_topics?.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {recommendation.shared_topics.map((topic, idx) => (
+            <span
+              key={idx}
+              className="bg-gray-600 text-gray-300 text-xs px-2 py-0.5 rounded-full"
+            >
+              {topic}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-2 mt-3">
+        {recommendation.status === 'connected' ? (
+          <span className="text-green-400 text-sm flex items-center gap-1">
+            <span>&#10003;</span> Connected
+          </span>
+        ) : (
+          <>
+            <button
+              onClick={onConnect}
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm font-medium transition"
+            >
+              Connect
+            </button>
+            <button
+              onClick={onDismiss}
+              className="px-4 bg-gray-600 hover:bg-gray-500 text-gray-300 py-2 rounded-lg text-sm transition"
+            >
+              Not now
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Group Recommendation Card Component
+ */
+function GroupRecommendationCard({ recommendation, memberProfiles, onCreateGroup, onJoinGroup, onDismiss }) {
+  const isFormNew = recommendation.recommendation_type === 'form_new';
+  const matchPercent = Math.round((recommendation.match_score || 0) * 100);
+
+  // Get suggested member names for form_new
+  const getMemberNames = () => {
+    if (!recommendation.suggested_members || !memberProfiles) return [];
+    return recommendation.suggested_members
+      .map(id => {
+        const profile = memberProfiles[id];
+        if (profile?.name) return profile.name;
+        if (profile?.email) return profile.email.split('@')[0];
+        return null;
+      })
+      .filter(Boolean);
+  };
+
+  const memberNames = getMemberNames();
+
+  return (
+    <div className="bg-gray-700 rounded-xl p-4">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+            isFormNew ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-blue-500'
+          }`}>
+            <span className="text-white text-xl">
+              {isFormNew ? '&#43;' : '&#128101;'}
+            </span>
+          </div>
+          <div>
+            <h4 className="text-white font-medium">
+              {isFormNew
+                ? recommendation.suggested_name || 'New Connection Group'
+                : recommendation.suggested_group?.name || 'Connection Group'
+              }
+            </h4>
+            <p className="text-gray-400 text-sm">
+              {isFormNew ? 'Form a new cohort' : 'Join existing group'}
+            </p>
+          </div>
+        </div>
+
+        {/* Match Score */}
+        <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+          matchPercent >= 80 ? 'bg-green-600 text-white' :
+          matchPercent >= 60 ? 'bg-blue-600 text-white' :
+          'bg-gray-600 text-gray-300'
+        }`}>
+          {matchPercent}% match
+        </div>
+      </div>
+
+      {/* Topic badge for form_new */}
+      {isFormNew && recommendation.suggested_topic && (
+        <div className="mb-2">
+          <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full">
+            {recommendation.suggested_topic}
+          </span>
+        </div>
+      )}
+
+      {/* Suggested members for form_new */}
+      {isFormNew && memberNames.length > 0 && (
+        <p className="text-gray-300 text-sm mb-2">
+          <span className="text-gray-400">With: </span>
+          {memberNames.join(', ')}
+        </p>
+      )}
+
+      {/* AI Reason */}
+      <p className="text-gray-300 text-sm mb-3">
+        <span className="text-purple-400">Why: </span>
+        {recommendation.reason}
+      </p>
+
+      {/* Actions */}
+      <div className="flex gap-2">
+        {recommendation.status === 'acted' ? (
+          <span className="text-green-400 text-sm flex items-center gap-1">
+            <span>&#10003;</span> {isFormNew ? 'Group Created' : 'Request Sent'}
+          </span>
+        ) : (
+          <>
+            <button
+              onClick={isFormNew ? onCreateGroup : onJoinGroup}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
+                isFormNew
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              {isFormNew ? 'Create Group' : 'Request to Join'}
+            </button>
+            <button
+              onClick={onDismiss}
+              className="px-4 bg-gray-600 hover:bg-gray-500 text-gray-300 py-2 rounded-lg text-sm transition"
+            >
+              Not now
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

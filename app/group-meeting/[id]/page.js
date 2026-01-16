@@ -1,132 +1,61 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { useAgora } from '@/hooks/useAgora';
 import { useRecording } from '@/hooks/useRecording';
+import useSpeechRecognition from '@/hooks/useSpeechRecognition';
+import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 import { getAgoraRoomByChannel, startAgoraRoom, endAgoraRoom, getCallRecapData } from '@/lib/agoraHelpers';
+import { saveCallRecap, saveProviderMetrics } from '@/lib/callRecapHelpers';
 import CallRecap from '@/components/CallRecap';
 
 /**
- * Convert UUID string to a numeric UID for Agora
- * Agora recommends using numeric UIDs for better performance
+ * Group Video Meeting - Uses LiveKit for large meetups
+ *
+ * Provider: LiveKit (configured in lib/videoProviders/index.js)
  */
-function generateNumericUid(uuidString) {
-  // Simple hash function to convert UUID to a number
-  let hash = 0;
-  for (let i = 0; i < uuidString.length; i++) {
-    const char = uuidString.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  // Return absolute value to ensure positive number
-  return Math.abs(hash);
-}
-
-/**
- * Component to render a remote user's video
- * Uses useEffect to properly manage video playback
- */
-function RemoteVideoPlayer({ remoteUser }) {
-  const videoRef = useRef(null);
-
-  useEffect(() => {
-    if (videoRef.current && remoteUser.videoTrack) {
-      console.log('🎬 Playing remote video for user:', remoteUser.uid);
-      console.log('Remote video container:', videoRef.current);
-      console.log('Container dimensions:', {
-        width: videoRef.current.offsetWidth,
-        height: videoRef.current.offsetHeight,
-        parentWidth: videoRef.current.parentElement?.offsetWidth,
-        parentHeight: videoRef.current.parentElement?.offsetHeight
-      });
-      remoteUser.videoTrack.play(videoRef.current);
-    }
-
-    return () => {
-      if (remoteUser.videoTrack) {
-        console.log('🛑 Stopping remote video for user:', remoteUser.uid);
-        remoteUser.videoTrack.stop();
-      }
-    };
-  }, [remoteUser.videoTrack, remoteUser.uid]);
-
-  return (
-    <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
-      {remoteUser.videoTrack ? (
-        <div
-          ref={videoRef}
-          className="absolute inset-0"
-        />
-      ) : (
-        <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-2xl text-white">
-                {String(remoteUser.uid).charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <p className="text-white text-sm">User {remoteUser.uid}</p>
-            <p className="text-white text-xs opacity-70">Camera off</p>
-          </div>
-        </div>
-      )}
-      <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
-        User {remoteUser.uid}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Large version for speaker view
- */
-function RemoteVideoPlayerLarge({ remoteUser }) {
-  const videoRef = useRef(null);
-
-  useEffect(() => {
-    if (videoRef.current && remoteUser.videoTrack) {
-      console.log('🎬 Playing remote video (large) for user:', remoteUser.uid);
-      remoteUser.videoTrack.play(videoRef.current);
-    }
-
-    return () => {
-      if (remoteUser.videoTrack) {
-        remoteUser.videoTrack.stop();
-      }
-    };
-  }, [remoteUser.videoTrack, remoteUser.uid]);
-
-  return (
-    <>
-      <div ref={videoRef} className="w-full h-full" />
-      <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded">
-        User {remoteUser.uid}
-      </div>
-    </>
-  );
-}
-
 export default function GroupVideoMeeting() {
   const params = useParams();
   const router = useRouter();
-  const channelName = params.id; // This will be like "meetup-123"
+  const channelName = params.id;
 
-  const {
-    localAudioTrack,
-    localVideoTrack,
-    localScreenTrack,
-    remoteUsers,
-    isJoined,
-    isScreenSharing,
-    join,
-    leave,
-    toggleMute,
-    toggleVideo,
-    startScreenShare,
-    stopScreenShare
-  } = useAgora();
+  // LiveKit state
+  const [room, setRoom] = useState(null);
+  const [localParticipant, setLocalParticipant] = useState(null);
+  const [remoteParticipants, setRemoteParticipants] = useState([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  // Track state
+  const [localVideoTrack, setLocalVideoTrack] = useState(null);
+  const [localAudioTrack, setLocalAudioTrack] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+
+  // UI state
+  const [user, setUser] = useState(null);
+  const [meetupInfo, setMeetupInfo] = useState(null);
+  const [participantCount, setParticipantCount] = useState(0);
+  const [gridView, setGridView] = useState(true);
+  const [showChat, setShowChat] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [showRecap, setShowRecap] = useState(false);
+  const [recapData, setRecapData] = useState(null);
+  const [transcript, setTranscript] = useState([]);
+  const [metrics, setMetrics] = useState(null);
+  const [callStartTime, setCallStartTime] = useState(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
+  // Refs
+  const localVideoRef = useRef(null);
+  const hasInitialized = useRef(false);
+  const isInitializing = useRef(false);
+  const messagesEndRef = useRef(null);
+  const roomRef = useRef(null);
+  const participantTracksRef = useRef(new Map()); // Stable track storage
 
   const {
     isRecording,
@@ -136,24 +65,56 @@ export default function GroupVideoMeeting() {
     formatTime
   } = useRecording();
 
-  const [user, setUser] = useState(null);
-  const [meetupInfo, setMeetupInfo] = useState(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-  const [participantCount, setParticipantCount] = useState(0);
-  const [gridView, setGridView] = useState(true); // Grid vs speaker view
-  const [showChat, setShowChat] = useState(false); // Toggle chat panel
-  const [messages, setMessages] = useState([]); // Chat messages
-  const [newMessage, setNewMessage] = useState(''); // Current message being typed
-  const [showRecap, setShowRecap] = useState(false); // Show post-call recap
-  const [recapData, setRecapData] = useState(null); // Recap data
-  const localVideoRef = useRef(null);
-  const localVideoThumbnailRef = useRef(null); // Separate ref for thumbnail in speaker view
-  const hasInitialized = useRef(false); // Prevent double initialization
-  const messagesEndRef = useRef(null); // For auto-scroll chat
+  const {
+    isBlurEnabled,
+    isBlurSupported,
+    isLoading: blurLoading,
+    toggleBlur
+  } = useBackgroundBlur('livekit');
 
+  // Handle transcript from speech recognition
+  const handleTranscript = useCallback(({ text, isFinal, timestamp }) => {
+    if (isFinal && text.trim()) {
+      setTranscript(prev => [...prev, {
+        speakerId: user?.id || 'local',
+        speakerName: user?.email?.split('@')[0] || 'You',
+        text: text.trim(),
+        timestamp,
+        isFinal: true
+      }]);
+      console.log('[Transcription]', text);
+    }
+  }, [user]);
+
+  const {
+    isListening: isSpeechListening,
+    isSupported: isSpeechSupported,
+    error: speechError,
+    startListening,
+    stopListening
+  } = useSpeechRecognition({
+    onTranscript: handleTranscript,
+    continuous: true,
+    interimResults: false // Only capture final results for cleaner transcript
+  });
+
+  // Toggle transcription
+  const toggleTranscription = useCallback(() => {
+    if (isTranscribing) {
+      stopListening();
+      setIsTranscribing(false);
+      console.log('[Transcription] Stopped');
+    } else {
+      const started = startListening();
+      if (started) {
+        setIsTranscribing(true);
+        console.log('[Transcription] Started');
+      }
+    }
+  }, [isTranscribing, startListening, stopListening]);
+
+  // Get current user
   useEffect(() => {
-    // Get current user
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) {
         setUser(data.user);
@@ -163,175 +124,449 @@ export default function GroupVideoMeeting() {
     });
   }, [router]);
 
+  // Initialize LiveKit call
   useEffect(() => {
-    // Prevent duplicate initialization (React Strict Mode runs effects twice)
-    if (channelName && user && !hasInitialized.current) {
-      hasInitialized.current = true;
-      initializeGroupCall();
+    if (channelName && user && !hasInitialized.current && !isInitializing.current) {
+      initializeLiveKitCall();
     }
 
     return () => {
-      hasInitialized.current = false;
-      leave();
+      // Only cleanup if we actually initialized
+      if (hasInitialized.current) {
+        leaveCall();
+      }
     };
   }, [channelName, user]);
 
-  // Play local video when track is available
-  useEffect(() => {
-    if (localVideoTrack) {
-      const remoteUsersArray = Object.values(remoteUsers);
-
-      // In grid view, play in main ref
-      if (gridView && localVideoRef.current) {
-        console.log('🎬 Playing local video in grid view');
-        localVideoTrack.play(localVideoRef.current);
-      }
-      // In speaker view, decide based on remote users
-      else if (!gridView) {
-        const hasRemoteVideo = remoteUsersArray.length > 0 && remoteUsersArray[0].videoTrack;
-
-        if (hasRemoteVideo && localVideoThumbnailRef.current) {
-          // Show local in thumbnail
-          console.log('🎬 Playing local video in thumbnail');
-          localVideoTrack.play(localVideoThumbnailRef.current);
-        } else if (!hasRemoteVideo && localVideoRef.current) {
-          // Show local in main area
-          console.log('🎬 Playing local video in main area');
-          localVideoTrack.play(localVideoRef.current);
-        }
-      }
+  const initializeLiveKitCall = async () => {
+    // Prevent double initialization (React StrictMode)
+    if (isInitializing.current || hasInitialized.current) {
+      console.log('[LiveKit] Skipping duplicate initialization');
+      return;
     }
-  }, [localVideoTrack, gridView, remoteUsers]);
+    isInitializing.current = true;
 
-  // Update participant count
-  useEffect(() => {
-    const count = Object.keys(remoteUsers).length + (isJoined ? 1 : 0);
-    setParticipantCount(count);
-    console.log('👥 Participant count:', count);
-    console.log('👥 Remote users:', Object.keys(remoteUsers));
-  }, [remoteUsers, isJoined]);
-
-  const initializeGroupCall = async () => {
     try {
-      console.log('🎥 Initializing group video call for channel:', channelName);
+      setIsConnecting(true);
+      console.log('[LiveKit] Initializing group video call for channel:', channelName);
 
-      // Get room and meetup info
-      const room = await getAgoraRoomByChannel(channelName);
-      if (room && room.meetups) {
-        setMeetupInfo(room.meetups);
+      // Get room info
+      const roomInfo = await getAgoraRoomByChannel(channelName);
+      if (roomInfo && roomInfo.meetups) {
+        setMeetupInfo(roomInfo.meetups);
       }
 
-      // Get Agora App ID from environment
-      const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
-      if (!appId) {
-        alert('❌ Configuration Error\n\nAgora App ID not configured. Please add NEXT_PUBLIC_AGORA_APP_ID to your .env.local file.');
-        return;
+      // Check for LiveKit URL
+      const liveKitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+      if (!liveKitUrl) {
+        throw new Error('LiveKit URL not configured. Please add NEXT_PUBLIC_LIVEKIT_URL to your .env.local file.');
       }
 
-      console.log('✅ Agora App ID found:', appId.substring(0, 8) + '...');
-
-      // Test camera/microphone permissions first
-      console.log('🎤 Checking camera and microphone permissions...');
+      // Check camera/microphone permissions
+      console.log('[LiveKit] Checking camera and microphone permissions...');
       try {
         const testStream = await navigator.mediaDevices.getUserMedia({
           video: true,
           audio: true
         });
-        console.log('✅ Camera and microphone permissions granted');
-        // Stop test stream
         testStream.getTracks().forEach(track => track.stop());
+        console.log('[LiveKit] Camera and microphone permissions granted');
       } catch (permError) {
-        console.error('❌ Permission error:', permError);
-        let errorMsg = '❌ Camera/Microphone Access Denied\n\n';
-
-        if (permError.name === 'NotAllowedError') {
-          errorMsg += 'Please allow camera and microphone access in your browser settings.\n\n';
-          errorMsg += '1. Click the camera icon in your browser address bar\n';
-          errorMsg += '2. Select "Allow" for camera and microphone\n';
-          errorMsg += '3. Reload the page';
-        } else if (permError.name === 'NotFoundError') {
-          errorMsg += 'No camera or microphone found. Please connect a webcam and microphone.';
-        } else if (permError.name === 'NotReadableError') {
-          errorMsg += 'Camera or microphone is already in use by another application.\n\n';
-          errorMsg += 'Please close other apps using your camera/microphone and try again.';
-        } else {
-          errorMsg += 'Error: ' + permError.message;
-        }
-
-        alert(errorMsg);
+        handlePermissionError(permError);
         return;
       }
 
-      // Join Agora channel
-      // Convert user ID to number (Agora prefers numeric UIDs)
-      const numericUid = generateNumericUid(user.id);
-      console.log('📡 Joining Agora channel:', channelName, 'with UID:', numericUid);
-      await join(appId, channelName, null, numericUid);
+      // Dynamic import LiveKit
+      const { Room, RoomEvent, VideoPresets } = await import('livekit-client');
 
-      // Mark room as started
-      await startAgoraRoom(channelName);
-
-      console.log('✅ Successfully joined group call');
-
-    } catch (error) {
-      console.error('❌ Error initializing group call:', error);
-      console.error('Error details:', {
-        name: error.name,
-        message: error.message,
-        stack: error.stack
+      // Create room instance
+      const newRoom = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        videoCaptureDefaults: {
+          resolution: VideoPresets.h720.resolution,
+        },
       });
 
-      let errorMsg = '❌ Failed to Join Video Call\n\n';
+      roomRef.current = newRoom;
+      setRoom(newRoom);
 
-      if (error.message && error.message.includes('INVALID_PARAMS')) {
-        errorMsg += 'Invalid Agora configuration. Please check your App ID.';
-      } else if (error.message && error.message.includes('NETWORK_ERROR')) {
-        errorMsg += 'Network error. Please check your internet connection.';
-      } else if (error.code === 'PGRST116') {
-        errorMsg += 'Video room not found. The room may have been deleted.';
-      } else {
-        errorMsg += 'Error: ' + (error.message || 'Unknown error');
-        errorMsg += '\n\nPlease check the browser console for more details.';
+      // Set up event handlers
+      setupRoomEventHandlers(newRoom, RoomEvent);
+
+      // Get token from API
+      console.log('[LiveKit] Fetching access token...');
+      const tokenResponse = await fetch('/api/livekit-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: channelName,
+          participantId: user.id,
+          participantName: user.email || 'Anonymous'
+        })
+      });
+
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to get LiveKit token');
       }
 
-      alert(errorMsg);
+      const { token } = await tokenResponse.json();
+
+      // Connect to room
+      console.log('[LiveKit] Connecting to room:', channelName);
+      await newRoom.connect(liveKitUrl, token);
+
+      setLocalParticipant(newRoom.localParticipant);
+      setCallStartTime(new Date().toISOString());
+
+      // Enable camera and microphone
+      console.log('[LiveKit] Enabling camera and microphone...');
+      await newRoom.localParticipant.enableCameraAndMicrophone();
+
+      // Get local tracks
+      const camTrack = newRoom.localParticipant.getTrackPublication('camera');
+      const micTrack = newRoom.localParticipant.getTrackPublication('microphone');
+
+      if (camTrack?.track) setLocalVideoTrack(camTrack.track);
+      if (micTrack?.track) setLocalAudioTrack(micTrack.track);
+
+      setIsConnected(true);
+      setIsConnecting(false);
+      hasInitialized.current = true;
+      isInitializing.current = false;
+
+      // Mark room as started in database
+      await startAgoraRoom(channelName);
+
+      console.log('[LiveKit] Successfully joined group call');
+
+    } catch (error) {
+      console.error('[LiveKit] Error initializing call:', error);
+      setIsConnecting(false);
+      isInitializing.current = false;
+      alert('Failed to join video call: ' + error.message);
     }
   };
 
+  const setupRoomEventHandlers = (room, RoomEvent) => {
+    // Participant connected
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+      console.log('[LiveKit] Participant connected:', participant.identity);
+      updateParticipantsList(room);
+    });
+
+    // Participant disconnected
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      console.log('[LiveKit] Participant disconnected:', participant.identity);
+      updateParticipantsList(room);
+    });
+
+    // Track subscribed
+    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      console.log('[LiveKit] Track subscribed:', track.kind, 'from', participant.identity);
+      updateParticipantsList(room);
+    });
+
+    // Track unsubscribed
+    room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+      console.log('[LiveKit] Track unsubscribed:', track.kind, 'from', participant.identity);
+      updateParticipantsList(room);
+    });
+
+    // Active speakers changed
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      // Could be used for speaker view highlighting
+    });
+
+    // Data received (for transcription)
+    room.on(RoomEvent.DataReceived, (payload, participant) => {
+      try {
+        const data = JSON.parse(new TextDecoder().decode(payload));
+        if (data.type === 'transcription') {
+          setTranscript(prev => [...prev, {
+            speakerId: participant?.identity || 'unknown',
+            speakerName: participant?.name || 'Unknown',
+            text: data.text,
+            timestamp: Date.now(),
+            isFinal: data.isFinal
+          }]);
+        }
+      } catch (e) {
+        // Not JSON or not transcription
+      }
+    });
+
+    // Connection quality changed
+    room.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+      if (participant === room.localParticipant) {
+        setMetrics(prev => ({
+          ...prev,
+          connectionQuality: quality
+        }));
+      }
+    });
+
+    // Disconnected
+    room.on(RoomEvent.Disconnected, (reason) => {
+      console.log('[LiveKit] Disconnected:', reason);
+      setIsConnected(false);
+    });
+
+    // Reconnecting
+    room.on(RoomEvent.Reconnecting, () => {
+      console.log('[LiveKit] Reconnecting...');
+    });
+
+    // Reconnected
+    room.on(RoomEvent.Reconnected, () => {
+      console.log('[LiveKit] Reconnected - refreshing participants');
+      setIsConnected(true);
+      // Force refresh participant list after reconnection
+      updateParticipantsList(room);
+    });
+
+    // Track muted/unmuted - refresh participant state
+    room.on(RoomEvent.TrackMuted, (publication, participant) => {
+      console.log('[LiveKit] Track muted:', publication.kind, 'from', participant.identity);
+      updateParticipantsList(room);
+    });
+
+    room.on(RoomEvent.TrackUnmuted, (publication, participant) => {
+      console.log('[LiveKit] Track unmuted:', publication.kind, 'from', participant.identity);
+      updateParticipantsList(room);
+    });
+  };
+
+  const updateParticipantsList = useCallback((room) => {
+    if (!room || room.state === 'disconnected') {
+      console.log('[LiveKit] Skipping participant update - room disconnected');
+      return;
+    }
+
+    const participants = Array.from(room.remoteParticipants.values()).map(p => {
+      const videoPublication = p.getTrackPublication('camera');
+      const audioPublication = p.getTrackPublication('microphone');
+
+      // Store tracks in ref for stability
+      const existingTracks = participantTracksRef.current.get(p.identity) || {};
+      const videoTrack = videoPublication?.track || existingTracks.videoTrack;
+      const audioTrack = audioPublication?.track || existingTracks.audioTrack;
+
+      participantTracksRef.current.set(p.identity, { videoTrack, audioTrack });
+
+      return {
+        id: p.identity,
+        name: p.name || p.identity,
+        videoTrack,
+        audioTrack,
+        isSpeaking: p.isSpeaking,
+        // Track publication state for UI
+        hasVideo: !!videoPublication?.track,
+        hasAudio: !!audioPublication?.track
+      };
+    });
+
+    // Clean up tracks for participants that left
+    const currentIds = new Set(participants.map(p => p.id));
+    for (const id of participantTracksRef.current.keys()) {
+      if (!currentIds.has(id)) {
+        participantTracksRef.current.delete(id);
+      }
+    }
+
+    setRemoteParticipants(participants);
+    setParticipantCount(participants.length + 1);
+  }, []);
+
+  const handlePermissionError = (permError) => {
+    let errorMsg = 'Camera/Microphone Access Denied\n\n';
+    if (permError.name === 'NotAllowedError') {
+      errorMsg += 'Please allow camera and microphone access in your browser settings.';
+    } else if (permError.name === 'NotFoundError') {
+      errorMsg += 'No camera or microphone found.';
+    } else if (permError.name === 'NotReadableError') {
+      errorMsg += 'Camera or microphone is already in use.';
+    } else {
+      errorMsg += permError.message;
+    }
+    alert(errorMsg);
+    setIsConnecting(false);
+    isInitializing.current = false;
+  };
+
+  const leaveCall = async () => {
+    console.log('[LiveKit] Leaving call, cleaning up...');
+
+    if (roomRef.current) {
+      try {
+        await roomRef.current.disconnect();
+      } catch (e) {
+        console.error('[LiveKit] Error disconnecting:', e);
+      }
+      roomRef.current = null;
+    }
+
+    // Clear track references
+    participantTracksRef.current.clear();
+
+    // Reset initialization flags
+    hasInitialized.current = false;
+    isInitializing.current = false;
+
+    setRoom(null);
+    setLocalParticipant(null);
+    setRemoteParticipants([]);
+    setIsConnected(false);
+  };
+
   const handleToggleMute = async () => {
-    const newState = await toggleMute();
-    setIsMuted(!newState);
+    if (localParticipant) {
+      const newState = !isMuted;
+      await localParticipant.setMicrophoneEnabled(!newState);
+      setIsMuted(newState);
+    }
   };
 
   const handleToggleVideo = async () => {
-    const newState = await toggleVideo();
-    setIsVideoOff(!newState);
+    if (localParticipant) {
+      const newState = !isVideoOff;
+      await localParticipant.setCameraEnabled(!newState);
+      setIsVideoOff(newState);
+    }
+  };
+
+  const handleToggleBlur = async () => {
+    if (localVideoTrack) {
+      await toggleBlur(localVideoTrack);
+    }
+  };
+
+  const handleToggleScreenShare = async () => {
+    if (localParticipant) {
+      try {
+        await localParticipant.setScreenShareEnabled(!isScreenSharing);
+        setIsScreenSharing(!isScreenSharing);
+      } catch (error) {
+        console.error('[LiveKit] Screen share error:', error);
+        alert('Failed to toggle screen share: ' + error.message);
+      }
+    }
   };
 
   const handleLeaveCall = async () => {
-    console.log('👋 Leaving group call...');
+    console.log('[LiveKit] Leaving group call...');
 
-    // Stop recording if active
     if (isRecording) {
       stopRecording();
     }
 
-    // Stop screen sharing if active
-    if (isScreenSharing) {
-      await stopScreenShare();
+    // Stop transcription if active
+    if (isTranscribing) {
+      stopListening();
+      setIsTranscribing(false);
     }
 
-    await endAgoraRoom(channelName);
-    await leave();
+    // Capture LiveKit participants BEFORE leaving the call
+    const liveKitParticipantIds = remoteParticipants.map(p => p.id);
+    console.log('[LiveKit] Captured participant IDs for recap:', liveKitParticipantIds);
 
-    // Get recap data and show recap screen
+    await endAgoraRoom(channelName);
+    await leaveCall();
+
+    // Prepare recap data
     const meetupId = meetupInfo?.id || channelName.replace('meetup-', '');
     const recap = await getCallRecapData(channelName, meetupId);
+
+    // Fetch profile data for LiveKit participants if not already in recap
+    let allParticipants = recap.participants || [];
+    if (liveKitParticipantIds.length > 0) {
+      const existingIds = new Set(allParticipants.map(p => p.id));
+      const newIds = liveKitParticipantIds.filter(id => !existingIds.has(id));
+
+      if (newIds.length > 0) {
+        try {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, name, email, profile_picture, career')
+            .in('id', newIds);
+
+          if (profiles) {
+            allParticipants = [...allParticipants, ...profiles];
+          }
+        } catch (e) {
+          console.error('Failed to fetch participant profiles:', e);
+        }
+      }
+    }
+
+    const endTime = new Date().toISOString();
+
     setRecapData({
       ...recap,
-      startedAt: recap.startedAt || meetupInfo?.started_at,
-      endedAt: new Date().toISOString()
+      participants: allParticipants,
+      callType: 'meetup',
+      provider: 'livekit',
+      startedAt: callStartTime || recap.startedAt,
+      endedAt: endTime,
+      transcript: transcript,
+      metrics: metrics
     });
+
+    // Save recap to database
+    let savedRecapId = null;
+    try {
+      const savedRecap = await saveCallRecap({
+        channelName,
+        callType: 'meetup',
+        provider: 'livekit',
+        startedAt: callStartTime,
+        endedAt: endTime,
+        participants: allParticipants,
+        transcript: transcript,
+        metrics: metrics,
+        userId: user?.id
+      });
+      savedRecapId = savedRecap?.id;
+    } catch (e) {
+      console.error('Failed to save recap:', e);
+    }
+
+    // Generate AI connection and group recommendations
+    if (allParticipants.length >= 2) {
+      try {
+        // Fetch full profiles for recommendation generation
+        const participantIds = allParticipants.map(p => p.id).filter(Boolean);
+        const { data: fullProfiles } = await supabase
+          .from('profiles')
+          .select('id, name, email, career, bio, interests, profile_picture')
+          .in('id', participantIds);
+
+        // Fetch existing connection groups for join recommendations
+        const { data: existingGroups } = await supabase
+          .from('connection_groups')
+          .select('id, name, creator_id, is_active')
+          .eq('is_active', true)
+          .limit(50);
+
+        // Call recommendations API
+        await fetch('/api/generate-connection-recommendations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callRecapId: savedRecapId,
+            meetupId: meetupInfo?.id || meetupId,
+            channelName,
+            transcript: transcript,
+            participants: fullProfiles || allParticipants,
+            existingGroups: existingGroups || []
+          })
+        });
+        console.log('[LiveKit] Connection recommendations generated');
+      } catch (e) {
+        console.error('Failed to generate recommendations:', e);
+      }
+    }
+
     setShowRecap(true);
   };
 
@@ -342,7 +577,6 @@ export default function GroupVideoMeeting() {
 
   const handleConnectFromRecap = async (userId) => {
     try {
-      // Express interest in the user
       const { error } = await supabase
         .from('user_interests')
         .insert({
@@ -350,7 +584,7 @@ export default function GroupVideoMeeting() {
           interested_in_user_id: userId
         });
 
-      if (error && error.code !== '23505') { // Ignore duplicate key error
+      if (error && error.code !== '23505') {
         console.error('Error expressing interest:', error);
       }
       alert('Connection request sent!');
@@ -359,50 +593,11 @@ export default function GroupVideoMeeting() {
     }
   };
 
-  const handleToggleScreenShare = async () => {
-    try {
-      if (isScreenSharing) {
-        await stopScreenShare();
-      } else {
-        await startScreenShare();
-      }
-    } catch (error) {
-      alert('Failed to toggle screen share: ' + error.message);
-    }
-  };
-
-  const handleToggleRecording = async () => {
-    try {
-      if (isRecording) {
-        stopRecording();
-      } else {
-        // Get the canvas stream for recording (captures the local video)
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 1280;
-        canvas.height = 720;
-
-        const stream = canvas.captureStream(30);
-
-        // Add audio from local track
-        if (localAudioTrack) {
-          const audioStream = localAudioTrack.getMediaStreamTrack();
-          stream.addTrack(audioStream);
-        }
-
-        await startRecording(stream);
-      }
-    } catch (error) {
-      alert('Failed to toggle recording: ' + error.message);
-    }
-  };
-
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !user) return;
 
     try {
-      console.log('📤 Sending message to channel:', channelName);
       const { data, error } = await supabase
         .from('call_messages')
         .insert({
@@ -414,33 +609,24 @@ export default function GroupVideoMeeting() {
         .select();
 
       if (error) throw error;
-
-      console.log('✅ Message sent:', data);
       setNewMessage('');
 
-      // If real-time isn't working, manually add the message
       if (data && data[0]) {
         setMessages(prev => {
-          // Check if message already exists (from real-time)
           const exists = prev.some(m => m.id === data[0].id);
-          if (!exists) {
-            console.log('📝 Adding message manually (real-time may not be enabled)');
-            return [...prev, data[0]];
-          }
+          if (!exists) return [...prev, data[0]];
           return prev;
         });
       }
     } catch (error) {
-      console.error('❌ Error sending message:', error);
-      alert('Failed to send message: ' + error.message);
+      console.error('Error sending message:', error);
     }
   };
 
-  // Subscribe to real-time messages
+  // Load and subscribe to messages
   useEffect(() => {
     if (!channelName || !user) return;
 
-    // Load existing messages
     const loadMessages = async () => {
       const { data, error } = await supabase
         .from('call_messages')
@@ -456,60 +642,217 @@ export default function GroupVideoMeeting() {
 
     loadMessages();
 
-    // Subscribe to new messages
-    console.log('🔌 Setting up real-time subscription for channel:', channelName);
     const channel = supabase
       .channel(`call-messages-${channelName}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'call_messages',
-          filter: `channel_name=eq.${channelName}`
-        },
-        (payload) => {
-          console.log('📨 Real-time message received:', payload.new);
-          setMessages(prev => {
-            // Avoid duplicates
-            const exists = prev.some(m => m.id === payload.new.id);
-            if (exists) return prev;
-            return [...prev, payload.new];
-          });
-        }
-      )
-      .subscribe((status) => {
-        console.log('📡 Subscription status:', status);
-      });
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'call_messages',
+        filter: `channel_name=eq.${channelName}`
+      }, (payload) => {
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === payload.new.id);
+          if (exists) return prev;
+          return [...prev, payload.new];
+        });
+      })
+      .subscribe();
 
     return () => {
-      console.log('🔌 Unsubscribing from real-time channel');
       supabase.removeChannel(channel);
     };
   }, [channelName, user]);
 
-  // Auto-scroll chat to bottom
+  // Auto-scroll chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Convert remoteUsers object to array for rendering
-  const remoteUsersList = Object.values(remoteUsers);
+  // Play local video with Safari support
+  const localAttachedTrackRef = useRef(null);
+
+  useEffect(() => {
+    const videoElement = localVideoRef.current;
+    const track = localVideoTrack;
+
+    if (!videoElement) return;
+
+    // Detach previous track if different or video turned off
+    if (localAttachedTrackRef.current && (localAttachedTrackRef.current !== track || isVideoOff)) {
+      try {
+        localAttachedTrackRef.current.detach(videoElement);
+      } catch (e) {
+        console.log('[LiveKit] Error detaching local video:', e);
+      }
+      localAttachedTrackRef.current = null;
+    }
+
+    // Attach new track if video is on
+    if (track && !isVideoOff && track !== localAttachedTrackRef.current) {
+      try {
+        track.attach(videoElement);
+        localAttachedTrackRef.current = track;
+
+        // Safari needs explicit play() call
+        const playPromise = videoElement.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(e => {
+            console.log('[LiveKit] Local video autoplay prevented:', e);
+          });
+        }
+      } catch (e) {
+        console.error('[LiveKit] Error attaching local video:', e);
+      }
+    }
+
+    return () => {
+      if (localAttachedTrackRef.current && videoElement) {
+        try {
+          localAttachedTrackRef.current.detach(videoElement);
+        } catch (e) {
+          console.log('[LiveKit] Error detaching local video on cleanup:', e);
+        }
+        localAttachedTrackRef.current = null;
+      }
+    };
+  }, [localVideoTrack, isVideoOff]);
+
+  // Remote Video Player Component with Safari support
+  const RemoteVideoPlayer = ({ participant }) => {
+    const videoRef = useRef(null);
+    const audioRef = useRef(null);
+    const attachedVideoTrackRef = useRef(null);
+    const attachedAudioTrackRef = useRef(null);
+
+    // Handle video track
+    useEffect(() => {
+      const videoElement = videoRef.current;
+      const track = participant.videoTrack;
+
+      // Skip if no video element
+      if (!videoElement) return;
+
+      // Detach previous track if different
+      if (attachedVideoTrackRef.current && attachedVideoTrackRef.current !== track) {
+        try {
+          attachedVideoTrackRef.current.detach(videoElement);
+        } catch (e) {
+          console.log('[LiveKit] Error detaching previous video track:', e);
+        }
+        attachedVideoTrackRef.current = null;
+      }
+
+      // Attach new track
+      if (track && track !== attachedVideoTrackRef.current) {
+        try {
+          console.log('[LiveKit] Attaching video track for:', participant.name);
+          track.attach(videoElement);
+          attachedVideoTrackRef.current = track;
+
+          // Safari needs explicit play() call
+          const playPromise = videoElement.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(e => {
+              console.log('[LiveKit] Video autoplay prevented:', e);
+              // Try muted autoplay for Safari
+              videoElement.muted = true;
+              videoElement.play().catch(() => {});
+            });
+          }
+        } catch (e) {
+          console.error('[LiveKit] Error attaching video track:', e);
+        }
+      }
+
+      return () => {
+        if (attachedVideoTrackRef.current && videoElement) {
+          try {
+            attachedVideoTrackRef.current.detach(videoElement);
+          } catch (e) {
+            console.log('[LiveKit] Error detaching video on cleanup:', e);
+          }
+          attachedVideoTrackRef.current = null;
+        }
+      };
+    }, [participant.videoTrack, participant.name]);
+
+    // Handle audio track
+    useEffect(() => {
+      const audioElement = audioRef.current;
+      const track = participant.audioTrack;
+
+      // Skip if no audio element
+      if (!audioElement) return;
+
+      // Detach previous track if different
+      if (attachedAudioTrackRef.current && attachedAudioTrackRef.current !== track) {
+        try {
+          attachedAudioTrackRef.current.detach(audioElement);
+        } catch (e) {
+          console.log('[LiveKit] Error detaching previous audio track:', e);
+        }
+        attachedAudioTrackRef.current = null;
+      }
+
+      // Attach new track
+      if (track && track !== attachedAudioTrackRef.current) {
+        try {
+          console.log('[LiveKit] Attaching audio track for:', participant.name);
+          track.attach(audioElement);
+          attachedAudioTrackRef.current = track;
+        } catch (e) {
+          console.error('[LiveKit] Error attaching audio track:', e);
+        }
+      }
+
+      return () => {
+        if (attachedAudioTrackRef.current && audioElement) {
+          try {
+            attachedAudioTrackRef.current.detach(audioElement);
+          } catch (e) {
+            console.log('[LiveKit] Error detaching audio on cleanup:', e);
+          }
+          attachedAudioTrackRef.current = null;
+        }
+      };
+    }, [participant.audioTrack, participant.name]);
+
+    return (
+      <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
+        {/* Hidden audio element for remote participant */}
+        <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
+
+        {participant.hasVideo ? (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted={false}
+            className="w-full h-full object-cover"
+            style={{ backgroundColor: '#1f2937' }}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                <span className="text-2xl text-white">
+                  {(participant.name || '?').charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <p className="text-white text-sm">{participant.name}</p>
+              <p className="text-white text-xs opacity-70">Camera off</p>
+            </div>
+          </div>
+        )}
+        <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
+          {participant.name} {participant.isSpeaking && '🔊'}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
-      {/* Global styles for Agora video elements */}
-      <style jsx global>{`
-        /* Ensure Agora video elements fill their containers */
-        [class*="agora_video"] video,
-        div[id*="video"] video,
-        video {
-          width: 100% !important;
-          height: 100% !important;
-          object-fit: cover !important;
-        }
-      `}</style>
-
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-4 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -522,10 +865,14 @@ export default function GroupVideoMeeting() {
               </p>
               <p className="text-rose-100 text-xs">
                 {participantCount} {participantCount === 1 ? 'participant' : 'participants'}
+                <span className="ml-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">LiveKit</span>
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {isConnecting && (
+              <span className="text-white text-sm animate-pulse">Connecting...</span>
+            )}
             <button
               onClick={() => setGridView(!gridView)}
               className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-4 py-2 rounded-lg font-medium transition text-sm"
@@ -543,166 +890,66 @@ export default function GroupVideoMeeting() {
       </div>
 
       {/* Video Grid */}
-      <div className="flex-1 p-3" style={{ display: 'flex', flexDirection: 'column' }}>
-        {gridView ? (
-          // Grid View - Show all participants in a grid
-          <div
-            className={`w-full flex-1 grid gap-2 ${
-              participantCount === 1 ? 'grid-cols-1' :
-              participantCount === 2 ? 'grid-cols-2' :
-              participantCount <= 4 ? 'grid-cols-2' :
-              participantCount <= 6 ? 'grid-cols-3' :
-              participantCount <= 9 ? 'grid-cols-3' :
-              'grid-cols-4'
-            }`}
-            style={{
-              gridTemplateRows: participantCount === 1 ? '1fr' :
-                               participantCount === 2 ? '1fr' :
-                               participantCount <= 4 ? 'repeat(2, 1fr)' :
-                               participantCount <= 6 ? 'repeat(2, 1fr)' :
-                               participantCount <= 9 ? 'repeat(3, 1fr)' :
-                               'repeat(4, 1fr)',
-              minHeight: 0
-            }}
-          >
-            {/* Local Video */}
-            <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
-              <div
+      <div className="flex-1 p-3 relative" style={{ display: 'flex', flexDirection: 'column' }}>
+        <div
+          className={`w-full flex-1 grid gap-2 ${
+            participantCount === 1 ? 'grid-cols-1' :
+            participantCount === 2 ? 'grid-cols-2' :
+            participantCount <= 4 ? 'grid-cols-2' :
+            participantCount <= 6 ? 'grid-cols-3' :
+            'grid-cols-4'
+          }`}
+          style={{ minHeight: 0 }}
+        >
+          {/* Local Video */}
+          <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
+            {!isVideoOff ? (
+              <video
                 ref={localVideoRef}
-                className="absolute inset-0"
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover mirror"
+                style={{ transform: 'scaleX(-1)' }}
               />
-              {isVideoOff && (
-                <div className="absolute inset-0 bg-gray-700 flex items-center justify-center z-10">
-                  <div className="text-center">
-                    <div className="w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                      <span className="text-2xl text-white">
-                        {user?.email?.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <p className="text-white text-sm">You (Camera off)</p>
+            ) : (
+              <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+                <div className="text-center">
+                  <div className="w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <span className="text-2xl text-white">
+                      {user?.email?.charAt(0).toUpperCase()}
+                    </span>
                   </div>
+                  <p className="text-white text-sm">You (Camera off)</p>
                 </div>
-              )}
-              <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
-                You {isMuted && '🔇'}
               </div>
+            )}
+            <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
+              You {isMuted && '🔇'}
             </div>
-
-            {/* Remote Videos */}
-            {remoteUsersList.map((remoteUser) => (
-              <RemoteVideoPlayer
-                key={remoteUser.uid}
-                remoteUser={remoteUser}
-              />
-            ))}
           </div>
-        ) : (
-          // Speaker View - Main speaker + thumbnails
-          <div className="h-full flex flex-col gap-2">
-            {/* Debug info */}
-            {console.log('🔍 Speaker View - Remote users:', remoteUsersList.length)}
-            {console.log('🔍 Remote users list:', remoteUsersList.map(u => ({ uid: u.uid, hasVideo: !!u.videoTrack })))}
 
-            {/* Main Speaker (first remote user or local) */}
-            <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden relative">
-              {remoteUsersList.length > 0 ? (
-                // Show first remote user (with or without video)
-                remoteUsersList[0].videoTrack ? (
-                  <RemoteVideoPlayerLarge remoteUser={remoteUsersList[0]} />
-                ) : (
-                  // Remote user without video
-                  <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-32 h-32 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <span className="text-5xl text-white">
-                          {String(remoteUsersList[0].uid).charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <p className="text-white text-xl">User {remoteUsersList[0].uid}</p>
-                      <p className="text-white text-sm opacity-70">Camera off</p>
-                    </div>
-                    <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded">
-                      User {remoteUsersList[0].uid}
-                    </div>
-                  </div>
-                )
-              ) : (
-                // No remote users, show local
-                <>
-                  {isVideoOff ? (
-                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-32 h-32 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <span className="text-5xl text-white">
-                            {user?.email?.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <p className="text-white text-xl">You (Camera off)</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      ref={localVideoRef}
-                      className="w-full h-full"
-                    />
-                  )}
-                  <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded">
-                    You {isMuted && '🔇'}
-                  </div>
-                </>
-              )}
-            </div>
+          {/* Remote Videos */}
+          {remoteParticipants.map((participant) => (
+            <RemoteVideoPlayer
+              key={participant.id}
+              participant={participant}
+            />
+          ))}
+        </div>
 
-            {/* Thumbnails */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              {/* Local thumbnail - show if remote user is in main area */}
-              {remoteUsersList.length > 0 && (
-                <div className="w-48 h-36 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative">
-                  {isVideoOff ? (
-                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-12 h-12 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-1">
-                          <span className="text-lg text-white">
-                            {user?.email?.charAt(0).toUpperCase()}
-                          </span>
-                        </div>
-                        <p className="text-white text-xs">Camera off</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="w-full h-full" ref={localVideoThumbnailRef} />
-                  )}
-                  <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs">
-                    You {isMuted && '🔇'}
-                  </div>
-                </div>
-              )}
-
-              {/* Remote thumbnails */}
-              {remoteUsersList.slice(1).map((remoteUser) => (
-                <div
-                  key={remoteUser.uid}
-                  className="w-48 h-36 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative"
-                >
-                  {remoteUser.videoTrack ? (
-                    <div
-                      ref={(ref) => {
-                        if (ref && remoteUser.videoTrack) {
-                          remoteUser.videoTrack.play(ref);
-                        }
-                      }}
-                      className="w-full h-full"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                      <span className="text-white">User {remoteUser.uid}</span>
-                    </div>
-                  )}
-                  <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs">
-                    User {remoteUser.uid}
-                  </div>
-                </div>
-              ))}
+        {/* Live Transcript Overlay */}
+        {isTranscribing && transcript.length > 0 && (
+          <div className="absolute bottom-4 left-4 right-4 pointer-events-none">
+            <div className="bg-black bg-opacity-70 rounded-lg p-3 max-h-24 overflow-hidden">
+              <div className="space-y-1">
+                {transcript.slice(-3).map((entry, idx) => (
+                  <p key={idx} className="text-white text-sm">
+                    <span className="text-green-400 font-medium">{entry.speakerName}: </span>
+                    {entry.text}
+                  </p>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -711,23 +958,31 @@ export default function GroupVideoMeeting() {
       {/* Controls */}
       <div className="bg-gray-800 py-3 px-4 flex-shrink-0">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          {/* Left side - Recording indicator */}
-          <div className="w-32">
+          <div className="w-40">
             {isRecording && (
               <div className="flex items-center text-red-500 text-sm">
                 <span className="animate-pulse mr-2">⏺</span>
                 {formatTime(recordingTime)}
               </div>
             )}
+            {isTranscribing && !isRecording && (
+              <div className="flex items-center text-green-400 text-sm">
+                <span className="animate-pulse mr-2">📝</span>
+                Transcribing...
+              </div>
+            )}
+            {isTranscribing && isRecording && (
+              <div className="flex items-center text-green-400 text-xs mt-1">
+                <span className="mr-1">📝</span>
+                + Transcribing
+              </div>
+            )}
           </div>
 
-          {/* Center - Main controls */}
           <div className="flex items-center gap-3">
             <button
               onClick={handleToggleMute}
-              className={`${
-                isMuted ? 'bg-red-600' : 'bg-gray-700'
-              } hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
+              className={`${isMuted ? 'bg-red-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
               title={isMuted ? 'Unmute' : 'Mute'}
             >
               {isMuted ? '🔇' : '🎤'}
@@ -735,39 +990,48 @@ export default function GroupVideoMeeting() {
 
             <button
               onClick={handleToggleVideo}
-              className={`${
-                isVideoOff ? 'bg-red-600' : 'bg-gray-700'
-              } hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
+              className={`${isVideoOff ? 'bg-red-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
               title={isVideoOff ? 'Turn on camera' : 'Turn off camera'}
             >
               📹
             </button>
 
+            {isBlurSupported && (
+              <button
+                onClick={handleToggleBlur}
+                disabled={blurLoading || isVideoOff}
+                className={`${isBlurEnabled ? 'bg-blue-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={isBlurEnabled ? 'Disable blur' : 'Enable background blur'}
+              >
+                {blurLoading ? '⏳' : '🌫️'}
+              </button>
+            )}
+
             <button
               onClick={handleToggleScreenShare}
-              className={`${
-                isScreenSharing ? 'bg-blue-600' : 'bg-gray-700'
-              } hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
+              className={`${isScreenSharing ? 'bg-blue-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
               title={isScreenSharing ? 'Stop sharing' : 'Share screen'}
             >
               🖥️
             </button>
 
-            <button
-              onClick={handleToggleRecording}
-              className={`${
-                isRecording ? 'bg-red-600' : 'bg-gray-700'
-              } hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
-              title={isRecording ? 'Stop recording' : 'Start recording'}
-            >
-              ⏺
-            </button>
+            {/* Transcription toggle */}
+            {isSpeechSupported && (
+              <button
+                onClick={toggleTranscription}
+                className={`${isTranscribing ? 'bg-green-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
+                title={isTranscribing ? 'Stop transcription' : 'Start transcription'}
+              >
+                📝
+                {isTranscribing && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
+                )}
+              </button>
+            )}
 
             <button
               onClick={() => setShowChat(!showChat)}
-              className={`${
-                showChat ? 'bg-purple-600' : 'bg-gray-700'
-              } hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
+              className={`${showChat ? 'bg-purple-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
               title="Toggle chat"
             >
               💬
@@ -786,7 +1050,6 @@ export default function GroupVideoMeeting() {
             </button>
           </div>
 
-          {/* Right side - Spacer */}
           <div className="w-32"></div>
         </div>
       </div>
@@ -794,18 +1057,13 @@ export default function GroupVideoMeeting() {
       {/* Chat Panel */}
       {showChat && (
         <div className="fixed right-0 top-0 bottom-0 w-80 bg-gray-800 border-l border-gray-700 flex flex-col z-50">
-          {/* Chat Header */}
           <div className="p-4 border-b border-gray-700 flex items-center justify-between">
             <h3 className="text-white font-semibold">Chat</h3>
-            <button
-              onClick={() => setShowChat(false)}
-              className="text-gray-400 hover:text-white"
-            >
+            <button onClick={() => setShowChat(false)} className="text-gray-400 hover:text-white">
               ✕
             </button>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 ? (
               <p className="text-gray-400 text-sm text-center mt-8">
@@ -815,21 +1073,14 @@ export default function GroupVideoMeeting() {
               messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`${
-                    msg.user_id === user?.id
-                      ? 'ml-auto bg-purple-600'
-                      : 'mr-auto bg-gray-700'
-                  } max-w-[85%] rounded-lg p-3`}
+                  className={`${msg.user_id === user?.id ? 'ml-auto bg-purple-600' : 'mr-auto bg-gray-700'} max-w-[85%] rounded-lg p-3`}
                 >
                   <p className="text-xs text-gray-300 mb-1">
                     {msg.user_id === user?.id ? 'You' : msg.user_name}
                   </p>
                   <p className="text-white text-sm break-words">{msg.message}</p>
                   <p className="text-xs text-gray-400 mt-1">
-                    {new Date(msg.created_at).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
+                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
               ))
@@ -837,7 +1088,6 @@ export default function GroupVideoMeeting() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Message Input */}
           <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700">
             <div className="flex gap-2">
               <input
@@ -864,12 +1114,17 @@ export default function GroupVideoMeeting() {
       {showRecap && recapData && (
         <CallRecap
           channelName={channelName}
+          callType="meetup"
+          provider="livekit"
           startedAt={recapData.startedAt}
           endedAt={recapData.endedAt}
           participants={recapData.participants}
           currentUserId={user?.id}
+          transcript={recapData.transcript}
+          metrics={recapData.metrics}
           onClose={handleRecapClose}
           onConnect={handleConnectFromRecap}
+          meetupId={meetupInfo?.id}
         />
       )}
     </div>

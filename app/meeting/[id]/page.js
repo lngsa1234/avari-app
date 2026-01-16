@@ -1,17 +1,19 @@
 // app/meeting/[id]/page.js
-// Create this folder and file: app/meeting/[id]/page.js
+// 1:1 Coffee Chat with Speech-to-Text and AI Recap
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import useSpeechRecognition from '@/hooks/useSpeechRecognition';
+import CallRecap from '@/components/CallRecap';
 
 export default function VideoMeeting() {
   const params = useParams();
   const router = useRouter();
   const meetingId = params.id;
-  
+
   const [localStream, setLocalStream] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -21,12 +23,80 @@ export default function VideoMeeting() {
   const [messageInput, setMessageInput] = useState('');
   const [user, setUser] = useState(null);
   const [partnerName, setPartnerName] = useState('Partner');
-  
+  const [partnerId, setPartnerId] = useState(null);
+
+  // Transcription state
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcript, setTranscript] = useState([]);
+  const [callStartTime, setCallStartTime] = useState(null);
+
+  // Recap state
+  const [showRecap, setShowRecap] = useState(false);
+  const [recapData, setRecapData] = useState(null);
+
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const dataChannelRef = useRef(null);
   const realtimeChannelRef = useRef(null);
+
+  // Handle transcript from speech recognition
+  const handleTranscript = useCallback(async ({ text, isFinal, timestamp }) => {
+    if (isFinal && text.trim() && user) {
+      const entry = {
+        speakerId: user.id,
+        speakerName: user.email?.split('@')[0] || 'You',
+        text: text.trim(),
+        timestamp,
+        isFinal: true
+      };
+
+      // Add to local state
+      setTranscript(prev => [...prev, entry]);
+      console.log('[Transcription]', text);
+
+      // Save to Supabase for shared access
+      try {
+        await supabase.from('call_transcripts').insert({
+          channel_name: meetingId,
+          user_id: user.id,
+          speaker_name: entry.speakerName,
+          text: entry.text,
+          timestamp: entry.timestamp,
+          is_final: true
+        });
+      } catch (e) {
+        console.error('Failed to save transcript:', e);
+      }
+    }
+  }, [user, meetingId]);
+
+  const {
+    isListening: isSpeechListening,
+    isSupported: isSpeechSupported,
+    error: speechError,
+    startListening,
+    stopListening
+  } = useSpeechRecognition({
+    onTranscript: handleTranscript,
+    continuous: true,
+    interimResults: false
+  });
+
+  // Toggle transcription
+  const toggleTranscription = useCallback(() => {
+    if (isTranscribing) {
+      stopListening();
+      setIsTranscribing(false);
+      console.log('[Transcription] Stopped');
+    } else {
+      const started = startListening();
+      if (started) {
+        setIsTranscribing(true);
+        console.log('[Transcription] Started');
+      }
+    }
+  }, [isTranscribing, startListening, stopListening]);
 
   useEffect(() => {
     // Get current user
@@ -34,7 +104,6 @@ export default function VideoMeeting() {
       if (data?.user) {
         setUser(data.user);
       } else {
-        // Not logged in, redirect to home
         router.push('/');
       }
     });
@@ -44,7 +113,7 @@ export default function VideoMeeting() {
     if (meetingId && user) {
       initializeCall();
     }
-    
+
     return () => {
       cleanup();
     };
@@ -52,8 +121,9 @@ export default function VideoMeeting() {
 
   const initializeCall = async () => {
     try {
-      console.log('🎥 Initializing video call for meeting:', meetingId);
-      
+      console.log('Initializing video call for meeting:', meetingId);
+      setCallStartTime(new Date().toISOString());
+
       // Get meeting info from database
       const { data: meeting } = await supabase
         .from('video_rooms')
@@ -61,29 +131,40 @@ export default function VideoMeeting() {
           *,
           coffee_chats (
             requester_id,
-            recipient_id,
-            profiles!coffee_chats_requester_id_fkey (full_name),
-            profiles!coffee_chats_recipient_id_fkey (full_name)
+            recipient_id
           )
         `)
         .eq('room_id', meetingId)
         .single();
 
       if (meeting?.coffee_chats) {
-        // Determine partner name
+        // Determine partner ID
         const isRequester = meeting.coffee_chats.requester_id === user.id;
-        const partner = isRequester 
-          ? meeting.coffee_chats.profiles[1] 
-          : meeting.coffee_chats.profiles[0];
-        setPartnerName(partner?.full_name || 'Partner');
+        const partnerUserId = isRequester
+          ? meeting.coffee_chats.recipient_id
+          : meeting.coffee_chats.requester_id;
+
+        // Fetch partner profile separately
+        if (partnerUserId) {
+          const { data: partnerProfile } = await supabase
+            .from('profiles')
+            .select('id, name, email, profile_picture, career')
+            .eq('id', partnerUserId)
+            .single();
+
+          if (partnerProfile) {
+            setPartnerName(partnerProfile.name || partnerProfile.email?.split('@')[0] || 'Partner');
+            setPartnerId(partnerProfile.id);
+          }
+        }
       }
-      
+
       // Get media
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: 1280, height: 720 },
         audio: { echoCancellation: true, noiseSuppression: true }
       });
-      
+
       setLocalStream(stream);
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -91,12 +172,12 @@ export default function VideoMeeting() {
 
       // Setup WebRTC
       setupPeerConnection(stream);
-      
+
       // Setup Supabase Realtime for signaling
       setupRealtimeSignaling();
-      
+
     } catch (error) {
-      console.error('❌ Error initializing call:', error);
+      console.error('Error initializing call:', error);
       alert('Could not access camera/microphone. Please check permissions.');
     }
   };
@@ -120,7 +201,7 @@ export default function VideoMeeting() {
 
     // Handle remote stream
     pc.ontrack = (event) => {
-      console.log('🎉 Received remote track:', event.track.kind);
+      console.log('Received remote track:', event.track.kind);
       if (remoteVideoRef.current && event.streams[0]) {
         remoteVideoRef.current.srcObject = event.streams[0];
         setIsConnected(true);
@@ -158,11 +239,11 @@ export default function VideoMeeting() {
 
   const setupDataChannel = (channel) => {
     dataChannelRef.current = channel;
-    
+
     channel.onopen = () => {
-      console.log('💬 Chat channel opened');
+      console.log('Chat channel opened');
     };
-    
+
     channel.onmessage = (event) => {
       const message = JSON.parse(event.data);
       setChatMessages(prev => [...prev, { ...message, sender: 'remote' }]);
@@ -170,7 +251,6 @@ export default function VideoMeeting() {
   };
 
   const setupRealtimeSignaling = () => {
-    // Use Supabase Realtime for WebRTC signaling
     const channel = supabase.channel(`meeting:${meetingId}`, {
       config: { broadcast: { self: false } }
     });
@@ -181,20 +261,7 @@ export default function VideoMeeting() {
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Connected to signaling channel');
-          
-          // Update participants in database
-          await supabase
-            .from('video_rooms')
-            .update({
-              participants: supabase.rpc('array_append', {
-                arr: 'participants',
-                elem: { user_id: user.id, joined_at: new Date().toISOString() }
-              })
-            })
-            .eq('room_id', meetingId);
-          
-          // Check if we should create offer (first person)
+          console.log('Connected to signaling channel');
           setTimeout(() => createOffer(), 1000);
         }
       });
@@ -219,7 +286,7 @@ export default function VideoMeeting() {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      
+
       sendSignal({
         type: 'offer',
         offer: pc.localDescription
@@ -245,13 +312,13 @@ export default function VideoMeeting() {
             answer: pc.localDescription
           });
           break;
-          
+
         case 'answer':
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
           }
           break;
-          
+
         case 'ice-candidate':
           await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
           break;
@@ -281,12 +348,12 @@ export default function VideoMeeting() {
 
   const sendChatMessage = () => {
     if (!messageInput.trim() || !dataChannelRef.current) return;
-    
+
     const message = {
       text: messageInput,
       timestamp: new Date().toISOString()
     };
-    
+
     if (dataChannelRef.current.readyState === 'open') {
       dataChannelRef.current.send(JSON.stringify(message));
       setChatMessages(prev => [...prev, { ...message, sender: 'local' }]);
@@ -295,14 +362,96 @@ export default function VideoMeeting() {
   };
 
   const endCall = async () => {
+    // Stop transcription
+    if (isTranscribing) {
+      stopListening();
+      setIsTranscribing(false);
+    }
+
+    const endTime = new Date().toISOString();
+
     // Save call end time
     await supabase
       .from('video_rooms')
-      .update({ ended_at: new Date().toISOString() })
+      .update({ ended_at: endTime })
       .eq('room_id', meetingId);
-    
+
+    // Fetch ALL transcripts for this call (both participants)
+    let allTranscripts = [];
+    try {
+      const { data: transcripts } = await supabase
+        .from('call_transcripts')
+        .select('*')
+        .eq('channel_name', meetingId)
+        .order('timestamp', { ascending: true });
+
+      if (transcripts) {
+        allTranscripts = transcripts.map(t => ({
+          speakerId: t.user_id,
+          speakerName: t.speaker_name,
+          text: t.text,
+          timestamp: t.timestamp,
+          isFinal: t.is_final
+        }));
+      }
+    } catch (e) {
+      console.error('Failed to fetch transcripts:', e);
+      allTranscripts = transcript; // Fall back to local transcript
+    }
+
+    // Get partner profile for recap
+    let participants = [];
+    if (partnerId) {
+      try {
+        const { data: partnerProfile } = await supabase
+          .from('profiles')
+          .select('id, name, email, profile_picture, career')
+          .eq('id', partnerId)
+          .single();
+
+        if (partnerProfile) {
+          participants = [partnerProfile];
+        }
+      } catch (e) {
+        console.error('Failed to fetch partner profile:', e);
+      }
+    }
+
+    // Prepare recap data
+    setRecapData({
+      channelName: meetingId,
+      callType: '1on1',
+      provider: 'webrtc',
+      startedAt: callStartTime,
+      endedAt: endTime,
+      participants,
+      transcript: allTranscripts,
+      messages: chatMessages.map(m => ({
+        user_name: m.sender === 'local' ? (user?.email?.split('@')[0] || 'You') : partnerName,
+        message: m.text,
+        created_at: m.timestamp
+      }))
+    });
+
     cleanup();
-    router.push('/'); // Go back to Avari dashboard
+    setShowRecap(true);
+  };
+
+  const handleRecapClose = () => {
+    setShowRecap(false);
+    router.push('/');
+  };
+
+  const handleConnectFromRecap = async (userId) => {
+    try {
+      await supabase.from('user_interests').insert({
+        user_id: user.id,
+        interested_in_user_id: userId
+      });
+      alert('Connection request sent!');
+    } catch (err) {
+      console.error('Error connecting:', err);
+    }
   };
 
   const cleanup = () => {
@@ -317,9 +466,27 @@ export default function VideoMeeting() {
     }
   };
 
+  // Show recap screen
+  if (showRecap && recapData) {
+    return (
+      <CallRecap
+        channelName={recapData.channelName}
+        callType={recapData.callType}
+        provider={recapData.provider}
+        startedAt={recapData.startedAt}
+        endedAt={recapData.endedAt}
+        participants={recapData.participants}
+        currentUserId={user?.id}
+        transcript={recapData.transcript}
+        onClose={handleRecapClose}
+        onConnect={handleConnectFromRecap}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
-      {/* Header - Avari Branded */}
+      {/* Header */}
       <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-4 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -327,21 +494,29 @@ export default function VideoMeeting() {
             <div>
               <h1 className="text-white font-bold text-xl">Avari Coffee Chat</h1>
               <p className="text-rose-100 text-sm">
-                {isConnected ? `✓ Connected with ${partnerName}` : 'Connecting...'}
+                {isConnected ? `Connected with ${partnerName}` : 'Connecting...'}
               </p>
             </div>
           </div>
-          <button
-            onClick={endCall}
-            className="bg-white text-rose-600 hover:bg-rose-50 px-6 py-2 rounded-lg font-medium transition"
-          >
-            End Call
-          </button>
+          <div className="flex items-center gap-3">
+            {isTranscribing && (
+              <span className="text-white text-sm flex items-center">
+                <span className="animate-pulse mr-2">📝</span>
+                Transcribing
+              </span>
+            )}
+            <button
+              onClick={endCall}
+              className="bg-white text-rose-600 hover:bg-rose-50 px-6 py-2 rounded-lg font-medium transition"
+            >
+              End Call
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Video Area */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden relative">
         {/* Main Video */}
         <div className="flex-1 relative bg-black">
           {/* Local Video (You) */}
@@ -377,6 +552,22 @@ export default function VideoMeeting() {
             )}
           </div>
 
+          {/* Live Transcript Overlay */}
+          {isTranscribing && transcript.length > 0 && (
+            <div className="absolute bottom-24 left-4 right-4 pointer-events-none">
+              <div className="bg-black bg-opacity-70 rounded-lg p-3 max-h-24 overflow-hidden">
+                <div className="space-y-1">
+                  {transcript.slice(-3).map((entry, idx) => (
+                    <p key={idx} className="text-white text-sm">
+                      <span className="text-green-400 font-medium">{entry.speakerName}: </span>
+                      {entry.text}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Controls */}
           <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4">
             <button
@@ -397,9 +588,28 @@ export default function VideoMeeting() {
             >
               📹
             </button>
+
+            {/* Transcription toggle */}
+            {isSpeechSupported && (
+              <button
+                onClick={toggleTranscription}
+                className={`${
+                  isTranscribing ? 'bg-green-600' : 'bg-gray-700'
+                } hover:bg-gray-600 text-white w-14 h-14 rounded-full text-2xl transition relative`}
+                title={isTranscribing ? 'Stop transcription' : 'Start transcription'}
+              >
+                📝
+                {isTranscribing && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => setShowChat(!showChat)}
-              className="bg-gray-700 hover:bg-gray-600 text-white w-14 h-14 rounded-full text-2xl transition"
+              className={`${
+                showChat ? 'bg-purple-600' : 'bg-gray-700'
+              } hover:bg-gray-600 text-white w-14 h-14 rounded-full text-2xl transition`}
               title="Toggle chat"
             >
               💬
@@ -421,7 +631,7 @@ export default function VideoMeeting() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {chatMessages.length === 0 ? (
                 <div className="text-center text-gray-400 mt-8">

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MessageCircle, Send, User, Clock, Check, CheckCheck, Search } from 'lucide-react';
 
-export default function MessagesView({ currentUser, supabase }) {
+export default function MessagesView({ currentUser, supabase, onUnreadCountChange }) {
   const [conversations, setConversations] = useState([]);
   
   // Persist selected conversation across re-renders
@@ -99,6 +99,8 @@ export default function MessagesView({ currentUser, supabase }) {
                   setMessages(prev =>
                     prev.map(m => m.id === message.id ? { ...m, read: true } : m)
                   );
+                  // Notify parent to refresh unread count
+                  onUnreadCountChange?.();
                 }
               });
           } else {
@@ -236,13 +238,15 @@ export default function MessagesView({ currentUser, supabase }) {
                 .from('messages')
                 .update({ read: true })
                 .in('id', messageIds);
-              
+
               if (!readError) {
                 console.log('✅ Marked polled messages as read');
                 // Update local state
                 setMessages(prev =>
                   prev.map(m => messageIds.includes(m.id) ? { ...m, read: true } : m)
                 );
+                // Notify parent to refresh unread count
+                onUnreadCountChange?.();
               }
               
               // Update last checked time to the newest message
@@ -413,7 +417,7 @@ export default function MessagesView({ currentUser, supabase }) {
           console.error('❌ Error marking as read:', updateError);
         } else {
           console.log('✅ Marked messages as read in database');
-          
+
           // Update local state to reflect read status
           setMessages(prev =>
             prev.map(msg =>
@@ -422,6 +426,9 @@ export default function MessagesView({ currentUser, supabase }) {
                 : msg
             )
           );
+
+          // Notify parent to refresh unread count
+          onUnreadCountChange?.();
         }
       }
 

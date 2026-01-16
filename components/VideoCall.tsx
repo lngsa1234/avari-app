@@ -3,15 +3,24 @@ import { useSignaling } from '@/hooks/useSignaling';
 import { useIceServers } from '@/hooks/useIceServers';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useRecording } from '@/hooks/useRecording';
+import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 import { supabase } from '@/lib/supabase';
-import CallRecap from '@/components/CallRecap';
+
+interface RecapData {
+  startedAt: string | null;
+  endedAt: string;
+  participants: any[];
+  transcript: any[];
+  messages: any[];
+  metrics?: any;
+}
 
 interface VideoCallProps {
   matchId: string;
   userId: string;
   otherUserId: string;
   otherUserName: string;
-  onEndCall: () => void;
+  onEndCall: (recapData?: RecapData) => void;
 }
 
 interface Message {
@@ -40,7 +49,6 @@ export default function VideoCall({
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [currentUserName, setCurrentUserName] = useState('');
-  const [showRecap, setShowRecap] = useState(false);
   const [callStartTime, setCallStartTime] = useState<string | null>(null);
   const [otherUserProfile, setOtherUserProfile] = useState<any>(null);
 
@@ -67,7 +75,15 @@ export default function VideoCall({
     stopRecording,
     formatTime
   } = useRecording();
-  
+
+  // Background blur hook
+  const {
+    isBlurEnabled,
+    isBlurSupported,
+    isLoading: blurLoading,
+    toggleBlur
+  } = useBackgroundBlur('webrtc');
+
   const {
     isConnected,
     isConnecting,
@@ -119,9 +135,21 @@ export default function VideoCall({
         cleanup();
       },
       onCallEnded: (from) => {
+        console.log('[Avari] Call ended by other party');
         setCallState('ended');
         cleanup();
-        setTimeout(onEndCall, 1000);
+        // Pass recap data to parent
+        onEndCall({
+          startedAt: callStartTime,
+          endedAt: new Date().toISOString(),
+          participants: otherUserProfile ? [otherUserProfile] : [{ id: otherUserId, name: otherUserName }],
+          transcript: [],
+          messages: messages.map(m => ({
+            user_name: m.user_name,
+            message: m.message,
+            created_at: m.created_at
+          }))
+        });
       },
       onError: (error) => {
         console.error('[Avari] Signaling error:', error);
@@ -347,6 +375,16 @@ export default function VideoCall({
     }
   };
 
+  // Toggle background blur
+  const handleToggleBlur = async () => {
+    if (localStreamRef.current) {
+      const videoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (videoTrack) {
+        await toggleBlur(videoTrack);
+      }
+    }
+  };
+
   // Toggle screen sharing
   const toggleScreenShare = async () => {
     try {
@@ -453,7 +491,7 @@ export default function VideoCall({
     }
   };
 
-  // Handle end call
+  // Handle end call - pass recap data to parent
   const handleEndCall = () => {
     console.log('[Avari] Ending call');
 
@@ -474,33 +512,18 @@ export default function VideoCall({
     setCallState('ended');
     cleanup();
 
-    // Show recap instead of immediately ending
-    setShowRecap(true);
-  };
-
-  // Handle recap close
-  const handleRecapClose = () => {
-    setShowRecap(false);
-    onEndCall();
-  };
-
-  // Handle connect from recap
-  const handleConnectFromRecap = async (targetUserId: string) => {
-    try {
-      const { error } = await supabase
-        .from('user_interests')
-        .insert({
-          user_id: userId,
-          interested_in_user_id: targetUserId
-        });
-
-      if (error && error.code !== '23505') {
-        console.error('Error expressing interest:', error);
-      }
-      alert('Connection request sent!');
-    } catch (err) {
-      console.error('Error connecting:', err);
-    }
+    // Pass recap data to parent (VideoCallButton handles showing the recap)
+    onEndCall({
+      startedAt: callStartTime,
+      endedAt: new Date().toISOString(),
+      participants: otherUserProfile ? [otherUserProfile] : [{ id: otherUserId, name: otherUserName }],
+      transcript: [],
+      messages: messages.map(m => ({
+        user_name: m.user_name,
+        message: m.message,
+        created_at: m.created_at
+      }))
+    });
   };
 
   // Handle reject call
@@ -776,6 +799,20 @@ export default function VideoCall({
                 📹
               </button>
 
+              {/* Background blur toggle */}
+              {isBlurSupported && (
+                <button
+                  onClick={handleToggleBlur}
+                  disabled={blurLoading || !isVideoEnabled}
+                  className={`p-4 rounded-full transition ${
+                    isBlurEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-700 hover:bg-gray-600'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={isBlurEnabled ? 'Disable blur' : 'Enable background blur'}
+                >
+                  {blurLoading ? '⏳' : '🌫️'}
+                </button>
+              )}
+
               {/* Screen share toggle */}
               <button
                 onClick={toggleScreenShare}
@@ -900,23 +937,10 @@ export default function VideoCall({
 
       {/* Connection indicator */}
       <div className="absolute bottom-24 left-4 text-white text-sm bg-black bg-opacity-50 px-3 py-2 rounded">
-        {!isConnected && <p>⚠️ {isConnecting ? 'Connecting...' : 'Disconnected'}</p>}
-        {isConnected && callState === 'calling' && <p>📞 Calling...</p>}
-        {isConnected && callState === 'connected' && <p>✅ Connected</p>}
+        {!isConnected && <p>{isConnecting ? 'Connecting...' : 'Disconnected'}</p>}
+        {isConnected && callState === 'calling' && <p>Calling...</p>}
+        {isConnected && callState === 'connected' && <p>Connected</p>}
       </div>
-
-      {/* Post-Call Recap */}
-      {showRecap && (
-        <CallRecap
-          channelName={`video-${matchId}`}
-          startedAt={callStartTime}
-          endedAt={new Date().toISOString()}
-          participants={otherUserProfile ? [otherUserProfile] : [{ id: otherUserId, name: otherUserName }]}
-          currentUserId={userId}
-          onClose={handleRecapClose}
-          onConnect={handleConnectFromRecap}
-        />
-      )}
     </div>
   );
 }

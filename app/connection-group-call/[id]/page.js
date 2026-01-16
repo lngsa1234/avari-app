@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAgora } from '@/hooks/useAgora';
 import { useRecording } from '@/hooks/useRecording';
+import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 import {
   getConnectionGroupRoomByChannel,
   startConnectionGroupRoom,
@@ -133,6 +134,13 @@ export default function ConnectionGroupVideoCall() {
     stopRecording,
     formatTime
   } = useRecording();
+
+  const {
+    isBlurEnabled,
+    isBlurSupported,
+    isLoading: blurLoading,
+    toggleBlur
+  } = useBackgroundBlur('agora');
 
   const [user, setUser] = useState(null);
   const [groupInfo, setGroupInfo] = useState(null);
@@ -304,6 +312,12 @@ export default function ConnectionGroupVideoCall() {
   const handleToggleVideo = async () => {
     const newState = await toggleVideo();
     setIsVideoOff(!newState);
+  };
+
+  const handleToggleBlur = async () => {
+    if (localVideoTrack) {
+      await toggleBlur(localVideoTrack);
+    }
   };
 
   const handleLeaveCall = async () => {
@@ -732,6 +746,19 @@ export default function ConnectionGroupVideoCall() {
             >
               📹
             </button>
+
+            {isBlurSupported && (
+              <button
+                onClick={handleToggleBlur}
+                disabled={blurLoading || isVideoOff}
+                className={`${
+                  isBlurEnabled ? 'bg-blue-600' : 'bg-gray-700'
+                } hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={isBlurEnabled ? 'Disable blur' : 'Enable background blur'}
+              >
+                {blurLoading ? '⏳' : '🌫️'}
+              </button>
+            )}
 
             <button
               onClick={handleToggleScreenShare}

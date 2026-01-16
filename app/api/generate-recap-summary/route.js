@@ -20,11 +20,23 @@ export async function POST(request) {
       );
     }
 
+    // Helper to get display name
+    const getDisplayName = (p) => {
+      if (p.name && p.name !== 'Unknown' && !p.name.includes('-')) {
+        return p.name;
+      }
+      if (p.email) {
+        const emailPart = p.email.split('@')[0];
+        return emailPart.charAt(0).toUpperCase() + emailPart.slice(1);
+      }
+      return null;
+    };
+
     // Build context for summary
     const participantNames = participants
-      ?.map(p => p.name || p.email || 'Unknown')
+      ?.map(p => getDisplayName(p))
       .filter(Boolean)
-      .join(', ') || 'Unknown participants';
+      .join(', ') || 'the participants';
 
     const durationMinutes = Math.floor((duration || 0) / 60);
 
@@ -151,27 +163,55 @@ function generateSimpleSummary(transcript, messages, participants, duration) {
   const transcriptCount = transcript?.length || 0;
   const messageCount = messages?.length || 0;
 
-  let summary = `A ${duration} minute call with ${participants}.`;
+  // Build a more engaging summary
+  let summary = '';
+
+  if (duration > 0) {
+    summary = `You had a ${duration} minute video call`;
+    if (participants && participants !== 'the participants') {
+      summary += ` with ${participants}`;
+    }
+    summary += '.';
+  } else {
+    summary = participants && participants !== 'the participants'
+      ? `You connected with ${participants}.`
+      : 'A video call session.';
+  }
 
   if (transcriptCount > 0) {
     // Extract unique speakers
     const speakers = [...new Set(transcript.map(t => t.speakerName).filter(Boolean))];
-    summary += ` ${speakers.length} participants spoke during the call.`;
+    if (speakers.length > 0) {
+      summary += ` The conversation included ${speakers.length} active speaker${speakers.length > 1 ? 's' : ''}.`;
+    }
 
     // Try to identify topics from keywords
     const allText = transcript.map(t => t.text).join(' ').toLowerCase();
     const topics = [];
 
-    if (allText.includes('project') || allText.includes('work')) topics.push('work projects');
-    if (allText.includes('meeting') || allText.includes('schedule')) topics.push('scheduling');
-    if (allText.includes('idea') || allText.includes('think')) topics.push('brainstorming');
-    if (allText.includes('question') || allText.includes('help')) topics.push('Q&A');
+    if (allText.includes('project') || allText.includes('work') || allText.includes('team')) topics.push('work discussions');
+    if (allText.includes('idea') || allText.includes('think') || allText.includes('suggest')) topics.push('brainstorming');
+    if (allText.includes('question') || allText.includes('help') || allText.includes('how')) topics.push('Q&A');
+    if (allText.includes('coffee') || allText.includes('meet') || allText.includes('connect')) topics.push('networking');
 
     if (topics.length > 0) {
-      summary += ` Topics included: ${topics.join(', ')}.`;
+      summary += ` The call covered: ${topics.join(', ')}.`;
     }
   } else if (messageCount > 0) {
-    summary += ` ${messageCount} chat messages were exchanged during the call.`;
+    summary += ` You exchanged ${messageCount} chat message${messageCount > 1 ? 's' : ''} during the call.`;
+
+    // Try to extract some info from messages
+    const allMessages = messages?.map(m => m.message || m.text || '').join(' ').toLowerCase() || '';
+    if (allMessages.length > 20) {
+      const topics = [];
+      if (allMessages.includes('nice') || allMessages.includes('great') || allMessages.includes('good')) topics.push('positive exchange');
+      if (allMessages.includes('help') || allMessages.includes('question')) topics.push('helpful discussion');
+      if (allMessages.includes('thanks') || allMessages.includes('thank')) topics.push('gratitude shared');
+
+      if (topics.length > 0) {
+        summary += ` It was a ${topics.join(' with ')}.`;
+      }
+    }
   }
 
   return summary;
