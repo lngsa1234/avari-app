@@ -6,7 +6,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import useSpeechRecognition from '@/hooks/useSpeechRecognition';
+import useTranscription from '@/hooks/useTranscription';
 import CallRecap from '@/components/CallRecap';
 
 export default function VideoMeeting() {
@@ -29,6 +29,10 @@ export default function VideoMeeting() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcript, setTranscript] = useState([]);
   const [callStartTime, setCallStartTime] = useState(null);
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState(
+    process.env.NEXT_PUBLIC_TRANSCRIPTION_LANGUAGE || 'en-US'
+  );
+  const [pendingLanguageRestart, setPendingLanguageRestart] = useState(false);
 
   // Recap state
   const [showRecap, setShowRecap] = useState(false);
@@ -77,11 +81,34 @@ export default function VideoMeeting() {
     error: speechError,
     startListening,
     stopListening
-  } = useSpeechRecognition({
+  } = useTranscription({
     onTranscript: handleTranscript,
+    language: transcriptionLanguage,
     continuous: true,
     interimResults: false
   });
+
+  // Handle language change - restart transcription if active
+  const handleLanguageChange = useCallback((newLanguage) => {
+    if (isTranscribing) {
+      stopListening();
+      setIsTranscribing(false);
+      setPendingLanguageRestart(true);
+    }
+    setTranscriptionLanguage(newLanguage);
+  }, [isTranscribing, stopListening]);
+
+  // Restart transcription after language change (runs after re-render with new language)
+  useEffect(() => {
+    if (pendingLanguageRestart) {
+      setPendingLanguageRestart(false);
+      const started = startListening();
+      if (started) {
+        setIsTranscribing(true);
+        console.log('[Transcription] Restarted with language:', transcriptionLanguage);
+      }
+    }
+  }, [pendingLanguageRestart, startListening, transcriptionLanguage]);
 
   // Toggle transcription
   const toggleTranscription = useCallback(() => {
@@ -589,20 +616,31 @@ export default function VideoMeeting() {
               📹
             </button>
 
-            {/* Transcription toggle */}
+            {/* Transcription toggle with language selector */}
             {isSpeechSupported && (
-              <button
-                onClick={toggleTranscription}
-                className={`${
-                  isTranscribing ? 'bg-green-600' : 'bg-gray-700'
-                } hover:bg-gray-600 text-white w-14 h-14 rounded-full text-2xl transition relative`}
-                title={isTranscribing ? 'Stop transcription' : 'Start transcription'}
-              >
-                📝
-                {isTranscribing && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
-                )}
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={toggleTranscription}
+                  className={`${
+                    isTranscribing ? 'bg-green-600' : 'bg-gray-700'
+                  } hover:bg-gray-600 text-white w-14 h-14 rounded-full text-2xl transition relative`}
+                  title={isTranscribing ? 'Stop transcription' : 'Start transcription'}
+                >
+                  📝
+                  {isTranscribing && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
+                  )}
+                </button>
+                <select
+                  value={transcriptionLanguage}
+                  onChange={(e) => handleLanguageChange(e.target.value)}
+                  className="bg-gray-700 text-white text-xs rounded-lg px-2 py-1 border-none focus:ring-2 focus:ring-green-500 cursor-pointer"
+                  title="Transcription language"
+                >
+                  <option value="en-US">EN</option>
+                  <option value="zh-CN">中文</option>
+                </select>
+              </div>
             )}
 
             <button

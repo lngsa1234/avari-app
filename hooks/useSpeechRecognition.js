@@ -206,6 +206,8 @@ export default function useSpeechRecognition({
       } catch (e) {
         console.log('[SpeechRecognition] Stop error:', e.message);
       }
+      // Clear the instance so next start creates fresh one with updated settings
+      recognitionRef.current = null;
     }
 
     setIsListening(false);

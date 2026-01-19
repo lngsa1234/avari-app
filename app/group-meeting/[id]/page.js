@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useRecording } from '@/hooks/useRecording';
-import useSpeechRecognition from '@/hooks/useSpeechRecognition';
+import useTranscription from '@/hooks/useTranscription';
 import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 import { getAgoraRoomByChannel, startAgoraRoom, endAgoraRoom, getCallRecapData } from '@/lib/agoraHelpers';
 import { saveCallRecap, saveProviderMetrics } from '@/lib/callRecapHelpers';
@@ -269,6 +269,10 @@ export default function GroupVideoMeeting() {
   const [metrics, setMetrics] = useState(null);
   const [callStartTime, setCallStartTime] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState(
+    process.env.NEXT_PUBLIC_TRANSCRIPTION_LANGUAGE || 'en-US'
+  );
+  const [pendingLanguageRestart, setPendingLanguageRestart] = useState(false);
 
   // Refs
   const localVideoRef = useRef(null);
@@ -317,11 +321,34 @@ export default function GroupVideoMeeting() {
     error: speechError,
     startListening,
     stopListening
-  } = useSpeechRecognition({
+  } = useTranscription({
     onTranscript: handleTranscript,
+    language: transcriptionLanguage,
     continuous: true,
     interimResults: false // Only capture final results for cleaner transcript
   });
+
+  // Handle language change - restart transcription if active
+  const handleLanguageChange = useCallback((newLanguage) => {
+    if (isTranscribing) {
+      stopListening();
+      setIsTranscribing(false);
+      setPendingLanguageRestart(true);
+    }
+    setTranscriptionLanguage(newLanguage);
+  }, [isTranscribing, stopListening]);
+
+  // Restart transcription after language change (runs after re-render with new language)
+  useEffect(() => {
+    if (pendingLanguageRestart) {
+      setPendingLanguageRestart(false);
+      const started = startListening();
+      if (started) {
+        setIsTranscribing(true);
+        console.log('[Transcription] Restarted with language:', transcriptionLanguage);
+      }
+    }
+  }, [pendingLanguageRestart, startListening, transcriptionLanguage]);
 
   // Toggle transcription
   const toggleTranscription = useCallback(() => {
@@ -1227,26 +1254,37 @@ export default function GroupVideoMeeting() {
               🖥️
             </button>
 
-            {/* Transcription toggle */}
+            {/* Transcription toggle with language selector */}
             {isSpeechSupported && (
-              <button
-                onClick={() => {
-                  if (isSafari && !isTranscribing) {
-                    alert('⚠️ Safari has limited speech recognition support. Transcription may not work properly. For best results, use Chrome.');
-                  }
-                  toggleTranscription();
-                }}
-                className={`${isTranscribing ? 'bg-green-600' : isSafari ? 'bg-yellow-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
-                title={isSafari ? 'Transcription (limited on Safari)' : isTranscribing ? 'Stop transcription' : 'Start transcription'}
-              >
-                📝
-                {isTranscribing && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
-                )}
-                {isSafari && !isTranscribing && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full" title="Limited support on Safari"></span>
-                )}
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    if (isSafari && !isTranscribing) {
+                      alert('⚠️ Safari has limited speech recognition support. Transcription may not work properly. For best results, use Chrome.');
+                    }
+                    toggleTranscription();
+                  }}
+                  className={`${isTranscribing ? 'bg-green-600' : isSafari ? 'bg-yellow-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
+                  title={isSafari ? 'Transcription (limited on Safari)' : isTranscribing ? 'Stop transcription' : 'Start transcription'}
+                >
+                  📝
+                  {isTranscribing && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
+                  )}
+                  {isSafari && !isTranscribing && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-400 rounded-full" title="Limited support on Safari"></span>
+                  )}
+                </button>
+                <select
+                  value={transcriptionLanguage}
+                  onChange={(e) => handleLanguageChange(e.target.value)}
+                  className="bg-gray-700 text-white text-xs rounded-lg px-2 py-1 border-none focus:ring-2 focus:ring-green-500 cursor-pointer"
+                  title="Transcription language"
+                >
+                  <option value="en-US">EN</option>
+                  <option value="zh-CN">中文</option>
+                </select>
+              </div>
             )}
 
             <button
