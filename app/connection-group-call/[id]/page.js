@@ -74,17 +74,18 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
 
     // Only play if video is enabled
     if (!isEnabled) {
-      console.log('[RemoteVideo] Video disabled for user:', remoteUser.uid);
       return;
     }
 
     // Play the track - always replay when transitioning from disabled to enabled
     try {
-      console.log('[RemoteVideo] Playing track for user:', remoteUser.uid, 'enabled:', isEnabled, 'justUnmuted:', justUnmuted);
+      // Skip if this exact track is already attached to prevent duplicate play() calls
+      if (attachedTrackRef.current === track && !justUnmuted) {
+        return;
+      }
 
-      // Stop existing track if we just unmuted to force re-attach
-      if (justUnmuted && attachedTrackRef.current) {
-        console.log('[RemoteVideo] Force replay after unmute for user:', remoteUser.uid);
+      // Stop existing track if we just unmuted or if it's a different track
+      if (attachedTrackRef.current && (justUnmuted || attachedTrackRef.current !== track)) {
         try {
           attachedTrackRef.current.stop();
         } catch (e) {
@@ -95,17 +96,6 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
 
       track.play(videoElement, { fit: 'contain' });
       attachedTrackRef.current = track;
-
-      // Safari fix: ensure video plays after attach
-      const videoEl = videoElement.querySelector('video');
-      if (videoEl) {
-        videoEl.setAttribute('playsinline', '');
-        videoEl.setAttribute('webkit-playsinline', '');
-        videoEl.play().catch(() => {
-          videoEl.muted = true;
-          videoEl.play().catch(() => {});
-        });
-      }
     } catch (e) {
       console.error('[Agora] Error playing video track:', e);
     }
@@ -124,29 +114,30 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
 
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
-      {/* Always render video div so ref is available when track arrives */}
+      {/* Always render video div so ref is available - use layering instead of display:none */}
       <div
         ref={videoRef}
         className="absolute inset-0"
         style={{
           backgroundColor: '#1f2937',
-          display: hasVideo ? 'block' : 'none'
+          zIndex: hasVideo ? 10 : 1
         }}
       />
-      {/* Show placeholder when no video */}
-      {!hasVideo && (
-        <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
-              <span className="text-2xl text-white">
-                {String(remoteUser.uid).charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <p className="text-white text-sm">User {remoteUser.uid}</p>
-            <p className="text-white text-xs opacity-70">Camera off</p>
+      {/* Show placeholder when no video - rendered below video layer */}
+      <div
+        className="absolute inset-0 bg-gray-700 flex items-center justify-center"
+        style={{ zIndex: hasVideo ? 1 : 10 }}
+      >
+        <div className="text-center">
+          <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
+            <span className="text-2xl text-white">
+              {String(remoteUser.uid).charAt(0).toUpperCase()}
+            </span>
           </div>
+          <p className="text-white text-sm">User {remoteUser.uid}</p>
+          <p className="text-white text-xs opacity-70">Camera off</p>
         </div>
-      )}
+      </div>
       <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
         User {remoteUser.uid}
       </div>
@@ -198,17 +189,18 @@ const RemoteVideoPlayerLarge = memo(function RemoteVideoPlayerLarge({ remoteUser
 
     // Only play if video is enabled
     if (!isEnabled) {
-      console.log('[RemoteVideoLarge] Video disabled for user:', remoteUser.uid);
       return;
     }
 
     // Play the track - always replay when transitioning from disabled to enabled
     try {
-      console.log('[RemoteVideoLarge] Playing track for user:', remoteUser.uid, 'enabled:', isEnabled, 'justUnmuted:', justUnmuted);
+      // Skip if this exact track is already attached to prevent duplicate play() calls
+      if (attachedTrackRef.current === track && !justUnmuted) {
+        return;
+      }
 
-      // Stop existing track if we just unmuted to force re-attach
-      if (justUnmuted && attachedTrackRef.current) {
-        console.log('[RemoteVideoLarge] Force replay after unmute for user:', remoteUser.uid);
+      // Stop existing track if we just unmuted or if it's a different track
+      if (attachedTrackRef.current && (justUnmuted || attachedTrackRef.current !== track)) {
         try {
           attachedTrackRef.current.stop();
         } catch (e) {
@@ -219,17 +211,6 @@ const RemoteVideoPlayerLarge = memo(function RemoteVideoPlayerLarge({ remoteUser
 
       track.play(videoElement, { fit: 'contain' });
       attachedTrackRef.current = track;
-
-      // Safari fix: ensure video plays after attach
-      const videoEl = videoElement.querySelector('video');
-      if (videoEl) {
-        videoEl.setAttribute('playsinline', '');
-        videoEl.setAttribute('webkit-playsinline', '');
-        videoEl.play().catch(() => {
-          videoEl.muted = true;
-          videoEl.play().catch(() => {});
-        });
-      }
     } catch (e) {
       console.error('[Agora] Error playing video track (large):', e);
     }
@@ -246,32 +227,34 @@ const RemoteVideoPlayerLarge = memo(function RemoteVideoPlayerLarge({ remoteUser
     };
   }, [remoteUser.videoTrack, remoteUser.uid, remoteUser._lastUpdate, remoteUser._videoEnabled]);
 
+  // Use absolute positioning to fill parent since h-full doesn't work with flex parents
   return (
     <>
-      {/* Always render video div so ref is available when track arrives */}
+      {/* Always render video div so ref is available - use layering instead of display:none */}
       <div
         ref={videoRef}
-        className="w-full h-full"
+        className="absolute inset-0"
         style={{
           backgroundColor: '#1f2937',
-          display: hasVideo ? 'block' : 'none'
+          zIndex: hasVideo ? 10 : 1
         }}
       />
-      {/* Show placeholder when no video */}
-      {!hasVideo && (
-        <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-32 h-32 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
-              <span className="text-5xl text-white">
-                {String(remoteUser.uid).charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <p className="text-white text-xl">User {remoteUser.uid}</p>
-            <p className="text-white text-sm opacity-70">Camera off</p>
+      {/* Show placeholder when no video - rendered below video layer */}
+      <div
+        className="absolute inset-0 bg-gray-700 flex items-center justify-center"
+        style={{ zIndex: hasVideo ? 1 : 10 }}
+      >
+        <div className="text-center">
+          <div className="w-32 h-32 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
+            <span className="text-5xl text-white">
+              {String(remoteUser.uid).charAt(0).toUpperCase()}
+            </span>
           </div>
+          <p className="text-white text-xl">User {remoteUser.uid}</p>
+          <p className="text-white text-sm opacity-70">Camera off</p>
         </div>
-      )}
-      <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded">
+      </div>
+      <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded z-20">
         User {remoteUser.uid}
       </div>
     </>
@@ -302,7 +285,13 @@ const RemoteVideoThumbnail = memo(function RemoteVideoThumbnail({ remoteUser }) 
     if (!track || !videoElement || !isEnabled) return;
 
     try {
-      if (justUnmuted && attachedTrackRef.current) {
+      // Skip if this exact track is already attached to prevent duplicate play() calls
+      if (attachedTrackRef.current === track && !justUnmuted) {
+        return;
+      }
+
+      // Stop existing track if we just unmuted or if it's a different track
+      if (attachedTrackRef.current && (justUnmuted || attachedTrackRef.current !== track)) {
         try {
           attachedTrackRef.current.stop();
         } catch (e) {}
@@ -311,15 +300,6 @@ const RemoteVideoThumbnail = memo(function RemoteVideoThumbnail({ remoteUser }) 
 
       track.play(videoElement, { fit: 'cover' });
       attachedTrackRef.current = track;
-
-      const videoEl = videoElement.querySelector('video');
-      if (videoEl) {
-        videoEl.setAttribute('playsinline', '');
-        videoEl.play().catch(() => {
-          videoEl.muted = true;
-          videoEl.play().catch(() => {});
-        });
-      }
     } catch (e) {
       console.error('[Agora] Error playing thumbnail:', e);
     }
@@ -336,29 +316,30 @@ const RemoteVideoThumbnail = memo(function RemoteVideoThumbnail({ remoteUser }) 
 
   return (
     <div className="w-48 h-36 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative">
-      {/* Always render video div so ref is available when track arrives */}
+      {/* Always render video div so ref is available - use layering instead of display:none */}
       <div
         ref={videoRef}
-        className="w-full h-full"
+        className="w-full h-full absolute inset-0"
         style={{
           backgroundColor: '#1f2937',
-          display: hasVideo ? 'block' : 'none'
+          zIndex: hasVideo ? 10 : 1
         }}
       />
-      {/* Show placeholder when no video */}
-      {!hasVideo && (
-        <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-1">
-              <span className="text-sm text-white">
-                {String(remoteUser.uid).charAt(0).toUpperCase()}
-              </span>
-            </div>
-            <span className="text-white text-xs">Camera off</span>
+      {/* Show placeholder when no video - rendered below video layer */}
+      <div
+        className="w-full h-full bg-gray-700 flex items-center justify-center absolute inset-0"
+        style={{ zIndex: hasVideo ? 1 : 10 }}
+      >
+        <div className="text-center">
+          <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-1">
+            <span className="text-sm text-white">
+              {String(remoteUser.uid).charAt(0).toUpperCase()}
+            </span>
           </div>
+          <span className="text-white text-xs">Camera off</span>
         </div>
-      )}
-      <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs">
+      </div>
+      <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
         User {remoteUser.uid}
       </div>
     </div>
@@ -777,10 +758,21 @@ export default function ConnectionGroupVideoCall() {
         /* Ensure Agora video elements fill their containers */
         [class*="agora_video"] video,
         div[id*="video"] video,
+        div[id*="agora"] video,
         video {
           width: 100% !important;
           height: 100% !important;
           object-fit: cover !important;
+        }
+        /* Ensure Agora's container divs also fill their parents */
+        [class*="agora_video"],
+        div[id*="video_"],
+        div[id*="agora-video"] {
+          width: 100% !important;
+          height: 100% !important;
+          position: absolute !important;
+          top: 0 !important;
+          left: 0 !important;
         }
       `}</style>
 
@@ -868,9 +860,9 @@ export default function ConnectionGroupVideoCall() {
           </div>
         ) : (
           // Speaker View - Main speaker + thumbnails
-          <div className="h-full flex flex-col gap-2">
+          <div className="flex-1 flex flex-col gap-2 relative min-h-0">
             {/* Main Speaker (first remote user or local) */}
-            <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden relative">
+            <div className="flex-1 min-h-0 bg-gray-800 rounded-lg overflow-hidden relative">
               {remoteUsersList.length > 0 ? (
                 // Show first remote user - component handles camera off state
                 <RemoteVideoPlayerLarge remoteUser={remoteUsersList[0]} />
@@ -902,7 +894,7 @@ export default function ConnectionGroupVideoCall() {
             </div>
 
             {/* Thumbnails */}
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex gap-2 overflow-x-auto pb-2" style={{ minHeight: '144px' }}>
               {/* Local thumbnail - show if remote user is in main area */}
               {remoteUsersList.length > 0 && (
                 <div className="w-48 h-36 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative">
