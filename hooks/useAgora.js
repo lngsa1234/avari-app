@@ -17,6 +17,8 @@ export function useAgora() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const clientRef = useRef(null);
   const isJoiningRef = useRef(false); // Track if currently joining
+  const isLeavingRef = useRef(false); // Track if currently leaving
+  const leavePromiseRef = useRef(null); // Store leave promise to await
 
   useEffect(() => {
     // Create Agora client with rtc mode for group calls
@@ -79,21 +81,25 @@ export function useAgora() {
 
       if (mediaType === 'video') {
         setRemoteUsers(prev => {
-          const updated = { ...prev };
-          if (updated[user.uid]) {
-            delete updated[user.uid].videoTrack;
-          }
-          return updated;
+          if (!prev[user.uid]) return prev;
+          // Create new object to ensure React detects the change
+          const { videoTrack, ...rest } = prev[user.uid];
+          return {
+            ...prev,
+            [user.uid]: { ...rest, videoTrack: null }
+          };
         });
       }
 
       if (mediaType === 'audio') {
         setRemoteUsers(prev => {
-          const updated = { ...prev };
-          if (updated[user.uid]) {
-            delete updated[user.uid].audioTrack;
-          }
-          return updated;
+          if (!prev[user.uid]) return prev;
+          // Create new object to ensure React detects the change
+          const { audioTrack, ...rest } = prev[user.uid];
+          return {
+            ...prev,
+            [user.uid]: { ...rest, audioTrack: null }
+          };
         });
       }
     });
@@ -106,6 +112,34 @@ export function useAgora() {
         delete updated[user.uid];
         return updated;
       });
+    });
+
+    // Event: User info updated (mute/unmute video/audio)
+    client.on('user-info-updated', (uid, msg) => {
+      console.log('ℹ️ User info updated:', uid, msg);
+
+      // When user unmutes video, force a state update to re-render
+      if (msg === 'unmute-video') {
+        setRemoteUsers(prev => {
+          if (!prev[uid]) return prev;
+          // Create new object reference to trigger re-render
+          return {
+            ...prev,
+            [uid]: { ...prev[uid], _videoEnabled: true, _lastUpdate: Date.now() }
+          };
+        });
+      }
+
+      // When user mutes video
+      if (msg === 'mute-video') {
+        setRemoteUsers(prev => {
+          if (!prev[uid]) return prev;
+          return {
+            ...prev,
+            [uid]: { ...prev[uid], _videoEnabled: false, _lastUpdate: Date.now() }
+          };
+        });
+      }
     });
 
     // Event: Connection state changed
@@ -139,13 +173,56 @@ export function useAgora() {
       return;
     }
 
+    // Wait for any pending leave operation to complete
+    if (isLeavingRef.current && leavePromiseRef.current) {
+      console.log('⏳ Waiting for pending leave to complete...');
+      try {
+        await leavePromiseRef.current;
+      } catch (e) {
+        console.log('Leave wait error (ignored):', e.message);
+      }
+      // Add a small delay after leave completes
+      await new Promise(r => setTimeout(r, 500));
+    }
+
     try {
       isJoiningRef.current = true;
       console.log('🚀 Joining Agora channel:', channel);
       console.log('📊 Current connection state:', client.connectionState);
 
-      // Join the channel
-      const assignedUid = await client.join(appId, channel, token, uid);
+      // If already connected or disconnecting, leave first and wait
+      if (client.connectionState === 'CONNECTED' || client.connectionState === 'CONNECTING' || client.connectionState === 'DISCONNECTING') {
+        console.log('⚠️ Client in state:', client.connectionState, '- leaving first...');
+        try {
+          await client.leave();
+          // Wait for client to fully disconnect
+          await new Promise(r => setTimeout(r, 300));
+        } catch (e) {
+          console.log('Leave error (ignored):', e.message);
+        }
+      }
+
+      // Join the channel with retry on UID conflict
+      let assignedUid;
+      let retries = 0;
+      const maxRetries = 2;
+
+      while (retries <= maxRetries) {
+        try {
+          // Add random suffix to UID on retry to avoid conflict
+          const uidToUse = retries > 0 ? (uid ? uid + retries : Math.floor(Math.random() * 100000)) : uid;
+          assignedUid = await client.join(appId, channel, token, uidToUse);
+          break; // Success, exit loop
+        } catch (joinError) {
+          if (joinError.code === 'UID_CONFLICT' && retries < maxRetries) {
+            console.log(`⚠️ UID conflict, retrying with different UID (attempt ${retries + 1})`);
+            retries++;
+            await new Promise(r => setTimeout(r, 500)); // Wait before retry
+          } else {
+            throw joinError;
+          }
+        }
+      }
       console.log('✅ Joined channel with UID:', assignedUid);
 
       // Create local audio and video tracks
@@ -195,37 +272,52 @@ export function useAgora() {
   const leave = async () => {
     const client = clientRef.current;
 
-    console.log('👋 Leaving Agora channel...');
-
-    try {
-      // Stop and close local tracks
-      if (localAudioTrack) {
-        localAudioTrack.stop();
-        localAudioTrack.close();
-        setLocalAudioTrack(null);
-      }
-
-      if (localVideoTrack) {
-        localVideoTrack.stop();
-        localVideoTrack.close();
-        setLocalVideoTrack(null);
-      }
-
-      // Leave the channel (only if connected or connecting)
-      if (client && (client.connectionState === 'CONNECTED' || client.connectionState === 'CONNECTING')) {
-        await client.leave();
-      }
-
-      setIsJoined(false);
-      setIsPublishing(false);
-      setRemoteUsers({});
-      isJoiningRef.current = false;
-
-      console.log('✅ Successfully left channel');
-    } catch (error) {
-      console.error('❌ Error leaving channel:', error);
-      isJoiningRef.current = false;
+    // Prevent duplicate leaves
+    if (isLeavingRef.current) {
+      console.log('⚠️ Already leaving, returning existing promise');
+      return leavePromiseRef.current;
     }
+
+    console.log('👋 Leaving Agora channel...');
+    isLeavingRef.current = true;
+
+    const leaveOperation = async () => {
+      try {
+        // Stop and close local tracks
+        if (localAudioTrack) {
+          localAudioTrack.stop();
+          localAudioTrack.close();
+          setLocalAudioTrack(null);
+        }
+
+        if (localVideoTrack) {
+          localVideoTrack.stop();
+          localVideoTrack.close();
+          setLocalVideoTrack(null);
+        }
+
+        // Leave the channel (only if connected or connecting)
+        if (client && (client.connectionState === 'CONNECTED' || client.connectionState === 'CONNECTING')) {
+          await client.leave();
+        }
+
+        setIsJoined(false);
+        setIsPublishing(false);
+        setRemoteUsers({});
+        isJoiningRef.current = false;
+
+        console.log('✅ Successfully left channel');
+      } catch (error) {
+        console.error('❌ Error leaving channel:', error);
+        isJoiningRef.current = false;
+      } finally {
+        isLeavingRef.current = false;
+        leavePromiseRef.current = null;
+      }
+    };
+
+    leavePromiseRef.current = leaveOperation();
+    return leavePromiseRef.current;
   };
 
   /**

@@ -38,46 +38,76 @@ function generateNumericUid(uuidString) {
 const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
   const videoRef = useRef(null);
   const attachedTrackRef = useRef(null);
+  const lastEnabledRef = useRef(true); // Track previous enabled state, default to true
+  const [hasVideo, setHasVideo] = useState(!!remoteUser.videoTrack && remoteUser._videoEnabled !== false);
 
   useEffect(() => {
     const videoElement = videoRef.current;
     const track = remoteUser.videoTrack;
+    const isEnabled = remoteUser._videoEnabled !== false; // Default to true if not set
+    const wasEnabled = lastEnabledRef.current;
+
+    // Update hasVideo state
+    setHasVideo(!!track && isEnabled);
+
+    // Check if this is an unmute transition (was disabled, now enabled)
+    const justUnmuted = !wasEnabled && isEnabled;
+
+    // Update the ref for next render
+    lastEnabledRef.current = isEnabled;
+
+    // If track is null/undefined, clean up
+    if (!track) {
+      if (attachedTrackRef.current) {
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {
+          // Ignore stop errors
+        }
+        attachedTrackRef.current = null;
+      }
+      return;
+    }
 
     // Skip if no video element
     if (!videoElement) return;
 
-    // Skip if same track already attached
-    if (track && track === attachedTrackRef.current) return;
-
-    // Detach previous track if different
-    if (attachedTrackRef.current && attachedTrackRef.current !== track) {
-      try {
-        attachedTrackRef.current.stop();
-      } catch (e) {
-        // Ignore detach errors
-      }
-      attachedTrackRef.current = null;
+    // Only play if video is enabled
+    if (!isEnabled) {
+      console.log('[RemoteVideo] Video disabled for user:', remoteUser.uid);
+      return;
     }
 
-    // Attach new track
-    if (track && track !== attachedTrackRef.current) {
-      try {
-        track.play(videoElement, { fit: 'contain' });
-        attachedTrackRef.current = track;
+    // Play the track - always replay when transitioning from disabled to enabled
+    try {
+      console.log('[RemoteVideo] Playing track for user:', remoteUser.uid, 'enabled:', isEnabled, 'justUnmuted:', justUnmuted);
 
-        // Safari fix: ensure video plays after attach
-        const videoEl = videoElement.querySelector('video');
-        if (videoEl) {
-          videoEl.setAttribute('playsinline', '');
-          videoEl.setAttribute('webkit-playsinline', '');
-          videoEl.play().catch(() => {
-            videoEl.muted = true;
-            videoEl.play().catch(() => {});
-          });
+      // Stop existing track if we just unmuted to force re-attach
+      if (justUnmuted && attachedTrackRef.current) {
+        console.log('[RemoteVideo] Force replay after unmute for user:', remoteUser.uid);
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {
+          // Ignore stop errors
         }
-      } catch (e) {
-        console.error('[Agora] Error playing video track:', e);
+        attachedTrackRef.current = null;
       }
+
+      track.play(videoElement, { fit: 'contain' });
+      attachedTrackRef.current = track;
+
+      // Safari fix: ensure video plays after attach
+      const videoEl = videoElement.querySelector('video');
+      if (videoEl) {
+        videoEl.setAttribute('playsinline', '');
+        videoEl.setAttribute('webkit-playsinline', '');
+        videoEl.play().catch(() => {
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+        });
+      }
+    } catch (e) {
+      console.error('[Agora] Error playing video track:', e);
     }
 
     return () => {
@@ -90,17 +120,21 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
         attachedTrackRef.current = null;
       }
     };
-  }, [remoteUser.videoTrack]);
+  }, [remoteUser.videoTrack, remoteUser.uid, remoteUser._lastUpdate, remoteUser._videoEnabled]);
 
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
-      {remoteUser.videoTrack ? (
-        <div
-          ref={videoRef}
-          className="absolute inset-0"
-          style={{ backgroundColor: '#1f2937' }}
-        />
-      ) : (
+      {/* Always render video div so ref is available when track arrives */}
+      <div
+        ref={videoRef}
+        className="absolute inset-0"
+        style={{
+          backgroundColor: '#1f2937',
+          display: hasVideo ? 'block' : 'none'
+        }}
+      />
+      {/* Show placeholder when no video */}
+      {!hasVideo && (
         <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
           <div className="text-center">
             <div className="w-20 h-20 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-2">
@@ -118,11 +152,6 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
       </div>
     </div>
   );
-}, (prevProps, nextProps) => {
-  // Custom comparison - only re-render if these specific props change
-  return prevProps.remoteUser.uid === nextProps.remoteUser.uid &&
-         prevProps.remoteUser.videoTrack === nextProps.remoteUser.videoTrack &&
-         prevProps.remoteUser.audioTrack === nextProps.remoteUser.audioTrack;
 });
 
 /**
@@ -133,46 +162,76 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
 const RemoteVideoPlayerLarge = memo(function RemoteVideoPlayerLarge({ remoteUser }) {
   const videoRef = useRef(null);
   const attachedTrackRef = useRef(null);
+  const lastEnabledRef = useRef(true); // Track previous enabled state, default to true
+  const [hasVideo, setHasVideo] = useState(!!remoteUser.videoTrack && remoteUser._videoEnabled !== false);
 
   useEffect(() => {
     const videoElement = videoRef.current;
     const track = remoteUser.videoTrack;
+    const isEnabled = remoteUser._videoEnabled !== false;
+    const wasEnabled = lastEnabledRef.current;
+
+    // Update hasVideo state
+    setHasVideo(!!track && isEnabled);
+
+    // Check if this is an unmute transition
+    const justUnmuted = !wasEnabled && isEnabled;
+
+    // Update the ref for next render
+    lastEnabledRef.current = isEnabled;
+
+    // If track is null/undefined, clean up
+    if (!track) {
+      if (attachedTrackRef.current) {
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {
+          // Ignore stop errors
+        }
+        attachedTrackRef.current = null;
+      }
+      return;
+    }
 
     // Skip if no video element
     if (!videoElement) return;
 
-    // Skip if same track already attached
-    if (track && track === attachedTrackRef.current) return;
-
-    // Detach previous track if different
-    if (attachedTrackRef.current && attachedTrackRef.current !== track) {
-      try {
-        attachedTrackRef.current.stop();
-      } catch (e) {
-        // Ignore stop errors
-      }
-      attachedTrackRef.current = null;
+    // Only play if video is enabled
+    if (!isEnabled) {
+      console.log('[RemoteVideoLarge] Video disabled for user:', remoteUser.uid);
+      return;
     }
 
-    // Attach new track
-    if (track && track !== attachedTrackRef.current) {
-      try {
-        track.play(videoElement, { fit: 'contain' });
-        attachedTrackRef.current = track;
+    // Play the track - always replay when transitioning from disabled to enabled
+    try {
+      console.log('[RemoteVideoLarge] Playing track for user:', remoteUser.uid, 'enabled:', isEnabled, 'justUnmuted:', justUnmuted);
 
-        // Safari fix: ensure video plays after attach
-        const videoEl = videoElement.querySelector('video');
-        if (videoEl) {
-          videoEl.setAttribute('playsinline', '');
-          videoEl.setAttribute('webkit-playsinline', '');
-          videoEl.play().catch(() => {
-            videoEl.muted = true;
-            videoEl.play().catch(() => {});
-          });
+      // Stop existing track if we just unmuted to force re-attach
+      if (justUnmuted && attachedTrackRef.current) {
+        console.log('[RemoteVideoLarge] Force replay after unmute for user:', remoteUser.uid);
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {
+          // Ignore stop errors
         }
-      } catch (e) {
-        console.error('[Agora] Error playing video track (large):', e);
+        attachedTrackRef.current = null;
       }
+
+      track.play(videoElement, { fit: 'contain' });
+      attachedTrackRef.current = track;
+
+      // Safari fix: ensure video plays after attach
+      const videoEl = videoElement.querySelector('video');
+      if (videoEl) {
+        videoEl.setAttribute('playsinline', '');
+        videoEl.setAttribute('webkit-playsinline', '');
+        videoEl.play().catch(() => {
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+        });
+      }
+    } catch (e) {
+      console.error('[Agora] Error playing video track (large):', e);
     }
 
     return () => {
@@ -185,20 +244,125 @@ const RemoteVideoPlayerLarge = memo(function RemoteVideoPlayerLarge({ remoteUser
         attachedTrackRef.current = null;
       }
     };
-  }, [remoteUser.videoTrack]);
+  }, [remoteUser.videoTrack, remoteUser.uid, remoteUser._lastUpdate, remoteUser._videoEnabled]);
 
   return (
     <>
-      <div ref={videoRef} className="w-full h-full" style={{ backgroundColor: '#1f2937' }} />
+      {/* Always render video div so ref is available when track arrives */}
+      <div
+        ref={videoRef}
+        className="w-full h-full"
+        style={{
+          backgroundColor: '#1f2937',
+          display: hasVideo ? 'block' : 'none'
+        }}
+      />
+      {/* Show placeholder when no video */}
+      {!hasVideo && (
+        <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-32 h-32 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
+              <span className="text-5xl text-white">
+                {String(remoteUser.uid).charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <p className="text-white text-xl">User {remoteUser.uid}</p>
+            <p className="text-white text-sm opacity-70">Camera off</p>
+          </div>
+        </div>
+      )}
       <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded">
         User {remoteUser.uid}
       </div>
     </>
   );
-}, (prevProps, nextProps) => {
-  return prevProps.remoteUser.uid === nextProps.remoteUser.uid &&
-         prevProps.remoteUser.videoTrack === nextProps.remoteUser.videoTrack &&
-         prevProps.remoteUser.audioTrack === nextProps.remoteUser.audioTrack;
+});
+
+/**
+ * Thumbnail version for speaker view
+ * Memoized to prevent unnecessary re-renders
+ */
+const RemoteVideoThumbnail = memo(function RemoteVideoThumbnail({ remoteUser }) {
+  const videoRef = useRef(null);
+  const attachedTrackRef = useRef(null);
+  const lastEnabledRef = useRef(true);
+  const [hasVideo, setHasVideo] = useState(!!remoteUser.videoTrack && remoteUser._videoEnabled !== false);
+
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    const track = remoteUser.videoTrack;
+    const isEnabled = remoteUser._videoEnabled !== false;
+    const wasEnabled = lastEnabledRef.current;
+
+    setHasVideo(!!track && isEnabled);
+
+    const justUnmuted = !wasEnabled && isEnabled;
+    lastEnabledRef.current = isEnabled;
+
+    if (!track || !videoElement || !isEnabled) return;
+
+    try {
+      if (justUnmuted && attachedTrackRef.current) {
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {}
+        attachedTrackRef.current = null;
+      }
+
+      track.play(videoElement, { fit: 'cover' });
+      attachedTrackRef.current = track;
+
+      const videoEl = videoElement.querySelector('video');
+      if (videoEl) {
+        videoEl.setAttribute('playsinline', '');
+        videoEl.play().catch(() => {
+          videoEl.muted = true;
+          videoEl.play().catch(() => {});
+        });
+      }
+    } catch (e) {
+      console.error('[Agora] Error playing thumbnail:', e);
+    }
+
+    return () => {
+      if (attachedTrackRef.current && videoElement) {
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {}
+        attachedTrackRef.current = null;
+      }
+    };
+  }, [remoteUser.videoTrack, remoteUser.uid, remoteUser._lastUpdate, remoteUser._videoEnabled]);
+
+  return (
+    <div className="w-48 h-36 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative">
+      {/* Always render video div so ref is available when track arrives */}
+      <div
+        ref={videoRef}
+        className="w-full h-full"
+        style={{
+          backgroundColor: '#1f2937',
+          display: hasVideo ? 'block' : 'none'
+        }}
+      />
+      {/* Show placeholder when no video */}
+      {!hasVideo && (
+        <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-1">
+              <span className="text-sm text-white">
+                {String(remoteUser.uid).charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <span className="text-white text-xs">Camera off</span>
+          </div>
+        </div>
+      )}
+      <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs">
+        User {remoteUser.uid}
+      </div>
+    </div>
+  );
 });
 
 export default function ConnectionGroupVideoCall() {
@@ -270,9 +434,13 @@ export default function ConnectionGroupVideoCall() {
       initializeGroupCall();
     }
 
+    // Cleanup only on actual unmount, not Strict Mode re-render
+    // We keep hasInitialized.current = true to prevent re-joining after cleanup
     return () => {
-      hasInitialized.current = false;
-      leave();
+      // Only leave if we were actually joined
+      if (hasInitialized.current) {
+        leave();
+      }
     };
   }, [channelName, user]);
 
@@ -704,26 +872,8 @@ export default function ConnectionGroupVideoCall() {
             {/* Main Speaker (first remote user or local) */}
             <div className="flex-1 bg-gray-800 rounded-lg overflow-hidden relative">
               {remoteUsersList.length > 0 ? (
-                // Show first remote user (with or without video)
-                remoteUsersList[0].videoTrack ? (
-                  <RemoteVideoPlayerLarge remoteUser={remoteUsersList[0]} />
-                ) : (
-                  // Remote user without video
-                  <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-32 h-32 bg-purple-500 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <span className="text-5xl text-white">
-                          {String(remoteUsersList[0].uid).charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <p className="text-white text-xl">User {remoteUsersList[0].uid}</p>
-                      <p className="text-white text-sm opacity-70">Camera off</p>
-                    </div>
-                    <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded">
-                      User {remoteUsersList[0].uid}
-                    </div>
-                  </div>
-                )
+                // Show first remote user - component handles camera off state
+                <RemoteVideoPlayerLarge remoteUser={remoteUsersList[0]} />
               ) : (
                 // No remote users, show local
                 <>
@@ -778,28 +928,7 @@ export default function ConnectionGroupVideoCall() {
 
               {/* Remote thumbnails */}
               {remoteUsersList.slice(1).map((remoteUser) => (
-                <div
-                  key={remoteUser.uid}
-                  className="w-48 h-36 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative"
-                >
-                  {remoteUser.videoTrack ? (
-                    <div
-                      ref={(ref) => {
-                        if (ref && remoteUser.videoTrack) {
-                          remoteUser.videoTrack.play(ref);
-                        }
-                      }}
-                      className="w-full h-full"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gray-700 flex items-center justify-center">
-                      <span className="text-white">User {remoteUser.uid}</span>
-                    </div>
-                  )}
-                  <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs">
-                    User {remoteUser.uid}
-                  </div>
-                </div>
+                <RemoteVideoThumbnail key={remoteUser.uid} remoteUser={remoteUser} />
               ))}
             </div>
           </div>
