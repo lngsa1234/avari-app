@@ -1476,68 +1476,106 @@ function MainApp({ currentUser, onSignOut }) {
   }
 
   const ConnectionsView = () => {
-    const [activeTab, setActiveTab] = useState('network') // network, discover
-    const [expandedMeetup, setExpandedMeetup] = useState(null) // Track which meetup is expanded
-
-    const toggleMeetup = (meetupId) => {
-      setExpandedMeetup(expandedMeetup === meetupId ? null : meetupId)
-    }
-
+    // Flatten and deduplicate people by user ID
     const meetupPeopleArray = Object.entries(meetupPeople).map(([meetupId, data]) => ({
       meetupId,
       ...data
     }))
 
-    const totalPeopleCount = meetupPeopleArray.reduce((sum, mp) => sum + mp.people.length, 0)
+    const allPeople = meetupPeopleArray.flatMap(({ people }) => people)
+    const uniquePeopleMap = new Map()
+    allPeople.forEach(personData => {
+      if (!uniquePeopleMap.has(personData.id)) {
+        uniquePeopleMap.set(personData.id, personData)
+      }
+    })
+    const uniquePeople = Array.from(uniquePeopleMap.values())
 
     return (
       <div className="space-y-6">
         <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
           <h3 className="text-lg font-semibold text-gray-800 mb-2">Your Network</h3>
-          <p className="text-sm text-gray-600">Show interest privately - connect when it's mutual! ❤️</p>
+          <p className="text-sm text-gray-600">Show interest privately - connect when it's mutual!</p>
         </div>
 
         {currentUser.meetups_attended < 3 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <p className="text-sm text-amber-800">
-              🔒 Complete {3 - currentUser.meetups_attended} more meetups to unlock 1-on-1 video chats
+              Complete {3 - currentUser.meetups_attended} more meetups to unlock 1-on-1 video chats
             </p>
           </div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-2 border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('network')}
-            className={`px-4 py-2 font-medium transition-colors ${
-              activeTab === 'network'
-                ? 'text-purple-600 border-b-2 border-purple-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            My Connections ({connections.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('discover')}
-            className={`px-4 py-2 font-medium transition-colors ${
-              activeTab === 'discover'
-                ? 'text-purple-600 border-b-2 border-purple-600'
-                : 'text-gray-600 hover:text-gray-800'
-            }`}
-          >
-            Discover People ({totalPeopleCount})
-          </button>
+        {/* Recommend to Connect Section */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Recommend to Connect ({uniquePeople.length})</h3>
+          <div className="space-y-4">
+            {uniquePeople.length === 0 ? (
+              <div className="bg-gray-50 rounded-lg p-8 text-center">
+                <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-600">No recommendations yet</p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Attend more meetups to get connection recommendations!
+                </p>
+              </div>
+            ) : (
+              uniquePeople.map(personData => {
+                const person = personData.user
+                const hasShownInterest = myInterests.includes(personData.id)
+
+                return (
+                  <div key={personData.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
+                        <p className="text-sm text-gray-600 mb-1">{person.career}</p>
+                        {person.city && person.state && (
+                          <p className="text-xs text-gray-500">{person.city}, {person.state}</p>
+                        )}
+                        {person.bio && (
+                          <p className="text-sm text-gray-700 mt-2 italic">"{person.bio}"</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {hasShownInterest ? (
+                      <div className="space-y-2">
+                        <div className="bg-purple-50 border border-purple-200 rounded px-4 py-2 text-purple-700 text-sm font-medium text-center">
+                          Interest shown - waiting for mutual match
+                        </div>
+                        <button
+                          onClick={() => handleRemoveInterest(personData.id)}
+                          className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 rounded transition-colors text-sm"
+                        >
+                          Remove Interest
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleShowInterest(personData.id, person.name)}
+                        className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
+                      >
+                        <Heart className="w-4 h-4 mr-2" />
+                        Show Interest
+                      </button>
+                    )}
+                  </div>
+                )
+              })
+            )}
+          </div>
         </div>
 
-        {/* My Connections Tab */}
-        {activeTab === 'network' && (
+        {/* My Connections Section */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">My Connections ({connections.length})</h3>
           <div className="space-y-4">
             {connections.length === 0 ? (
               <div className="bg-gray-50 rounded-lg p-8 text-center">
                 <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
                 <p className="text-gray-600">No connections yet</p>
                 <p className="text-sm text-gray-500 mt-2">
-                  Show interest in people from "Discover" tab to match!
+                  Show interest in people above to match!
                 </p>
               </div>
             ) : (
@@ -1563,9 +1601,9 @@ function MainApp({ currentUser, onSignOut }) {
                         )}
                       </div>
                     </div>
-                    
+
                     {currentUser.meetups_attended >= 3 ? (
-                      <button 
+                      <button
                         onClick={() => setCurrentView('coffeeChats')}
                         className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
                       >
@@ -1574,7 +1612,7 @@ function MainApp({ currentUser, onSignOut }) {
                       </button>
                     ) : (
                       <button disabled className="w-full bg-gray-300 text-gray-500 font-medium py-2 rounded cursor-not-allowed">
-                        🔒 Complete {3 - currentUser.meetups_attended} more meetups to unlock
+                        Complete {3 - currentUser.meetups_attended} more meetups to unlock
                       </button>
                     )}
                   </div>
@@ -1582,105 +1620,7 @@ function MainApp({ currentUser, onSignOut }) {
               })
             )}
           </div>
-        )}
-
-        {/* Discover Tab - Grouped by Meetups */}
-        {activeTab === 'discover' && (
-          <div className="space-y-4">
-            {meetupPeopleArray.length === 0 ? (
-              <div className="bg-gray-50 rounded-lg p-8 text-center">
-                <Users className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-600">No one to discover yet</p>
-                <p className="text-sm text-gray-500 mt-2">
-                  Attend more meetups to meet new people!
-                </p>
-              </div>
-            ) : (
-              meetupPeopleArray.map(({ meetupId, meetup, people }) => {
-                const isExpanded = expandedMeetup === meetupId
-                
-                return (
-                  <div key={meetupId} className="bg-white rounded-lg shadow border border-gray-200">
-                    {/* Meetup Header - Clickable to expand/collapse */}
-                    <button
-                      onClick={() => toggleMeetup(meetupId)}
-                      className="w-full p-5 text-left hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center mb-1">
-                            <Calendar className="w-5 h-5 mr-2 text-purple-500" />
-                            <h3 className="font-semibold text-gray-800">{formatDate(meetup.date)}</h3>
-                          </div>
-                          <div className="flex items-center text-sm text-gray-600 ml-7">
-                            <Clock className="w-4 h-4 mr-2" />
-                            {formatTime(meetup.time)}
-                          </div>
-                          <div className="flex items-center text-sm text-purple-600 ml-7 mt-1">
-                            <Users className="w-4 h-4 mr-1" />
-                            {people.length} {people.length === 1 ? 'person' : 'people'} to discover
-                          </div>
-                        </div>
-                        <div className="text-gray-400">
-                          {isExpanded ? '▼' : '▶'}
-                        </div>
-                      </div>
-                    </button>
-
-                    {/* People List - Show when expanded */}
-                    {isExpanded && (
-                      <div className="border-t border-gray-200 p-4 space-y-3 bg-gray-50">
-                        {people.map(personData => {
-                          const person = personData.user
-                          const hasShownInterest = myInterests.includes(personData.id)
-                          
-                          return (
-                            <div key={personData.id} className="bg-white rounded-lg p-4 border border-gray-200">
-                              <div className="flex justify-between items-start mb-3">
-                                <div className="flex-1">
-                                  <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
-                                  <p className="text-sm text-gray-600 mb-1">{person.career}</p>
-                                  {person.city && person.state && (
-                                    <p className="text-xs text-gray-500">{person.city}, {person.state}</p>
-                                  )}
-                                  {person.bio && (
-                                    <p className="text-sm text-gray-700 mt-2 italic">"{person.bio}"</p>
-                                  )}
-                                </div>
-                              </div>
-                              
-                              {hasShownInterest ? (
-                                <div className="space-y-2">
-                                  <div className="bg-purple-50 border border-purple-200 rounded px-4 py-2 text-purple-700 text-sm font-medium text-center">
-                                    ✓ Interest shown - waiting for mutual match
-                                  </div>
-                                  <button 
-                                    onClick={() => handleRemoveInterest(personData.id)}
-                                    className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 rounded transition-colors text-sm"
-                                  >
-                                    Remove Interest
-                                  </button>
-                                </div>
-                              ) : (
-                                <button 
-                                  onClick={() => handleShowInterest(personData.id, person.name)}
-                                  className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
-                                >
-                                  <Heart className="w-4 h-4 mr-2" />
-                                  Show Interest
-                                </button>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })
-            )}
-          </div>
-        )}
+        </div>
       </div>
     )
   }

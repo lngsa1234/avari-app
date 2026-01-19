@@ -265,25 +265,47 @@ export function useAgora() {
       console.log('🖥️ Starting screen share...');
 
       // Create screen track
-      const screenTrack = await AgoraRTC.createScreenVideoTrack({
-        encoderConfig: '1080p_1',
-      }, 'auto');
+      // Note: createScreenVideoTrack with 'auto' can return either:
+      // - A single video track (if system audio not available)
+      // - An array [videoTrack, audioTrack] (if system audio available)
+      // Using 720p and VP8 for better Safari compatibility
+      const screenTrackResult = await AgoraRTC.createScreenVideoTrack({
+        encoderConfig: {
+          width: 1280,
+          height: 720,
+          frameRate: 15,
+          bitrateMax: 1500,
+        },
+        optimizationMode: 'detail',
+      }, 'disable'); // Disable system audio for better compatibility
 
-      setLocalScreenTrack(screenTrack);
+      // Handle both cases - array or single track
+      const screenVideoTrack = Array.isArray(screenTrackResult)
+        ? screenTrackResult[0]
+        : screenTrackResult;
+      const screenAudioTrack = Array.isArray(screenTrackResult)
+        ? screenTrackResult[1]
+        : null;
+
+      setLocalScreenTrack(screenVideoTrack);
 
       // Unpublish camera video
       if (localVideoTrack) {
         await client.unpublish(localVideoTrack);
       }
 
-      // Publish screen track
-      await client.publish(screenTrack);
+      // Publish screen track(s)
+      if (screenAudioTrack) {
+        await client.publish([screenVideoTrack, screenAudioTrack]);
+      } else {
+        await client.publish(screenVideoTrack);
+      }
       setIsScreenSharing(true);
 
       console.log('✅ Screen share started');
 
       // Handle screen share stopped (user clicks browser stop button)
-      screenTrack.on('track-ended', async () => {
+      screenVideoTrack.on('track-ended', async () => {
         console.log('🛑 Screen share stopped by user');
         await stopScreenShare();
       });

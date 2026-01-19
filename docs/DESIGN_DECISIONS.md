@@ -21,15 +21,24 @@ This document explains the key architectural and technical decisions made in bui
 
 ---
 
-## 1. Dual Video Architecture
+## 1. Multi-Provider Video Architecture
 
 ### Decision
-Use **WebRTC for 1:1 calls**, **Agora for 3+ participants**
+Use **WebRTC for 1:1 calls**, **Agora for connection groups**, **LiveKit for admin meetups**
 
 ### Context
-Needed to support both private coffee chats (2 people) and group meetups (3-17 people) with different requirements:
-- 1:1: Intimate, private, peer-to-peer
-- Groups: Scalable, reliable, professional quality
+Needed to support different video call scenarios with different requirements:
+- 1:1 coffee chats: Intimate, private, peer-to-peer
+- Connection groups: User-organized groups, moderate scale
+- Admin meetups: Large scheduled events, transcription support
+
+### Current Architecture
+
+| Use Case | Provider | Page | Features |
+|----------|----------|------|----------|
+| 1:1 Coffee Chats | WebRTC | `/meeting/[id]` | P2P, recording |
+| Connection Groups | Agora | `/connection-group-call/[id]` | Screen share, chat |
+| Admin Meetups | LiveKit | `/group-meeting/[id]` | Screen share, transcription, AI recap |
 
 ### Options Considered
 
@@ -40,32 +49,34 @@ Needed to support both private coffee chats (2 people) and group meetups (3-17 p
 - ❌ Poor quality at 5+ participants
 - ❌ No built-in features (screen share, recording)
 
-**Option B: Agora for everything**
-- ✅ Scales well to groups
-- ✅ Built-in features (screen share, recording, noise suppression)
-- ✅ Production-grade reliability
-- ❌ Costs money (after 10K minutes/month)
-- ❌ Overkill for 1:1 calls
-- ❌ Adds latency (goes through Agora servers)
+**Option B: Single provider for everything**
+- ✅ Simpler codebase
+- ❌ One-size-fits-all doesn't optimize each use case
+- ❌ Higher costs for simple 1:1 calls
 
-**Option C: Dual architecture (Chosen)**
-- ✅ Best of both worlds
+**Option C: Multi-provider architecture (Chosen)**
+- ✅ Best provider for each use case
 - ✅ WebRTC for lightweight 1:1
-- ✅ Agora for scalable groups
-- ✅ Optimized for each use case
-- ❌ Increased complexity (two codebases)
+- ✅ Agora for user-organized groups
+- ✅ LiveKit for admin features (transcription, AI integration)
+- ❌ Increased complexity (three codebases)
+
+### Why LiveKit for Admin Meetups?
+- **Server-side transcription**: LiveKit supports transcription agents
+- **Better AI integration**: Works well with AI-powered recap features
+- **Open source option**: Self-hostable if needed
+- **Modern SDK**: Better TypeScript support, cleaner APIs
 
 ### Rationale
-- **1:1 calls are frequent**: Most networking starts with coffee chats
-- **WebRTC is free**: No ongoing costs for peer-to-peer
-- **Groups need reliability**: Professional quality for larger meetups
-- **Agora free tier is generous**: 10K min/month covers small communities
-- **Complexity is manageable**: Both are well-documented
+- **1:1 calls are frequent**: Most networking starts with coffee chats (WebRTC = free)
+- **Connection groups are user-driven**: Agora provides reliable group calls
+- **Admin meetups need premium features**: LiveKit enables transcription and AI recaps
+- **Complexity is manageable**: Provider abstraction layer (`lib/videoProviders/`)
 
 ### Impact
-- Separate hooks: `useSignaling.ts` (WebRTC) vs `useAgora.js`
-- Separate pages: `/meeting/[id]` vs `/group-meeting/[id]`
-- Different databases: `video_rooms` vs `agora_rooms`
+- Provider abstraction: `lib/videoProviders/` with `BaseVideoProvider` interface
+- Separate hooks: `useSignaling.ts` (WebRTC), `useAgora.js`, `useVideoProvider.js`
+- Separate pages: `/meeting/[id]`, `/connection-group-call/[id]`, `/group-meeting/[id]`
 
 ---
 
@@ -615,7 +626,7 @@ module.exports = {
 
 | Decision | Rationale | Trade-off |
 |----------|-----------|-----------|
-| Dual Video (WebRTC + Agora) | Optimize each use case | Increased complexity |
+| Multi-Provider Video (WebRTC + Agora + LiveKit) | Optimize each use case | Increased complexity |
 | Socket.IO Polling First | Mobile reliability | Slight latency increase |
 | Supabase Singleton | Prevent duplicate subscriptions | None |
 | Profile Auto-creation | Reduce onboarding friction | Some incomplete profiles |

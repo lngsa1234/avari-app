@@ -16,10 +16,13 @@ import CallRecap from '@/components/CallRecap';
  */
 const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
   const videoRef = useRef(null);
+  const screenRef = useRef(null);
   const audioRef = useRef(null);
   const attachedVideoTrackRef = useRef(null);
+  const attachedScreenTrackRef = useRef(null);
   const attachedAudioTrackRef = useRef(null);
   const videoTrackSid = useRef(null);
+  const screenTrackSid = useRef(null);
   const audioTrackSid = useRef(null);
 
   // Handle video track - use track SID for stable comparison
@@ -73,6 +76,56 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
     };
   }, [participant.videoTrack]);
 
+  // Handle screen share track
+  useEffect(() => {
+    const screenElement = screenRef.current;
+    const track = participant.screenTrack;
+    const trackSid = track?.sid || track?.mediaStreamTrack?.id;
+
+    // Skip if no screen element or same track already attached
+    if (!screenElement) return;
+    if (trackSid && trackSid === screenTrackSid.current) return;
+
+    // Detach previous track if different
+    if (attachedScreenTrackRef.current && attachedScreenTrackRef.current !== track) {
+      try {
+        attachedScreenTrackRef.current.detach(screenElement);
+      } catch (e) {
+        // Ignore detach errors
+      }
+      attachedScreenTrackRef.current = null;
+      screenTrackSid.current = null;
+    }
+
+    // Attach new track
+    if (track && track !== attachedScreenTrackRef.current) {
+      try {
+        track.attach(screenElement);
+        attachedScreenTrackRef.current = track;
+        screenTrackSid.current = trackSid;
+
+        screenElement.play().catch(() => {
+          screenElement.muted = true;
+          screenElement.play().catch(() => {});
+        });
+      } catch (e) {
+        console.error('[LiveKit] Error attaching screen track:', e);
+      }
+    }
+
+    return () => {
+      if (attachedScreenTrackRef.current && screenElement) {
+        try {
+          attachedScreenTrackRef.current.detach(screenElement);
+        } catch (e) {
+          // Ignore detach errors
+        }
+        attachedScreenTrackRef.current = null;
+        screenTrackSid.current = null;
+      }
+    };
+  }, [participant.screenTrack]);
+
   // Handle audio track
   useEffect(() => {
     const audioElement = audioRef.current;
@@ -121,7 +174,18 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
       <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
-      {participant.hasVideo ? (
+
+      {/* Screen share takes priority when available */}
+      {participant.hasScreen ? (
+        <video
+          ref={screenRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-contain"
+          style={{ backgroundColor: '#1f2937' }}
+        />
+      ) : participant.hasVideo ? (
         <video
           ref={videoRef}
           autoPlay
@@ -143,8 +207,14 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
           </div>
         </div>
       )}
+
+      {/* Hidden video element for camera when screen sharing (keeps track attached) */}
+      {participant.hasScreen && participant.hasVideo && (
+        <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
+      )}
+
       <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
-        {participant.name} {participant.isSpeaking && '🔊'}
+        {participant.name} {participant.isSpeaking && '🔊'} {participant.hasScreen && '🖥️'}
       </div>
     </div>
   );
@@ -154,8 +224,10 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
     prevProps.participant.id === nextProps.participant.id &&
     prevProps.participant.hasVideo === nextProps.participant.hasVideo &&
     prevProps.participant.hasAudio === nextProps.participant.hasAudio &&
+    prevProps.participant.hasScreen === nextProps.participant.hasScreen &&
     prevProps.participant.videoTrack === nextProps.participant.videoTrack &&
-    prevProps.participant.audioTrack === nextProps.participant.audioTrack
+    prevProps.participant.audioTrack === nextProps.participant.audioTrack &&
+    prevProps.participant.screenTrack === nextProps.participant.screenTrack
   );
 });
 
@@ -207,6 +279,7 @@ export default function GroupVideoMeeting() {
   const participantTracksRef = useRef(new Map()); // Stable track storage
   const callStartTimeRef = useRef(null); // Store start time in ref for reliable access
   const updateDebounceRef = useRef(null); // Debounce timer for participant updates
+  const screenTrackRef = useRef(null); // Store screen share track for cleanup
 
   const {
     isRecording,
@@ -511,23 +584,27 @@ export default function GroupVideoMeeting() {
     const participants = Array.from(room.remoteParticipants.values()).map(p => {
       const videoPublication = p.getTrackPublication('camera');
       const audioPublication = p.getTrackPublication('microphone');
+      const screenPublication = p.getTrackPublication('screen_share');
 
       // Store tracks in ref for stability
       const existingTracks = participantTracksRef.current.get(p.identity) || {};
       const videoTrack = videoPublication?.track || existingTracks.videoTrack;
       const audioTrack = audioPublication?.track || existingTracks.audioTrack;
+      const screenTrack = screenPublication?.track || existingTracks.screenTrack;
 
-      participantTracksRef.current.set(p.identity, { videoTrack, audioTrack });
+      participantTracksRef.current.set(p.identity, { videoTrack, audioTrack, screenTrack });
 
       return {
         id: p.identity,
         name: p.name || p.identity,
         videoTrack,
         audioTrack,
+        screenTrack,
         isSpeaking: p.isSpeaking,
         // Track publication state for UI
         hasVideo: !!videoPublication?.track,
-        hasAudio: !!audioPublication?.track
+        hasAudio: !!audioPublication?.track,
+        hasScreen: !!screenPublication?.track
       };
     });
 
@@ -552,7 +629,8 @@ export default function GroupVideoMeeting() {
         return !existing ||
                existing.id !== p.id ||
                existing.hasVideo !== p.hasVideo ||
-               existing.hasAudio !== p.hasAudio;
+               existing.hasAudio !== p.hasAudio ||
+               existing.hasScreen !== p.hasScreen;
       });
 
       return hasChanges ? participants : prev;
@@ -650,13 +728,59 @@ export default function GroupVideoMeeting() {
   };
 
   const handleToggleScreenShare = async () => {
-    if (localParticipant) {
-      try {
-        await localParticipant.setScreenShareEnabled(!isScreenSharing);
-        setIsScreenSharing(!isScreenSharing);
-      } catch (error) {
-        console.error('[LiveKit] Screen share error:', error);
-        alert('Failed to toggle screen share: ' + error.message);
+    if (!localParticipant) return;
+
+    try {
+      if (isScreenSharing) {
+        // Stop screen sharing
+        if (screenTrackRef.current) {
+          await localParticipant.unpublishTrack(screenTrackRef.current);
+          screenTrackRef.current.stop();
+          screenTrackRef.current = null;
+        }
+        setIsScreenSharing(false);
+      } else {
+        // Start screen sharing - manually request permission first for better browser compatibility
+        // This ensures getDisplayMedia is called directly in the click handler
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: 'always' },
+          audio: false
+        });
+
+        // Now publish the screen track to LiveKit
+        const { LocalVideoTrack, Track } = await import('livekit-client');
+        const screenTrack = new LocalVideoTrack(screenStream.getVideoTracks()[0]);
+        screenTrackRef.current = screenTrack;
+        await localParticipant.publishTrack(screenTrack, {
+          name: 'screen',
+          source: Track.Source.ScreenShare
+        });
+
+        setIsScreenSharing(true);
+        console.log('[LiveKit] Screen share published successfully');
+
+        // Handle when user stops sharing via browser UI
+        screenStream.getVideoTracks()[0].onended = async () => {
+          console.log('[LiveKit] Screen share stopped by user');
+          if (screenTrackRef.current) {
+            await localParticipant.unpublishTrack(screenTrackRef.current);
+            screenTrackRef.current = null;
+          }
+          setIsScreenSharing(false);
+        };
+      }
+    } catch (error) {
+      console.error('[LiveKit] Screen share error:', error);
+
+      if (error.name === 'NotAllowedError') {
+        const isMac = navigator.platform?.toUpperCase().includes('MAC');
+        if (isMac) {
+          alert('Screen sharing requires permission.\n\nGo to: System Settings → Privacy & Security → Screen Recording\n\nEnable your browser and restart it.');
+        } else {
+          alert('Screen sharing was blocked. Please allow screen sharing when prompted.');
+        }
+      } else {
+        alert('Failed to share screen: ' + error.message);
       }
     }
   };
@@ -666,6 +790,12 @@ export default function GroupVideoMeeting() {
 
     if (isRecording) {
       stopRecording();
+    }
+
+    // Stop screen sharing if active
+    if (screenTrackRef.current) {
+      screenTrackRef.current.stop();
+      screenTrackRef.current = null;
     }
 
     // Stop transcription if active

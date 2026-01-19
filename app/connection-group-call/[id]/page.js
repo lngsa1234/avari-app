@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAgora } from '@/hooks/useAgora';
@@ -32,24 +32,65 @@ function generateNumericUid(uuidString) {
 
 /**
  * Component to render a remote user's video
- * Uses useEffect to properly manage video playback
+ * Memoized to prevent unnecessary re-renders that cause video flickering
+ * Uses proper video element attributes for Safari compatibility
  */
-function RemoteVideoPlayer({ remoteUser }) {
+const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ remoteUser }) {
   const videoRef = useRef(null);
+  const attachedTrackRef = useRef(null);
 
   useEffect(() => {
-    if (videoRef.current && remoteUser.videoTrack) {
-      console.log('🎬 Playing remote video for user:', remoteUser.uid);
-      remoteUser.videoTrack.play(videoRef.current);
+    const videoElement = videoRef.current;
+    const track = remoteUser.videoTrack;
+
+    // Skip if no video element
+    if (!videoElement) return;
+
+    // Skip if same track already attached
+    if (track && track === attachedTrackRef.current) return;
+
+    // Detach previous track if different
+    if (attachedTrackRef.current && attachedTrackRef.current !== track) {
+      try {
+        attachedTrackRef.current.stop();
+      } catch (e) {
+        // Ignore detach errors
+      }
+      attachedTrackRef.current = null;
+    }
+
+    // Attach new track
+    if (track && track !== attachedTrackRef.current) {
+      try {
+        track.play(videoElement, { fit: 'contain' });
+        attachedTrackRef.current = track;
+
+        // Safari fix: ensure video plays after attach
+        const videoEl = videoElement.querySelector('video');
+        if (videoEl) {
+          videoEl.setAttribute('playsinline', '');
+          videoEl.setAttribute('webkit-playsinline', '');
+          videoEl.play().catch(() => {
+            videoEl.muted = true;
+            videoEl.play().catch(() => {});
+          });
+        }
+      } catch (e) {
+        console.error('[Agora] Error playing video track:', e);
+      }
     }
 
     return () => {
-      if (remoteUser.videoTrack) {
-        console.log('🛑 Stopping remote video for user:', remoteUser.uid);
-        remoteUser.videoTrack.stop();
+      if (attachedTrackRef.current && videoElement) {
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {
+          // Ignore stop errors
+        }
+        attachedTrackRef.current = null;
       }
     };
-  }, [remoteUser.videoTrack, remoteUser.uid]);
+  }, [remoteUser.videoTrack]);
 
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
@@ -57,6 +98,7 @@ function RemoteVideoPlayer({ remoteUser }) {
         <div
           ref={videoRef}
           className="absolute inset-0"
+          style={{ backgroundColor: '#1f2937' }}
         />
       ) : (
         <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
@@ -76,36 +118,88 @@ function RemoteVideoPlayer({ remoteUser }) {
       </div>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison - only re-render if these specific props change
+  return prevProps.remoteUser.uid === nextProps.remoteUser.uid &&
+         prevProps.remoteUser.videoTrack === nextProps.remoteUser.videoTrack &&
+         prevProps.remoteUser.audioTrack === nextProps.remoteUser.audioTrack;
+});
 
 /**
  * Large version for speaker view
+ * Memoized to prevent unnecessary re-renders
+ * Uses proper video element attributes for Safari compatibility
  */
-function RemoteVideoPlayerLarge({ remoteUser }) {
+const RemoteVideoPlayerLarge = memo(function RemoteVideoPlayerLarge({ remoteUser }) {
   const videoRef = useRef(null);
+  const attachedTrackRef = useRef(null);
 
   useEffect(() => {
-    if (videoRef.current && remoteUser.videoTrack) {
-      console.log('🎬 Playing remote video (large) for user:', remoteUser.uid);
-      remoteUser.videoTrack.play(videoRef.current);
+    const videoElement = videoRef.current;
+    const track = remoteUser.videoTrack;
+
+    // Skip if no video element
+    if (!videoElement) return;
+
+    // Skip if same track already attached
+    if (track && track === attachedTrackRef.current) return;
+
+    // Detach previous track if different
+    if (attachedTrackRef.current && attachedTrackRef.current !== track) {
+      try {
+        attachedTrackRef.current.stop();
+      } catch (e) {
+        // Ignore stop errors
+      }
+      attachedTrackRef.current = null;
+    }
+
+    // Attach new track
+    if (track && track !== attachedTrackRef.current) {
+      try {
+        track.play(videoElement, { fit: 'contain' });
+        attachedTrackRef.current = track;
+
+        // Safari fix: ensure video plays after attach
+        const videoEl = videoElement.querySelector('video');
+        if (videoEl) {
+          videoEl.setAttribute('playsinline', '');
+          videoEl.setAttribute('webkit-playsinline', '');
+          videoEl.play().catch(() => {
+            videoEl.muted = true;
+            videoEl.play().catch(() => {});
+          });
+        }
+      } catch (e) {
+        console.error('[Agora] Error playing video track (large):', e);
+      }
     }
 
     return () => {
-      if (remoteUser.videoTrack) {
-        remoteUser.videoTrack.stop();
+      if (attachedTrackRef.current && videoElement) {
+        try {
+          attachedTrackRef.current.stop();
+        } catch (e) {
+          // Ignore stop errors
+        }
+        attachedTrackRef.current = null;
       }
     };
-  }, [remoteUser.videoTrack, remoteUser.uid]);
+  }, [remoteUser.videoTrack]);
 
   return (
     <>
-      <div ref={videoRef} className="w-full h-full" />
+      <div ref={videoRef} className="w-full h-full" style={{ backgroundColor: '#1f2937' }} />
       <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded">
         User {remoteUser.uid}
       </div>
     </>
   );
-}
+}, (prevProps, nextProps) => {
+  return prevProps.remoteUser.uid === nextProps.remoteUser.uid &&
+         prevProps.remoteUser.videoTrack === nextProps.remoteUser.videoTrack &&
+         prevProps.remoteUser.audioTrack === nextProps.remoteUser.audioTrack;
+});
 
 export default function ConnectionGroupVideoCall() {
   const params = useParams();

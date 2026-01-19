@@ -1,36 +1,46 @@
-# Avari - Group Video Calls (Agora)
+# Avari - Group Video Calls
 
-**Last Updated:** 2026-01-09
+**Last Updated:** 2026-01-17
 
-Complete guide to group video meetings using Agora RTC SDK.
+Complete guide to group video meetings using Agora and LiveKit.
 
 ---
 
 ## Table of Contents
 1. [Overview](#overview)
 2. [Architecture](#architecture)
-3. [Implementation](#implementation)
-4. [Features](#features)
-5. [UI Components](#ui-components)
-6. [Troubleshooting](#troubleshooting)
+3. [LiveKit (Admin Meetups)](#livekit-admin-meetups)
+4. [Agora (Connection Groups)](#agora-connection-groups)
+5. [Screen Sharing](#screen-sharing)
+6. [UI Components](#ui-components)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Overview
 
-**Purpose:** Support 3-17 participants in hybrid meetups
-**Technology:** Agora RTC SDK NG v4.24.2
-**Mode:** RTC (Real-time Communication)
-**Codec:** VP8 for video, Opus for audio
+Avari uses two providers for group video calls:
 
-### Key Features
+| Provider | Use Case | Page | Max Participants |
+|----------|----------|------|------------------|
+| **LiveKit** | Admin scheduled meetups | `/group-meeting/[id]` | 17 |
+| **Agora** | Connection group calls | `/connection-group-call/[id]` | 17 |
+
+### Key Features (Both Providers)
 - Grid view (responsive layout for 1-16 participants)
-- Speaker view (main speaker + thumbnails)
-- Screen sharing
-- Client-side recording (MediaRecorder)
+- Screen sharing with remote display
 - In-call text chat (Supabase Realtime)
 - Mute/unmute audio
 - Turn camera on/off
+
+### LiveKit-Specific Features
+- Client-side transcription (Web Speech API)
+- AI-powered call recaps
+- Connection quality metrics
+
+### Agora-Specific Features
+- Client-side recording (MediaRecorder)
+- Background blur
 
 ---
 
@@ -101,11 +111,163 @@ function generateNumericUid(uuidString) {
 
 ---
 
-## Implementation
+## LiveKit (Admin Meetups)
 
-### 1. useAgora Hook
+**File:** `app/group-meeting/[id]/page.js`
+**Provider:** `lib/videoProviders/LiveKitProvider.js`
 
-**File:** `hooks/useAgora.js`
+### Setup
+
+LiveKit requires a server URL and token:
+
+```javascript
+// Environment variables
+NEXT_PUBLIC_LIVEKIT_URL=wss://your-livekit-server.livekit.cloud
+LIVEKIT_API_KEY=your-api-key
+LIVEKIT_API_SECRET=your-api-secret
+```
+
+### Initialization
+
+```javascript
+const { Room, RoomEvent, VideoPresets } = await import('livekit-client');
+
+const room = new Room({
+  adaptiveStream: true,
+  dynacast: true,
+  videoCaptureDefaults: {
+    resolution: VideoPresets.h720.resolution,
+  },
+});
+
+// Get token from API
+const { token } = await fetch('/api/livekit-token', {
+  method: 'POST',
+  body: JSON.stringify({ roomId, participantId, participantName })
+}).then(r => r.json());
+
+// Connect
+await room.connect(liveKitUrl, token);
+await room.localParticipant.enableCameraAndMicrophone();
+```
+
+### Event Handlers
+
+```javascript
+// Participant joined
+room.on(RoomEvent.ParticipantConnected, (participant) => {
+  console.log('Participant connected:', participant.identity);
+});
+
+// Track subscribed (video/audio/screen from remote)
+room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+  // Handle camera, microphone, or screen_share tracks
+  const source = publication.source; // 'camera', 'microphone', 'screen_share'
+});
+
+// Track unsubscribed
+room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+  // Clean up track
+});
+```
+
+### Remote Participant Tracks
+
+```javascript
+// Get all tracks for a remote participant
+const videoPublication = participant.getTrackPublication('camera');
+const audioPublication = participant.getTrackPublication('microphone');
+const screenPublication = participant.getTrackPublication('screen_share');
+
+// Attach video track to element
+if (videoPublication?.track) {
+  videoPublication.track.attach(videoElement);
+}
+```
+
+---
+
+## Screen Sharing
+
+### LiveKit Screen Share Implementation
+
+Screen sharing in LiveKit requires manual `getDisplayMedia` for browser compatibility:
+
+```javascript
+const handleToggleScreenShare = async () => {
+  if (isScreenSharing) {
+    // Stop screen sharing
+    await localParticipant.unpublishTrack(screenTrack);
+    screenTrack.stop();
+  } else {
+    // Request permission directly in click handler for browser compatibility
+    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: 'always' },
+      audio: false
+    });
+
+    // Create and publish LiveKit track
+    const { LocalVideoTrack, Track } = await import('livekit-client');
+    const screenTrack = new LocalVideoTrack(screenStream.getVideoTracks()[0]);
+    await localParticipant.publishTrack(screenTrack, {
+      name: 'screen',
+      source: Track.Source.ScreenShare
+    });
+
+    // Handle browser stop button
+    screenStream.getVideoTracks()[0].onended = async () => {
+      await localParticipant.unpublishTrack(screenTrack);
+      setIsScreenSharing(false);
+    };
+  }
+};
+```
+
+### Receiving Screen Share
+
+Remote participants detect screen share via `getTrackPublication('screen_share')`:
+
+```javascript
+const participants = Array.from(room.remoteParticipants.values()).map(p => {
+  const screenPublication = p.getTrackPublication('screen_share');
+  return {
+    id: p.identity,
+    screenTrack: screenPublication?.track,
+    hasScreen: !!screenPublication?.track
+  };
+});
+```
+
+### Displaying Screen Share
+
+Screen share takes priority over camera when rendering:
+
+```javascript
+{participant.hasScreen ? (
+  <video ref={screenRef} className="object-contain" />
+) : participant.hasVideo ? (
+  <video ref={videoRef} className="object-cover" />
+) : (
+  <div>Camera off</div>
+)}
+```
+
+### macOS Permissions
+
+If screen share fails with "NotAllowedError: Permission denied by user" without showing a dialog:
+
+1. Open **System Settings** → **Privacy & Security** → **Screen Recording**
+2. Enable your browser (Chrome, Safari, Arc, etc.)
+3. **Restart the browser** (required for changes to take effect)
+
+---
+
+## Agora (Connection Groups)
+
+**File:** `app/connection-group-call/[id]/page.js`
+**Hook:** `hooks/useAgora.js`
+
+### useAgora Hook
 
 **Initialization:**
 ```javascript
@@ -245,9 +407,9 @@ const leave = async () => {
 
 ---
 
-### 2. Group Meeting Page
+### Connection Group Call Page
 
-**File:** `app/group-meeting/[id]/page.js`
+**File:** `app/connection-group-call/[id]/page.js`
 
 **Initialize Call:**
 ```javascript
@@ -312,9 +474,9 @@ function RemoteVideoPlayer({ remoteUser }) {
 
 ---
 
-## Features
+## Agora Features
 
-### 1. Grid View
+### Grid View
 
 **Responsive Layout:**
 ```javascript
@@ -345,7 +507,7 @@ const gridRows =
 - 7-9 participants: 3x3
 - 10+ participants: 4x4
 
-### 2. Speaker View
+### Speaker View
 
 **Layout:**
 - Main area: First remote user (or local if alone)
@@ -359,7 +521,7 @@ const gridRows =
 </button>
 ```
 
-### 3. Screen Sharing
+### Agora Screen Sharing
 
 **Start Sharing:**
 ```javascript
@@ -404,7 +566,7 @@ const stopScreenShare = async () => {
 };
 ```
 
-### 4. Recording
+### Recording
 
 **Hook:** `hooks/useRecording.js`
 
@@ -454,7 +616,7 @@ const startRecording = async (stream) => {
 - Mix remote audio streams into recording
 - Upload to Supabase Storage
 
-### 5. In-call Chat
+### In-call Chat
 
 **Implementation:**
 - Supabase `call_messages` table

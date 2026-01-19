@@ -342,7 +342,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
             .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUser.id})`)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           // Get unread count
           const { count: unreadCount } = await supabase
