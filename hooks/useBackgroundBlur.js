@@ -20,6 +20,8 @@ export function useBackgroundBlur(provider = 'webrtc') {
   const segmenterRef = useRef(null);
   const canvasRef = useRef(null);
   const animationFrameRef = useRef(null);
+  const videoTrackRef = useRef(null); // Store video track reference for cleanup
+  const extensionRef = useRef(null); // Store Agora extension to reuse
 
   // Check if blur is supported
   useEffect(() => {
@@ -124,16 +126,54 @@ export function useBackgroundBlur(provider = 'webrtc') {
       setIsLoading(true);
       setError(null);
 
+      // If we already have a processor, just re-enable it
+      if (processorRef.current && videoTrackRef.current === videoTrack) {
+        console.log('[BackgroundBlur] Re-enabling existing processor');
+        try {
+          await processorRef.current.enable();
+          console.log('[BackgroundBlur] Agora blur re-enabled');
+          return true;
+        } catch (e) {
+          console.log('[BackgroundBlur] Re-enable failed, will recreate:', e.message);
+        }
+      }
+
+      // Clean up any existing processors
+      try {
+        if (processorRef.current) {
+          await processorRef.current.disable();
+          processorRef.current.unpipe();
+        }
+      } catch (e) {
+        console.log('[BackgroundBlur] Processor cleanup:', e.message);
+      }
+
+      // Unpipe the video track to clear any piped processors
+      try {
+        videoTrack.unpipe();
+      } catch (e) {
+        console.log('[BackgroundBlur] Track unpipe:', e.message);
+      }
+      processorRef.current = null;
+      console.log('[BackgroundBlur] Cleanup complete');
+
       // Dynamically import Agora extension
       const VirtualBackgroundExtension = (await import('agora-extension-virtual-background')).default;
       const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
 
-      // Register extension
-      const extension = new VirtualBackgroundExtension();
-      AgoraRTC.registerExtensions([extension]);
+      // Reuse existing extension or create new one
+      if (!extensionRef.current) {
+        extensionRef.current = new VirtualBackgroundExtension();
+        try {
+          AgoraRTC.registerExtensions([extensionRef.current]);
+          console.log('[BackgroundBlur] Extension registered');
+        } catch (e) {
+          console.log('[BackgroundBlur] Extension registration:', e.message);
+        }
+      }
 
       // Create and initialize processor
-      const processor = extension.createProcessor();
+      const processor = extensionRef.current.createProcessor();
       await processor.init();
 
       // Configure blur
@@ -147,6 +187,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
       await processor.enable();
 
       processorRef.current = processor;
+      videoTrackRef.current = videoTrack; // Store reference for cleanup
       console.log('[BackgroundBlur] Agora blur enabled');
 
       return true;
@@ -238,11 +279,16 @@ export function useBackgroundBlur(provider = 'webrtc') {
 
       if (processorRef.current) {
         if (provider === 'agora') {
+          // Just disable, don't unpipe - allows re-enabling without re-piping
           await processorRef.current.disable();
+          console.log('[BackgroundBlur] Agora processor disabled (kept for re-enable)');
+          // Don't clear processorRef so we can re-enable
         } else if (provider === 'livekit' && videoTrack) {
           await videoTrack.stopProcessor();
+          processorRef.current = null;
+        } else {
+          processorRef.current = null;
         }
-        processorRef.current = null;
       }
 
       setIsBlurEnabled(false);
