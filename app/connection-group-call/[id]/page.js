@@ -894,7 +894,11 @@ export default function ConnectionGroupVideoCall() {
             </div>
 
             {/* Thumbnails */}
-            <div className="flex gap-2 overflow-x-auto pb-2" style={{ minHeight: '144px' }}>
+            <div className="flex gap-2 overflow-x-auto pb-2" style={{ minHeight: '144px', backgroundColor: 'rgba(255,0,0,0.3)' }}>
+              {/* Debug: show count */}
+              <div className="absolute bottom-40 left-2 bg-yellow-500 text-black px-2 py-1 rounded text-xs z-50">
+                Thumbnails: Local + {remoteUsersList.slice(1).length} remote
+              </div>
               {/* Local thumbnail - show if remote user is in main area */}
               {remoteUsersList.length > 0 && (
                 <div className="w-48 h-36 bg-gray-800 rounded-lg overflow-hidden flex-shrink-0 relative">
