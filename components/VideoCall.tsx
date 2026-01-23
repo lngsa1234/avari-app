@@ -51,6 +51,7 @@ export default function VideoCall({
   const [currentUserName, setCurrentUserName] = useState('');
   const [callStartTime, setCallStartTime] = useState<string | null>(null);
   const [otherUserProfile, setOtherUserProfile] = useState<any>(null);
+  const [isLocalVideoMain, setIsLocalVideoMain] = useState(false); // Speaker view: false = remote is main
 
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -708,25 +709,43 @@ export default function VideoCall({
 
       {/* Video containers */}
       <div className={`flex-1 relative transition-all duration-300 ${showChat ? 'md:mr-80' : ''}`}>
-        {/* Remote video (full screen) */}
+        {/* Remote video */}
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
-          className="w-full h-full object-cover"
+          className={`object-cover transition-all duration-300 ${
+            isLocalVideoMain
+              ? 'absolute top-4 right-4 w-48 h-36 rounded-lg shadow-xl z-10'
+              : 'w-full h-full'
+          }`}
         />
 
-        {/* Local video (small preview) */}
-        <div className="absolute top-4 right-4 w-48 h-36 bg-gray-900 rounded-lg overflow-hidden shadow-xl">
-          <video
-            ref={localVideoRef}
-            key={localStreamRef.current ? 'has-stream' : 'no-stream'}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover mirror"
-            style={{ transform: 'scaleX(-1)' }}
-          />
+        {/* Local video */}
+        <video
+          ref={localVideoRef}
+          key={localStreamRef.current ? 'has-stream' : 'no-stream'}
+          autoPlay
+          playsInline
+          muted
+          className={`object-cover transition-all duration-300 ${
+            isLocalVideoMain
+              ? 'w-full h-full'
+              : 'absolute top-4 right-4 w-48 h-36 rounded-lg shadow-xl z-10'
+          }`}
+          style={{ transform: 'scaleX(-1)' }}
+        />
+
+        {/* Clickable overlay on small video to swap */}
+        <div
+          className="absolute top-4 right-4 w-48 h-36 cursor-pointer hover:ring-2 hover:ring-purple-500 rounded-lg transition-all z-20"
+          onClick={() => setIsLocalVideoMain(!isLocalVideoMain)}
+          title="Tap to swap videos"
+        >
+          {/* Swap indicator */}
+          <div className="absolute bottom-1 right-1 bg-black bg-opacity-50 rounded px-1.5 py-0.5 text-xs text-white">
+            {isLocalVideoMain ? otherUserName : 'You'}
+          </div>
         </div>
 
         {/* Call state overlay */}

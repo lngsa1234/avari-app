@@ -41,6 +41,8 @@ export default function CallRecap({
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [aiSummary, setAiSummary] = useState(null);
+  const [topicsDiscussed, setTopicsDiscussed] = useState([]);
+  const [keyTakeaways, setKeyTakeaways] = useState([]);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'transcript', 'metrics', 'recommendations'
 
@@ -194,6 +196,8 @@ export default function CallRecap({
       if (response.ok) {
         const data = await response.json();
         setAiSummary(data.summary);
+        setTopicsDiscussed(data.topicsDiscussed || []);
+        setKeyTakeaways(data.keyTakeaways || []);
       }
     } catch (err) {
       console.error('Error generating AI summary:', err);
@@ -203,7 +207,14 @@ export default function CallRecap({
   };
 
   // Public function for manual regeneration
-  const generateAiSummary = () => generateAiSummaryInternal(messages);
+  const generateAiSummary = () => {
+    // Reset current state to allow regeneration
+    setAiSummary(null);
+    setTopicsDiscussed([]);
+    setKeyTakeaways([]);
+    // Then generate new summary
+    setTimeout(() => generateAiSummaryInternal(messages), 0);
+  };
 
   // Handle connection recommendation actions
   const handleConnectFromRec = async (rec) => {
@@ -428,6 +439,44 @@ export default function CallRecap({
                       No summary available
                     </p>
                   )}
+                </div>
+              )}
+
+              {/* Topics Discussed */}
+              {topicsDiscussed.length > 0 && (
+                <div className="bg-gray-700 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xl">&#128172;</span>
+                    <p className="text-gray-400 text-sm">Topics Discussed</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {topicsDiscussed.map((topic, index) => (
+                      <span
+                        key={index}
+                        className="bg-purple-600/30 text-purple-300 px-3 py-1.5 rounded-full text-sm"
+                      >
+                        {topic}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Key Takeaways */}
+              {keyTakeaways.length > 0 && (
+                <div className="bg-gray-700 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xl">&#128161;</span>
+                    <p className="text-gray-400 text-sm">Key Takeaways</p>
+                  </div>
+                  <ul className="space-y-2">
+                    {keyTakeaways.map((takeaway, index) => (
+                      <li key={index} className="flex items-start gap-2 text-white text-sm">
+                        <span className="text-green-400 mt-0.5">&#10003;</span>
+                        <span>{takeaway}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
 

@@ -24,6 +24,7 @@ export default function useSpeechRecognition({
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
   const restartTimeoutRef = useRef(null);
+  const instanceIdRef = useRef(0); // Track recognition instance to prevent stale restarts
 
   // Check browser support and detect Safari
   useEffect(() => {
@@ -47,7 +48,7 @@ export default function useSpeechRecognition({
   }, []);
 
   // Initialize recognition
-  const initRecognition = useCallback(() => {
+  const initRecognition = useCallback((instanceId) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return null;
 
@@ -61,22 +62,32 @@ export default function useSpeechRecognition({
     recognition.lang = language;
     recognition.maxAlternatives = 1;
 
+    console.log('[SpeechRecognition] Created instance', instanceId, 'with language:', language);
+
     recognition.onstart = () => {
-      console.log('[SpeechRecognition] Started - continuous:', recognition.continuous);
+      console.log('[SpeechRecognition] Started - continuous:', recognition.continuous, 'lang:', recognition.lang);
       setIsListening(true);
       isListeningRef.current = true;
       setError(null);
     };
 
     recognition.onend = () => {
-      console.log('[SpeechRecognition] Ended');
+      console.log('[SpeechRecognition] Ended for instance', instanceId);
+
+      // Only handle if this is still the current instance
+      if (instanceId !== instanceIdRef.current) {
+        console.log('[SpeechRecognition] Ignoring onend for old instance', instanceId, '(current:', instanceIdRef.current, ')');
+        return;
+      }
+
       setIsListening(false);
 
       // Auto-restart if we're supposed to be listening
-      if (isListeningRef.current) {
+      if (isListeningRef.current && recognitionRef.current) {
         console.log('[SpeechRecognition] Auto-restarting...');
         restartTimeoutRef.current = setTimeout(() => {
-          if (isListeningRef.current && recognitionRef.current) {
+          // Double-check instance is still current
+          if (isListeningRef.current && recognitionRef.current && instanceId === instanceIdRef.current) {
             try {
               recognitionRef.current.start();
             } catch (e) {
@@ -162,18 +173,21 @@ export default function useSpeechRecognition({
     // Clear any existing timeout
     if (restartTimeoutRef.current) {
       clearTimeout(restartTimeoutRef.current);
+      restartTimeoutRef.current = null;
     }
 
-    // Create new recognition instance
-    if (!recognitionRef.current) {
-      recognitionRef.current = initRecognition();
-    }
+    // Always create a new recognition instance to ensure fresh settings
+    // Increment instance ID to invalidate old instance's callbacks
+    instanceIdRef.current += 1;
+    const currentInstanceId = instanceIdRef.current;
+
+    recognitionRef.current = initRecognition(currentInstanceId);
 
     if (recognitionRef.current) {
       try {
         isListeningRef.current = true;
         recognitionRef.current.start();
-        console.log('[SpeechRecognition] Starting...');
+        console.log('[SpeechRecognition] Starting instance', currentInstanceId);
         return true;
       } catch (e) {
         // Already started
@@ -206,7 +220,6 @@ export default function useSpeechRecognition({
       } catch (e) {
         console.log('[SpeechRecognition] Stop error:', e.message);
       }
-      // Clear the instance so next start creates fresh one with updated settings
       recognitionRef.current = null;
     }
 

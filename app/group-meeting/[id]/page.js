@@ -24,9 +24,13 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
   const videoTrackSid = useRef(null);
   const screenTrackSid = useRef(null);
   const audioTrackSid = useRef(null);
+  const [isVideoFrozen, setIsVideoFrozen] = useState(false);
+  const lastTimeUpdateRef = useRef(Date.now());
+  const frozenCheckIntervalRef = useRef(null);
 
   // Handle video track - use track SID for stable comparison
   useEffect(() => {
+    let isMounted = true; // Track mount state to handle StrictMode
     const videoElement = videoRef.current;
     const track = participant.videoTrack;
     const trackSid = track?.sid || track?.mediaStreamTrack?.id;
@@ -53,17 +57,25 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
         attachedVideoTrackRef.current = track;
         videoTrackSid.current = trackSid;
 
-        // Safari needs explicit play() call - only call once
-        videoElement.play().catch(() => {
-          videoElement.muted = true;
-          videoElement.play().catch(() => {});
+        // Safari needs explicit play() call
+        videoElement.play().catch(e => {
+          // Ignore AbortError - expected during StrictMode unmount
+          if (e.name === 'AbortError') return;
+          // Try muted playback for other autoplay restrictions
+          if (isMounted) {
+            videoElement.muted = true;
+            videoElement.play().catch(() => {});
+          }
         });
       } catch (e) {
-        console.error('[LiveKit] Error attaching video track:', e);
+        if (isMounted) {
+          console.error('[LiveKit] Error attaching video track:', e);
+        }
       }
     }
 
     return () => {
+      isMounted = false;
       if (attachedVideoTrackRef.current && videoElement) {
         try {
           attachedVideoTrackRef.current.detach(videoElement);
@@ -76,8 +88,58 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
     };
   }, [participant.videoTrack]);
 
+  // Detect frozen video and attempt recovery
+  useEffect(() => {
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    const handleTimeUpdate = () => {
+      lastTimeUpdateRef.current = Date.now();
+      if (isVideoFrozen) {
+        setIsVideoFrozen(false);
+        console.log('[LiveKit] Video recovered for', participant.name);
+      }
+    };
+
+    const handleStalled = () => {
+      console.log('[LiveKit] Video stalled for', participant.name);
+      setIsVideoFrozen(true);
+      // Try to recover by re-playing
+      videoElement.play().catch(() => {});
+    };
+
+    const handleWaiting = () => {
+      console.log('[LiveKit] Video waiting for', participant.name);
+    };
+
+    // Check for frozen video every 3 seconds
+    frozenCheckIntervalRef.current = setInterval(() => {
+      const timeSinceUpdate = Date.now() - lastTimeUpdateRef.current;
+      if (timeSinceUpdate > 5000 && participant.videoTrack && !videoElement.paused) {
+        console.log('[LiveKit] Video appears frozen for', participant.name, '- attempting recovery');
+        setIsVideoFrozen(true);
+        // Try to recover
+        videoElement.play().catch(() => {});
+      }
+    }, 3000);
+
+    videoElement.addEventListener('timeupdate', handleTimeUpdate);
+    videoElement.addEventListener('stalled', handleStalled);
+    videoElement.addEventListener('waiting', handleWaiting);
+
+    return () => {
+      if (frozenCheckIntervalRef.current) {
+        clearInterval(frozenCheckIntervalRef.current);
+      }
+      videoElement.removeEventListener('timeupdate', handleTimeUpdate);
+      videoElement.removeEventListener('stalled', handleStalled);
+      videoElement.removeEventListener('waiting', handleWaiting);
+    };
+  }, [participant.name, participant.videoTrack, isVideoFrozen]);
+
   // Handle screen share track
   useEffect(() => {
+    let isMounted = true;
     const screenElement = screenRef.current;
     const track = participant.screenTrack;
     const trackSid = track?.sid || track?.mediaStreamTrack?.id;
@@ -104,16 +166,22 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
         attachedScreenTrackRef.current = track;
         screenTrackSid.current = trackSid;
 
-        screenElement.play().catch(() => {
-          screenElement.muted = true;
-          screenElement.play().catch(() => {});
+        screenElement.play().catch(e => {
+          if (e.name === 'AbortError') return;
+          if (isMounted) {
+            screenElement.muted = true;
+            screenElement.play().catch(() => {});
+          }
         });
       } catch (e) {
-        console.error('[LiveKit] Error attaching screen track:', e);
+        if (isMounted) {
+          console.error('[LiveKit] Error attaching screen track:', e);
+        }
       }
     }
 
     return () => {
+      isMounted = false;
       if (attachedScreenTrackRef.current && screenElement) {
         try {
           attachedScreenTrackRef.current.detach(screenElement);
@@ -213,6 +281,24 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
         <video ref={videoRef} autoPlay playsInline muted style={{ display: 'none' }} />
       )}
 
+      {/* Frozen video indicator */}
+      {isVideoFrozen && participant.hasVideo && (
+        <div className="absolute top-2 right-2 bg-red-500 bg-opacity-80 text-white px-2 py-1 rounded text-xs z-20 animate-pulse">
+          ⚠️ Reconnecting...
+        </div>
+      )}
+
+      {/* Connection quality indicator */}
+      {participant.connectionQuality && participant.connectionQuality !== 'excellent' && (
+        <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs z-20 ${
+          participant.connectionQuality === 'poor' ? 'bg-red-500 text-white' :
+          participant.connectionQuality === 'fair' ? 'bg-yellow-500 text-black' : 'bg-green-500 text-white'
+        }`}>
+          {participant.connectionQuality === 'poor' ? '📶 Poor' :
+           participant.connectionQuality === 'fair' ? '📶 Fair' : '📶 Good'}
+        </div>
+      )}
+
       <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
         {participant.name} {participant.isSpeaking && '🔊'} {participant.hasScreen && '🖥️'}
       </div>
@@ -227,7 +313,8 @@ const RemoteVideoPlayer = memo(function RemoteVideoPlayer({ participant }) {
     prevProps.participant.hasScreen === nextProps.participant.hasScreen &&
     prevProps.participant.videoTrack === nextProps.participant.videoTrack &&
     prevProps.participant.audioTrack === nextProps.participant.audioTrack &&
-    prevProps.participant.screenTrack === nextProps.participant.screenTrack
+    prevProps.participant.screenTrack === nextProps.participant.screenTrack &&
+    prevProps.participant.connectionQuality === nextProps.participant.connectionQuality
   );
 });
 
@@ -260,13 +347,20 @@ export default function GroupVideoMeeting() {
   const [meetupInfo, setMeetupInfo] = useState(null);
   const [participantCount, setParticipantCount] = useState(0);
   const [gridView, setGridView] = useState(true);
+  const [isLocalMain, setIsLocalMain] = useState(false); // For 2-person PiP swap
   const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showRecap, setShowRecap] = useState(false);
   const [recapData, setRecapData] = useState(null);
   const [transcript, setTranscript] = useState([]);
-  const [metrics, setMetrics] = useState(null);
+  const [metrics, setMetrics] = useState({
+    connectionQuality: 'unknown',
+    latency: 0,
+    packetLoss: 0,
+    bitrate: 0,
+    videoResolution: 'N/A'
+  });
   const [callStartTime, setCallStartTime] = useState(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionLanguage, setTranscriptionLanguage] = useState(
@@ -284,6 +378,7 @@ export default function GroupVideoMeeting() {
   const callStartTimeRef = useRef(null); // Store start time in ref for reliable access
   const updateDebounceRef = useRef(null); // Debounce timer for participant updates
   const screenTrackRef = useRef(null); // Store screen share track for cleanup
+  const metricsIntervalRef = useRef(null); // Interval for collecting metrics
 
   const {
     isRecording,
@@ -389,6 +484,171 @@ export default function GroupVideoMeeting() {
       }
     };
   }, [channelName, user]);
+
+  // Collect metrics periodically when connected
+  useEffect(() => {
+    if (!isConnected || !roomRef.current) {
+      return;
+    }
+
+    const collectMetrics = async () => {
+      const room = roomRef.current;
+      if (!room || room.state === 'disconnected') return;
+
+      try {
+        // Get local video track stats
+        const videoTrack = room.localParticipant?.getTrackPublication('camera')?.track;
+        const audioTrack = room.localParticipant?.getTrackPublication('microphone')?.track;
+
+        let videoResolution = 'N/A';
+        let bitrate = 0;
+        let packetLoss = 0;
+        let latency = 0;
+
+        // Try to get sender stats from video track
+        if (videoTrack?.sender) {
+          try {
+            const stats = await videoTrack.sender.getStats();
+            stats.forEach(report => {
+              if (report.type === 'outbound-rtp' && report.kind === 'video') {
+                // Calculate bitrate from bytes sent
+                if (report.bytesSent && report.timestamp) {
+                  bitrate = Math.round((report.bytesSent * 8) / 1000); // kbps total (approximate)
+                }
+                // Get resolution
+                if (report.frameWidth && report.frameHeight) {
+                  videoResolution = `${report.frameWidth}x${report.frameHeight}`;
+                }
+              }
+              if (report.type === 'remote-inbound-rtp') {
+                // Packet loss and round trip time
+                if (report.packetsLost !== undefined && report.packetsReceived !== undefined) {
+                  const total = report.packetsLost + report.packetsReceived;
+                  packetLoss = total > 0 ? (report.packetsLost / total) * 100 : 0;
+                }
+                if (report.roundTripTime !== undefined) {
+                  latency = Math.round(report.roundTripTime * 1000); // Convert to ms
+                }
+              }
+              if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                if (report.currentRoundTripTime !== undefined) {
+                  latency = Math.round(report.currentRoundTripTime * 1000);
+                }
+              }
+            });
+          } catch (e) {
+            // Stats not available
+          }
+        }
+
+        // Also try to get stats from audio track for latency
+        if (audioTrack?.sender && latency === 0) {
+          try {
+            const stats = await audioTrack.sender.getStats();
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                if (report.currentRoundTripTime !== undefined) {
+                  latency = Math.round(report.currentRoundTripTime * 1000);
+                }
+              }
+            });
+          } catch (e) {
+            // Stats not available
+          }
+        }
+
+        setMetrics(prev => ({
+          ...prev,
+          latency,
+          packetLoss: parseFloat(packetLoss.toFixed(1)),
+          bitrate,
+          videoResolution
+        }));
+      } catch (e) {
+        console.error('[LiveKit] Error collecting metrics:', e);
+      }
+    };
+
+    // Collect metrics immediately and then every 5 seconds
+    collectMetrics();
+    metricsIntervalRef.current = setInterval(collectMetrics, 5000);
+
+    return () => {
+      if (metricsIntervalRef.current) {
+        clearInterval(metricsIntervalRef.current);
+        metricsIntervalRef.current = null;
+      }
+    };
+  }, [isConnected]);
+
+  // Handle tab visibility changes - recover video streams when returning to tab
+  useEffect(() => {
+    if (!isConnected || !roomRef.current) {
+      return;
+    }
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && roomRef.current) {
+        console.log('[LiveKit] Tab became visible, recovering video streams...');
+
+        const room = roomRef.current;
+
+        // For each remote participant, request keyframe via PLI
+        room.remoteParticipants.forEach((participant) => {
+          const videoPublication = participant.getTrackPublication('camera');
+          if (videoPublication?.track) {
+            const track = videoPublication.track;
+
+            // Try to request PLI (Picture Loss Indication) to get a keyframe faster
+            // This is done via the RTCRtpReceiver
+            if (track.receiver) {
+              try {
+                // Request keyframe by sending PLI
+                // Note: This is handled automatically by WebRTC, but we can try to trigger it
+                const receiver = track.receiver;
+                if (receiver.transport?.iceTransport) {
+                  // Connection is active, WebRTC should auto-recover
+                }
+              } catch (e) {
+                // Ignore errors
+              }
+            }
+
+            // Find video elements displaying this track and ensure they're playing
+            const videoElements = document.querySelectorAll('video');
+            videoElements.forEach(video => {
+              const stream = video.srcObject;
+              if (stream instanceof MediaStream) {
+                const videoTracks = stream.getVideoTracks();
+                const hasThisTrack = videoTracks.some(t => t.id === track.mediaStreamTrack?.id);
+
+                if (hasThisTrack) {
+                  // Force play to ensure video is running
+                  video.play().catch(() => {});
+                }
+              }
+            });
+          }
+        });
+
+        // Give a moment for recovery, then force refresh all video elements
+        setTimeout(() => {
+          const videoElements = document.querySelectorAll('video');
+          videoElements.forEach(video => {
+            if (video.srcObject && video.paused) {
+              video.play().catch(() => {});
+            }
+          });
+        }, 100);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isConnected]);
 
   const initializeLiveKitCall = async () => {
     // Prevent double initialization (React StrictMode)
@@ -568,6 +828,13 @@ export default function GroupVideoMeeting() {
           ...prev,
           connectionQuality: quality
         }));
+      } else {
+        // Update remote participant's connection quality
+        setRemoteParticipants(prev => prev.map(p =>
+          p.id === participant.identity
+            ? { ...p, connectionQuality: quality }
+            : p
+        ));
       }
     });
 
@@ -628,6 +895,7 @@ export default function GroupVideoMeeting() {
         audioTrack,
         screenTrack,
         isSpeaking: p.isSpeaking,
+        connectionQuality: p.connectionQuality, // Track connection quality
         // Track publication state for UI
         hasVideo: !!videoPublication?.track,
         hasAudio: !!audioPublication?.track,
@@ -708,6 +976,12 @@ export default function GroupVideoMeeting() {
     if (updateDebounceRef.current) {
       clearTimeout(updateDebounceRef.current);
       updateDebounceRef.current = null;
+    }
+
+    // Clear metrics collection interval
+    if (metricsIntervalRef.current) {
+      clearInterval(metricsIntervalRef.current);
+      metricsIntervalRef.current = null;
     }
 
     if (roomRef.current) {
@@ -1043,55 +1317,72 @@ export default function GroupVideoMeeting() {
 
   // Play local video with Safari support
   const localAttachedTrackRef = useRef(null);
+  const lastVideoElementRef = useRef(null); // Track which element has the track
 
   useEffect(() => {
+    let isMounted = true; // Track mount state to handle StrictMode double-mount
     const videoElement = localVideoRef.current;
     const track = localVideoTrack;
 
     if (!videoElement) return;
 
-    // Detach previous track if different or video turned off
-    if (localAttachedTrackRef.current && (localAttachedTrackRef.current !== track || isVideoOff)) {
+    // Check if video element changed (e.g., view toggle)
+    const elementChanged = lastVideoElementRef.current !== videoElement;
+
+    // Detach from previous element if it changed or track changed
+    if (localAttachedTrackRef.current && (elementChanged || localAttachedTrackRef.current !== track || isVideoOff)) {
       try {
-        localAttachedTrackRef.current.detach(videoElement);
+        // Detach from the OLD element, not the new one
+        if (lastVideoElementRef.current) {
+          localAttachedTrackRef.current.detach(lastVideoElementRef.current);
+        }
       } catch (e) {
-        console.log('[LiveKit] Error detaching local video:', e);
+        // Ignore detach errors
       }
       localAttachedTrackRef.current = null;
     }
 
-    // Attach new track if video is on
-    if (track && !isVideoOff && track !== localAttachedTrackRef.current) {
+    // Attach track to new element if video is on
+    if (track && !isVideoOff && (!localAttachedTrackRef.current || elementChanged)) {
       try {
         track.attach(videoElement);
         localAttachedTrackRef.current = track;
+        lastVideoElementRef.current = videoElement;
 
         // Safari needs explicit play() call
         const playPromise = videoElement.play();
         if (playPromise !== undefined) {
           playPromise.catch(e => {
-            console.log('[LiveKit] Local video autoplay prevented:', e);
+            // Ignore AbortError - expected during StrictMode unmount/remount
+            if (e.name === 'AbortError') return;
+            if (isMounted) {
+              console.log('[LiveKit] Local video autoplay prevented:', e.name);
+            }
           });
         }
       } catch (e) {
-        console.error('[LiveKit] Error attaching local video:', e);
+        if (isMounted) {
+          console.error('[LiveKit] Error attaching local video:', e);
+        }
       }
     }
 
     return () => {
-      if (localAttachedTrackRef.current && videoElement) {
+      isMounted = false;
+      if (localAttachedTrackRef.current && lastVideoElementRef.current) {
         try {
-          localAttachedTrackRef.current.detach(videoElement);
+          localAttachedTrackRef.current.detach(lastVideoElementRef.current);
         } catch (e) {
-          console.log('[LiveKit] Error detaching local video on cleanup:', e);
+          // Ignore detach errors on cleanup
         }
         localAttachedTrackRef.current = null;
+        lastVideoElementRef.current = null;
       }
     };
-  }, [localVideoTrack, isVideoOff]);
+  }, [localVideoTrack, isVideoOff, gridView, remoteParticipants.length, isLocalMain]); // Re-run when view, participant count, or swap changes
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
+    <div className="h-screen bg-gray-900 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-4 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -1128,54 +1419,184 @@ export default function GroupVideoMeeting() {
         </div>
       </div>
 
-      {/* Video Grid */}
-      <div className="flex-1 p-3 relative" style={{ display: 'flex', flexDirection: 'column' }}>
-        <div
-          className={`w-full flex-1 grid gap-2 ${
-            participantCount === 1 ? 'grid-cols-1' :
-            participantCount === 2 ? 'grid-cols-2' :
-            participantCount <= 4 ? 'grid-cols-2' :
-            participantCount <= 6 ? 'grid-cols-3' :
-            'grid-cols-4'
-          }`}
-          style={{ minHeight: 0 }}
-        >
-          {/* Local Video */}
-          <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
-            {!isVideoOff ? (
-              <video
-                ref={localVideoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover mirror"
-                style={{ transform: 'scaleX(-1)' }}
-              />
-            ) : (
-              <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-2">
-                    <span className="text-2xl text-white">
-                      {user?.email?.charAt(0).toUpperCase()}
-                    </span>
+      {/* Video Grid / Speaker View */}
+      <div className={`flex-1 p-3 relative overflow-hidden transition-all duration-300 ${showChat ? 'mr-80' : ''}`} style={{ minHeight: 0 }}>
+        {/* For 2 participants: Render both videos once, swap via CSS only */}
+        {remoteParticipants.length === 1 && (
+          <>
+            {/* Remote Video - single instance, CSS controls size/position */}
+            <div
+              className={`bg-gray-800 rounded-lg overflow-hidden absolute z-0 ${
+                gridView
+                  ? 'right-3 top-3 bottom-3 w-[calc(50%-6px)]'  // Grid: right half
+                  : isLocalMain
+                    ? 'top-4 right-4 w-36 h-28 md:w-48 md:h-36 shadow-xl z-10 cursor-pointer hover:ring-2 hover:ring-purple-500'
+                    : 'inset-0'
+              }`}
+              onClick={!gridView && isLocalMain ? () => setIsLocalMain(false) : undefined}
+            >
+              <RemoteVideoPlayer key={remoteParticipants[0].id} participant={remoteParticipants[0]} />
+              {!gridView && isLocalMain && (
+                <div className="absolute bottom-1 right-1 bg-black bg-opacity-60 text-white px-1.5 py-0.5 rounded text-xs z-20">
+                  {remoteParticipants[0].name}
+                </div>
+              )}
+            </div>
+
+            {/* Local Video - single instance, CSS controls size/position */}
+            <div
+              className={`bg-gray-800 rounded-lg overflow-hidden absolute z-0 ${
+                gridView
+                  ? 'left-3 top-3 bottom-3 w-[calc(50%-6px)]'  // Grid: left half
+                  : isLocalMain
+                    ? 'inset-0'
+                    : 'top-4 right-4 w-36 h-28 md:w-48 md:h-36 shadow-xl z-10 cursor-pointer hover:ring-2 hover:ring-purple-500'
+              }`}
+              onClick={!gridView && !isLocalMain ? () => setIsLocalMain(true) : undefined}
+            >
+              {!isVideoOff ? (
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className={`bg-rose-500 rounded-full flex items-center justify-center mx-auto ${
+                      !gridView && !isLocalMain ? 'w-12 h-12' : 'w-20 h-20 mb-2'
+                    }`}>
+                      <span className={`text-white ${!gridView && !isLocalMain ? 'text-lg' : 'text-2xl'}`}>
+                        {user?.email?.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
+                    {(gridView || isLocalMain) && <p className="text-white text-sm">You (Camera off)</p>}
                   </div>
-                  <p className="text-white text-sm">You (Camera off)</p>
+                </div>
+              )}
+              <div className={`absolute bg-black bg-opacity-60 text-white rounded z-20 ${
+                !gridView && !isLocalMain
+                  ? 'bottom-1 right-1 px-1.5 py-0.5 text-xs'
+                  : 'bottom-2 left-2 px-2 py-1 text-xs'
+              }`}>
+                {!gridView && !isLocalMain ? 'You' : `You ${isMuted ? '🔇' : ''}`}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* For 1 participant (alone) or 3+ participants: use original grid/speaker layouts */}
+        {remoteParticipants.length !== 1 && (
+          gridView ? (
+            /* Grid View */
+            <div
+              className={`w-full h-full grid gap-2 auto-rows-fr ${
+                participantCount === 1 ? 'grid-cols-1' :
+                participantCount <= 4 ? 'grid-cols-2' :
+                participantCount <= 6 ? 'grid-cols-3' :
+                'grid-cols-4'
+              }`}
+            >
+              {/* Local Video in Grid */}
+              <div className="bg-gray-800 rounded-lg overflow-hidden relative w-full h-full min-h-0">
+                {!isVideoOff ? (
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                    style={{ transform: 'scaleX(-1)' }}
+                  />
+                ) : (
+                  <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="w-20 h-20 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <span className="text-2xl text-white">{user?.email?.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <p className="text-white text-sm">You (Camera off)</p>
+                    </div>
+                  </div>
+                )}
+                <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
+                  You {isMuted && '🔇'}
                 </div>
               </div>
-            )}
-            <div className="absolute bottom-2 left-2 bg-black bg-opacity-60 text-white px-2 py-1 rounded text-xs z-20">
-              You {isMuted && '🔇'}
-            </div>
-          </div>
 
-          {/* Remote Videos */}
-          {remoteParticipants.map((participant) => (
-            <RemoteVideoPlayer
-              key={participant.id}
-              participant={participant}
-            />
-          ))}
-        </div>
+              {/* Remote Videos in Grid */}
+              {remoteParticipants.map((participant) => (
+                <RemoteVideoPlayer key={participant.id} participant={participant} />
+              ))}
+            </div>
+          ) : remoteParticipants.length === 0 ? (
+            /* Alone - full screen local */
+            <div className="bg-gray-800 rounded-lg overflow-hidden absolute inset-0">
+              {!isVideoOff ? (
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-24 h-24 bg-rose-500 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <span className="text-3xl text-white">{user?.email?.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <p className="text-white">You (Camera off)</p>
+                  </div>
+                </div>
+              )}
+              <div className="absolute bottom-3 left-3 bg-black bg-opacity-60 text-white px-3 py-1.5 rounded text-sm z-20">
+                You {isMuted && '🔇'}
+              </div>
+            </div>
+          ) : (
+            /* 3+ participants: Thumbnails on top */
+            <div className="w-full h-full flex flex-col">
+              <div className="flex gap-2 h-24 flex-shrink-0 overflow-x-auto pb-2">
+                {/* Local video thumbnail */}
+                <div className="bg-gray-800 rounded-lg overflow-hidden relative h-full aspect-video flex-shrink-0">
+                  {!isVideoOff ? (
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                      style={{ transform: 'scaleX(-1)' }}
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gray-700 flex items-center justify-center">
+                      <div className="w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center">
+                        <span className="text-sm text-white">{user?.email?.charAt(0).toUpperCase()}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="absolute bottom-1 left-1 bg-black bg-opacity-60 text-white px-1.5 py-0.5 rounded text-xs z-20">
+                    You {isMuted && '🔇'}
+                  </div>
+                </div>
+                {/* Other remote participant thumbnails */}
+                {remoteParticipants.slice(1).map((participant) => (
+                  <div key={participant.id} className="h-full aspect-video flex-shrink-0">
+                    <RemoteVideoPlayer participant={participant} />
+                  </div>
+                ))}
+              </div>
+              {/* Main speaker */}
+              <div className="flex-1 min-h-0">
+                <RemoteVideoPlayer key={remoteParticipants[0].id} participant={remoteParticipants[0]} />
+              </div>
+            </div>
+          )
+        )}
 
         {/* Live Transcript Overlay */}
         {isTranscribing && transcript.length > 0 && (
@@ -1195,7 +1616,7 @@ export default function GroupVideoMeeting() {
       </div>
 
       {/* Controls */}
-      <div className="bg-gray-800 py-3 px-4 flex-shrink-0">
+      <div className={`bg-gray-800 py-3 px-4 flex-shrink-0 transition-all duration-300 ${showChat ? 'mr-80' : ''}`}>
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="w-40">
             {isRecording && (
