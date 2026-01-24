@@ -52,7 +52,7 @@ export function useRecording() {
         // Download the recording
         const a = document.createElement('a');
         a.href = url;
-        a.download = `avari-call-${new Date().toISOString()}.webm`;
+        a.download = `circlew-call-${new Date().toISOString()}.webm`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

@@ -14,16 +14,16 @@ export const useWakeLock = (enabled: boolean = true) => {
         // Check if Wake Lock API is supported
         if ('wakeLock' in navigator) {
           wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-          console.log('[Avari] Wake lock activated - screen will stay on');
+          console.log('[CircleW] Wake lock activated - screen will stay on');
 
           wakeLockRef.current.addEventListener('release', () => {
-            console.log('[Avari] Wake lock released');
+            console.log('[CircleW] Wake lock released');
           });
         } else {
-          console.log('[Avari] Wake Lock API not supported on this device');
+          console.log('[CircleW] Wake Lock API not supported on this device');
         }
       } catch (err) {
-        console.error('[Avari] Wake lock error:', err);
+        console.error('[CircleW] Wake lock error:', err);
       }
     };
 
@@ -43,7 +43,7 @@ export const useWakeLock = (enabled: boolean = true) => {
       
       if (wakeLockRef.current) {
         wakeLockRef.current.release().then(() => {
-          console.log('[Avari] Wake lock released on cleanup');
+          console.log('[CircleW] Wake lock released on cleanup');
           wakeLockRef.current = null;
         });
       }

@@ -13,11 +13,11 @@ export default function Onboarding({ onComplete, userName }) {
 
   const steps = [
     {
-      icon: <Sparkles className="w-16 h-16 text-pink-400" />,
-      title: "Welcome to Avari!",
+      icon: <Sparkles className="w-16 h-16 text-stone-400" />,
+      title: "Welcome to CircleW!",
       subtitle: userName ? `Hey ${userName}, great to have you!` : "Great to have you!",
-      description: "Your space for meaningful professional connections. Let's show you around.",
-      color: "from-pink-500 to-rose-500"
+      description: "Find your circle. Move forward. Let's show you around.",
+      color: "from-stone-500 to-stone-600"
     },
     {
       icon: <Coffee className="w-16 h-16 text-amber-400" />,

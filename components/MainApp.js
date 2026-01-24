@@ -73,6 +73,8 @@ function MainApp({ currentUser, onSignOut }) {
   const [groupsCount, setGroupsCount] = useState(0) // Number of groups user is in
   const [coffeeChatsCount, setCoffeeChatsCount] = useState(0) // Number of 1:1 coffee chats completed
   const [nextStepPrompt, setNextStepPrompt] = useState(null) // { type, data } for post-action prompts
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false) // Profile dropdown in header
+  const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
 
   // DEBUGGING: Detect prop changes
   const prevPropsRef = useRef({ currentUser, onSignOut, supabase })
@@ -106,7 +108,7 @@ function MainApp({ currentUser, onSignOut }) {
   useEffect(() => {
     if (!currentUser?.id) return
 
-    const onboardingKey = `avari_onboarding_complete_${currentUser.id}`
+    const onboardingKey = `circlew_onboarding_complete_${currentUser.id}`
     const hasCompletedOnboarding = localStorage.getItem(onboardingKey)
 
     if (!hasCompletedOnboarding) {
@@ -119,7 +121,7 @@ function MainApp({ currentUser, onSignOut }) {
   const handleOnboardingComplete = useCallback(() => {
     if (!currentUser?.id) return
 
-    const onboardingKey = `avari_onboarding_complete_${currentUser.id}`
+    const onboardingKey = `circlew_onboarding_complete_${currentUser.id}`
     localStorage.setItem(onboardingKey, 'true')
     setShowOnboarding(false)
   }, [currentUser?.id])
@@ -145,6 +147,7 @@ function MainApp({ currentUser, onSignOut }) {
     loadUnreadMessageCount()
     loadGroupsCount()
     loadCoffeeChatsCount()
+    loadPendingRecaps()
 
     // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
     // Re-enable after adding useCallback to all functions
@@ -444,6 +447,107 @@ function MainApp({ currentUser, onSignOut }) {
       setCoffeeChatsCount(0)
     }
   }, [currentUser.id, supabase])
+
+  // Load pending recaps for the checklist
+  const loadPendingRecaps = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('call_recaps')
+        .select('*')
+        .or(`caller_id.eq.${currentUser.id},callee_id.eq.${currentUser.id}`)
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (error) {
+        console.log('Pending recaps not available:', error.message)
+        setPendingRecaps([])
+        return
+      }
+      setPendingRecaps(data || [])
+    } catch (err) {
+      console.error('Error loading pending recaps:', err)
+      setPendingRecaps([])
+    }
+  }, [currentUser.id, supabase])
+
+  // Get greeting based on time of day
+  const getTimeBasedGreeting = useCallback(() => {
+    const hour = new Date().getHours()
+    if (hour < 12) return { greeting: 'Good morning', emoji: '☀️' }
+    if (hour < 17) return { greeting: 'Good afternoon', emoji: '🌤️' }
+    return { greeting: 'Good evening', emoji: '🌙' }
+  }, [])
+
+  // Get next meeting within 60 minutes
+  const getNextUpcomingMeeting = useCallback((meetupsList, userSignupsList) => {
+    const now = new Date()
+    const sixtyMinLater = new Date(now.getTime() + 60 * 60 * 1000)
+
+    for (const meetup of meetupsList) {
+      if (!userSignupsList.includes(meetup.id)) continue
+
+      try {
+        let meetupDate
+        const dateStr = meetup.date
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const [year, month, day] = dateStr.split('-').map(Number)
+          meetupDate = new Date(year, month - 1, day)
+        } else {
+          const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+          meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
+        }
+
+        if (meetup.time) {
+          const [hours, minutes] = meetup.time.split(':').map(Number)
+          meetupDate.setHours(hours, minutes, 0, 0)
+        }
+
+        if (meetupDate >= now && meetupDate <= sixtyMinLater) {
+          // Calculate minutes until meeting
+          const minutesUntil = Math.round((meetupDate - now) / (1000 * 60))
+          return { ...meetup, minutesUntil }
+        }
+      } catch (err) {
+        console.error('Error parsing meetup date:', err)
+      }
+    }
+    return null
+  }, [])
+
+  // Count meetings within 60 minutes
+  const getUpcomingMeetingCount = useCallback((meetupsList, userSignupsList) => {
+    const now = new Date()
+    const sixtyMinLater = new Date(now.getTime() + 60 * 60 * 1000)
+    let count = 0
+
+    for (const meetup of meetupsList) {
+      if (!userSignupsList.includes(meetup.id)) continue
+
+      try {
+        let meetupDate
+        const dateStr = meetup.date
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const [year, month, day] = dateStr.split('-').map(Number)
+          meetupDate = new Date(year, month - 1, day)
+        } else {
+          const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+          meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
+        }
+
+        if (meetup.time) {
+          const [hours, minutes] = meetup.time.split(':').map(Number)
+          meetupDate.setHours(hours, minutes, 0, 0)
+        }
+
+        if (meetupDate >= now && meetupDate <= sixtyMinLater) {
+          count++
+        }
+      } catch (err) {
+        console.error('Error parsing meetup date:', err)
+      }
+    }
+    return count
+  }, [])
 
   const loadMeetupPeople = useCallback(async () => {
     try {
@@ -1239,238 +1343,338 @@ function MainApp({ currentUser, onSignOut }) {
 
   const HomeView = () => {
     // Filter to show UPCOMING meetups and recent ones (within 4 hours grace period)
-    // This allows late users to still see and join meetups
-    // WRAPPED IN useMemo to prevent infinite re-render loop!
     const upcomingMeetups = useMemo(() => {
       const now = new Date()
-      const GRACE_PERIOD_HOURS = 4 // Allow joining up to 4 hours after start time
+      const GRACE_PERIOD_HOURS = 4
 
       return meetups.filter(meetup => {
         try {
           let meetupDate
           const dateStr = meetup.date
 
-          // Check if ISO format (YYYY-MM-DD)
           if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            // ISO format - parse as local timezone to avoid UTC issues
             const [year, month, day] = dateStr.split('-').map(Number)
-            meetupDate = new Date(year, month - 1, day) // month is 0-indexed
+            meetupDate = new Date(year, month - 1, day)
           } else {
-            // Old format like "Wednesday, Dec 3" - remove day name
             const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
             meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
           }
 
-          // If can't parse, show it
-          if (isNaN(meetupDate.getTime())) {
-            console.log('Could not parse date:', meetup.date)
-            return true
-          }
+          if (isNaN(meetupDate.getTime())) return true
 
-          // Add time to the meetup date for accurate comparison
           if (meetup.time) {
             const [hours, minutes] = meetup.time.split(':').map(Number)
             meetupDate.setHours(hours, minutes, 0, 0)
           }
 
-          // Calculate grace period end time (4 hours after meetup start)
           const gracePeriodEnd = new Date(meetupDate.getTime() + (GRACE_PERIOD_HOURS * 60 * 60 * 1000))
-
-          // Show if meetup hasn't started yet OR if we're still within grace period
-          const shouldShow = now < gracePeriodEnd
-
-          // Removed console.logs to reduce spam
-          // if (!shouldShow) {
-          //   console.log(`Filtering out past meetup (beyond grace period): ${meetup.date} at ${meetup.time}`)
-          // }
-
-          return shouldShow
-
+          return now < gracePeriodEnd
         } catch (err) {
-          console.error('Error parsing date:', meetup.date, err)
           return true
         }
       })
-    }, [meetups]) // Only re-filter when meetups array changes
+    }, [meetups])
+
+    // Get time-based greeting
+    const { greeting, emoji } = getTimeBasedGreeting()
+    const firstName = (currentUser.name || currentUser.email?.split('@')[0] || 'User').split(' ')[0]
+
+    // Check for meetings within 60 minutes
+    const nextMeeting = getNextUpcomingMeeting(meetups, userSignups)
+    const upcomingMeetingCount = getUpcomingMeetingCount(meetups, userSignups)
+
+    // Calculate momentum tracker step
+    const getMomentumStep = () => {
+      if (connections.length === 0) return { step: 1, label: 'Make connections' }
+      if (userSignups.length === 0) return { step: 2, label: 'Schedule meetings' }
+      if (pendingRecaps.length > 0) return { step: 3, label: 'Review recaps' }
+      if (unreadMessageCount > 0) return { step: 4, label: 'Send follow-ups' }
+      return { step: 4, label: 'All caught up!' }
+    }
+    const momentum = getMomentumStep()
 
     return (
       <div className="space-y-6">
-        {/* Header with Profile Icon */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-800">Welcome back!</h2>
-            <p className="text-gray-600">{currentUser.name || currentUser.email?.split('@')[0] || 'User'}</p>
-          </div>
-          <button
-            onClick={() => setCurrentView('profile')}
-            className="w-12 h-12 bg-rose-200 rounded-full flex items-center justify-center text-xl text-rose-600 font-bold hover:bg-rose-300 transition-colors"
-          >
-            {(currentUser.name || currentUser.email?.split('@')[0] || 'User').charAt(0)}
-          </button>
-        </div>
-
-        {/* Journey Progress - Happy Path Guide */}
-        <JourneyProgress
-          meetupsAttended={currentUser.meetups_attended || 0}
-          connectionsCount={connections.length}
-          groupsCount={groupsCount}
-          coffeeChatsCount={coffeeChatsCount}
-          onNavigate={setCurrentView}
-        />
-
-        {/* Propose Meetup CTA */}
-        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+        {/* Time-Aware Greeting Banner */}
+        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-semibold text-gray-800">Have a meetup idea?</h4>
-              <p className="text-sm text-gray-600">Propose a topic and we'll create it!</p>
+              <h2 className="text-2xl font-bold text-stone-700">
+                {greeting}, {firstName} {emoji}
+              </h2>
+              {upcomingMeetingCount > 0 && (
+                <p className="text-stone-500 mt-1">
+                  You have {upcomingMeetingCount} circle{upcomingMeetingCount > 1 ? 's' : ''} starting soon
+                </p>
+              )}
             </div>
+          </div>
+        </div>
+
+        {/* Hero "Next Step" Card - Only shows if meeting within 60 min */}
+        {nextMeeting && (
+          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-stone-600 via-stone-700 to-stone-800 p-6 shadow-lg">
+            {/* Glass effect overlay */}
+            <div className="absolute inset-0 bg-white/5 backdrop-blur-sm" />
+
+            <div className="relative z-10">
+              <div className="flex items-center mb-4">
+                {/* CircleW Logo */}
+                <svg width="32" height="32" viewBox="0 0 100 100" className="mr-3 text-white">
+                  <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
+                  <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
+                </svg>
+                <div className="flex-1">
+                  <h3 className="text-white font-semibold text-lg">Circle Meeting</h3>
+                  <p className="text-stone-300 text-sm">
+                    starts in {nextMeeting.minutesUntil}m
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-stone-200 text-sm mb-4">
+                {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
+              </p>
+
+              <button
+                onClick={() => handleJoinVideoCall(nextMeeting.id)}
+                className="w-full bg-amber-400 hover:bg-amber-500 text-stone-800 font-semibold py-3 rounded-lg transition-colors flex items-center justify-center"
+              >
+                <Video className="w-5 h-5 mr-2" />
+                Join Room
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Momentum Tracker */}
+        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-stone-700">Your momentum</h3>
+            <span className="text-sm text-stone-500">
+              Step {momentum.step} of 4 — {momentum.label}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Connections Card */}
             <button
-              onClick={() => setCurrentView('meetupProposals')}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-medium px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+              onClick={() => setCurrentView('coffeeChats')}
+              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                momentum.step === 1
+                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
+                  : connections.length > 0
+                    ? 'border-green-200 bg-green-50'
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              }`}
             >
-              Propose Meetup
+              <div className="flex items-center justify-between mb-2">
+                <Users className={`w-5 h-5 ${connections.length > 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                {connections.length > 0 && (
+                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-stone-700">{connections.length}</p>
+              <p className="text-xs text-stone-500">Connections</p>
+            </button>
+
+            {/* Meetings Card */}
+            <button
+              onClick={() => setCurrentView('home')}
+              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                momentum.step === 2
+                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
+                  : userSignups.length > 0
+                    ? 'border-green-200 bg-green-50'
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <Calendar className={`w-5 h-5 ${userSignups.length > 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                {userSignups.length > 0 && (
+                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-stone-700">{userSignups.length}</p>
+              <p className="text-xs text-stone-500">Meetings</p>
+            </button>
+
+            {/* Recaps Card */}
+            <button
+              onClick={() => setCurrentView('callHistory')}
+              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                momentum.step === 3
+                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
+                  : pendingRecaps.length === 0
+                    ? 'border-green-200 bg-green-50'
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <Video className={`w-5 h-5 ${pendingRecaps.length === 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                {pendingRecaps.length === 0 && coffeeChatsCount > 0 && (
+                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-stone-700">{pendingRecaps.length}</p>
+              <p className="text-xs text-stone-500">Recaps</p>
+            </button>
+
+            {/* Follow-up Card */}
+            <button
+              onClick={() => setCurrentView('messages')}
+              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                momentum.step === 4 && unreadMessageCount > 0
+                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
+                  : unreadMessageCount === 0
+                    ? 'border-green-200 bg-green-50'
+                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <MessageCircle className={`w-5 h-5 ${unreadMessageCount === 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                {unreadMessageCount === 0 && (
+                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <p className="text-2xl font-bold text-stone-700">{unreadMessageCount}</p>
+              <p className="text-xs text-stone-500">Follow-up</p>
             </button>
           </div>
         </div>
 
-        {/* Upcoming Meetups */}
-        <div>
-          <h3 className="text-xl font-bold text-gray-800 mb-4">Upcoming Meetups</h3>
+        {/* Upcoming Events Section */}
+        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-stone-700">Upcoming events</h3>
+            <button
+              onClick={() => setCurrentView('meetupProposals')}
+              className="text-sm text-stone-500 hover:text-stone-700 font-medium"
+            >
+              View all &gt;
+            </button>
+          </div>
+
           {loadingMeetups ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center">
-              <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading meetups...</p>
+            <div className="py-8 text-center">
+              <div className="w-8 h-8 border-4 border-stone-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-stone-500">Loading events...</p>
             </div>
           ) : upcomingMeetups.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center">
-              <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600">No upcoming meetups</p>
-              <p className="text-sm text-gray-500 mt-2">
-                {currentUser.meetups_attended > 0 
-                  ? `You've attended ${currentUser.meetups_attended} meetup${currentUser.meetups_attended > 1 ? 's' : ''}! Check back for new events.`
-                  : 'Check back soon for new events!'
-                }
-              </p>
+            <div className="py-8 text-center">
+              <Calendar className="w-12 h-12 text-stone-300 mx-auto mb-3" />
+              <p className="text-stone-500">No upcoming events</p>
+              <p className="text-sm text-stone-400 mt-1">Check back soon for new circles!</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {upcomingMeetups.map(meetup => {
-                // Check if we should show participants (12 hours before event)
-                const meetupDateTime = new Date(`${meetup.date}T${meetup.time}`)
-                const now = new Date()
-                const hoursUntilMeetup = (meetupDateTime - now) / (1000 * 60 * 60) // difference in hours
-                const showParticipants = hoursUntilMeetup <= 12 && hoursUntilMeetup > 0
-                
+            <div className="space-y-3">
+              {upcomingMeetups.slice(0, 3).map(meetup => {
+                const isSignedUp = userSignups.includes(meetup.id)
                 const meetupSignups = signups[meetup.id] || []
                 const participantCount = meetupSignups.length
-                
+
                 return (
-                <div key={meetup.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
-                  <div className="mb-4">
-                    <div className="flex items-center text-gray-800 font-semibold mb-1">
-                      <Calendar className="w-5 h-5 mr-2 text-rose-500" />
-                      {formatDate(meetup.date)}
-                    </div>
-                    <div className="flex items-center text-gray-600 text-sm ml-7">
-                      <Clock className="w-4 h-4 mr-2" />
-                      {formatTime(meetup.time)}
-                    </div>
-                    <div className="text-xs text-gray-500 ml-7 mt-1">
-                      Location near {currentUser.city}, {currentUser.state}
+                  <div key={meetup.id} className="border border-stone-200 rounded-lg p-4 hover:border-stone-300 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-stone-700">Circle Meetup</h4>
+                        <div className="flex items-center text-stone-500 text-sm mt-1">
+                          <Calendar className="w-4 h-4 mr-1" />
+                          {formatDate(meetup.date)}
+                          <Clock className="w-4 h-4 ml-3 mr-1" />
+                          {formatTime(meetup.time)}
+                        </div>
+                        {participantCount > 0 && (
+                          <p className="text-xs text-stone-400 mt-1">
+                            {participantCount} {participantCount === 1 ? 'person' : 'people'} attending
+                          </p>
+                        )}
+                      </div>
+
+                      {isSignedUp ? (
+                        <div className="flex flex-col items-end gap-2">
+                          <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-1 rounded">
+                            Signed up
+                          </span>
+                          <button
+                            onClick={() => handleJoinVideoCall(meetup.id)}
+                            className="text-sm text-stone-600 hover:text-stone-800 font-medium"
+                          >
+                            Join &gt;
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleSignUp(meetup.id)}
+                          className="bg-stone-600 hover:bg-stone-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                        >
+                          Reserve my spot &gt;
+                        </button>
+                      )}
                     </div>
                   </div>
-                  
-                  {/* Show participants 12 hours before event */}
-                  {showParticipants && participantCount > 0 && (
-                    <div className="mb-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                      <p className="text-sm font-medium text-purple-800 mb-2">
-                        👥 {participantCount} {participantCount === 1 ? 'person' : 'people'} joining:
-                      </p>
-                      <div className="space-y-1">
-                        {meetupSignups.map((signup, idx) => (
-                          <div key={signup.id || idx} className="text-sm text-purple-700">
-                            • {signup.profiles?.career || 'Professional'}
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-xs text-purple-600 mt-2">
-                        💡 You'll meet everyone in person at the event
-                      </p>
-                    </div>
-                  )}
-                  
-                  {/* Don't show participants yet if more than 12 hours away */}
-                  {!showParticipants && hoursUntilMeetup > 12 && participantCount > 0 && (
-                    <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3">
-                      <p className="text-sm text-gray-600">
-                        👥 {participantCount} {participantCount === 1 ? 'person has' : 'people have'} signed up
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Participants will be visible 12 hours before the event
-                      </p>
-                    </div>
-                  )}
-                  
-                  {userSignups.includes(meetup.id) ? (
-                    <div className="space-y-2">
-                      <div className="bg-green-50 border border-green-200 rounded px-4 py-2 text-green-700 text-sm font-medium">
-                        ✓ You're signed up!
-                      </div>
-
-                      {/* Hybrid Options: In-Person + Video */}
-                      <div className="bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-3">
-                        <p className="text-xs font-medium text-purple-900 mb-2">Choose how to attend:</p>
-                        <div className="space-y-2">
-                          <div className="flex items-start">
-                            <MapPin className="w-4 h-4 mr-2 text-purple-600 mt-0.5 flex-shrink-0" />
-                            <div className="flex-1">
-                              <p className="text-sm text-purple-900 font-medium">In-Person</p>
-                              <p className="text-xs text-purple-700">
-                                {meetup.location || `Location near ${currentUser.city}, ${currentUser.state}`}
-                              </p>
-                              <p className="text-xs text-purple-600 mt-1">
-                                Details will be sent the morning of the event
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="border-t border-purple-200 pt-2">
-                            <button
-                              onClick={() => handleJoinVideoCall(meetup.id)}
-                              className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center text-sm"
-                            >
-                              <Video className="w-4 h-4 mr-2" />
-                              Join Video Call
-                            </button>
-                            <p className="text-xs text-center text-purple-600 mt-1">
-                              Can't make it in person? Join virtually!
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => handleCancelSignup(meetup.id)}
-                        className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded transition-colors border border-red-200 text-sm"
-                      >
-                        Cancel Signup
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleSignUp(meetup.id)}
-                      className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors"
-                    >
-                      Sign Up
-                    </button>
-                  )}
-                </div>
-              )
-            })}
+                )
+              })}
             </div>
           )}
         </div>
+
+        {/* Pending Recaps Checklist */}
+        {pendingRecaps.length > 0 && (
+          <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-stone-700">Pending recaps</h3>
+              <button
+                onClick={() => setCurrentView('callHistory')}
+                className="text-sm text-stone-500 hover:text-stone-700 font-medium"
+              >
+                View all recaps &gt;
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {pendingRecaps.slice(0, 3).map(recap => (
+                <div key={recap.id} className="flex items-start gap-3 p-3 bg-stone-50 rounded-lg">
+                  <div className="w-5 h-5 border-2 border-stone-400 rounded-full flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm text-stone-700 font-medium">
+                      Review call recap
+                    </p>
+                    <p className="text-xs text-stone-500 mt-1">
+                      {new Date(recap.created_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                      })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setCurrentView('callHistory')}
+                    className="text-sm text-stone-600 hover:text-stone-800 font-medium"
+                  >
+                    Open &gt;
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -1865,13 +2069,152 @@ function MainApp({ currentUser, onSignOut }) {
       )}
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-lg">
-        <div className="max-w-4xl mx-auto p-6">
-          <h1 className="text-3xl font-bold flex items-center">
-            <Coffee className="mr-3" />
-            Avari
-          </h1>
-          <p className="text-rose-100 mt-1">Welcome back, {currentUser.name || currentUser.email?.split('@')[0] || 'User'}!</p>
+      <div className="bg-gradient-to-r from-stone-600 to-stone-700 text-white shadow-lg">
+        <div className="max-w-4xl mx-auto px-4 py-3 md:px-6 md:py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl md:text-2xl font-bold flex items-center">
+              <svg width="28" height="28" viewBox="0 0 100 100" className="mr-2 md:mr-3">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
+                <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
+              </svg>
+              CircleW
+            </h1>
+            {/* Profile Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                style={{
+                  backgroundColor: currentUser.profile_picture ? 'transparent' : '#d6bcfa'
+                }}
+              >
+                {currentUser.profile_picture ? (
+                  <img
+                    src={currentUser.profile_picture}
+                    alt="Profile"
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-purple-700">
+                    {(currentUser.name || currentUser.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </button>
+
+              {/* Dropdown Menu */}
+              {showProfileDropdown && (
+                <>
+                  {/* Backdrop to close dropdown */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowProfileDropdown(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-stone-200 py-1 z-50">
+                    <button
+                      onClick={() => {
+                        setShowProfileDropdown(false)
+                        setCurrentView('profile')
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center"
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      View Profile
+                    </button>
+                    <hr className="my-1 border-stone-200" />
+                    <button
+                      onClick={() => {
+                        setShowProfileDropdown(false)
+                        handleSignOut()
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation Bar */}
+        <div className="bg-stone-700 border-t border-stone-500">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex overflow-x-auto scrollbar-hide">
+              <button
+                onClick={() => setCurrentView('home')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                  currentView === 'home'
+                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Home</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('coffeeChats')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                  currentView === 'coffeeChats'
+                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                }`}
+              >
+                <Coffee className="w-4 h-4" />
+                <span>Chats</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('connections')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                  currentView === 'connections'
+                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Network</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('connectionGroups')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                  currentView === 'connectionGroups'
+                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Groups</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('messages')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${
+                  currentView === 'messages'
+                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                }`}
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Messages</span>
+                {unreadMessageCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {unreadMessageCount}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setCurrentView('callHistory')}
+                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                  currentView === 'callHistory'
+                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
+                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                }`}
+              >
+                <Video className="w-4 h-4" />
+                <span>Recaps</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2247,72 +2590,6 @@ function MainApp({ currentUser, onSignOut }) {
         </div>
       )}
 
-      {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white pb-safe-bottom border-t border-gray-200 shadow-lg">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex justify-around overflow-x-auto snap-x snap-mandatory scrollbar-hide">
-          <button
-            onClick={() => setCurrentView('home')}
-            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
-              currentView === 'home' ? 'text-rose-500' : 'text-gray-500'
-            }`}
-          >
-            <Calendar className="w-6 h-6 mb-1" />
-            <span className="text-sm font-medium">Home</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('coffeeChats')}
-            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
-              currentView === 'coffeeChats' ? 'text-rose-500' : 'text-gray-500'
-            }`}
-          >
-            <Coffee className="w-6 h-6 mb-1" />
-            <span className="text-sm font-medium">Chats</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('connections')}
-            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
-              currentView === 'connections' ? 'text-rose-500' : 'text-gray-500'
-            }`}
-          >
-            <Users className="w-6 h-6 mb-1" />
-            <span className="text-sm font-medium">Network</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('connectionGroups')}
-            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
-              currentView === 'connectionGroups' ? 'text-rose-500' : 'text-gray-500'
-            }`}
-          >
-            <Users className="w-6 h-6 mb-1" />
-            <span className="text-sm font-medium">Groups</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('messages')}
-            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start relative ${
-              currentView === 'messages' ? 'text-rose-500' : 'text-gray-500'
-            }`}
-          >
-            <MessageCircle className="w-6 h-6 mb-1" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-2 bg-rose-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                {unreadCount}
-              </span>
-            )}
-            <span className="text-sm font-medium">Messages</span>
-          </button>
-          <button
-            onClick={() => setCurrentView('callHistory')}
-            className={`flex flex-col items-center px-3 py-3 flex-shrink-0 min-w-[72px] snap-start ${
-              currentView === 'callHistory' ? 'text-rose-500' : 'text-gray-500'
-            }`}
-          >
-            <Video className="w-6 h-6 mb-1" />
-            <span className="text-sm font-medium">Recaps</span>
-          </button>
-          </div>
-        </div>
-      </div>
 
       {/* Feedback Button - Floating button for users to submit feedback */}
       <FeedbackButton currentUser={currentUser} pageContext={currentView} />

@@ -113,7 +113,7 @@ export default function VideoCall({
       },
       onIncomingCall: async (from) => {
         if (from !== otherUserId) return;
-        console.log('[Avari] Incoming call - auto-accepting');
+        console.log('[CircleW] Incoming call - auto-accepting');
         setCallState('ringing');
         
         // Auto-accept and get camera
@@ -122,7 +122,7 @@ export default function VideoCall({
           initializePeerConnection();
           acceptCall(otherUserId);
         } catch (error) {
-          console.error('[Avari] Error accepting call:', error);
+          console.error('[CircleW] Error accepting call:', error);
           setError('Failed to accept call: ' + (error as Error).message);
         }
       },
@@ -136,7 +136,7 @@ export default function VideoCall({
         cleanup();
       },
       onCallEnded: (from) => {
-        console.log('[Avari] Call ended by other party');
+        console.log('[CircleW] Call ended by other party');
         setCallState('ended');
         cleanup();
         // Pass recap data to parent
@@ -153,7 +153,7 @@ export default function VideoCall({
         });
       },
       onError: (error) => {
-        console.error('[Avari] Signaling error:', error);
+        console.error('[CircleW] Signaling error:', error);
         setError(error.message);
       },
     }
@@ -163,33 +163,33 @@ export default function VideoCall({
   const initializePeerConnection = () => {
     if (peerConnectionRef.current || iceServersLoading) return;
 
-    console.log('[Avari] Initializing peer connection with ICE servers:', iceServers);
+    console.log('[CircleW] Initializing peer connection with ICE servers:', iceServers);
     const peerConnection = new RTCPeerConnection({ iceServers });
     peerConnectionRef.current = peerConnection;
 
     // ICE candidate handler
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        console.log('[Avari] Sending ICE candidate');
+        console.log('[CircleW] Sending ICE candidate');
         sendIceCandidate(event.candidate.toJSON(), otherUserId);
       }
     };
 
     // Remote stream handler
     peerConnection.ontrack = (event) => {
-      console.log('[Avari] Received remote track:', event.track.kind);
+      console.log('[CircleW] Received remote track:', event.track.kind);
       if (remoteVideoRef.current && event.streams[0]) {
         remoteVideoRef.current.srcObject = event.streams[0];
         // Force play for Safari compatibility
         remoteVideoRef.current.play().catch(err => {
-          console.log('[Avari] Remote video autoplay prevented (will retry):', err);
+          console.log('[CircleW] Remote video autoplay prevented (will retry):', err);
         });
       }
     };
 
     // Connection state handler
     peerConnection.onconnectionstatechange = () => {
-      console.log('[Avari] Connection state:', peerConnection.connectionState);
+      console.log('[CircleW] Connection state:', peerConnection.connectionState);
       
       if (peerConnection.connectionState === 'connected') {
         setCallState('connected');
@@ -208,7 +208,7 @@ export default function VideoCall({
 
     // ICE connection state handler
     peerConnection.oniceconnectionstatechange = () => {
-      console.log('[Avari] ICE connection state:', peerConnection.iceConnectionState);
+      console.log('[CircleW] ICE connection state:', peerConnection.iceConnectionState);
     };
 
     // Add pending ICE candidates
@@ -216,7 +216,7 @@ export default function VideoCall({
       try {
         await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error('[Avari] Error adding pending ICE candidate:', err);
+        console.error('[CircleW] Error adding pending ICE candidate:', err);
       }
     });
     pendingCandidatesRef.current = [];
@@ -225,7 +225,7 @@ export default function VideoCall({
   // Get local media stream
   const getLocalStream = async () => {
     try {
-      console.log('[Avari] Getting local media stream');
+      console.log('[CircleW] Getting local media stream');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1280 },
@@ -245,7 +245,7 @@ export default function VideoCall({
         localVideoRef.current.srcObject = stream;
         // Force video to play
         localVideoRef.current.play().catch(err => {
-          console.log('[Avari] Video autoplay prevented (normal):', err);
+          console.log('[CircleW] Video autoplay prevented (normal):', err);
         });
       }
 
@@ -258,7 +258,7 @@ export default function VideoCall({
 
       return stream;
     } catch (err) {
-      console.error('[Avari] Error getting local stream:', err);
+      console.error('[CircleW] Error getting local stream:', err);
       setError('Could not access camera/microphone');
       throw err;
     }
@@ -267,7 +267,7 @@ export default function VideoCall({
   // Start call (create offer)
   const startCall = async () => {
     try {
-      console.log('[Avari] Starting call');
+      console.log('[CircleW] Starting call');
       setCallState('calling');
 
       initializePeerConnection();
@@ -276,10 +276,10 @@ export default function VideoCall({
       const offer = await peerConnectionRef.current!.createOffer();
       await peerConnectionRef.current!.setLocalDescription(offer);
 
-      console.log('[Avari] Sending offer');
+      console.log('[CircleW] Sending offer');
       sendOffer(offer, otherUserId);
     } catch (err) {
-      console.error('[Avari] Error starting call:', err);
+      console.error('[CircleW] Error starting call:', err);
       setError('Failed to start call');
       setCallState('idle');
     }
@@ -288,13 +288,13 @@ export default function VideoCall({
   // Handle incoming call (answer)
   const handleAnswer = async () => {
     try {
-      console.log('[Avari] Answering call');
+      console.log('[CircleW] Answering call');
       acceptCall(otherUserId);
 
       initializePeerConnection();
       await getLocalStream();
     } catch (err) {
-      console.error('[Avari] Error answering call:', err);
+      console.error('[CircleW] Error answering call:', err);
       setError('Failed to answer call');
     }
   };
@@ -302,7 +302,7 @@ export default function VideoCall({
   // Handle remote offer
   const handleRemoteOffer = async (offer: RTCSessionDescriptionInit) => {
     try {
-      console.log('[Avari] Handling remote offer');
+      console.log('[CircleW] Handling remote offer');
       
       if (!peerConnectionRef.current) {
         initializePeerConnection();
@@ -314,11 +314,11 @@ export default function VideoCall({
       const answer = await peerConnectionRef.current!.createAnswer();
       await peerConnectionRef.current!.setLocalDescription(answer);
 
-      console.log('[Avari] Sending answer');
+      console.log('[CircleW] Sending answer');
       sendAnswer(answer, otherUserId);
       setCallState('connected');
     } catch (err) {
-      console.error('[Avari] Error handling remote offer:', err);
+      console.error('[CircleW] Error handling remote offer:', err);
       setError('Failed to establish connection');
     }
   };
@@ -326,17 +326,17 @@ export default function VideoCall({
   // Handle remote answer
   const handleRemoteAnswer = async (answer: RTCSessionDescriptionInit) => {
     try {
-      console.log('[Avari] Handling remote answer');
+      console.log('[CircleW] Handling remote answer');
       
       if (!peerConnectionRef.current) {
-        console.error('[Avari] No peer connection');
+        console.error('[CircleW] No peer connection');
         return;
       }
 
       await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(answer));
       setCallState('connected');
     } catch (err) {
-      console.error('[Avari] Error handling remote answer:', err);
+      console.error('[CircleW] Error handling remote answer:', err);
       setError('Failed to establish connection');
     }
   };
@@ -345,14 +345,14 @@ export default function VideoCall({
   const handleRemoteIceCandidate = async (candidate: RTCIceCandidateInit) => {
     try {
       if (!peerConnectionRef.current) {
-        console.log('[Avari] Queueing ICE candidate');
+        console.log('[CircleW] Queueing ICE candidate');
         pendingCandidatesRef.current.push(candidate);
         return;
       }
 
       await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
-      console.error('[Avari] Error adding ICE candidate:', err);
+      console.error('[CircleW] Error adding ICE candidate:', err);
     }
   };
 
@@ -434,7 +434,7 @@ export default function VideoCall({
         setIsScreenSharing(true);
       }
     } catch (error) {
-      console.error('[Avari] Error toggling screen share:', error);
+      console.error('[CircleW] Error toggling screen share:', error);
       setError('Failed to share screen');
     }
   };
@@ -451,7 +451,7 @@ export default function VideoCall({
         }
       }
     } catch (error) {
-      console.error('[Avari] Error toggling recording:', error);
+      console.error('[CircleW] Error toggling recording:', error);
       setError('Failed to start recording');
     }
   };
@@ -488,13 +488,13 @@ export default function VideoCall({
         });
       }
     } catch (error) {
-      console.error('[Avari] Error sending message:', error);
+      console.error('[CircleW] Error sending message:', error);
     }
   };
 
   // Handle end call - pass recap data to parent
   const handleEndCall = () => {
-    console.log('[Avari] Ending call');
+    console.log('[CircleW] Ending call');
 
     // Stop recording if active
     if (isRecording) {
@@ -529,7 +529,7 @@ export default function VideoCall({
 
   // Handle reject call
   const handleRejectCall = () => {
-    console.log('[Avari] Rejecting call');
+    console.log('[CircleW] Rejecting call');
     rejectCall(otherUserId, 'User declined');
     setCallState('ended');
     cleanup();
@@ -538,7 +538,7 @@ export default function VideoCall({
 
   // Cleanup
   const cleanup = () => {
-    console.log('[Avari] Cleaning up resources');
+    console.log('[CircleW] Cleaning up resources');
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
@@ -556,16 +556,16 @@ export default function VideoCall({
   // Initialize call on mount - AUTO START VERSION
   useEffect(() => {
     if (!isConnected || iceServersLoading) {
-      console.log('[Avari] Not ready to start call:', { isConnected, iceServersLoading });
+      console.log('[CircleW] Not ready to start call:', { isConnected, iceServersLoading });
       return;
     }
 
     if (peerConnectionRef.current || localStreamRef.current) {
-      console.log('[Avari] Call already started');
+      console.log('[CircleW] Call already started');
       return;
     }
 
-    console.log('[Avari] Auto-starting call setup');
+    console.log('[CircleW] Auto-starting call setup');
 
     // Auto-start the call immediately (no manual accept needed)
     const autoStartCall = async () => {
@@ -586,12 +586,12 @@ export default function VideoCall({
         if (peerConnectionRef.current && peerConnectionRef.current.signalingState === 'stable') {
           const offer = await peerConnectionRef.current.createOffer();
           await peerConnectionRef.current.setLocalDescription(offer);
-          console.log('[Avari] Sending offer');
+          console.log('[CircleW] Sending offer');
           sendOffer(offer, otherUserId);
           setCallState('calling');
         }
       } catch (error) {
-        console.error('[Avari] Error auto-starting call:', error);
+        console.error('[CircleW] Error auto-starting call:', error);
         setError('Failed to start call: ' + (error as Error).message);
       }
     };
@@ -662,7 +662,7 @@ export default function VideoCall({
           filter: `channel_name=eq.${channelName}`
         },
         (payload) => {
-          console.log('[Avari] New message:', payload.new);
+          console.log('[CircleW] New message:', payload.new);
           setMessages(prev => {
             const exists = prev.some(m => m.id === payload.new.id);
             if (!exists) {

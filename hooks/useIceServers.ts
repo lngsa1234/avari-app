@@ -13,7 +13,7 @@ interface UseIceServersReturn {
 }
 
 /**
- * Hook to fetch ICE servers (STUN/TURN) from Avari backend
+ * Hook to fetch ICE servers (STUN/TURN) from CircleW backend
  * 
  * Usage:
  * ```typescript
@@ -44,13 +44,13 @@ export const useIceServers = (): UseIceServersReturn => {
         const data = await response.json();
         
         if (data.iceServers && Array.isArray(data.iceServers)) {
-          console.log('[Avari] Fetched ICE servers:', data.iceServers.length);
+          console.log('[CircleW] Fetched ICE servers:', data.iceServers.length);
           setIceServers(data.iceServers);
         }
         
         setError(null);
       } catch (err) {
-        console.error('[Avari] Failed to fetch ICE servers:', err);
+        console.error('[CircleW] Failed to fetch ICE servers:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch ICE servers');
         // Keep using default STUN servers
       } finally {

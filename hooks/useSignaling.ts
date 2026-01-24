@@ -21,9 +21,9 @@ interface SignalingCallbacks {
 }
 
 /**
- * Avari Signaling Hook - Socket.IO Version
+ * CircleW Signaling Hook - Socket.IO Version
  * 
- * Production-ready WebRTC signaling for Avari video calls
+ * Production-ready WebRTC signaling for CircleW video calls
  * Features:
  * - Automatic reconnection
  * - Connection state management
@@ -48,12 +48,12 @@ export const useSignaling = (
 
     const serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'http://localhost:3001';
     
-    console.log('[Avari] Connecting to:', serverUrl);
+    console.log('[CircleW] Connecting to:', serverUrl);
     setIsConnecting(true);
     
     // Detect if mobile
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    console.log('[Avari] Device type:', isMobile ? 'Mobile' : 'Desktop');
+    console.log('[CircleW] Device type:', isMobile ? 'Mobile' : 'Desktop');
     
     const socket = io(serverUrl, {
       transports: ['polling', 'websocket'], // Polling first on mobile for reliability
@@ -76,7 +76,7 @@ export const useSignaling = (
     // ================================================
 
     socket.on('connect', () => {
-      console.log('[Avari] Connected to signaling server');
+      console.log('[CircleW] Connected to signaling server');
       setIsConnected(true);
       setIsConnecting(false);
       setConnectionError(null);
@@ -86,7 +86,7 @@ export const useSignaling = (
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('[Avari] Disconnected:', reason);
+      console.log('[CircleW] Disconnected:', reason);
       setIsConnected(false);
       
       if (reason === 'io server disconnect') {
@@ -96,7 +96,7 @@ export const useSignaling = (
     });
 
     socket.on('connect_error', (error) => {
-      console.error('[Avari] Connection error:', error);
+      console.error('[CircleW] Connection error:', error);
       setIsConnecting(false);
       setConnectionError(error.message);
       callbacks.onError?.({ 
@@ -106,7 +106,7 @@ export const useSignaling = (
     });
 
     socket.on('reconnect', (attemptNumber) => {
-      console.log(`[Avari] Reconnected after ${attemptNumber} attempts`);
+      console.log(`[CircleW] Reconnected after ${attemptNumber} attempts`);
       setIsConnected(true);
       setConnectionError(null);
       
@@ -115,16 +115,16 @@ export const useSignaling = (
     });
 
     socket.on('reconnect_attempt', (attemptNumber) => {
-      console.log(`[Avari] Reconnection attempt ${attemptNumber}`);
+      console.log(`[CircleW] Reconnection attempt ${attemptNumber}`);
       setIsConnecting(true);
     });
 
     socket.on('reconnect_error', (error) => {
-      console.error('[Avari] Reconnection error:', error);
+      console.error('[CircleW] Reconnection error:', error);
     });
 
     socket.on('reconnect_failed', () => {
-      console.error('[Avari] Reconnection failed after all attempts');
+      console.error('[CircleW] Reconnection failed after all attempts');
       setConnectionError('Failed to reconnect');
       callbacks.onError?.({ 
         type: 'reconnection', 
@@ -137,13 +137,13 @@ export const useSignaling = (
     // ================================================
 
     socket.on('joined', ({ matchId: joinedMatchId, participants: roomParticipants }) => {
-      console.log(`[Avari] Joined match ${joinedMatchId}`);
-      console.log('[Avari] Participants:', roomParticipants);
+      console.log(`[CircleW] Joined match ${joinedMatchId}`);
+      console.log('[CircleW] Participants:', roomParticipants);
       setParticipants(roomParticipants);
     });
 
     socket.on('user-joined', ({ userId: joinedUserId }) => {
-      console.log('[Avari] User joined:', joinedUserId);
+      console.log('[CircleW] User joined:', joinedUserId);
       setParticipants(prev => {
         if (prev.includes(joinedUserId)) return prev;
         return [...prev, joinedUserId];
@@ -152,7 +152,7 @@ export const useSignaling = (
     });
 
     socket.on('user-left', ({ userId: leftUserId }) => {
-      console.log('[Avari] User left:', leftUserId);
+      console.log('[CircleW] User left:', leftUserId);
       setParticipants(prev => prev.filter(id => id !== leftUserId));
       callbacks.onUserLeft?.(leftUserId);
     });
@@ -162,22 +162,22 @@ export const useSignaling = (
     // ================================================
 
     socket.on('incoming-call', ({ from }) => {
-      console.log('[Avari] Incoming call from:', from);
+      console.log('[CircleW] Incoming call from:', from);
       callbacks.onIncomingCall?.(from);
     });
 
     socket.on('call-accepted', ({ from }) => {
-      console.log('[Avari] Call accepted by:', from);
+      console.log('[CircleW] Call accepted by:', from);
       callbacks.onCallAccepted?.(from);
     });
 
     socket.on('call-rejected', ({ from, reason }) => {
-      console.log('[Avari] Call rejected by:', from, 'Reason:', reason);
+      console.log('[CircleW] Call rejected by:', from, 'Reason:', reason);
       callbacks.onCallRejected?.(from, reason);
     });
 
     socket.on('call-ended', ({ from }) => {
-      console.log('[Avari] Call ended by:', from);
+      console.log('[CircleW] Call ended by:', from);
       callbacks.onCallEnded?.(from);
     });
 
@@ -186,17 +186,17 @@ export const useSignaling = (
     // ================================================
 
     socket.on('offer', ({ offer, from }) => {
-      console.log('[Avari] Received offer from:', from);
+      console.log('[CircleW] Received offer from:', from);
       callbacks.onOffer?.(offer, from);
     });
 
     socket.on('answer', ({ answer, from }) => {
-      console.log('[Avari] Received answer from:', from);
+      console.log('[CircleW] Received answer from:', from);
       callbacks.onAnswer?.(answer, from);
     });
 
     socket.on('ice-candidate', ({ candidate, from }) => {
-      console.log('[Avari] Received ICE candidate from:', from);
+      console.log('[CircleW] Received ICE candidate from:', from);
       callbacks.onIceCandidate?.(candidate, from);
     });
 
@@ -205,12 +205,12 @@ export const useSignaling = (
     // ================================================
 
     socket.on('error', ({ type, message }) => {
-      console.error('[Avari] Server error:', type, message);
+      console.error('[CircleW] Server error:', type, message);
       callbacks.onError?.({ type, message });
     });
 
     socket.on('server-shutdown', ({ message }) => {
-      console.warn('[Avari] Server shutting down:', message);
+      console.warn('[CircleW] Server shutting down:', message);
       callbacks.onError?.({ 
         type: 'server_shutdown', 
         message 
@@ -223,13 +223,13 @@ export const useSignaling = (
     
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        console.log('[Avari] App went to background (mobile)');
+        console.log('[CircleW] App went to background (mobile)');
         // Don't disconnect, but log it
       } else {
-        console.log('[Avari] App came to foreground (mobile)');
+        console.log('[CircleW] App came to foreground (mobile)');
         // Reconnect if disconnected
         if (!socket.connected) {
-          console.log('[Avari] Reconnecting after coming to foreground');
+          console.log('[CircleW] Reconnecting after coming to foreground');
           socket.connect();
         }
       }
@@ -237,7 +237,7 @@ export const useSignaling = (
 
     const handlePageShow = (event: PageTransitionEvent) => {
       if (event.persisted && !socket.connected) {
-        console.log('[Avari] Page restored from cache, reconnecting');
+        console.log('[CircleW] Page restored from cache, reconnecting');
         socket.connect();
       }
     };
@@ -263,7 +263,7 @@ export const useSignaling = (
     // ================================================
 
     return () => {
-      console.log('[Avari] Cleaning up socket connection');
+      console.log('[CircleW] Cleaning up socket connection');
       
       // Clean up mobile event listeners
       if (isMobile) {
@@ -287,7 +287,7 @@ export const useSignaling = (
 
   const sendMessage = useCallback((event: string, data: any) => {
     if (!socketRef.current?.connected) {
-      console.error('[Avari] Cannot send message - not connected');
+      console.error('[CircleW] Cannot send message - not connected');
       return false;
     }
     socketRef.current.emit(event, data);
@@ -295,12 +295,12 @@ export const useSignaling = (
   }, []);
 
   const sendOffer = useCallback((offer: RTCSessionDescriptionInit, to: string) => {
-    console.log('[Avari] Sending offer to:', to);
+    console.log('[CircleW] Sending offer to:', to);
     return sendMessage('offer', { offer, to });
   }, [sendMessage]);
 
   const sendAnswer = useCallback((answer: RTCSessionDescriptionInit, to: string) => {
-    console.log('[Avari] Sending answer to:', to);
+    console.log('[CircleW] Sending answer to:', to);
     return sendMessage('answer', { answer, to });
   }, [sendMessage]);
 
@@ -309,22 +309,22 @@ export const useSignaling = (
   }, [sendMessage]);
 
   const initiateCall = useCallback((to: string) => {
-    console.log('[Avari] Initiating call to:', to);
+    console.log('[CircleW] Initiating call to:', to);
     return sendMessage('initiate-call', { to });
   }, [sendMessage]);
 
   const acceptCall = useCallback((to: string) => {
-    console.log('[Avari] Accepting call from:', to);
+    console.log('[CircleW] Accepting call from:', to);
     return sendMessage('accept-call', { to });
   }, [sendMessage]);
 
   const rejectCall = useCallback((to: string, reason?: string) => {
-    console.log('[Avari] Rejecting call from:', to);
+    console.log('[CircleW] Rejecting call from:', to);
     return sendMessage('reject-call', { to, reason });
   }, [sendMessage]);
 
   const endCall = useCallback((to?: string) => {
-    console.log('[Avari] Ending call');
+    console.log('[CircleW] Ending call');
     return sendMessage('end-call', { to });
   }, [sendMessage]);
 

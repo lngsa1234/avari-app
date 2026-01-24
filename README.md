@@ -1,6 +1,8 @@
-# Avari - Women's Networking Platform
+# CircleW - Women's Networking Community
 
-Avari is a Next.js-based platform that connects professional women through hybrid meetups, 1:1 coffee chats, group video calls, and direct messaging.
+CircleW is a Next.js-based platform that connects professional women through hybrid meetups, 1:1 coffee chats, group video calls, and direct messaging.
+
+**Find your circle. Move forward.**
 
 ## ✨ Features
 
@@ -24,8 +26,8 @@ Avari is a Next.js-based platform that connects professional women through hybri
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/avari-app.git
-cd avari-app
+git clone https://github.com/your-org/circlew-app.git
+cd circlew-app
 
 # Install dependencies
 npm install
@@ -82,7 +84,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 ## 📁 Project Structure
 
 ```
-avari-app/
+circlew-app/
 ├── app/                    # Next.js pages
 ├── components/             # React components
 ├── hooks/                  # Custom React hooks
@@ -158,7 +160,7 @@ Contributions are welcome! Please read the documentation before submitting PRs.
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/your-org/avari-app/issues)
+- **Issues**: [GitHub Issues](https://github.com/your-org/circlew-app/issues)
 - **Docs**: See `/docs` folder
 - **Supabase Support**: [Discord](https://discord.supabase.com)
 - **Agora Support**: [Community Forum](https://www.agora.io/en/community/)

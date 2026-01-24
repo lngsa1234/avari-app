@@ -91,7 +91,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   // Forgot Password Screen
   if (showForgotPassword) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Reset Password</h2>
@@ -118,7 +118,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
             />
             <button
               onClick={handleForgotPassword}
-              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
+              className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
             >
               Send Reset Link
             </button>
@@ -141,11 +141,11 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   // Login Screen
   if (showLogin) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome Back</h2>
-            <p className="text-gray-600">Log in to your Avari account</p>
+            <p className="text-gray-600">Log in to your CircleW account</p>
           </div>
 
           {message && (
@@ -185,7 +185,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
             </div>
             <button
               onClick={handleEmailSignIn}
-              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
+              className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
             >
               Log In
             </button>
@@ -195,7 +195,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
                 setShowLogin(false)
                 setMessage(null)
               }}
-              className="w-full text-rose-500 hover:text-rose-600 text-sm"
+              className="w-full text-stone-600 hover:text-stone-700 text-sm"
             >
               Forgot password?
             </button>
@@ -217,7 +217,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   // Signup Screen
   if (showEmailSignup) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Sign Up with Email</h2>
@@ -260,7 +260,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
             </div>
             <button
               onClick={handleEmailSignUp}
-              className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
+              className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
             >
               Sign Up
             </button>
@@ -281,12 +281,19 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
 
   // Main Landing Page
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
         <div className="text-center mb-8">
-          <div className="text-6xl mb-4">☕</div>
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Avari</h1>
-          <p className="text-gray-600">Connect & Grow Through Coffee</p>
+          {/* CircleW Logo */}
+          <div className="flex justify-center mb-4">
+            <svg width="80" height="80" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="#78716c" strokeWidth="4" strokeDasharray="220 60"/>
+              <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="#78716c">W</text>
+            </svg>
+          </div>
+          <h1 className="text-4xl font-bold text-stone-700 mb-2">CircleW</h1>
+          <p className="text-stone-600">Connect and grow through coffee</p>
+          <p className="text-xs text-stone-400 mt-1">Women's Networking Community</p>
         </div>
 
         {message && (
@@ -324,7 +331,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
 
           <button
             onClick={() => setShowEmailSignup(true)}
-            className="w-full bg-rose-500 hover:bg-rose-600 text-white font-medium py-3 rounded-lg"
+            className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
           >
             Sign up with Email
           </button>
@@ -332,7 +339,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
           <div className="text-center">
             <button
               onClick={() => setShowLogin(true)}
-              className="text-rose-500 hover:text-rose-600 font-medium text-sm"
+              className="text-stone-600 hover:text-stone-700 font-medium text-sm"
             >
               Already have an account? Log in
             </button>
@@ -340,7 +347,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
         </div>
 
         <div className="mt-8 text-center">
-          <p className="text-sm text-gray-600 mb-4">Join a community of women building meaningful connections</p>
+          <p className="text-sm text-stone-500 mb-4">Join a community of women building meaningful connections</p>
         </div>
       </div>
     </div>

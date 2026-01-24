@@ -514,13 +514,16 @@ export default function VideoMeeting() {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* Header */}
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-4 flex-shrink-0">
+      <div className="bg-gradient-to-r from-stone-600 to-stone-700 p-4 flex-shrink-0">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-3xl">☕</span>
+            <svg width="32" height="32" viewBox="0 0 100 100" className="text-white">
+              <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
+              <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
+            </svg>
             <div>
-              <h1 className="text-white font-bold text-xl">Avari Coffee Chat</h1>
-              <p className="text-rose-100 text-sm">
+              <h1 className="text-white font-bold text-xl">CircleW Coffee Chat</h1>
+              <p className="text-stone-200 text-sm">
                 {isConnected ? `Connected with ${partnerName}` : 'Connecting...'}
               </p>
             </div>
