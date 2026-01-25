@@ -25,6 +25,10 @@ export default function useSpeechRecognition({
   const isListeningRef = useRef(false);
   const restartTimeoutRef = useRef(null);
   const instanceIdRef = useRef(0); // Track recognition instance to prevent stale restarts
+  const errorCountRef = useRef(0); // Track consecutive errors for backoff
+  const lastErrorRef = useRef(null); // Track last error type
+  const MAX_CONSECUTIVE_ERRORS = 5; // Stop retrying after this many errors
+  const BASE_RESTART_DELAY = 100; // Base delay in ms
 
   // Check browser support and detect Safari
   useEffect(() => {
@@ -82,49 +86,87 @@ export default function useSpeechRecognition({
 
       setIsListening(false);
 
+      // Check if we've hit too many consecutive errors
+      if (errorCountRef.current >= MAX_CONSECUTIVE_ERRORS) {
+        console.log('[SpeechRecognition] Max consecutive errors reached, stopping auto-restart');
+        isListeningRef.current = false;
+        setError('Speech recognition temporarily unavailable. Please try again later.');
+        return;
+      }
+
       // Auto-restart if we're supposed to be listening
       if (isListeningRef.current && recognitionRef.current) {
-        console.log('[SpeechRecognition] Auto-restarting...');
+        // Calculate backoff delay: 100ms, 200ms, 400ms, 800ms, 1600ms...
+        const backoffDelay = lastErrorRef.current
+          ? Math.min(BASE_RESTART_DELAY * Math.pow(2, errorCountRef.current), 5000)
+          : BASE_RESTART_DELAY;
+
+        console.log('[SpeechRecognition] Auto-restarting in', backoffDelay, 'ms (error count:', errorCountRef.current, ')');
+
         restartTimeoutRef.current = setTimeout(() => {
           // Double-check instance is still current
           if (isListeningRef.current && recognitionRef.current && instanceId === instanceIdRef.current) {
             try {
               recognitionRef.current.start();
+              // Clear last error on successful restart attempt
+              lastErrorRef.current = null;
             } catch (e) {
               console.log('[SpeechRecognition] Restart error:', e.message);
+              errorCountRef.current += 1;
             }
           }
-        }, 100);
+        }, backoffDelay);
       }
     };
 
     recognition.onerror = (event) => {
-      console.log('[SpeechRecognition] Error:', event.error);
+      console.log('[SpeechRecognition] Error:', event.error, '(count:', errorCountRef.current + 1, ')');
+
+      // Track error for backoff logic
+      lastErrorRef.current = event.error;
 
       // Handle specific errors
       switch (event.error) {
         case 'no-speech':
-          // This is normal, just means silence was detected
+          // This is normal, just means silence was detected - don't count as error
+          lastErrorRef.current = null;
           break;
         case 'audio-capture':
           setError('No microphone detected');
+          errorCountRef.current += 1;
           break;
         case 'not-allowed':
           setError('Microphone permission denied');
           isListeningRef.current = false;
+          errorCountRef.current = MAX_CONSECUTIVE_ERRORS; // Stop retrying
           break;
         case 'network':
-          setError('Network error occurred');
+          // Network errors are common and recoverable - increment count for backoff
+          errorCountRef.current += 1;
+          if (errorCountRef.current >= MAX_CONSECUTIVE_ERRORS) {
+            setError('Network connection issues. Speech recognition paused.');
+          }
+          // Don't show error for first few network errors (they'll auto-recover)
           break;
         case 'aborted':
-          // User or system aborted, don't show error
+          // User or system aborted, don't show error or count
+          lastErrorRef.current = null;
           break;
         default:
           setError(`Speech recognition error: ${event.error}`);
+          errorCountRef.current += 1;
       }
     };
 
     recognition.onresult = (event) => {
+      // Reset error count on successful result - connection is working
+      if (errorCountRef.current > 0) {
+        console.log('[SpeechRecognition] Resetting error count after successful result');
+        errorCountRef.current = 0;
+        lastErrorRef.current = null;
+        setError(null);
+      }
+
       let finalTranscript = '';
       let interimTranscript = '';
 
@@ -175,6 +217,11 @@ export default function useSpeechRecognition({
       clearTimeout(restartTimeoutRef.current);
       restartTimeoutRef.current = null;
     }
+
+    // Reset error tracking for fresh start
+    errorCountRef.current = 0;
+    lastErrorRef.current = null;
+    setError(null);
 
     // Always create a new recognition instance to ensure fresh settings
     // Increment instance ID to invalidate old instance's callbacks

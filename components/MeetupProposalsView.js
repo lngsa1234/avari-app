@@ -26,12 +26,23 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
   const [selectedProposal, setSelectedProposal] = useState(null);
 
   // Form states
-  const [title, setTitle] = useState('');
+  const [topic, setTopic] = useState('');
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
+  const [duration, setDuration] = useState('60'); // Default 60 minutes
+  const [participantLimit, setParticipantLimit] = useState('100'); // Default 100
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [vibeCategory, setVibeCategory] = useState(''); // advice, vent, grow
+
+  // Vibe categories
+  const VIBE_OPTIONS = [
+    { id: '', label: 'Select a vibe (optional)' },
+    { id: 'advice', label: 'I need advice - Mentorship & guidance' },
+    { id: 'vent', label: 'I want to vent - Support & casual' },
+    { id: 'grow', label: 'I want to grow - Skills & learning' }
+  ];
 
   useEffect(() => {
     loadData();
@@ -59,27 +70,33 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
   };
 
   const handleSubmitProposal = async () => {
-    if (!title.trim() || !date || !time) {
-      alert('Please fill in all required fields (title, date, time)');
+    if (!topic.trim() || !date || !time || !duration) {
+      alert('Please fill in all required fields (topic, date, time, duration)');
       return;
     }
 
     try {
       await submitMeetupProposal(supabase, {
-        title: title.trim(),
+        topic: topic.trim(),
         date,
         time,
-        description: description.trim() || null
+        duration: parseInt(duration),
+        participant_limit: participantLimit ? parseInt(participantLimit) : 100,
+        description: description.trim() || null,
+        vibe_category: vibeCategory || null
       });
 
       alert('✅ Proposal submitted! An admin will review it soon.');
 
       // Reset form
       setShowCreateModal(false);
-      setTitle('');
+      setTopic('');
       setDate('');
       setTime('');
+      setDuration('60');
+      setParticipantLimit('100');
       setDescription('');
+      setVibeCategory('');
 
       // Reload data
       await loadData();
@@ -261,10 +278,21 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
               <div key={proposal.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-800 text-lg">{proposal.title}</h4>
+                    <h4 className="font-semibold text-gray-800 text-lg">{proposal.topic || proposal.title}</h4>
                     <div className="flex items-center text-sm text-gray-600 mt-1">
                       <Calendar className="w-4 h-4 mr-1" />
                       {formatDate(proposal.date)} at {formatTime(proposal.time)}
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                      {proposal.duration && (
+                        <span className="flex items-center">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {proposal.duration} min
+                        </span>
+                      )}
+                      {proposal.participant_limit && (
+                        <span>Max {proposal.participant_limit} participants</span>
+                      )}
                     </div>
                     {proposal.description && (
                       <p className="text-sm text-gray-600 mt-2">{proposal.description}</p>
@@ -308,12 +336,23 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
               <div key={proposal.id} className="bg-white rounded-lg shadow p-5 border-2 border-blue-200">
                 <div className="mb-4">
                   <div className="flex justify-between items-start mb-2">
-                    <h4 className="font-semibold text-gray-800 text-lg">{proposal.title}</h4>
+                    <h4 className="font-semibold text-gray-800 text-lg">{proposal.topic || proposal.title}</h4>
                     {getStatusBadge(proposal.status)}
                   </div>
                   <div className="flex items-center text-sm text-gray-600 mt-1">
                     <Calendar className="w-4 h-4 mr-1" />
                     {formatDate(proposal.date)} at {formatTime(proposal.time)}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                    {proposal.duration && (
+                      <span className="flex items-center">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {proposal.duration} min
+                      </span>
+                    )}
+                    {proposal.participant_limit && (
+                      <span>Max {proposal.participant_limit} participants</span>
+                    )}
                   </div>
                   {proposal.description && (
                     <p className="text-sm text-gray-600 mt-2">{proposal.description}</p>
@@ -352,10 +391,21 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
               <div key={proposal.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-800 text-lg">{proposal.title}</h4>
+                    <h4 className="font-semibold text-gray-800 text-lg">{proposal.topic || proposal.title}</h4>
                     <div className="flex items-center text-sm text-gray-600 mt-1">
                       <Calendar className="w-4 h-4 mr-1" />
                       {formatDate(proposal.date)} at {formatTime(proposal.time)}
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-gray-500 mt-1">
+                      {proposal.duration && (
+                        <span className="flex items-center">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {proposal.duration} min
+                        </span>
+                      )}
+                      {proposal.participant_limit && (
+                        <span>Max {proposal.participant_limit} participants</span>
+                      )}
                     </div>
                     {proposal.description && (
                       <p className="text-sm text-gray-600 mt-2">{proposal.description}</p>
@@ -388,9 +438,11 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
               <button
                 onClick={() => {
                   setShowCreateModal(false);
-                  setTitle('');
+                  setTopic('');
                   setDate('');
                   setTime('');
+                  setDuration('60');
+                  setParticipantLimit('100');
                   setDescription('');
                 }}
                 className="text-gray-500 hover:text-gray-700"
@@ -402,41 +454,78 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Meetup Topic/Title *
+                  Topic *
                 </label>
                 <input
                   type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
                   placeholder="e.g., Product Manager Coffee Chat"
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
                   maxLength={200}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Proposed Date *
-                </label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Time *
+                  </label>
+                  <input
+                    type="time"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Proposed Time *
-                </label>
-                <input
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Duration *
+                  </label>
+                  <select
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="60">60 minutes</option>
+                    <option value="90">90 minutes</option>
+                    <option value="120">2 hours</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Participant Limit
+                  </label>
+                  <input
+                    type="number"
+                    value={participantLimit}
+                    onChange={(e) => setParticipantLimit(e.target.value)}
+                    placeholder="100"
+                    min="2"
+                    max="500"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Optional, default 100</p>
+                </div>
               </div>
 
               <div>
@@ -454,16 +543,39 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
                   {description.length}/1000 characters
                 </p>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Vibe Category (Optional)
+                </label>
+                <select
+                  value={vibeCategory}
+                  onChange={(e) => setVibeCategory(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
+                >
+                  {VIBE_OPTIONS.map(option => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Helps others find your meetup based on their mood
+                </p>
+              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => {
                   setShowCreateModal(false);
-                  setTitle('');
+                  setTopic('');
                   setDate('');
                   setTime('');
+                  setDuration('60');
+                  setParticipantLimit('100');
                   setDescription('');
+                  setVibeCategory('');
                 }}
                 className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 rounded-lg transition-colors"
               >
@@ -471,7 +583,7 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
               </button>
               <button
                 onClick={handleSubmitProposal}
-                disabled={!title.trim() || !date || !time}
+                disabled={!topic.trim() || !date || !time || !duration}
                 className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Submit Proposal
@@ -502,8 +614,8 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
 
             <div className="space-y-4 mb-6">
               <div>
-                <p className="text-sm font-medium text-gray-700">Title:</p>
-                <p className="text-gray-800">{selectedProposal.title}</p>
+                <p className="text-sm font-medium text-gray-700">Topic:</p>
+                <p className="text-gray-800">{selectedProposal.topic || selectedProposal.title}</p>
               </div>
 
               <div>
@@ -511,6 +623,17 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
                 <p className="text-gray-800">
                   {formatDate(selectedProposal.date)} at {formatTime(selectedProposal.time)}
                 </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Duration:</p>
+                  <p className="text-gray-800">{selectedProposal.duration || 60} minutes</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Participant Limit:</p>
+                  <p className="text-gray-800">{selectedProposal.participant_limit || 100}</p>
+                </div>
               </div>
 
               {selectedProposal.description && (

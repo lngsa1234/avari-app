@@ -2,7 +2,7 @@
 
 import { supabase } from '@/lib/supabase'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video } from 'lucide-react'
+import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import CoffeeChatsView from './CoffeeChatsView'
@@ -16,6 +16,7 @@ import Onboarding from './Onboarding'
 import JourneyProgress from './JourneyProgress'
 import NextStepPrompt from './NextStepPrompt'
 import { createAgoraRoom, hasAgoraRoom } from '@/lib/agoraHelpers'
+import NetworkDiscoverView from './NetworkDiscoverView'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -57,7 +58,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [showEditMeetup, setShowEditMeetup] = useState(false)
   const [editedProfile, setEditedProfile] = useState(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [newMeetup, setNewMeetup] = useState({ date: '', time: '', location: '' })
+  const [newMeetup, setNewMeetup] = useState({ date: '', time: '', location: '', topic: '', duration: '60', participantLimit: '100', description: '' })
   const [selectedDate, setSelectedDate] = useState(null) // For DatePicker
   const [editingMeetup, setEditingMeetup] = useState(null)
   const [meetups, setMeetups] = useState([])
@@ -999,8 +1000,8 @@ function MainApp({ currentUser, onSignOut }) {
   }
 
   const handleCreateMeetup = async () => {
-    if (!newMeetup.date || !newMeetup.time) {
-      alert('Please fill in date and time')
+    if (!newMeetup.date || !newMeetup.time || !newMeetup.topic) {
+      alert('Please fill in topic, date and time')
       return
     }
 
@@ -1011,6 +1012,10 @@ function MainApp({ currentUser, onSignOut }) {
           {
             date: newMeetup.date,
             time: newMeetup.time,
+            topic: newMeetup.topic.trim(),
+            duration: parseInt(newMeetup.duration) || 60,
+            participant_limit: parseInt(newMeetup.participantLimit) || 100,
+            description: newMeetup.description?.trim() || null,
             location: newMeetup.location || null,
             created_by: currentUser.id
           }
@@ -1022,7 +1027,7 @@ function MainApp({ currentUser, onSignOut }) {
       } else {
         // Reload meetups from database to ensure consistency
         await loadMeetupsFromDatabase()
-        setNewMeetup({ date: '', time: '', location: '' })
+        setNewMeetup({ date: '', time: '', location: '', topic: '', duration: '60', participantLimit: '100', description: '' })
         setSelectedDate(null)
         setShowCreateMeetup(false)
         alert('Meetup created successfully!')
@@ -2165,15 +2170,15 @@ function MainApp({ currentUser, onSignOut }) {
                 <span>Chats</span>
               </button>
               <button
-                onClick={() => setCurrentView('connections')}
+                onClick={() => setCurrentView('discover')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentView === 'connections'
+                  currentView === 'discover'
                     ? 'text-white bg-stone-600 border-b-2 border-amber-400'
                     : 'text-stone-300 hover:text-white hover:bg-stone-600'
                 }`}
               >
-                <Users className="w-4 h-4" />
-                <span>Network</span>
+                <Compass className="w-4 h-4" />
+                <span>Discover</span>
               </button>
               <button
                 onClick={() => setCurrentView('connectionGroups')}
@@ -2224,6 +2229,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} connections={connections} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'connections' && <ConnectionsView />}
+        {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={setCurrentView} onHostMeetup={() => setShowCreateMeetup(true)} />}
         {currentView === 'messages' && <MessagesView currentUser={currentUser} supabase={supabase} onUnreadCountChange={loadUnreadMessageCount} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'meetupProposals' && <MeetupProposalsView currentUser={currentUser} supabase={supabase} isAdmin={currentUser.role === 'admin'} />}
@@ -2404,52 +2410,97 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Create Meetup Modal */}
       {showCreateMeetup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800">Create New Meetup</h3>
               <button onClick={() => setShowCreateMeetup(false)} className="text-gray-500 hover:text-gray-700">
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="space-y-4">
-              {/* DATE PICKER */}
+              {/* TOPIC */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
-                <DatePicker
-                  selected={selectedDate}
-                  onChange={(date) => {
-                    setSelectedDate(date)
-                    if (date) {
-                      // Convert to ISO format for database
-                      const year = date.getFullYear()
-                      const month = String(date.getMonth() + 1).padStart(2, '0')
-                      const day = String(date.getDate()).padStart(2, '0')
-                      setNewMeetup({ ...newMeetup, date: `${year}-${month}-${day}` })
-                    } else {
-                      setNewMeetup({ ...newMeetup, date: '' })
-                    }
-                  }}
-                  minDate={new Date()}
-                  dateFormat="MMMM d, yyyy"
-                  placeholderText="Click to select a date"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500 cursor-pointer"
-                  wrapperClassName="w-full"
-                  showPopperArrow={false}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Topic *</label>
+                <input
+                  type="text"
+                  value={newMeetup.topic}
+                  onChange={(e) => setNewMeetup({ ...newMeetup, topic: e.target.value })}
+                  placeholder="e.g., Product Manager Coffee Chat"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  maxLength={200}
                   required
                 />
               </div>
 
-              {/* TIME PICKER */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
-                <input
-                  type="time"
-                  value={newMeetup.time}
-                  onChange={(e) => setNewMeetup({ ...newMeetup, time: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
-                  required
-                />
+              {/* DATE & TIME */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                  <DatePicker
+                    selected={selectedDate}
+                    onChange={(date) => {
+                      setSelectedDate(date)
+                      if (date) {
+                        const year = date.getFullYear()
+                        const month = String(date.getMonth() + 1).padStart(2, '0')
+                        const day = String(date.getDate()).padStart(2, '0')
+                        setNewMeetup({ ...newMeetup, date: `${year}-${month}-${day}` })
+                      } else {
+                        setNewMeetup({ ...newMeetup, date: '' })
+                      }
+                    }}
+                    minDate={new Date()}
+                    dateFormat="MMM d, yyyy"
+                    placeholderText="Select date"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500 cursor-pointer"
+                    wrapperClassName="w-full"
+                    showPopperArrow={false}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
+                  <input
+                    type="time"
+                    value={newMeetup.time}
+                    onChange={(e) => setNewMeetup({ ...newMeetup, time: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* DURATION & PARTICIPANT LIMIT */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Duration *</label>
+                  <select
+                    value={newMeetup.duration}
+                    onChange={(e) => setNewMeetup({ ...newMeetup, duration: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="30">30 minutes</option>
+                    <option value="45">45 minutes</option>
+                    <option value="60">60 minutes</option>
+                    <option value="90">90 minutes</option>
+                    <option value="120">2 hours</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Participant Limit</label>
+                  <input
+                    type="number"
+                    value={newMeetup.participantLimit}
+                    onChange={(e) => setNewMeetup({ ...newMeetup, participantLimit: e.target.value })}
+                    placeholder="100"
+                    min="2"
+                    max="500"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
               </div>
 
               {/* LOCATION */}
@@ -2464,15 +2515,31 @@ function MainApp({ currentUser, onSignOut }) {
                 />
                 <p className="text-xs text-gray-500 mt-1">You can set the location after seeing who signs up</p>
               </div>
+
+              {/* DESCRIPTION */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Description (Optional)</label>
+                <textarea
+                  value={newMeetup.description}
+                  onChange={(e) => setNewMeetup({ ...newMeetup, description: e.target.value })}
+                  placeholder="Tell participants what this meetup is about..."
+                  className="w-full border border-gray-300 rounded-lg p-3 h-20 resize-none focus:outline-none focus:border-purple-500"
+                  maxLength={1000}
+                />
+                <p className="text-xs text-gray-500 mt-1">{newMeetup.description?.length || 0}/1000 characters</p>
+              </div>
             </div>
 
             {/* PREVIEW */}
-            {newMeetup.date && (
+            {newMeetup.topic && newMeetup.date && (
               <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
                 <p className="text-sm text-purple-800 font-medium">Preview:</p>
+                <p className="text-sm text-purple-700 font-semibold">{newMeetup.topic}</p>
                 <p className="text-sm text-purple-700">
                   {formatDate(newMeetup.date)}
                   {newMeetup.time && ` at ${formatTime(newMeetup.time)}`}
+                  {` · ${newMeetup.duration} min`}
+                  {newMeetup.participantLimit && ` · Max ${newMeetup.participantLimit}`}
                 </p>
               </div>
             )}
@@ -2486,7 +2553,7 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={handleCreateMeetup}
-                disabled={!newMeetup.date || !newMeetup.time}
+                disabled={!newMeetup.topic || !newMeetup.date || !newMeetup.time}
                 className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Create Meetup
