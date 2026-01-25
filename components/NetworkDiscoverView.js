@@ -18,7 +18,9 @@ import {
   ThumbsUp,
   Clock,
   MapPin,
-  ChevronRight
+  ChevronRight,
+  AlertCircle,
+  Sparkles
 } from 'lucide-react';
 
 // Vibe categories mapping
@@ -68,6 +70,30 @@ export default function NetworkDiscoverView({
 
   // Check if user is new (no meetups attended, no connections)
   const isNewUser = connections.length === 0;
+
+  // Calculate profile completion for nudge banner
+  const getProfileCompletion = () => {
+    if (!currentUser) return { percentage: 0, missing: [] };
+
+    const fields = [
+      { key: 'name', label: 'name' },
+      { key: 'career', label: 'role' },
+      { key: 'industry', label: 'industry' },
+      { key: 'career_stage', label: 'career stage' },
+      { key: 'vibe_category', label: 'vibe' },
+      { key: 'hook', label: 'hook' },
+      { key: 'city', label: 'location' },
+      { key: 'profile_picture', label: 'photo' }
+    ];
+
+    const filled = fields.filter(f => currentUser[f.key]);
+    const missing = fields.filter(f => !currentUser[f.key]).map(f => f.label);
+    const percentage = Math.round((filled.length / fields.length) * 100);
+
+    return { percentage, missing };
+  };
+
+  const profileCompletion = getProfileCompletion();
 
   useEffect(() => {
     loadData();
@@ -391,6 +417,42 @@ export default function NetworkDiscoverView({
         </div>
       )}
 
+      {/* Profile Completion Nudge */}
+      {profileCompletion.percentage < 100 && profileCompletion.percentage > 0 && (
+        <button
+          onClick={() => onNavigate?.('profile')}
+          className="w-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 text-left hover:shadow-md transition-shadow"
+        >
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="absolute -bottom-1 -right-1 bg-white rounded-full px-1.5 py-0.5 text-xs font-bold text-amber-600 border border-amber-200">
+                {profileCompletion.percentage}%
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-gray-800">
+                Complete your profile
+              </p>
+              <p className="text-sm text-amber-700">
+                Add {profileCompletion.missing.slice(0, 2).join(' & ')} to get 2x more connections
+              </p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-amber-500" />
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-3 h-2 bg-amber-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-400 to-orange-400 transition-all duration-500"
+              style={{ width: `${profileCompletion.percentage}%` }}
+            />
+          </div>
+        </button>
+      )}
+
       {/* Header */}
       <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
         <div className="flex items-center mb-2">
@@ -465,9 +527,9 @@ export default function NetworkDiscoverView({
 
       {/* 3. Dynamic Results Feed */}
 
-      {/* A. Large Meetup Cards (Featured Events) */}
+      {/* A. Large Meetup Cards (Featured Events) - Horizontal Scroll */}
       {featuredMeetups.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-gray-800">Featured Meetups</h3>
             <button
@@ -478,83 +540,70 @@ export default function NetworkDiscoverView({
             </button>
           </div>
 
-          {featuredMeetups.map((meetup) => {
-            const vibeColors = getVibeColor(meetup.vibe_category || 'grow');
-            const signupCount = meetup.signups?.length || 0;
+          <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
+            {featuredMeetups.map((meetup) => {
+              const vibeColors = getVibeColor(meetup.vibe_category || 'grow');
+              const signupCount = meetup.signups?.length || 0;
 
-            return (
-              <div
-                key={meetup.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
-              >
-                <div className={`h-2 ${vibeColors.button.split(' ')[0]}`} />
-                <div className="p-5">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-gray-800 text-lg">{meetup.topic}</h4>
-                      <div className="flex items-center text-sm text-gray-600 mt-1">
-                        <Calendar className="w-4 h-4 mr-1" />
-                        {new Date(meetup.date).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                        <Clock className="w-4 h-4 ml-3 mr-1" />
-                        {meetup.time}
-                      </div>
-                      {meetup.location && (
-                        <div className="flex items-center text-sm text-gray-500 mt-1">
-                          <MapPin className="w-4 h-4 mr-1" />
-                          {meetup.location}
-                        </div>
-                      )}
+              return (
+                <div
+                  key={meetup.id}
+                  className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow snap-start"
+                >
+                  <div className={`h-2 ${vibeColors.button.split(' ')[0]}`} />
+                  <div className="p-4">
+                    <h4 className="font-semibold text-gray-800 text-base line-clamp-2 mb-2">{meetup.topic}</h4>
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <Calendar className="w-4 h-4 mr-1 flex-shrink-0" />
+                      {new Date(meetup.date).toLocaleDateString('en-US', {
+                        weekday: 'short',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
                     </div>
-                    {meetup.vibe_category && (
-                      <span className={`text-xs px-2 py-1 rounded-full ${vibeColors.bg} ${vibeColors.text}`}>
-                        {VIBE_CATEGORIES[meetup.vibe_category]?.label || meetup.vibe_category}
-                      </span>
-                    )}
-                  </div>
+                    <div className="flex items-center text-sm text-gray-600 mb-3">
+                      <Clock className="w-4 h-4 mr-1 flex-shrink-0" />
+                      {meetup.time}
+                    </div>
 
-                  {/* Who's Going Avatars */}
-                  {signupCount > 0 && (
-                    <div className="flex items-center mb-4">
+                    {/* Who's Going Avatars */}
+                    <div className="flex items-center mb-3">
                       <div className="flex -space-x-2">
-                        {(meetup.signups || []).slice(0, 4).map((signup, idx) => (
+                        {(meetup.signups || []).slice(0, 3).map((signup, idx) => (
                           <div
                             key={idx}
-                            className="w-8 h-8 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 border-2 border-white flex items-center justify-center text-white text-xs font-medium"
+                            className="w-7 h-7 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 border-2 border-white flex items-center justify-center text-white text-xs font-medium"
                           >
                             {signup.user?.name?.[0] || '?'}
                           </div>
                         ))}
-                        {signupCount > 4 && (
-                          <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center text-gray-600 text-xs font-medium">
-                            +{signupCount - 4}
+                        {signupCount > 3 && (
+                          <div className="w-7 h-7 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center text-gray-600 text-xs font-medium">
+                            +{signupCount - 3}
                           </div>
                         )}
                       </div>
-                      <span className="text-sm text-gray-500 ml-3">
-                        {signupCount} going
+                      <span className="text-xs text-gray-500 ml-2">
+                        {signupCount > 0 ? `${signupCount} going` : 'Be first!'}
                       </span>
                     </div>
-                  )}
 
-                  <button
-                    onClick={() => onNavigate?.('home')}
-                    className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2.5 rounded-lg transition-colors"
-                  >
-                    Join Meetup
-                  </button>
+                    <button
+                      onClick={() => onNavigate?.('home')}
+                      className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2 rounded-lg transition-colors text-sm"
+                    >
+                      Join Meetup
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* B. Connection Group Cards (The Ring) */}
-      <div className="space-y-4">
+      {/* B. Connection Group Cards (The Ring) - Horizontal Scroll */}
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800">Connection Groups</h3>
           <button
@@ -565,138 +614,138 @@ export default function NetworkDiscoverView({
           </button>
         </div>
 
-        {connectionGroups.length === 0 ? (
-          <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 text-center">
-            <div className="flex justify-center mb-3">
-              <div className="flex -space-x-1">
-                {[1, 2, 3, 4].map((_, idx) => (
-                  <div
-                    key={idx}
-                    className="w-10 h-10 rounded-full border-2 border-dashed border-purple-300 flex items-center justify-center text-purple-300"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <h4 className="font-medium text-purple-800 mb-1">No groups yet</h4>
-            <p className="text-sm text-purple-600 mb-3">
-              Create a small group (3-4 people) for regular video chats
-            </p>
-            <button
-              onClick={() => onNavigate?.('connectionGroups')}
-              className="bg-purple-500 hover:bg-purple-600 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
-            >
-              Create a Group
-            </button>
-          </div>
-        ) : (
-          connectionGroups.slice(0, 3).map((group) => {
-            const members = group.members?.filter(m => m.status === 'accepted') || [];
-            const maxSlots = 4;
-            const filledSlots = members.length;
-            const emptySlots = maxSlots - filledSlots;
-
-            return (
-              <div
-                key={group.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-5"
-              >
-                <h4 className="font-semibold text-gray-800 mb-3">{group.name}</h4>
-
-                {/* The Ring Visualization */}
-                <div className="flex items-center justify-center mb-4">
-                  <div className="flex -space-x-1">
-                    {members.slice(0, maxSlots).map((member, idx) => (
-                      <div
-                        key={idx}
-                        className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 border-2 border-white flex items-center justify-center text-white text-sm font-medium shadow-sm"
-                        title={member.user?.name}
-                      >
-                        {member.user?.name?.[0] || '?'}
-                      </div>
-                    ))}
-                    {Array.from({ length: Math.max(0, emptySlots) }).map((_, idx) => (
-                      <div
-                        key={`empty-${idx}`}
-                        className="w-10 h-10 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </div>
-                    ))}
-                  </div>
+        <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
+          {connectionGroups.length === 0 ? (
+            <div className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-purple-50 border border-purple-200 rounded-xl p-5 text-center snap-start">
+              <div className="flex justify-center mb-3">
+                <div className="flex -space-x-1">
+                  {[1, 2, 3, 4].map((_, idx) => (
+                    <div
+                      key={idx}
+                      className="w-8 h-8 rounded-full border-2 border-dashed border-purple-300 flex items-center justify-center text-purple-300"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </div>
+                  ))}
                 </div>
-
-                <p className="text-sm text-gray-500 text-center mb-4">
-                  {filledSlots}/{maxSlots} members
-                </p>
-
-                <button
-                  onClick={() => onNavigate?.('connectionGroups')}
-                  className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded-lg transition-colors"
-                >
-                  Claim a Slot
-                </button>
               </div>
-            );
-          })
-        )}
+              <h4 className="font-medium text-purple-800 text-sm mb-1">No groups yet</h4>
+              <p className="text-xs text-purple-600 mb-3">
+                Create a small group for video chats
+              </p>
+              <button
+                onClick={() => onNavigate?.('connectionGroups')}
+                className="bg-purple-500 hover:bg-purple-600 text-white font-medium px-3 py-1.5 rounded-lg transition-colors text-xs"
+              >
+                Create Group
+              </button>
+            </div>
+          ) : (
+            connectionGroups.map((group) => {
+              const members = group.members?.filter(m => m.status === 'accepted') || [];
+              const maxSlots = 4;
+              const filledSlots = members.length;
+              const emptySlots = maxSlots - filledSlots;
+
+              return (
+                <div
+                  key={group.id}
+                  className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-white rounded-xl shadow-sm border border-gray-200 p-4 snap-start"
+                >
+                  <h4 className="font-semibold text-gray-800 text-sm mb-3 line-clamp-1">{group.name}</h4>
+
+                  {/* The Ring Visualization */}
+                  <div className="flex items-center justify-center mb-3">
+                    <div className="flex -space-x-1">
+                      {members.slice(0, maxSlots).map((member, idx) => (
+                        <div
+                          key={idx}
+                          className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 border-2 border-white flex items-center justify-center text-white text-xs font-medium shadow-sm"
+                          title={member.user?.name}
+                        >
+                          {member.user?.name?.[0] || '?'}
+                        </div>
+                      ))}
+                      {Array.from({ length: Math.max(0, emptySlots) }).map((_, idx) => (
+                        <div
+                          key={`empty-${idx}`}
+                          className="w-9 h-9 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-500 text-center mb-3">
+                    {filledSlots}/{maxSlots} members
+                  </p>
+
+                  <button
+                    onClick={() => onNavigate?.('connectionGroups')}
+                    className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-1.5 rounded-lg transition-colors text-sm"
+                  >
+                    Claim a Slot
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
-      {/* C. Community Wishlist (Requests) */}
+      {/* C. Community Wishlist (Requests) - Horizontal Scroll */}
       {meetupRequests.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <h3 className="text-lg font-semibold text-gray-800">Community Wishlist</h3>
 
-          {meetupRequests.map((request) => {
-            const supporterCount = request.supporter_count || request.supporters?.length || 0;
-            const hasSupported = request.supporters?.some(s => s.user_id === currentUser.id);
+          <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
+            {meetupRequests.map((request) => {
+              const supporterCount = request.supporter_count || request.supporters?.length || 0;
+              const hasSupported = request.supporters?.some(s => s.user_id === currentUser.id);
 
-            return (
-              <div
-                key={request.id}
-                className="bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200 p-4"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800">{request.topic}</p>
-                    {request.description && (
-                      <p className="text-sm text-gray-600 mt-1">{request.description}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-2">
-                      {supporterCount} {supporterCount === 1 ? 'person wants' : 'people want'} this
-                    </p>
+              return (
+                <div
+                  key={request.id}
+                  className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-sm bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200 p-4 sm:p-5 snap-start"
+                >
+                  <p className="font-medium text-gray-800 text-sm sm:text-base line-clamp-2 mb-1">{request.topic}</p>
+                  {request.description && (
+                    <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-2">{request.description}</p>
+                  )}
+                  <p className="text-xs sm:text-sm text-gray-500 mb-3">
+                    {supporterCount} {supporterCount === 1 ? 'person wants' : 'people want'} this
+                  </p>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleHostRequest(request)}
+                      className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs sm:text-sm font-medium py-2 sm:py-2.5 rounded-lg transition-colors"
+                    >
+                      Host This
+                    </button>
+                    <button
+                      onClick={() => !hasSupported && handleSupportRequest(request.id)}
+                      disabled={hasSupported}
+                      className={`flex-1 text-xs sm:text-sm font-medium py-2 sm:py-2.5 rounded-lg transition-colors flex items-center justify-center ${
+                        hasSupported
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
+                    >
+                      <ThumbsUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                      {hasSupported ? 'Supported' : 'Me Too'}
+                    </button>
                   </div>
                 </div>
-
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => handleHostRequest(request)}
-                    className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium py-2 rounded-lg transition-colors"
-                  >
-                    I'll Host This
-                  </button>
-                  <button
-                    onClick={() => !hasSupported && handleSupportRequest(request.id)}
-                    disabled={hasSupported}
-                    className={`flex-1 text-sm font-medium py-2 rounded-lg transition-colors flex items-center justify-center ${
-                      hasSupported
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                    }`}
-                  >
-                    <ThumbsUp className="w-4 h-4 mr-1" />
-                    {hasSupported ? 'Supported' : 'Me Too'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* D. Peer Discovery (1:1) */}
-      <div className="space-y-4">
+      {/* D. Peer Discovery (1:1) - Horizontal Scroll */}
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800">People to Meet</h3>
           <button
@@ -707,54 +756,50 @@ export default function NetworkDiscoverView({
           </button>
         </div>
 
-        {peerSuggestions.length === 0 ? (
-          <div className="bg-rose-50 border border-rose-200 rounded-xl p-6 text-center">
-            <div className="flex justify-center mb-3">
-              <div className="w-16 h-16 rounded-full bg-rose-100 flex items-center justify-center">
-                <User className="w-8 h-8 text-rose-400" />
+        <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
+          {peerSuggestions.length === 0 ? (
+            <div className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-rose-50 border border-rose-200 rounded-xl p-4 sm:p-5 text-center snap-start">
+              <div className="flex justify-center mb-3">
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-rose-100 flex items-center justify-center">
+                  <User className="w-7 h-7 sm:w-8 sm:h-8 text-rose-400" />
+                </div>
               </div>
+              <h4 className="font-medium text-rose-800 text-sm sm:text-base mb-1">Meet people</h4>
+              <p className="text-xs sm:text-sm text-rose-600 mb-3">
+                Join meetups to grow your network
+              </p>
+              <button
+                onClick={() => onNavigate?.('home')}
+                className="bg-rose-500 hover:bg-rose-600 text-white font-medium px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm"
+              >
+                Find Meetups
+              </button>
             </div>
-            <h4 className="font-medium text-rose-800 mb-1">Discover peers at meetups</h4>
-            <p className="text-sm text-rose-600 mb-3">
-              Join a meetup to meet people and grow your network
-            </p>
-            <button
-              onClick={() => onNavigate?.('home')}
-              className="bg-rose-500 hover:bg-rose-600 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
-            >
-              Find Meetups
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {peerSuggestions.map((peer) => (
+          ) : (
+            peerSuggestions.map((peer) => (
               <div
                 key={peer.id}
-                className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:shadow-md transition-shadow snap-start"
               >
                 <div className="flex flex-col items-center text-center">
-                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 flex items-center justify-center text-white text-xl font-semibold mb-3">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 flex items-center justify-center text-white text-xl sm:text-2xl font-semibold mb-3">
                     {peer.name?.[0] || '?'}
                   </div>
-                  <h4 className="font-medium text-gray-800 text-sm">{peer.name}</h4>
-                  <p className="text-xs text-gray-500 mt-1 line-clamp-1">{peer.career || 'Professional'}</p>
-
-                  {/* The Hook - a compelling bio snippet */}
-                  {peer.bio && (
-                    <p className="text-xs text-gray-600 mt-2 line-clamp-2 italic">
-                      "{peer.bio.slice(0, 60)}..."
-                    </p>
+                  <h4 className="font-medium text-gray-800 text-sm sm:text-base line-clamp-1">{peer.name}</h4>
+                  <p className="text-xs sm:text-sm text-gray-500 mt-1 line-clamp-1">{peer.career || 'Professional'}</p>
+                  {peer.city && (
+                    <p className="text-xs text-gray-400 mt-1">{peer.city}{peer.state ? `, ${peer.state}` : ''}</p>
                   )}
 
-                  <div className="flex items-center text-xs text-gray-400 mt-3">
-                    <Lock className="w-3 h-3 mr-1" />
+                  <div className="flex items-center text-xs sm:text-sm text-gray-400 mt-3">
+                    <Lock className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                     Connect to chat
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
+            ))
+          )}
+        </div>
       </div>
 
       {/* Vibe-filtered Empty State */}

@@ -3,7 +3,7 @@
 import { useAuth } from './AuthProvider'
 import MainApp from './MainApp'
 import LandingPage from './LandingPage'
-import ProfileSetup from './ProfileSetup'
+import ProfileSetupFlow from './ProfileSetupFlow'
 import { supabase } from '@/lib/supabase'
 
 export default function AppContainer() {
@@ -18,38 +18,23 @@ export default function AppContainer() {
     refreshProfile
   } = useAuth()
 
-  // Check if profile is incomplete (missing required fields)
-  const isProfileIncomplete = profile && (!profile.career || !profile.city || !profile.state)
+  // Check if onboarding is incomplete
+  // New flow: check onboarding_completed flag, or fallback to checking required fields
+  const needsOnboarding = profile && (
+    profile.onboarding_completed === false ||
+    !profile.career ||
+    !profile.vibe_category ||
+    !profile.career_stage
+  )
 
-  const handleProfileSave = async (profileData) => {
+  const handleOnboardingComplete = async (profileData) => {
     try {
-      // Use upsert to handle both insert and update cases
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          email: user.email,
-          name: profileData.name,
-          career: profileData.career,
-          city: profileData.city,
-          state: profileData.state,
-          bio: profileData.bio
-        }, {
-          onConflict: 'id'
-        })
-
-      if (error) throw error
-
-      console.log('✅ Profile saved successfully')
-
+      console.log('✅ Onboarding completed')
       // Refresh the profile to get updated data
       await refreshProfile()
-
       console.log('✅ Profile refresh complete')
     } catch (error) {
-      console.error('❌ Error saving profile:', error)
-      alert('Failed to save profile: ' + error.message)
-      throw error
+      console.error('❌ Error refreshing profile:', error)
     }
   }
 
@@ -70,25 +55,27 @@ export default function AppContainer() {
 
     case 'profile_missing':
       return (
-        <ProfileSetup
+        <ProfileSetupFlow
           session={{ user, profile: { name: user?.user_metadata?.name || '' } }}
-          onSave={handleProfileSave}
+          supabase={supabase}
+          onComplete={handleOnboardingComplete}
         />
       )
 
     case 'ready':
       if (profile) {
-        // Show profile setup if incomplete
-        if (isProfileIncomplete) {
+        // Show onboarding flow if incomplete
+        if (needsOnboarding) {
           return (
-            <ProfileSetup
+            <ProfileSetupFlow
               session={{ user, profile }}
-              onSave={handleProfileSave}
+              supabase={supabase}
+              onComplete={handleOnboardingComplete}
             />
           )
         }
 
-        // Show main app if profile is complete
+        // Show main app if onboarding is complete
         return (
           <MainApp
             currentUser={profile}
