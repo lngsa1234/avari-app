@@ -10,6 +10,38 @@ import { getAgoraRoomByChannel, startAgoraRoom, endAgoraRoom, getCallRecapData }
 import { saveCallRecap, saveProviderMetrics } from '@/lib/callRecapHelpers';
 import CallRecap from '@/components/CallRecap';
 
+// Topic suggestions organized by vibe category
+const TOPIC_SUGGESTIONS = {
+  advice: [
+    "What's the best career advice you've received?",
+    "How do you handle difficult conversations at work?",
+    "What strategies help you with work-life balance?",
+    "How did you navigate a major career transition?",
+    "What skills do you wish you'd developed earlier?",
+  ],
+  vent: [
+    "What's been challenging for you lately?",
+    "How do you decompress after a tough day?",
+    "What support do you wish you had more of?",
+    "How do you set boundaries at work?",
+    "What helps you stay motivated during setbacks?",
+  ],
+  grow: [
+    "What are you currently learning or developing?",
+    "What's a skill you'd like to master this year?",
+    "How do you approach professional development?",
+    "What inspires you in your industry right now?",
+    "What's a project you're excited to work on?",
+  ],
+  general: [
+    "What brought you to this industry?",
+    "What's your proudest professional achievement?",
+    "How do you approach networking authentically?",
+    "What does success look like to you?",
+    "Who has been a mentor or inspiration to you?",
+  ]
+};
+
 /**
  * Remote Video Player Component - Memoized to prevent re-renders
  * Defined outside main component to maintain stable refs
@@ -348,7 +380,6 @@ export default function GroupVideoMeeting() {
   const [participantCount, setParticipantCount] = useState(0);
   const [gridView, setGridView] = useState(true);
   const [isLocalMain, setIsLocalMain] = useState(false); // For 2-person PiP swap
-  const [showChat, setShowChat] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [showRecap, setShowRecap] = useState(false);
@@ -367,6 +398,20 @@ export default function GroupVideoMeeting() {
     process.env.NEXT_PUBLIC_TRANSCRIPTION_LANGUAGE || 'en-US'
   );
   const [pendingLanguageRestart, setPendingLanguageRestart] = useState(false);
+
+  // Sidebar state - each panel can be toggled independently
+  const [showMessages, setShowMessages] = useState(false);
+  const [showTopics, setShowTopics] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [activeTab, setActiveTab] = useState('messages'); // Which tab is active when multiple are open
+  const [currentTopic, setCurrentTopic] = useState(null);
+  const [usedTopicIndices, setUsedTopicIndices] = useState(new Set());
+  const [userVibeCategory, setUserVibeCategory] = useState('general');
+
+  // Derived state: sidebar is open if any panel is enabled
+  const showSidebar = showMessages || showTopics || showParticipants;
+  // Count how many panels are enabled (to decide if we need tabs)
+  const enabledPanelCount = [showMessages, showTopics, showParticipants].filter(Boolean).length;
 
   // Refs
   const localVideoRef = useRef(null);
@@ -459,6 +504,42 @@ export default function GroupVideoMeeting() {
       }
     }
   }, [isTranscribing, startListening, stopListening]);
+
+  // Shuffle to next topic
+  const shuffleTopic = useCallback(() => {
+    const topics = TOPIC_SUGGESTIONS[userVibeCategory] || TOPIC_SUGGESTIONS.general;
+    const availableIndices = topics
+      .map((_, index) => index)
+      .filter(index => !usedTopicIndices.has(index));
+
+    // Reset if all topics used
+    if (availableIndices.length === 0) {
+      setUsedTopicIndices(new Set());
+      const randomIndex = Math.floor(Math.random() * topics.length);
+      setCurrentTopic(topics[randomIndex]);
+      setUsedTopicIndices(new Set([randomIndex]));
+    } else {
+      const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+      setCurrentTopic(topics[randomIndex]);
+      setUsedTopicIndices(prev => new Set([...prev, randomIndex]));
+    }
+  }, [userVibeCategory, usedTopicIndices]);
+
+  // Load user's vibe category
+  useEffect(() => {
+    if (user?.id) {
+      supabase
+        .from('profiles')
+        .select('vibe_category')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (data?.vibe_category) {
+            setUserVibeCategory(data.vibe_category);
+          }
+        });
+    }
+  }, [user?.id]);
 
   // Get current user
   useEffect(() => {
@@ -1423,7 +1504,7 @@ export default function GroupVideoMeeting() {
       </div>
 
       {/* Video Grid / Speaker View */}
-      <div className={`flex-1 p-3 relative overflow-hidden transition-all duration-300 ${showChat ? 'mr-80' : ''}`} style={{ minHeight: 0 }}>
+      <div className={`flex-1 p-3 relative overflow-hidden transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`} style={{ minHeight: 0 }}>
         {/* For 2 participants: Render both videos once, swap via CSS only */}
         {remoteParticipants.length === 1 && (
           <>
@@ -1619,7 +1700,7 @@ export default function GroupVideoMeeting() {
       </div>
 
       {/* Controls */}
-      <div className={`bg-gray-800 py-3 px-4 flex-shrink-0 transition-all duration-300 ${showChat ? 'mr-80' : ''}`}>
+      <div className={`bg-gray-800 py-3 px-4 flex-shrink-0 transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`}>
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="w-40">
             {isRecording && (
@@ -1711,17 +1792,45 @@ export default function GroupVideoMeeting() {
               </div>
             )}
 
+            {/* Topics toggle */}
             <button
-              onClick={() => setShowChat(!showChat)}
-              className={`${showChat ? 'bg-purple-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
-              title="Toggle chat"
+              onClick={() => {
+                setShowTopics(!showTopics);
+                if (!showTopics) setActiveTab('topics');
+              }}
+              className={`${showTopics ? 'bg-amber-500' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
+              title="Toggle topics"
+            >
+              💡
+            </button>
+
+            {/* Messages toggle */}
+            <button
+              onClick={() => {
+                setShowMessages(!showMessages);
+                if (!showMessages) setActiveTab('messages');
+              }}
+              className={`${showMessages ? 'bg-purple-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center relative`}
+              title="Toggle messages"
             >
               💬
-              {messages.length > 0 && !showChat && (
+              {messages.length > 0 && !showMessages && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-1.5 rounded-full">
                   {messages.length}
                 </span>
               )}
+            </button>
+
+            {/* Participants toggle */}
+            <button
+              onClick={() => {
+                setShowParticipants(!showParticipants);
+                if (!showParticipants) setActiveTab('participants');
+              }}
+              className={`${showParticipants ? 'bg-green-600' : 'bg-gray-700'} hover:bg-gray-600 text-white w-12 h-12 rounded-full text-xl transition flex items-center justify-center`}
+              title="Toggle participants"
+            >
+              👥
             </button>
 
             <button
@@ -1736,59 +1845,321 @@ export default function GroupVideoMeeting() {
         </div>
       </div>
 
-      {/* Chat Panel */}
-      {showChat && (
-        <div className="fixed right-0 top-0 bottom-0 w-80 bg-gray-800 border-l border-gray-700 flex flex-col z-50">
-          <div className="p-4 border-b border-gray-700 flex items-center justify-between">
-            <h3 className="text-white font-semibold">Chat</h3>
-            <button onClick={() => setShowChat(false)} className="text-gray-400 hover:text-white">
-              ✕
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.length === 0 ? (
-              <p className="text-gray-400 text-sm text-center mt-8">
-                No messages yet. Start the conversation!
-              </p>
-            ) : (
-              messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`${msg.user_id === user?.id ? 'ml-auto bg-purple-600' : 'mr-auto bg-gray-700'} max-w-[85%] rounded-lg p-3`}
-                >
-                  <p className="text-xs text-gray-300 mb-1">
-                    {msg.user_id === user?.id ? 'You' : msg.user_name}
-                  </p>
-                  <p className="text-white text-sm break-words">{msg.message}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                </div>
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                maxLength={500}
-              />
+      {/* Sidebar - shows when Messages, Topics, and/or Participants is enabled */}
+      {showSidebar && (
+        <div className="fixed right-0 top-0 bottom-0 w-full md:w-80 bg-gray-800 border-l border-gray-700 flex flex-col z-50">
+          {/* Sidebar Header */}
+          <div className="border-b border-gray-700">
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <h3 className="text-white font-semibold">
+                {enabledPanelCount > 1 ? 'Meeting Panel' :
+                  showMessages ? 'Messages' :
+                  showTopics ? 'Topics' : 'Participants'}
+              </h3>
               <button
-                type="submit"
-                disabled={!newMessage.trim()}
-                className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition"
+                onClick={() => {
+                  setShowMessages(false);
+                  setShowTopics(false);
+                  setShowParticipants(false);
+                }}
+                className="text-gray-400 hover:text-white p-1"
               >
-                Send
+                ✕
               </button>
             </div>
-          </form>
+
+            {/* Tabs - only show when more than one panel is enabled */}
+            {enabledPanelCount > 1 && (
+              <div className="flex">
+                {showMessages && (
+                  <button
+                    onClick={() => setActiveTab('messages')}
+                    className={`flex-1 py-3 text-sm font-medium transition relative ${
+                      activeTab === 'messages'
+                        ? 'text-purple-400'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    💬 Messages
+                    {messages.length > 0 && activeTab !== 'messages' && (
+                      <span className="absolute top-2 right-2 bg-red-500 text-white text-xs w-4 h-4 flex items-center justify-center rounded-full text-[10px]">
+                        {messages.length > 9 ? '9+' : messages.length}
+                      </span>
+                    )}
+                    {activeTab === 'messages' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-400" />
+                    )}
+                  </button>
+                )}
+                {showTopics && (
+                  <button
+                    onClick={() => setActiveTab('topics')}
+                    className={`flex-1 py-3 text-sm font-medium transition relative ${
+                      activeTab === 'topics'
+                        ? 'text-amber-400'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    💡 Topics
+                    {activeTab === 'topics' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400" />
+                    )}
+                  </button>
+                )}
+                {showParticipants && (
+                  <button
+                    onClick={() => setActiveTab('participants')}
+                    className={`flex-1 py-3 text-sm font-medium transition relative ${
+                      activeTab === 'participants'
+                        ? 'text-green-400'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    👥 People
+                    {activeTab === 'participants' && (
+                      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-green-400" />
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Messages Content - show when messages is enabled AND (only one panel OR activeTab is messages) */}
+          {showMessages && (enabledPanelCount === 1 || activeTab === 'messages') && (
+            <>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {messages.length === 0 ? (
+                  <p className="text-gray-400 text-sm text-center mt-8">
+                    No messages yet. Start the conversation!
+                  </p>
+                ) : (
+                  messages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={`${msg.user_id === user?.id ? 'ml-auto bg-purple-600' : 'mr-auto bg-gray-700'} max-w-[85%] rounded-lg p-3`}
+                    >
+                      <p className="text-xs text-gray-300 mb-1">
+                        {msg.user_id === user?.id ? 'You' : msg.user_name}
+                      </p>
+                      <p className="text-white text-sm break-words">{msg.message}</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  ))
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-700">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Type a message..."
+                    className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    maxLength={500}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newMessage.trim()}
+                    className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition"
+                  >
+                    Send
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
+
+          {/* Topics Content - show when topics is enabled AND (only one panel OR activeTab is topics) */}
+          {showTopics && (enabledPanelCount === 1 || activeTab === 'topics') && (
+            <>
+              {/* Language Toggle */}
+              <div className="p-4 border-b border-gray-700">
+                <div className="flex items-center justify-between bg-gray-700/50 rounded-lg p-2">
+                  <span className="text-gray-300 text-sm">Language</span>
+                  <div className="flex items-center bg-gray-600 rounded-lg p-0.5">
+                    <button
+                      onClick={() => transcriptionLanguage !== 'en-US' && handleLanguageChange('en-US')}
+                      className={`px-3 py-1 text-sm font-medium rounded-md transition ${
+                        transcriptionLanguage === 'en-US'
+                          ? 'bg-amber-500 text-white'
+                          : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      EN
+                    </button>
+                    <button
+                      onClick={() => transcriptionLanguage !== 'zh-CN' && handleLanguageChange('zh-CN')}
+                      className={`px-3 py-1 text-sm font-medium rounded-md transition ${
+                        transcriptionLanguage === 'zh-CN'
+                          ? 'bg-amber-500 text-white'
+                          : 'text-gray-300 hover:text-white'
+                      }`}
+                    >
+                      中
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Current Topic Card */}
+              <div className="p-4 border-b border-gray-700">
+                <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-xl p-4 border border-amber-500/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="text-xs text-amber-400 font-medium uppercase tracking-wide mb-1">
+                        Current Topic
+                      </p>
+                      <p className="text-white font-medium leading-relaxed">
+                        {currentTopic || 'Click shuffle to get a conversation starter!'}
+                      </p>
+                    </div>
+                    <button
+                      onClick={shuffleTopic}
+                      className="p-2 bg-amber-500 hover:bg-amber-600 rounded-lg transition-all hover:scale-105"
+                      title="Shuffle topic"
+                    >
+                      <span className="text-white text-lg">🔀</span>
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">
+                    {userVibeCategory === 'advice' && 'Mentorship focused'}
+                    {userVibeCategory === 'vent' && 'Support focused'}
+                    {userVibeCategory === 'grow' && 'Growth focused'}
+                    {userVibeCategory === 'general' && 'General networking'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Live Transcript */}
+              <div className="flex-1 flex flex-col min-h-0">
+                <div className="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${isTranscribing ? 'bg-green-400 animate-pulse' : 'bg-gray-500'}`} />
+                    <span className="text-gray-300 text-sm font-medium">Live Transcript</span>
+                  </div>
+                  {speechError && (
+                    <span className="text-xs text-red-400">{speechError}</span>
+                  )}
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                  {transcript.length === 0 ? (
+                    <div className="text-center py-8">
+                      <span className="text-4xl mb-3 block">🎤</span>
+                      <p className="text-gray-400 text-sm">
+                        {isTranscribing
+                          ? 'Listening... Start speaking!'
+                          : isSpeechSupported
+                            ? 'Transcript will appear when you speak'
+                            : 'Speech recognition not supported'}
+                      </p>
+                    </div>
+                  ) : (
+                    transcript.map((entry, idx) => (
+                      <div key={idx} className="group">
+                        <div className="flex items-start gap-2">
+                          <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-medium bg-purple-500 text-white">
+                            {(entry.speakerName || '?').charAt(0).toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-400 mb-0.5">
+                              {entry.speakerName}
+                            </p>
+                            <p className="text-white text-sm leading-relaxed">
+                              {entry.text}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Transcript Controls */}
+              <div className="p-4 border-t border-gray-700">
+                <button
+                  onClick={toggleTranscription}
+                  disabled={!isSpeechSupported}
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    isTranscribing
+                      ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                      : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  🎤 {isTranscribing ? 'Stop Transcription' : 'Start Transcription'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Participants Content - show when participants is enabled AND (only one panel OR activeTab is participants) */}
+          {showParticipants && (enabledPanelCount === 1 || activeTab === 'participants') && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <p className="text-gray-400 text-xs uppercase tracking-wide mb-2">
+                {participantCount} {participantCount === 1 ? 'Participant' : 'Participants'}
+              </p>
+
+              {/* Current User */}
+              <div className="flex items-center gap-3 p-3 bg-gray-700/50 rounded-lg">
+                <div className="w-10 h-10 bg-rose-500 rounded-full flex items-center justify-center">
+                  <span className="text-white font-medium">
+                    {user?.email?.charAt(0).toUpperCase() || '?'}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-medium text-sm truncate">
+                    {user?.email?.split('@')[0] || 'You'}
+                  </p>
+                  <p className="text-gray-400 text-xs">You (Host)</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {!isMuted && <span className="text-green-400 text-sm">🎤</span>}
+                  {!isVideoOff && <span className="text-green-400 text-sm">📹</span>}
+                </div>
+              </div>
+
+              {/* Remote Participants */}
+              {remoteParticipants.map((participant) => (
+                <div key={participant.id} className="flex items-center gap-3 p-3 bg-gray-700/50 rounded-lg">
+                  <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
+                    <span className="text-white font-medium">
+                      {(participant.name || '?').charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-medium text-sm truncate">
+                      {participant.name || 'Anonymous'}
+                    </p>
+                    {participant.connectionQuality && participant.connectionQuality !== 'excellent' && (
+                      <p className={`text-xs ${
+                        participant.connectionQuality === 'poor' ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        {participant.connectionQuality === 'poor' ? '⚠️ Poor connection' : '📶 Fair connection'}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {participant.hasAudio && <span className="text-green-400 text-sm">🎤</span>}
+                    {participant.hasVideo && <span className="text-green-400 text-sm">📹</span>}
+                    {participant.hasScreen && <span className="text-blue-400 text-sm">🖥️</span>}
+                    {participant.isSpeaking && <span className="text-amber-400 text-sm animate-pulse">🔊</span>}
+                  </div>
+                </div>
+              ))}
+
+              {remoteParticipants.length === 0 && (
+                <p className="text-gray-400 text-sm text-center mt-4">
+                  Waiting for others to join...
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

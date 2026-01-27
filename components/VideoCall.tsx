@@ -1,18 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useIceServers } from '@/hooks/useIceServers';
 import { useWakeLock } from '@/hooks/useWakeLock';
 import { useRecording } from '@/hooks/useRecording';
 import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
+import useSpeechRecognition from '@/hooks/useSpeechRecognition';
 import { supabase } from '@/lib/supabase';
 
 interface RecapData {
   startedAt: string | null;
   endedAt: string;
   participants: any[];
-  transcript: any[];
+  transcript: TranscriptEntry[];
   messages: any[];
   metrics?: any;
+  topic?: string | null;
 }
 
 interface VideoCallProps {
@@ -31,6 +33,47 @@ interface Message {
   message: string;
   created_at: string;
 }
+
+interface TranscriptEntry {
+  id: string;
+  speaker: 'local' | 'remote';
+  speakerName: string;
+  text: string;
+  timestamp: number;
+  isFinal: boolean;
+}
+
+// Topic suggestions organized by vibe category
+const TOPIC_SUGGESTIONS = {
+  advice: [
+    "What's the best career advice you've received?",
+    "How do you handle difficult conversations at work?",
+    "What strategies help you with work-life balance?",
+    "How did you navigate a major career transition?",
+    "What skills do you wish you'd developed earlier?",
+  ],
+  vent: [
+    "What's been challenging for you lately?",
+    "How do you decompress after a tough day?",
+    "What support do you wish you had more of?",
+    "How do you set boundaries at work?",
+    "What helps you stay motivated during setbacks?",
+  ],
+  grow: [
+    "What are you currently learning or developing?",
+    "What's a skill you'd like to master this year?",
+    "How do you approach professional development?",
+    "What inspires you in your industry right now?",
+    "What's a project you're excited to work on?",
+  ],
+  general: [
+    "What brought you to this industry?",
+    "What's your proudest professional achievement?",
+    "How do you approach networking authentically?",
+    "What does success look like to you?",
+    "Who has been a mentor or inspiration to you?",
+  ]
+};
 
 export default function VideoCall({
   matchId,
@@ -58,6 +101,15 @@ export default function VideoCall({
   const [activeReaction, setActiveReaction] = useState<string | null>(null); // Current reaction emoji
   const [remoteReaction, setRemoteReaction] = useState<string | null>(null); // Other user's reaction
 
+  // Topic Sidebar state
+  const [showTopicSidebar, setShowTopicSidebar] = useState(true); // Show by default
+  const [transcriptLanguage, setTranscriptLanguage] = useState<'en-US' | 'zh-CN'>('en-US');
+  const [transcriptEntries, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
+  const [currentTopic, setCurrentTopic] = useState<string | null>(null);
+  const [usedTopicIndices, setUsedTopicIndices] = useState<Set<number>>(new Set());
+  const [userVibeCategory, setUserVibeCategory] = useState<'advice' | 'vent' | 'grow' | 'general'>('general');
+  const [showCaptions, setShowCaptions] = useState(true); // Closed captions overlay
+
   // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -66,6 +118,8 @@ export default function VideoCall({
   const screenStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const interimTranscriptRef = useRef<string>(''); // Track interim transcript for updates
 
   // Hooks
   const { iceServers, loading: iceServersLoading } = useIceServers();
@@ -89,6 +143,40 @@ export default function VideoCall({
     isLoading: blurLoading,
     toggleBlur
   } = useBackgroundBlur('webrtc');
+
+  // Transcript callback for speech recognition
+  const handleTranscript = useCallback((data: { text: string; isFinal: boolean; timestamp: number }) => {
+    if (data.isFinal && data.text.trim()) {
+      // Add final transcript entry
+      const newEntry: TranscriptEntry = {
+        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        speaker: 'local',
+        speakerName: currentUserName || 'You',
+        text: data.text.trim(),
+        timestamp: data.timestamp,
+        isFinal: true
+      };
+      setTranscriptEntries(prev => [...prev, newEntry]);
+      interimTranscriptRef.current = '';
+    } else if (!data.isFinal) {
+      // Update interim transcript for captions
+      interimTranscriptRef.current = data.text.trim();
+    }
+  }, [currentUserName]);
+
+  // Speech recognition hook
+  const {
+    isListening: isTranscribing,
+    isSupported: isTranscriptionSupported,
+    error: transcriptionError,
+    startListening: startTranscription,
+    stopListening: stopTranscription
+  } = useSpeechRecognition({
+    onTranscript: handleTranscript,
+    language: transcriptLanguage,
+    continuous: true,
+    interimResults: true
+  });
 
   const {
     isConnected,
@@ -144,17 +232,19 @@ export default function VideoCall({
         console.log('[CircleW] Call ended by other party');
         setCallState('ended');
         cleanup();
+        stopTranscription();
         // Pass recap data to parent
         onEndCall({
           startedAt: callStartTime,
           endedAt: new Date().toISOString(),
           participants: otherUserProfile ? [otherUserProfile] : [{ id: otherUserId, name: otherUserName }],
-          transcript: [],
+          transcript: transcriptEntries,
           messages: messages.map(m => ({
             user_name: m.user_name,
             message: m.message,
             created_at: m.created_at
-          }))
+          })),
+          topic: currentTopic
         });
       },
       onError: (error) => {
@@ -461,6 +551,50 @@ export default function VideoCall({
     }
   };
 
+  // Shuffle to next topic
+  const shuffleTopic = () => {
+    const topics = TOPIC_SUGGESTIONS[userVibeCategory] || TOPIC_SUGGESTIONS.general;
+    const availableIndices = topics
+      .map((_, index) => index)
+      .filter(index => !usedTopicIndices.has(index));
+
+    // Reset if all topics used
+    if (availableIndices.length === 0) {
+      setUsedTopicIndices(new Set());
+      const randomIndex = Math.floor(Math.random() * topics.length);
+      setCurrentTopic(topics[randomIndex]);
+      setUsedTopicIndices(new Set([randomIndex]));
+    } else {
+      const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+      setCurrentTopic(topics[randomIndex]);
+      setUsedTopicIndices(prev => new Set([...prev, randomIndex]));
+    }
+  };
+
+  // Toggle transcript language
+  const toggleTranscriptLanguage = () => {
+    const newLang = transcriptLanguage === 'en-US' ? 'zh-CN' : 'en-US';
+    setTranscriptLanguage(newLang);
+
+    // Restart transcription with new language if active
+    if (isTranscribing) {
+      stopTranscription();
+      // Small delay to allow cleanup
+      setTimeout(() => {
+        startTranscription();
+      }, 100);
+    }
+  };
+
+  // Toggle closed captions
+  const toggleCaptions = () => {
+    setShowCaptions(!showCaptions);
+    if (!showCaptions && !isTranscribing && callState === 'connected') {
+      // Auto-start transcription when enabling captions
+      startTranscription();
+    }
+  };
+
   // Toggle hand raise
   const toggleHandRaise = async () => {
     const newState = !isHandRaised;
@@ -586,12 +720,13 @@ export default function VideoCall({
       startedAt: callStartTime,
       endedAt: new Date().toISOString(),
       participants: otherUserProfile ? [otherUserProfile] : [{ id: otherUserId, name: otherUserName }],
-      transcript: [],
+      transcript: transcriptEntries,
       messages: messages.map(m => ({
         user_name: m.user_name,
         message: m.message,
         created_at: m.created_at
-      }))
+      })),
+      topic: currentTopic
     });
   };
 
@@ -752,10 +887,53 @@ export default function VideoCall({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Auto-scroll transcript to bottom
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [transcriptEntries]);
+
+  // Load user's vibe category for topic suggestions
+  useEffect(() => {
+    const loadUserVibeCategory = async () => {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('vibe_category')
+        .eq('id', userId)
+        .single();
+
+      if (profile?.vibe_category) {
+        setUserVibeCategory(profile.vibe_category as 'advice' | 'vent' | 'grow');
+      }
+    };
+
+    loadUserVibeCategory();
+  }, [userId]);
+
+  // Set initial topic and auto-start transcription when call connects
+  useEffect(() => {
+    if (callState === 'connected') {
+      // Set initial topic if not set
+      if (!currentTopic) {
+        shuffleTopic();
+      }
+
+      // Auto-start transcription if supported
+      if (isTranscriptionSupported && !isTranscribing) {
+        startTranscription();
+      }
+    }
+
+    // Stop transcription when call ends
+    if (callState === 'ended' && isTranscribing) {
+      stopTranscription();
+    }
+  }, [callState, isTranscriptionSupported]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanup();
+      stopTranscription();
     };
   }, []);
 
@@ -810,8 +988,177 @@ export default function VideoCall({
         </div>
       )}
 
+      {/* Topic Sidebar (Right) - Same side as chat for consistency */}
+      {showTopicSidebar && (
+        <div className="fixed right-0 top-[52px] bottom-0 w-full md:w-80 bg-slate-800 border-l border-slate-700 flex flex-col z-[60]">
+          {/* Sidebar Header */}
+          <div className="p-4 border-b border-slate-700">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                <h3 className="text-white font-semibold">Topics</h3>
+              </div>
+              <button
+                onClick={() => setShowTopicSidebar(false)}
+                className="text-slate-400 hover:text-white p-1 hover:bg-slate-700 rounded transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Language Toggle */}
+            <div className="flex items-center justify-between bg-slate-700/50 rounded-lg p-2">
+              <span className="text-slate-300 text-sm">Language</span>
+              <div className="flex items-center bg-slate-600 rounded-lg p-0.5">
+                <button
+                  onClick={() => transcriptLanguage !== 'en-US' && toggleTranscriptLanguage()}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition ${
+                    transcriptLanguage === 'en-US'
+                      ? 'bg-amber-500 text-white'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => transcriptLanguage !== 'zh-CN' && toggleTranscriptLanguage()}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition ${
+                    transcriptLanguage === 'zh-CN'
+                      ? 'bg-amber-500 text-white'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  中
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Current Topic Card */}
+          <div className="p-4 border-b border-slate-700">
+            <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 rounded-xl p-4 border border-amber-500/30">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-xs text-amber-400 font-medium uppercase tracking-wide mb-1">
+                    Current Topic
+                  </p>
+                  <p className="text-white font-medium leading-relaxed">
+                    {currentTopic || 'Click shuffle to get a conversation starter!'}
+                  </p>
+                </div>
+                <button
+                  onClick={shuffleTopic}
+                  className="p-2 bg-amber-500 hover:bg-amber-600 rounded-lg transition-all hover:scale-105"
+                  title="Shuffle topic"
+                >
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                {userVibeCategory === 'advice' && 'Mentorship focused'}
+                {userVibeCategory === 'vent' && 'Support focused'}
+                {userVibeCategory === 'grow' && 'Growth focused'}
+                {userVibeCategory === 'general' && 'General networking'}
+              </p>
+            </div>
+          </div>
+
+          {/* Live Transcript */}
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${isTranscribing ? 'bg-green-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span className="text-slate-300 text-sm font-medium">Live Transcript</span>
+              </div>
+              {transcriptionError && (
+                <span className="text-xs text-red-400">{transcriptionError}</span>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {transcriptEntries.length === 0 ? (
+                <div className="text-center py-8">
+                  <svg className="w-12 h-12 text-slate-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                  <p className="text-slate-400 text-sm">
+                    {isTranscribing
+                      ? 'Listening... Start speaking!'
+                      : isTranscriptionSupported
+                        ? 'Transcript will appear when you speak'
+                        : 'Speech recognition not supported in this browser'}
+                  </p>
+                </div>
+              ) : (
+                transcriptEntries.map((entry) => (
+                  <div key={entry.id} className="group">
+                    <div className="flex items-start gap-2">
+                      <div className={`w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-medium ${
+                        entry.speaker === 'local'
+                          ? 'bg-purple-500 text-white'
+                          : 'bg-blue-500 text-white'
+                      }`}>
+                        {entry.speakerName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate-400 mb-0.5">
+                          {entry.speakerName}
+                        </p>
+                        <p className="text-white text-sm leading-relaxed">
+                          {entry.text}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={transcriptEndRef} />
+            </div>
+          </div>
+
+          {/* Transcript Controls */}
+          <div className="p-4 border-t border-slate-700 flex items-center justify-between">
+            <button
+              onClick={() => isTranscribing ? stopTranscription() : startTranscription()}
+              disabled={!isTranscriptionSupported}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                isTranscribing
+                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                  : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              {isTranscribing ? 'Stop' : 'Start'}
+            </button>
+
+            <button
+              onClick={toggleCaptions}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                showCaptions
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-slate-600 text-slate-300 hover:bg-slate-500'
+              }`}
+              title={showCaptions ? 'Hide captions' : 'Show captions'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              CC
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Video containers */}
-      <div className={`flex-1 relative transition-all duration-300 ${showChat ? 'md:mr-80' : ''}`}>
+      <div className={`flex-1 relative transition-all duration-300 ${(showChat || showTopicSidebar) ? 'md:mr-80' : ''}`}>
         {/* Remote video (main) */}
         <video
           ref={remoteVideoRef}
@@ -878,6 +1225,27 @@ export default function VideoCall({
           onClick={() => setIsLocalVideoMain(!isLocalVideoMain)}
           title="Tap to swap videos"
         />
+
+        {/* Closed Captions Overlay */}
+        {showCaptions && callState === 'connected' && (
+          <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 z-30 max-w-2xl w-full px-4">
+            <div className="bg-black/80 backdrop-blur-sm rounded-lg px-4 py-3 text-center">
+              {transcriptEntries.length > 0 ? (
+                <p className="text-white text-lg leading-relaxed">
+                  {transcriptEntries[transcriptEntries.length - 1]?.text}
+                </p>
+              ) : interimTranscriptRef.current ? (
+                <p className="text-white/70 text-lg leading-relaxed italic">
+                  {interimTranscriptRef.current}
+                </p>
+              ) : (
+                <p className="text-slate-400 text-sm">
+                  {isTranscribing ? 'Listening...' : 'Captions paused'}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Call state overlay */}
         {callState !== 'connected' && (
@@ -1050,9 +1418,39 @@ export default function VideoCall({
                 </svg>
               </button>
 
+              {/* Topic Sidebar toggle */}
+              <button
+                onClick={() => {
+                  if (!showTopicSidebar) setShowChat(false); // Close chat when opening topic sidebar
+                  setShowTopicSidebar(!showTopicSidebar);
+                }}
+                className={`p-3.5 rounded-full transition ${
+                  showTopicSidebar ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'
+                }`}
+                title="Toggle topic sidebar"
+              >
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </button>
+
+              {/* Closed Captions toggle */}
+              <button
+                onClick={toggleCaptions}
+                className={`p-3.5 rounded-full transition ${
+                  showCaptions ? 'bg-amber-500 hover:bg-amber-600' : 'bg-slate-700 hover:bg-slate-600'
+                }`}
+                title={showCaptions ? 'Hide captions' : 'Show captions'}
+              >
+                <span className="text-white text-sm font-bold">CC</span>
+              </button>
+
               {/* Chat toggle */}
               <button
-                onClick={() => setShowChat(!showChat)}
+                onClick={() => {
+                  if (!showChat) setShowTopicSidebar(false); // Close topic sidebar when opening chat
+                  setShowChat(!showChat);
+                }}
                 className={`p-3.5 rounded-full transition relative ${
                   showChat ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-700 hover:bg-slate-600'
                 }`}
