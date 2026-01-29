@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
-import CoffeeChatsView from './CoffeeChatsView'
+import MeetupsView from './MeetupsView'
 import ConnectionGroupsView from './ConnectionGroupsView'
 import MeetupProposalsView from './MeetupProposalsView'
 import MessagesView from './MessagesView'
@@ -1570,7 +1570,7 @@ function MainApp({ currentUser, onSignOut }) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {/* Connections Card */}
             <button
-              onClick={() => setCurrentView('coffeeChats')}
+              onClick={() => setCurrentView('meetups')}
               className={`p-4 border-0 transition-all text-left ${
                 momentum.step === 1 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
               }`}
@@ -1987,7 +1987,7 @@ function MainApp({ currentUser, onSignOut }) {
 
                     {currentUser.meetups_attended >= 3 ? (
                       <button
-                        onClick={() => setCurrentView('coffeeChats')}
+                        onClick={() => setCurrentView('meetups')}
                         className="w-full bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
                       >
                         <Video className="w-4 h-4 mr-2" />
@@ -2333,15 +2333,15 @@ function MainApp({ currentUser, onSignOut }) {
                 <span>Home</span>
               </button>
               <button
-                onClick={() => setCurrentView('coffeeChats')}
+                onClick={() => setCurrentView('meetups')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentView === 'coffeeChats'
+                  currentView === 'meetups'
                     ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
                     : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
                 }`}
               >
-                <Coffee className="w-4 h-4" />
-                <span>Chats</span>
+                <Calendar className="w-4 h-4" />
+                <span>Meetups</span>
               </button>
               <button
                 onClick={() => setCurrentView('discover')}
@@ -2400,7 +2400,7 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Main Content */}
       <div className="max-w-4xl mx-auto p-6">
         {currentView === 'home' && <HomeView />}
-        {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} connections={connections} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={setCurrentView} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={setCurrentView} onHostMeetup={() => setShowCreateMeetup(true)} />}
