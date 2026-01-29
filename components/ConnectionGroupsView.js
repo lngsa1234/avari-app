@@ -479,37 +479,37 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   }
 
   return (
-    <div style={styles.container}>
+    <div style={styles.container} className="circles-container">
       <div style={styles.ambientBg}></div>
       <div style={styles.grainOverlay}></div>
 
       {/* Title Section */}
-      <section style={styles.titleSection}>
+      <section style={styles.titleSection} className="circles-title-section">
         <div style={styles.titleContent}>
-          <h1 style={styles.pageTitle}>Circles</h1>
+          <h1 style={styles.pageTitle} className="circles-page-title">Circles</h1>
           <p style={styles.tagline}>Your community, your connections</p>
         </div>
-        <div style={styles.quickStats}>
+        <div style={styles.quickStats} className="circles-quick-stats">
           <div style={styles.statItem}>
-            <span style={styles.statNumber}>{connections.length}</span>
-            <span style={styles.statLabel}>Connections</span>
+            <span style={styles.statNumber} className="circles-stat-number">{connections.length}</span>
+            <span style={styles.statLabel} className="circles-stat-label">Connections</span>
           </div>
           <div style={styles.statDivider}></div>
           <div style={styles.statItem}>
-            <span style={styles.statNumber}>{connectionGroups.length}</span>
-            <span style={styles.statLabel}>Groups</span>
+            <span style={styles.statNumber} className="circles-stat-number">{connectionGroups.length}</span>
+            <span style={styles.statLabel} className="circles-stat-label">Groups</span>
           </div>
           <div style={styles.statDivider}></div>
           <div style={styles.statItem}>
-            <span style={styles.statNumber}>{onlineCount}</span>
-            <span style={styles.statLabel}>Online</span>
+            <span style={styles.statNumber} className="circles-stat-number">{onlineCount}</span>
+            <span style={styles.statLabel} className="circles-stat-label">Online</span>
           </div>
         </div>
       </section>
 
       {/* Pending Invitations Alert */}
       {groupInvites.length > 0 && (
-        <div style={styles.inviteAlert}>
+        <div style={styles.inviteAlert} className="circles-invite-alert">
           <div style={styles.inviteAlertContent}>
             <span style={styles.inviteAlertIcon}>✨</span>
             <span style={styles.inviteAlertText}>
@@ -537,9 +537,9 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       <div style={styles.singleColumn}>
 
         {/* Connections Section - Horizontal Slide Bar */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <h2 style={styles.cardTitle}>
+        <section style={styles.card} className="circles-card">
+          <div style={styles.cardHeader} className="circles-card-header">
+            <h2 style={styles.cardTitle} className="circles-card-title">
               <span style={styles.cardIcon}>✨</span>
               Connections
             </h2>
@@ -557,20 +557,21 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   ...styles.slideCard,
                   animationDelay: `${index * 0.1}s`
                 }}
+                className="circles-slide-card"
                 onClick={() => setSelectedUser(user)}
               >
                 <div style={styles.slideAvatarContainer}>
                   {user.avatar ? (
-                    <img src={user.avatar} alt={user.name} style={styles.slideAvatarImg} />
+                    <img src={user.avatar} alt={user.name} style={styles.slideAvatarImg} className="circles-slide-avatar" />
                   ) : (
-                    <div style={styles.slideAvatarPlaceholder}>👤</div>
+                    <div style={styles.slideAvatarPlaceholder} className="circles-slide-avatar">👤</div>
                   )}
                   <span style={{
                     ...styles.slideStatusIndicator,
                     backgroundColor: user.status === 'online' ? '#4CAF50' : '#FFA726'
                   }}></span>
                 </div>
-                <span style={styles.slideName}>{user.name?.split(' ')[0]}</span>
+                <span style={styles.slideName} className="circles-slide-name">{user.name?.split(' ')[0]}</span>
                 <span style={styles.slideRole}>{user.career}</span>
               </div>
             ))}
@@ -578,9 +579,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             {/* Add Connection Button */}
             <div
               style={styles.addConnectionCard}
+              className="circles-add-card"
               onClick={() => onNavigate && onNavigate('discover')}
             >
-              <div style={styles.addConnectionIcon}>+</div>
+              <div style={styles.addConnectionIcon} className="circles-add-icon">+</div>
               <span style={styles.addConnectionText}>Add</span>
             </div>
           </div>
@@ -588,9 +590,9 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         </section>
 
         {/* Recent Conversations Section */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <h2 style={styles.cardTitle}>
+        <section style={styles.card} className="circles-card">
+          <div style={styles.cardHeader} className="circles-card-header">
+            <h2 style={styles.cardTitle} className="circles-card-title">
               <span style={styles.cardIcon}>💬</span>
               Recent Conversations
             </h2>
@@ -632,6 +634,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     ...(msg.unread ? styles.messageUnread : {}),
                     animationDelay: `${index * 0.08}s`
                   }}
+                  className="circles-message-item"
                   onClick={() => handleMessageClick(msg)}
                 >
                   <div style={styles.messageAvatar}>
@@ -667,9 +670,9 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         </section>
 
         {/* My Groups Section */}
-        <section style={styles.card}>
-          <div style={styles.cardHeader}>
-            <h2 style={styles.cardTitle}>
+        <section style={styles.card} className="circles-card">
+          <div style={styles.cardHeader} className="circles-card-header">
+            <h2 style={styles.cardTitle} className="circles-card-title">
               <span style={styles.cardIcon}>🌸</span>
               My Groups
             </h2>
@@ -710,11 +713,12 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       ...styles.circleCard,
                       animationDelay: `${index * 0.12}s`
                     }}
+                    className="circles-circle-card"
                   >
                     <div style={{
                       ...styles.circleEmoji,
                       background: `linear-gradient(135deg, ${theme.color}22, ${theme.color}44)`
-                    }}>
+                    }} className="circles-circle-emoji">
                       {theme.emoji}
                     </div>
                     <div style={styles.circleInfo}>
@@ -734,6 +738,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     </div>
                     <button
                       style={styles.enterBtn}
+                      className="circles-enter-btn"
                       onClick={() => handleOpenGroupChat(group)}
                     >
                       Enter
@@ -756,7 +761,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {/* Create Group Modal */}
       {showCreateModal && (
         <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
+          <div style={styles.modal} className="circles-modal">
             <div style={styles.modalHeader}>
               <h2 style={styles.modalTitle}>Create Connection Group</h2>
               <button
@@ -842,7 +847,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {/* Group Chat Modal */}
       {showChatModal && selectedGroup && (
         <div style={styles.modalOverlay}>
-          <div style={styles.chatModal}>
+          <div style={styles.chatModal} className="circles-modal">
             <div style={styles.chatHeader}>
               <div>
                 <h2 style={styles.chatTitle}>{selectedGroup.name}</h2>
@@ -962,6 +967,113 @@ const keyframeStyles = `
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
+
+  /* Responsive styles */
+  @media (max-width: 640px) {
+    .circles-container {
+      padding: 16px !important;
+    }
+    .circles-title-section {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      gap: 12px !important;
+    }
+    .circles-page-title {
+      font-size: 28px !important;
+    }
+    .circles-quick-stats {
+      width: 100% !important;
+      justify-content: space-around !important;
+      padding: 12px 16px !important;
+    }
+    .circles-stat-number {
+      font-size: 20px !important;
+    }
+    .circles-card {
+      padding: 16px !important;
+      border-radius: 20px !important;
+    }
+    .circles-card-header {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      gap: 8px !important;
+    }
+    .circles-card-title {
+      font-size: 16px !important;
+    }
+    .circles-slide-card {
+      min-width: 80px !important;
+      padding: 12px 10px !important;
+    }
+    .circles-slide-avatar {
+      width: 48px !important;
+      height: 48px !important;
+    }
+    .circles-slide-name {
+      font-size: 12px !important;
+    }
+    .circles-add-card {
+      min-width: 80px !important;
+      padding: 12px 10px !important;
+    }
+    .circles-add-icon {
+      width: 48px !important;
+      height: 48px !important;
+      font-size: 24px !important;
+    }
+    .circles-message-item {
+      padding: 10px !important;
+    }
+    .circles-circle-card {
+      flex-wrap: wrap !important;
+      gap: 10px !important;
+    }
+    .circles-enter-btn {
+      width: 100% !important;
+      text-align: center !important;
+    }
+    .circles-invite-alert {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+    }
+    .circles-modal {
+      margin: 16px !important;
+      max-height: calc(100vh - 32px) !important;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .circles-page-title {
+      font-size: 24px !important;
+    }
+    .circles-quick-stats {
+      gap: 12px !important;
+      padding: 10px 12px !important;
+    }
+    .circles-stat-number {
+      font-size: 18px !important;
+    }
+    .circles-stat-label {
+      font-size: 10px !important;
+    }
+    .circles-card {
+      padding: 14px !important;
+      border-radius: 16px !important;
+    }
+    .circles-slide-card {
+      min-width: 70px !important;
+      padding: 10px 8px !important;
+    }
+    .circles-slide-avatar {
+      width: 44px !important;
+      height: 44px !important;
+    }
+    .circles-circle-emoji {
+      width: 40px !important;
+      height: 40px !important;
+      font-size: 18px !important;
+    }
+  }
 `;
 
 const styles = {
@@ -1029,7 +1141,8 @@ const styles = {
     zIndex: 1,
     flexWrap: 'wrap',
     gap: '16px',
-    maxWidth: '600px',
+    width: '100%',
+    maxWidth: '800px',
     margin: '0 auto 24px auto',
   },
   titleContent: {},
@@ -1092,7 +1205,8 @@ const styles = {
     zIndex: 1,
     flexWrap: 'wrap',
     gap: '12px',
-    maxWidth: '600px',
+    width: '100%',
+    maxWidth: '800px',
     margin: '0 auto 24px auto',
   },
   inviteAlertContent: {
@@ -1142,7 +1256,8 @@ const styles = {
     marginBottom: '24px',
     position: 'relative',
     zIndex: 1,
-    maxWidth: '600px',
+    width: '100%',
+    maxWidth: '800px',
     margin: '0 auto 24px auto',
   },
   card: {
@@ -1928,7 +2043,7 @@ const styles = {
     backgroundColor: '#FDF8F3',
     borderRadius: '24px',
     width: '100%',
-    maxWidth: '600px',
+    maxWidth: '700px',
     maxHeight: '80vh',
     display: 'flex',
     flexDirection: 'column',
