@@ -17,6 +17,7 @@ import JourneyProgress from './JourneyProgress'
 import NextStepPrompt from './NextStepPrompt'
 import { createAgoraRoom, hasAgoraRoom } from '@/lib/agoraHelpers'
 import NetworkDiscoverView from './NetworkDiscoverView'
+import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -76,6 +77,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [nextStepPrompt, setNextStepPrompt] = useState(null) // { type, data } for post-action prompts
   const [showProfileDropdown, setShowProfileDropdown] = useState(false) // Profile dropdown in header
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
+  const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
 
   // DEBUGGING: Detect prop changes
   const prevPropsRef = useRef({ currentUser, onSignOut, supabase })
@@ -118,6 +120,33 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [currentUser?.id])
 
+  // Track user activity (update last_active timestamp)
+  useEffect(() => {
+    if (!currentUser?.id) return
+
+    // Update on initial load
+    updateLastActiveThrottled(currentUser.id)
+
+    // Update periodically while user is active (every 5 minutes)
+    const interval = setInterval(() => {
+      updateLastActiveThrottled(currentUser.id)
+    }, 5 * 60 * 1000)
+
+    // Update on user interactions
+    const handleActivity = () => {
+      updateLastActiveThrottled(currentUser.id)
+    }
+
+    window.addEventListener('click', handleActivity)
+    window.addEventListener('keydown', handleActivity)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('click', handleActivity)
+      window.removeEventListener('keydown', handleActivity)
+    }
+  }, [currentUser?.id])
+
   // Handle onboarding completion
   const handleOnboardingComplete = useCallback(() => {
     if (!currentUser?.id) return
@@ -143,6 +172,7 @@ function MainApp({ currentUser, onSignOut }) {
     loadUserSignups()
     loadConnections()
     loadMyInterests()
+    loadConnectionRequests()
     loadMeetupPeople()
     updateAttendedCount()
     loadUnreadMessageCount()
@@ -201,6 +231,7 @@ function MainApp({ currentUser, onSignOut }) {
           console.log('Interest changed:', payload)
           loadConnections() // Reload to check for new mutual matches
           loadMyInterests()
+          loadConnectionRequests() // Reload incoming requests
           loadMeetupPeople()
         }
       )
@@ -366,7 +397,7 @@ function MainApp({ currentUser, onSignOut }) {
       
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('id, name, career, city, state, bio')
+        .select('id, name, career, city, state, bio, last_active')
         .in('id', matchedUserIds)
 
       if (profileError) throw profileError
@@ -406,6 +437,76 @@ function MainApp({ currentUser, onSignOut }) {
     } catch (err) {
       console.error('💥 Error loading interests:', err)
       setMyInterests([])
+    }
+  }, [currentUser.id, supabase])
+
+  // Load incoming connection requests (people interested in me, but not mutual yet)
+  const loadConnectionRequests = useCallback(async () => {
+    try {
+      console.log('🔍 Loading connection requests...')
+
+      // Step 1: Get people who expressed interest in current user
+      const { data: incomingInterests, error: incomingError } = await supabase
+        .from('user_interests')
+        .select('user_id, created_at')
+        .eq('interested_in_user_id', currentUser.id)
+
+      if (incomingError) throw incomingError
+
+      if (!incomingInterests || incomingInterests.length === 0) {
+        console.log('📭 No incoming interests')
+        setConnectionRequests([])
+        return
+      }
+
+      // Step 2: Get people current user has expressed interest in (to filter out mutual)
+      const { data: myInterestsData, error: myError } = await supabase
+        .from('user_interests')
+        .select('interested_in_user_id')
+        .eq('user_id', currentUser.id)
+
+      if (myError) throw myError
+
+      const myInterestIds = new Set((myInterestsData || []).map(i => i.interested_in_user_id))
+
+      // Step 3: Filter to only non-mutual (pending requests)
+      const pendingRequestUserIds = incomingInterests
+        .filter(i => !myInterestIds.has(i.user_id))
+        .map(i => ({ user_id: i.user_id, created_at: i.created_at }))
+
+      if (pendingRequestUserIds.length === 0) {
+        console.log('📭 All incoming interests are mutual (already connections)')
+        setConnectionRequests([])
+        return
+      }
+
+      // Step 4: Get profile details for pending request users
+      const userIds = pendingRequestUserIds.map(p => p.user_id)
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, career, city, state, profile_picture')
+        .in('id', userIds)
+
+      if (profileError) throw profileError
+
+      // Step 5: Combine with request timestamps
+      const requestsWithProfiles = pendingRequestUserIds.map(req => {
+        const profile = profiles.find(p => p.id === req.user_id)
+        return {
+          id: req.user_id,
+          user: profile,
+          requested_at: req.created_at
+        }
+      }).filter(r => r.user) // Filter out any without profile
+
+      // Sort by most recent first
+      requestsWithProfiles.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
+
+      setConnectionRequests(requestsWithProfiles)
+      console.log('✅ Loaded connection requests:', requestsWithProfiles.length)
+    } catch (err) {
+      console.error('💥 Error loading connection requests:', err)
+      setConnectionRequests([])
     }
   }, [currentUser.id, supabase])
 
@@ -658,7 +759,7 @@ function MainApp({ currentUser, onSignOut }) {
         // Get profile data for these user_ids
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, name, career, city, state, bio')
+          .select('id, name, career, city, state, bio, last_active')
           .in('id', userIds)
 
         if (profilesError) {
@@ -1254,6 +1355,7 @@ function MainApp({ currentUser, onSignOut }) {
       console.log('🔄 Reloading interests and connections...')
       await loadMyInterests()
       await loadConnections()
+      await loadConnectionRequests()
       await loadMeetupPeople()
       console.log('✅ Data reloaded')
     } catch (err) {
@@ -1401,7 +1503,7 @@ function MainApp({ currentUser, onSignOut }) {
     return (
       <div className="space-y-6">
         {/* Time-Aware Greeting Banner */}
-        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+        <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold text-stone-700">
@@ -1418,32 +1520,36 @@ function MainApp({ currentUser, onSignOut }) {
 
         {/* Hero "Next Step" Card - Only shows if meeting within 60 min */}
         {nextMeeting && (
-          <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-stone-600 via-stone-700 to-stone-800 p-6 shadow-lg">
-            {/* Glass effect overlay */}
-            <div className="absolute inset-0 bg-white/5 backdrop-blur-sm" />
-
+          <div
+            className="relative overflow-hidden p-6"
+            style={{
+              background: 'linear-gradient(to right, #FFFFFF 50%, #E8F4F8 70%, #D4E9F7 100%)',
+              borderRadius: '12px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+            }}
+          >
             <div className="relative z-10">
               <div className="flex items-center mb-4">
                 {/* CircleW Logo */}
-                <svg width="32" height="32" viewBox="0 0 100 100" className="mr-3 text-white">
+                <svg width="32" height="32" viewBox="0 0 100 100" className="mr-3 text-[#6B4F3F]">
                   <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
                   <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
                 </svg>
                 <div className="flex-1">
-                  <h3 className="text-white font-semibold text-lg">Circle Meeting</h3>
-                  <p className="text-stone-300 text-sm">
+                  <h3 className="text-[#6B4F3F] font-semibold text-lg">Circle Meeting</h3>
+                  <p className="text-stone-500 text-sm">
                     starts in {nextMeeting.minutesUntil}m
                   </p>
                 </div>
               </div>
 
-              <p className="text-stone-200 text-sm mb-4">
+              <p className="text-stone-600 text-sm mb-4">
                 {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
               </p>
 
               <button
                 onClick={() => handleJoinVideoCall(nextMeeting.id)}
-                className="w-full bg-amber-400 hover:bg-amber-500 text-stone-800 font-semibold py-3 rounded-lg transition-colors flex items-center justify-center"
+                className="w-full bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center"
               >
                 <Video className="w-5 h-5 mr-2" />
                 Join Room
@@ -1453,7 +1559,7 @@ function MainApp({ currentUser, onSignOut }) {
         )}
 
         {/* Momentum Tracker */}
-        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+        <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-stone-700">Your momentum</h3>
             <span className="text-sm text-stone-500">
@@ -1465,18 +1571,15 @@ function MainApp({ currentUser, onSignOut }) {
             {/* Connections Card */}
             <button
               onClick={() => setCurrentView('coffeeChats')}
-              className={`p-4 rounded-lg border-2 transition-all text-left ${
-                momentum.step === 1
-                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
-                  : connections.length > 0
-                    ? 'border-green-200 bg-green-50'
-                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              className={`p-4 border-0 transition-all text-left ${
+                momentum.step === 1 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
               }`}
+              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
             >
               <div className="flex items-center justify-between mb-2">
-                <Users className={`w-5 h-5 ${connections.length > 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                <Users className={`w-5 h-5 ${connections.length > 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
                 {connections.length > 0 && (
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
@@ -1490,18 +1593,15 @@ function MainApp({ currentUser, onSignOut }) {
             {/* Meetings Card */}
             <button
               onClick={() => setCurrentView('home')}
-              className={`p-4 rounded-lg border-2 transition-all text-left ${
-                momentum.step === 2
-                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
-                  : userSignups.length > 0
-                    ? 'border-green-200 bg-green-50'
-                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              className={`p-4 border-0 transition-all text-left ${
+                momentum.step === 2 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
               }`}
+              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
             >
               <div className="flex items-center justify-between mb-2">
-                <Calendar className={`w-5 h-5 ${userSignups.length > 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                <Calendar className={`w-5 h-5 ${userSignups.length > 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
                 {userSignups.length > 0 && (
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
@@ -1515,18 +1615,15 @@ function MainApp({ currentUser, onSignOut }) {
             {/* Recaps Card */}
             <button
               onClick={() => setCurrentView('callHistory')}
-              className={`p-4 rounded-lg border-2 transition-all text-left ${
-                momentum.step === 3
-                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
-                  : pendingRecaps.length === 0
-                    ? 'border-green-200 bg-green-50'
-                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              className={`p-4 border-0 transition-all text-left ${
+                momentum.step === 3 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
               }`}
+              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
             >
               <div className="flex items-center justify-between mb-2">
-                <Video className={`w-5 h-5 ${pendingRecaps.length === 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                <Video className={`w-5 h-5 ${pendingRecaps.length === 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
                 {pendingRecaps.length === 0 && coffeeChatsCount > 0 && (
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
@@ -1540,18 +1637,15 @@ function MainApp({ currentUser, onSignOut }) {
             {/* Follow-up Card */}
             <button
               onClick={() => setCurrentView('messages')}
-              className={`p-4 rounded-lg border-2 transition-all text-left ${
-                momentum.step === 4 && unreadMessageCount > 0
-                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 ring-offset-2'
-                  : unreadMessageCount === 0
-                    ? 'border-green-200 bg-green-50'
-                    : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+              className={`p-4 border-0 transition-all text-left ${
+                momentum.step === 4 && unreadMessageCount > 0 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
               }`}
+              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
             >
               <div className="flex items-center justify-between mb-2">
-                <MessageCircle className={`w-5 h-5 ${unreadMessageCount === 0 ? 'text-green-600' : 'text-stone-400'}`} />
+                <MessageCircle className={`w-5 h-5 ${unreadMessageCount === 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
                 {unreadMessageCount === 0 && (
-                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
                     <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                     </svg>
@@ -1564,8 +1658,84 @@ function MainApp({ currentUser, onSignOut }) {
           </div>
         </div>
 
+        {/* Connection Requests Section */}
+        {connectionRequests.length > 0 && (
+          <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className="w-8 h-8 bg-rose-100 rounded-full flex items-center justify-center mr-3">
+                  <Heart className="w-4 h-4 text-rose-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-stone-700">
+                    {connectionRequests.length} {connectionRequests.length === 1 ? 'person wants' : 'people want'} to connect
+                  </h3>
+                  <p className="text-sm text-stone-500">Accept to start a conversation</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {connectionRequests.slice(0, 3).map(request => {
+                const user = request.user
+                const requestDate = new Date(request.requested_at)
+                const daysAgo = Math.floor((Date.now() - requestDate) / (1000 * 60 * 60 * 24))
+                const timeAgo = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`
+
+                return (
+                  <div
+                    key={request.id}
+                    className="flex items-center justify-between p-4 bg-[#FDFBF9] rounded-xl border border-[#E6D5C3]"
+                  >
+                    <div className="flex items-center">
+                      {user.profile_picture ? (
+                        <img
+                          src={user.profile_picture}
+                          alt={user.name}
+                          className="w-12 h-12 rounded-full object-cover mr-3"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 flex items-center justify-center text-white font-semibold mr-3">
+                          {user.name?.[0] || '?'}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-semibold text-stone-700">{user.name}</h4>
+                        <p className="text-sm text-stone-500">{user.career || 'Professional'}</p>
+                        {user.city && (
+                          <p className="text-xs text-stone-400">{user.city}{user.state ? `, ${user.state}` : ''}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-stone-400 mr-2">{timeAgo}</span>
+                      <button
+                        onClick={() => handleShowInterest(request.id, user.name)}
+                        className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm flex items-center"
+                      >
+                        <Heart className="w-4 h-4 mr-1" />
+                        Accept
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {connectionRequests.length > 3 && (
+              <button
+                onClick={() => setCurrentView('discover')}
+                className="w-full mt-3 text-sm text-[#6B4F3F] hover:text-[#5A4235] font-medium py-2"
+              >
+                View all {connectionRequests.length} requests &gt;
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Upcoming Events Section */}
-        <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+        <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-stone-700">Upcoming events</h3>
             <button
@@ -1595,7 +1765,11 @@ function MainApp({ currentUser, onSignOut }) {
                 const participantCount = meetupSignups.length
 
                 return (
-                  <div key={meetup.id} className="border border-stone-200 rounded-lg p-4 hover:border-stone-300 transition-colors">
+                  <div
+                    key={meetup.id}
+                    className="bg-white border border-[#E6D5C3] p-4 hover:border-[#D4A574] transition-colors rounded-xl"
+                    style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                  >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h4 className="font-semibold text-stone-700">Circle Meetup</h4>
@@ -1614,12 +1788,12 @@ function MainApp({ currentUser, onSignOut }) {
 
                       {isSignedUp ? (
                         <div className="flex flex-col items-end gap-2">
-                          <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-1 rounded">
+                          <span className="bg-[#F4EEE6] text-[#6B4F3F] text-xs font-medium px-2 py-1 rounded">
                             Signed up
                           </span>
                           <button
                             onClick={() => handleJoinVideoCall(meetup.id)}
-                            className="text-sm text-stone-600 hover:text-stone-800 font-medium"
+                            className="text-sm text-[#6B4F3F] hover:text-[#5A4235] font-medium"
                           >
                             Join &gt;
                           </button>
@@ -1627,7 +1801,7 @@ function MainApp({ currentUser, onSignOut }) {
                       ) : (
                         <button
                           onClick={() => handleSignUp(meetup.id)}
-                          className="bg-stone-600 hover:bg-stone-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                          className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
                         >
                           Reserve my spot &gt;
                         </button>
@@ -1642,7 +1816,7 @@ function MainApp({ currentUser, onSignOut }) {
 
         {/* Pending Recaps Checklist */}
         {pendingRecaps.length > 0 && (
-          <div className="bg-white rounded-xl p-5 border border-stone-200 shadow-sm">
+          <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-stone-700">Pending recaps</h3>
               <button
@@ -1702,14 +1876,14 @@ function MainApp({ currentUser, onSignOut }) {
 
     return (
       <div className="space-y-6">
-        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
+        <div className="bg-gradient-to-r from-[#F4EEE6] to-[#E8DDD0] rounded-lg p-6 border border-[#D4A574]">
           <h3 className="text-lg font-semibold text-gray-800 mb-2">Your Network</h3>
           <p className="text-sm text-gray-600">Show interest privately - connect when it's mutual!</p>
         </div>
 
         {currentUser.meetups_attended < 3 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-sm text-amber-800">
+          <div className="bg-[#F4EEE6] border border-[#D4A574] rounded-lg p-4">
+            <p className="text-sm text-[#5A4235]">
               Complete {3 - currentUser.meetups_attended} more meetups to unlock 1-on-1 video chats
             </p>
           </div>
@@ -1733,7 +1907,7 @@ function MainApp({ currentUser, onSignOut }) {
                 const hasShownInterest = myInterests.includes(personData.id)
 
                 return (
-                  <div key={personData.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
+                  <div key={personData.id} className="bg-white rounded-lg p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1">
                         <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
@@ -1749,7 +1923,7 @@ function MainApp({ currentUser, onSignOut }) {
 
                     {hasShownInterest ? (
                       <div className="space-y-2">
-                        <div className="bg-purple-50 border border-purple-200 rounded px-4 py-2 text-purple-700 text-sm font-medium text-center">
+                        <div className="bg-[#F4EEE6] border border-[#D4A574] rounded px-4 py-2 text-[#6B4F3F] text-sm font-medium text-center">
                           Interest shown - waiting for mutual match
                         </div>
                         <button
@@ -1791,12 +1965,12 @@ function MainApp({ currentUser, onSignOut }) {
               connections.map(connection => {
                 const person = connection.connected_user
                 return (
-                  <div key={connection.id} className="bg-white rounded-lg shadow p-5 border border-green-200">
+                  <div key={connection.id} className="bg-white rounded-lg p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
                     <div className="flex justify-between items-start mb-3">
                       <div className="flex-1">
                         <div className="flex items-center mb-1">
                           <h4 className="font-semibold text-gray-800 text-lg">{person.name}</h4>
-                          <div className="ml-2 bg-green-100 text-green-600 text-xs px-2 py-1 rounded-full flex items-center">
+                          <div className="ml-2 bg-[#F4EEE6] text-[#6B4F3F] text-xs px-2 py-1 rounded-full flex items-center">
                             <Heart className="w-3 h-3 mr-1 fill-current" />
                             Mutual Match
                           </div>
@@ -1814,7 +1988,7 @@ function MainApp({ currentUser, onSignOut }) {
                     {currentUser.meetups_attended >= 3 ? (
                       <button
                         onClick={() => setCurrentView('coffeeChats')}
-                        className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
+                        className="w-full bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
                       >
                         <Video className="w-4 h-4 mr-2" />
                         Schedule Video Chat
@@ -1836,7 +2010,7 @@ function MainApp({ currentUser, onSignOut }) {
 
   const ProfileView = () => (
     <div className="space-y-6">
-      <div className="bg-white rounded-lg shadow p-6">
+      <div className="bg-white rounded-lg p-6 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
         <div className="flex items-center mb-6">
           {currentUser.profile_picture ? (
             <img
@@ -1854,7 +2028,7 @@ function MainApp({ currentUser, onSignOut }) {
             <p className="text-gray-600">{currentUser.career} • Age {currentUser.age}</p>
             <p className="text-sm text-gray-500">{currentUser.city}, {currentUser.state}</p>
             {currentUser.role === 'admin' && (
-              <span className="inline-block mt-2 bg-purple-100 text-purple-700 text-xs px-3 py-1 rounded-full font-medium">
+              <span className="inline-block mt-2 bg-[#E8DDD0] text-[#6B4F3F] text-xs px-3 py-1 rounded-full font-medium">
                 Admin
               </span>
             )}
@@ -1874,8 +2048,8 @@ function MainApp({ currentUser, onSignOut }) {
                 <div className="text-2xl font-bold text-rose-600">{currentUser.meetups_attended}</div>
                 <div className="text-sm text-gray-600">Meetups Attended</div>
               </div>
-              <div className="bg-purple-50 rounded p-3">
-                <div className="text-2xl font-bold text-purple-600">{connections.length}</div>
+              <div className="bg-[#F4EEE6] rounded p-3">
+                <div className="text-2xl font-bold text-[#6B4F3F]">{connections.length}</div>
                 <div className="text-sm text-gray-600">Connections</div>
               </div>
             </div>
@@ -1890,7 +2064,7 @@ function MainApp({ currentUser, onSignOut }) {
 
           <button
             onClick={() => setShowOnboarding(true)}
-            className="w-full bg-blue-50 hover:bg-blue-100 text-blue-600 font-medium py-2 rounded transition-colors border border-blue-200 flex items-center justify-center"
+            className="w-full bg-[#F4EEE6] hover:bg-[#E8DDD0] text-[#6B4F3F] font-medium py-2 rounded transition-colors border border-[#D4A574] flex items-center justify-center"
           >
             <span className="mr-2">&#128218;</span>
             View App Tutorial
@@ -1900,7 +2074,7 @@ function MainApp({ currentUser, onSignOut }) {
           {currentUser.role === 'admin' && (
             <button
               onClick={() => setCurrentView('admin')}
-              className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
+              className="w-full bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
             >
               <Star className="w-4 h-4 mr-2" />
               Admin Dashboard
@@ -1920,7 +2094,7 @@ function MainApp({ currentUser, onSignOut }) {
 
   const AdminDashboard = () => (
     <div className="space-y-6">
-      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-6 border border-purple-200">
+      <div className="bg-gradient-to-r from-[#F4EEE6] to-[#E8DDD0] rounded-lg p-6 border border-[#D4A574]">
         <h3 className="text-lg font-semibold text-gray-800 mb-2">Admin Dashboard</h3>
         <p className="text-sm text-gray-600">Manage meetups and view signups</p>
       </div>
@@ -1929,21 +2103,21 @@ function MainApp({ currentUser, onSignOut }) {
       <div className="grid grid-cols-3 gap-4">
         <button
           onClick={() => setCurrentView('meetupProposals')}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
+          className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
         >
           <Calendar className="w-5 h-5 mr-2" />
           Review Proposals
         </button>
         <button
           onClick={() => setShowCreateMeetup(true)}
-          className="bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
+          className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
         >
           <Calendar className="w-5 h-5 mr-2" />
           Create Meetup
         </button>
         <button
           onClick={() => setCurrentView('adminFeedback')}
-          className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
+          className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
         >
           <MessageCircle className="w-5 h-5 mr-2" />
           View Feedback
@@ -1955,7 +2129,7 @@ function MainApp({ currentUser, onSignOut }) {
       </div>
 
       {meetups.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
+        <div className="bg-white rounded-lg p-8 text-center border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
           <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <p className="text-gray-600">No meetups yet</p>
           <p className="text-sm text-gray-500 mt-2">Create your first meetup above</p>
@@ -1967,11 +2141,11 @@ function MainApp({ currentUser, onSignOut }) {
             const signupCount = meetupSignups.length
 
             return (
-              <div key={meetup.id} className="bg-white rounded-lg shadow p-5 border border-gray-200">
+              <div key={meetup.id} className="bg-white rounded-lg p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <div className="flex items-center text-gray-800 font-semibold mb-1">
-                      <Calendar className="w-5 h-5 mr-2 text-purple-500" />
+                      <Calendar className="w-5 h-5 mr-2 text-[#6B4F3F]" />
                       {formatDate(meetup.date)} at {formatTime(meetup.time)}
                     </div>
                     {meetup.location && (
@@ -1985,7 +2159,7 @@ function MainApp({ currentUser, onSignOut }) {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleEditMeetup(meetup)}
-                      className="text-blue-500 hover:text-blue-700 text-sm font-medium"
+                      className="text-[#6B4F3F] hover:text-[#5A4235] text-sm font-medium"
                     >
                       Edit
                     </button>
@@ -2005,7 +2179,7 @@ function MainApp({ currentUser, onSignOut }) {
                       <input
                         type="text"
                         placeholder="e.g., Blue Bottle Coffee, 123 Main St"
-                        className="flex-1 border border-gray-300 rounded p-2 text-sm focus:outline-none focus:border-purple-500"
+                        className="flex-1 border border-gray-300 rounded p-2 text-sm focus:outline-none focus:border-[#6B4F3F]"
                         id={'location-' + meetup.id}
                       />
                       <button
@@ -2015,7 +2189,7 @@ function MainApp({ currentUser, onSignOut }) {
                             handleSetLocation(meetup.id, input.value)
                           }
                         }}
-                        className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded text-sm transition-colors"
+                        className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white px-4 py-2 rounded text-sm transition-colors"
                       >
                         Set
                       </button>
@@ -2051,7 +2225,7 @@ function MainApp({ currentUser, onSignOut }) {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
+    <div className="min-h-screen bg-[#F4EEE6] pb-28">
       {/* Onboarding for new users */}
       {showOnboarding && (
         <Onboarding
@@ -2074,11 +2248,11 @@ function MainApp({ currentUser, onSignOut }) {
       )}
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-stone-600 to-stone-700 text-white shadow-lg">
+      <div className="bg-[#6B4F3F] text-white shadow-lg">
         <div className="max-w-4xl mx-auto px-4 py-3 md:px-6 md:py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl md:text-2xl font-bold flex items-center">
-              <svg width="28" height="28" viewBox="0 0 100 100" className="mr-2 md:mr-3">
+              <svg width="36" height="36" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-10 md:h-10">
                 <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
                 <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
               </svg>
@@ -2088,9 +2262,9 @@ function MainApp({ currentUser, onSignOut }) {
             <div className="relative">
               <button
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-[#D4A574] focus:outline-none focus:ring-2 focus:ring-[#D4A574]"
                 style={{
-                  backgroundColor: currentUser.profile_picture ? 'transparent' : '#d6bcfa'
+                  backgroundColor: currentUser.profile_picture ? 'transparent' : '#E6D5C3'
                 }}
               >
                 {currentUser.profile_picture ? (
@@ -2100,7 +2274,7 @@ function MainApp({ currentUser, onSignOut }) {
                     className="w-full h-full rounded-full object-cover"
                   />
                 ) : (
-                  <span className="text-purple-700">
+                  <span className="text-[#6B4F3F]">
                     {(currentUser.name || currentUser.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -2114,7 +2288,7 @@ function MainApp({ currentUser, onSignOut }) {
                     className="fixed inset-0 z-40"
                     onClick={() => setShowProfileDropdown(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-stone-200 py-1 z-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg border border-[#E6D5C3] py-1 z-50" style={{ boxShadow: '0 4px 12px rgba(107, 79, 63, 0.12)' }}>
                     <button
                       onClick={() => {
                         setShowProfileDropdown(false)
@@ -2144,15 +2318,15 @@ function MainApp({ currentUser, onSignOut }) {
         </div>
 
         {/* Navigation Bar */}
-        <div className="bg-stone-700 border-t border-stone-500">
+        <div className="bg-[#5A4235] border-t border-[#7D5F4F]">
           <div className="max-w-4xl mx-auto">
             <div className="flex overflow-x-auto scrollbar-hide">
               <button
                 onClick={() => setCurrentView('home')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                   currentView === 'home'
-                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
-                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
+                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
                 }`}
               >
                 <Calendar className="w-4 h-4" />
@@ -2162,8 +2336,8 @@ function MainApp({ currentUser, onSignOut }) {
                 onClick={() => setCurrentView('coffeeChats')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                   currentView === 'coffeeChats'
-                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
-                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
+                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
                 }`}
               >
                 <Coffee className="w-4 h-4" />
@@ -2173,8 +2347,8 @@ function MainApp({ currentUser, onSignOut }) {
                 onClick={() => setCurrentView('discover')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                   currentView === 'discover'
-                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
-                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
+                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
                 }`}
               >
                 <Compass className="w-4 h-4" />
@@ -2184,25 +2358,25 @@ function MainApp({ currentUser, onSignOut }) {
                 onClick={() => setCurrentView('connectionGroups')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                   currentView === 'connectionGroups'
-                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
-                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
+                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
                 }`}
               >
                 <Users className="w-4 h-4" />
-                <span>Groups</span>
+                <span>Circles</span>
               </button>
               <button
                 onClick={() => setCurrentView('messages')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${
                   currentView === 'messages'
-                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
-                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
+                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
                 }`}
               >
                 <MessageCircle className="w-4 h-4" />
                 <span>Messages</span>
                 {unreadMessageCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  <span className="absolute -top-1 -right-1 bg-[#6B4F3F] text-white text-xs px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                     {unreadMessageCount}
                   </span>
                 )}
@@ -2211,8 +2385,8 @@ function MainApp({ currentUser, onSignOut }) {
                 onClick={() => setCurrentView('callHistory')}
                 className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                   currentView === 'callHistory'
-                    ? 'text-white bg-stone-600 border-b-2 border-amber-400'
-                    : 'text-stone-300 hover:text-white hover:bg-stone-600'
+                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
+                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
                 }`}
               >
                 <Video className="w-4 h-4" />
@@ -2227,7 +2401,7 @@ function MainApp({ currentUser, onSignOut }) {
       <div className="max-w-4xl mx-auto p-6">
         {currentView === 'home' && <HomeView />}
         {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} connections={connections} supabase={supabase} onNavigate={setCurrentView} />}
-        {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={setCurrentView} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={setCurrentView} onHostMeetup={() => setShowCreateMeetup(true)} />}
         {currentView === 'messages' && <MessagesView currentUser={currentUser} supabase={supabase} onUnreadCountChange={loadUnreadMessageCount} />}
@@ -2241,7 +2415,7 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Chat Modal */}
       {showChatModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full h-[600px] flex flex-col">
+          <div className="bg-white rounded-lg max-w-2xl w-full h-[600px] flex flex-col border border-[#E6D5C3]" style={{ boxShadow: '0 4px 16px rgba(107, 79, 63, 0.15)' }}>
             <div className="flex justify-between items-center p-4 border-b">
               <h3 className="text-xl font-bold text-gray-800">Jessica Lee</h3>
               <button onClick={() => setShowChatModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -2283,7 +2457,7 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Edit Profile Modal */}
       {showEditProfile && editedProfile && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto border border-[#E6D5C3]" style={{ boxShadow: '0 4px 16px rgba(107, 79, 63, 0.15)' }}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800">Edit Profile</h3>
               <button onClick={() => setShowEditProfile(false)} className="text-gray-500 hover:text-gray-700">
@@ -2410,7 +2584,7 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Create Meetup Modal */}
       {showCreateMeetup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 max-h-[90vh] overflow-y-auto border border-[#E6D5C3]" style={{ boxShadow: '0 4px 16px rgba(107, 79, 63, 0.15)' }}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800">Create New Meetup</h3>
               <button onClick={() => setShowCreateMeetup(false)} className="text-gray-500 hover:text-gray-700">
@@ -2427,7 +2601,7 @@ function MainApp({ currentUser, onSignOut }) {
                   value={newMeetup.topic}
                   onChange={(e) => setNewMeetup({ ...newMeetup, topic: e.target.value })}
                   placeholder="e.g., Product Manager Coffee Chat"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F]"
                   maxLength={200}
                   required
                 />
@@ -2453,7 +2627,7 @@ function MainApp({ currentUser, onSignOut }) {
                     minDate={new Date()}
                     dateFormat="MMM d, yyyy"
                     placeholderText="Select date"
-                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500 cursor-pointer"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F] cursor-pointer"
                     wrapperClassName="w-full"
                     showPopperArrow={false}
                     required
@@ -2466,7 +2640,7 @@ function MainApp({ currentUser, onSignOut }) {
                     type="time"
                     value={newMeetup.time}
                     onChange={(e) => setNewMeetup({ ...newMeetup, time: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F]"
                     required
                   />
                 </div>
@@ -2479,7 +2653,7 @@ function MainApp({ currentUser, onSignOut }) {
                   <select
                     value={newMeetup.duration}
                     onChange={(e) => setNewMeetup({ ...newMeetup, duration: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F]"
                   >
                     <option value="30">30 minutes</option>
                     <option value="45">45 minutes</option>
@@ -2498,7 +2672,7 @@ function MainApp({ currentUser, onSignOut }) {
                     placeholder="100"
                     min="2"
                     max="500"
-                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F]"
                   />
                 </div>
               </div>
@@ -2511,7 +2685,7 @@ function MainApp({ currentUser, onSignOut }) {
                   value={newMeetup.location}
                   onChange={(e) => setNewMeetup({ ...newMeetup, location: e.target.value })}
                   placeholder="e.g., Starbucks on Main St"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F]"
                 />
                 <p className="text-xs text-gray-500 mt-1">You can set the location after seeing who signs up</p>
               </div>
@@ -2523,7 +2697,7 @@ function MainApp({ currentUser, onSignOut }) {
                   value={newMeetup.description}
                   onChange={(e) => setNewMeetup({ ...newMeetup, description: e.target.value })}
                   placeholder="Tell participants what this meetup is about..."
-                  className="w-full border border-gray-300 rounded-lg p-3 h-20 resize-none focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 h-20 resize-none focus:outline-none focus:border-[#6B4F3F]"
                   maxLength={1000}
                 />
                 <p className="text-xs text-gray-500 mt-1">{newMeetup.description?.length || 0}/1000 characters</p>
@@ -2532,10 +2706,10 @@ function MainApp({ currentUser, onSignOut }) {
 
             {/* PREVIEW */}
             {newMeetup.topic && newMeetup.date && (
-              <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <p className="text-sm text-purple-800 font-medium">Preview:</p>
-                <p className="text-sm text-purple-700 font-semibold">{newMeetup.topic}</p>
-                <p className="text-sm text-purple-700">
+              <div className="mt-4 bg-[#F4EEE6] border border-[#D4A574] rounded-lg p-3">
+                <p className="text-sm text-[#5A4235] font-medium">Preview:</p>
+                <p className="text-sm text-[#6B4F3F] font-semibold">{newMeetup.topic}</p>
+                <p className="text-sm text-[#6B4F3F]">
                   {formatDate(newMeetup.date)}
                   {newMeetup.time && ` at ${formatTime(newMeetup.time)}`}
                   {` · ${newMeetup.duration} min`}
@@ -2554,7 +2728,7 @@ function MainApp({ currentUser, onSignOut }) {
               <button
                 onClick={handleCreateMeetup}
                 disabled={!newMeetup.topic || !newMeetup.date || !newMeetup.time}
-                className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="flex-1 bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-2 rounded transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Create Meetup
               </button>
@@ -2566,7 +2740,7 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Edit Meetup Modal */}
       {showEditMeetup && editingMeetup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
+          <div className="bg-white rounded-lg max-w-md w-full p-6 border border-[#E6D5C3]" style={{ boxShadow: '0 4px 16px rgba(107, 79, 63, 0.15)' }}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-gray-800">Edit Meetup</h3>
               <button onClick={() => setShowEditMeetup(false)} className="text-gray-500 hover:text-gray-700">
@@ -2595,7 +2769,7 @@ function MainApp({ currentUser, onSignOut }) {
                   minDate={new Date()}
                   dateFormat="MMMM d, yyyy"
                   placeholderText="Click to select a date"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500 cursor-pointer"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F] cursor-pointer"
                   wrapperClassName="w-full"
                   showPopperArrow={false}
                   required
@@ -2609,7 +2783,7 @@ function MainApp({ currentUser, onSignOut }) {
                   type="time"
                   value={editingMeetup.time}
                   onChange={(e) => setEditingMeetup({ ...editingMeetup, time: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F]"
                   required
                 />
               </div>
@@ -2622,16 +2796,16 @@ function MainApp({ currentUser, onSignOut }) {
                   value={editingMeetup.location || ''}
                   onChange={(e) => setEditingMeetup({ ...editingMeetup, location: e.target.value })}
                   placeholder="e.g., Blue Bottle Coffee, 123 Main St"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-[#6B4F3F]"
                 />
               </div>
             </div>
 
             {/* PREVIEW */}
             {editingMeetup.date && (
-              <div className="mt-4 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <p className="text-sm text-purple-800 font-medium">Preview:</p>
-                <p className="text-sm text-purple-700">
+              <div className="mt-4 bg-[#F4EEE6] border border-[#D4A574] rounded-lg p-3">
+                <p className="text-sm text-[#5A4235] font-medium">Preview:</p>
+                <p className="text-sm text-[#6B4F3F]">
                   {formatDate(editingMeetup.date)}
                   {editingMeetup.time && ` at ${formatTime(editingMeetup.time)}`}
                 </p>
@@ -2648,7 +2822,7 @@ function MainApp({ currentUser, onSignOut }) {
               <button
                 onClick={handleUpdateMeetup}
                 disabled={!editingMeetup.date || !editingMeetup.time}
-                className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="flex-1 bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-2 rounded transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Update Meetup
               </button>
