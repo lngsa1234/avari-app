@@ -540,7 +540,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         <section style={styles.card} className="circles-card">
           <div style={styles.cardHeader} className="circles-card-header">
             <h2 style={styles.cardTitle} className="circles-card-title">
-              <span style={styles.cardIcon}>✨</span>
               Connections
             </h2>
             <span style={styles.onlineBadge}>
@@ -593,7 +592,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         <section style={styles.card} className="circles-card">
           <div style={styles.cardHeader} className="circles-card-header">
             <h2 style={styles.cardTitle} className="circles-card-title">
-              <span style={styles.cardIcon}>💬</span>
               Recent Conversations
             </h2>
             <div style={styles.tabGroup}>
@@ -673,7 +671,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         <section style={styles.card} className="circles-card">
           <div style={styles.cardHeader} className="circles-card-header">
             <h2 style={styles.cardTitle} className="circles-card-title">
-              <span style={styles.cardIcon}>🌸</span>
               My Groups
             </h2>
             <button style={styles.addGroupBtn} onClick={handleCreateClick}>+ Join</button>

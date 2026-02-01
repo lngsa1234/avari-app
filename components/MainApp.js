@@ -2,7 +2,7 @@
 
 import { supabase } from '@/lib/supabase'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass } from 'lucide-react'
+import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import MeetupsView from './MeetupsView'
@@ -1500,182 +1500,291 @@ function MainApp({ currentUser, onSignOut }) {
     }
     const momentum = getMomentumStep()
 
+    const homeStyles = {
+      container: {
+        fontFamily: '"DM Sans", sans-serif',
+        position: 'relative',
+        padding: '24px 0',
+      },
+      titleSection: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-end',
+        marginBottom: '24px',
+        paddingBottom: '20px',
+        borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
+        flexWrap: 'wrap',
+        gap: '16px',
+      },
+      pageTitle: {
+        fontFamily: '"Playfair Display", serif',
+        fontSize: '36px',
+        fontWeight: '600',
+        color: '#5C4033',
+        letterSpacing: '-1px',
+        margin: 0,
+      },
+      tagline: {
+        fontSize: '15px',
+        color: '#8B7355',
+        fontWeight: '400',
+        margin: 0,
+      },
+      quickStats: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '20px',
+        padding: '14px 24px',
+        backgroundColor: 'rgba(255, 255, 255, 0.6)',
+        borderRadius: '16px',
+        boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
+      },
+      statItem: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+      },
+      statNumber: {
+        fontFamily: '"Playfair Display", serif',
+        fontSize: '24px',
+        fontWeight: '600',
+        color: '#5C4033',
+      },
+      statLabel: {
+        fontSize: '11px',
+        color: '#8B7355',
+        fontWeight: '500',
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+      },
+      statDivider: {
+        width: '1px',
+        height: '28px',
+        backgroundColor: 'rgba(139, 111, 92, 0.2)',
+      },
+      card: {
+        backgroundColor: 'rgba(255, 255, 255, 0.7)',
+        borderRadius: '24px',
+        padding: '20px',
+        boxShadow: '0 4px 24px rgba(139, 111, 92, 0.08)',
+        border: '1px solid rgba(139, 111, 92, 0.08)',
+        backdropFilter: 'blur(10px)',
+        marginBottom: '20px',
+      },
+      cardHeader: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px',
+        flexWrap: 'wrap',
+        gap: '10px',
+      },
+      cardTitle: {
+        fontFamily: '"Playfair Display", serif',
+        fontSize: '18px',
+        fontWeight: '600',
+        color: '#3D2B1F',
+        margin: 0,
+      },
+      seeAllBtn: {
+        padding: '8px 16px',
+        backgroundColor: 'transparent',
+        border: 'none',
+        color: '#8B6F5C',
+        fontSize: '13px',
+        fontWeight: '600',
+        cursor: 'pointer',
+      },
+    }
+
     return (
-      <div className="space-y-6">
-        {/* Time-Aware Greeting Banner */}
-        <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-stone-700">
-                {greeting}, {firstName} {emoji}
-              </h2>
-              {upcomingMeetingCount > 0 && (
-                <p className="text-stone-500 mt-1">
-                  You have {upcomingMeetingCount} circle{upcomingMeetingCount > 1 ? 's' : ''} starting soon
-                </p>
-              )}
-            </div>
+      <div style={homeStyles.container}>
+        {/* Title Section */}
+        <section style={homeStyles.titleSection}>
+          <div>
+            <h1 style={homeStyles.pageTitle}>{greeting}, {firstName}</h1>
+            <p style={homeStyles.tagline}>
+              {upcomingMeetingCount > 0
+                ? `You have ${upcomingMeetingCount} circle${upcomingMeetingCount > 1 ? 's' : ''} starting soon`
+                : 'Your community awaits'}
+            </p>
           </div>
-        </div>
+        </section>
 
         {/* Hero "Next Step" Card - Only shows if meeting within 60 min */}
         {nextMeeting && (
-          <div
-            className="relative overflow-hidden p-6"
-            style={{
-              background: 'linear-gradient(to right, #FFFFFF 50%, #E8F4F8 70%, #D4E9F7 100%)',
-              borderRadius: '12px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-            }}
-          >
-            <div className="relative z-10">
-              <div className="flex items-center mb-4">
-                {/* CircleW Logo */}
-                <svg width="32" height="32" viewBox="0 0 100 100" className="mr-3 text-[#6B4F3F]">
-                  <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
-                  <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
-                </svg>
-                <div className="flex-1">
-                  <h3 className="text-[#6B4F3F] font-semibold text-lg">Circle Meeting</h3>
-                  <p className="text-stone-500 text-sm">
-                    starts in {nextMeeting.minutesUntil}m
-                  </p>
-                </div>
+          <div style={{
+            ...homeStyles.card,
+            background: 'linear-gradient(135deg, rgba(139, 111, 92, 0.1) 0%, rgba(212, 165, 116, 0.1) 100%)',
+            border: '1px solid rgba(139, 111, 92, 0.15)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+              <svg width="32" height="32" viewBox="0 0 100 100" style={{ marginRight: '12px', color: '#5C4033' }}>
+                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
+                <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
+              </svg>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ ...homeStyles.cardTitle, fontSize: '16px' }}>Circle Meeting</h3>
+                <p style={{ fontSize: '14px', color: '#8B7355', margin: 0 }}>
+                  starts in {nextMeeting.minutesUntil}m
+                </p>
               </div>
-
-              <p className="text-stone-600 text-sm mb-4">
-                {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
-              </p>
-
-              <button
-                onClick={() => handleJoinVideoCall(nextMeeting.id)}
-                className="w-full bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center"
-              >
-                <Video className="w-5 h-5 mr-2" />
-                Join Room
-              </button>
             </div>
+
+            <p style={{ fontSize: '14px', color: '#6B5344', marginBottom: '16px' }}>
+              {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
+            </p>
+
+            <button
+              onClick={() => handleJoinVideoCall(nextMeeting.id)}
+              style={{
+                width: '100%',
+                padding: '14px',
+                backgroundColor: '#8B6F5C',
+                border: 'none',
+                borderRadius: '12px',
+                color: 'white',
+                fontSize: '15px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+            >
+              <Video style={{ width: '20px', height: '20px' }} />
+              Join Room
+            </button>
           </div>
         )}
 
         {/* Momentum Tracker */}
-        <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-stone-700">Your momentum</h3>
-            <span className="text-sm text-stone-500">
+        <div style={homeStyles.card}>
+          <div style={homeStyles.cardHeader}>
+            <h3 style={homeStyles.cardTitle}>Your Momentum</h3>
+            <span style={{ fontSize: '13px', color: '#8B7355' }}>
               Step {momentum.step} of 4 — {momentum.label}
             </span>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
             {/* Connections Card */}
             <button
               onClick={() => setCurrentView('meetups')}
-              className={`p-4 border-0 transition-all text-left ${
-                momentum.step === 1 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
-              }`}
-              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+              style={{
+                padding: '16px',
+                backgroundColor: momentum.step === 1 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
+                borderRadius: '16px',
+                border: momentum.step === 1 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <Users className={`w-5 h-5 ${connections.length > 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <Users style={{ width: '20px', height: '20px', color: connections.length > 0 ? '#5C4033' : '#8B7355' }} />
                 {connections.length > 0 && (
-                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
+                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
                   </div>
                 )}
               </div>
-              <p className="text-2xl font-bold text-stone-700">{connections.length}</p>
-              <p className="text-xs text-stone-500">Connections</p>
+              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{connections.length}</p>
+              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Connections</p>
             </button>
 
             {/* Meetings Card */}
             <button
-              onClick={() => setCurrentView('home')}
-              className={`p-4 border-0 transition-all text-left ${
-                momentum.step === 2 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
-              }`}
-              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+              onClick={() => setCurrentView('meetups')}
+              style={{
+                padding: '16px',
+                backgroundColor: momentum.step === 2 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
+                borderRadius: '16px',
+                border: momentum.step === 2 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <Calendar className={`w-5 h-5 ${userSignups.length > 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <Calendar style={{ width: '20px', height: '20px', color: userSignups.length > 0 ? '#5C4033' : '#8B7355' }} />
                 {userSignups.length > 0 && (
-                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
+                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
                   </div>
                 )}
               </div>
-              <p className="text-2xl font-bold text-stone-700">{userSignups.length}</p>
-              <p className="text-xs text-stone-500">Meetings</p>
+              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{userSignups.length}</p>
+              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Meetings</p>
             </button>
 
             {/* Recaps Card */}
             <button
               onClick={() => setCurrentView('callHistory')}
-              className={`p-4 border-0 transition-all text-left ${
-                momentum.step === 3 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
-              }`}
-              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+              style={{
+                padding: '16px',
+                backgroundColor: momentum.step === 3 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
+                borderRadius: '16px',
+                border: momentum.step === 3 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <Video className={`w-5 h-5 ${pendingRecaps.length === 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <Video style={{ width: '20px', height: '20px', color: pendingRecaps.length === 0 ? '#5C4033' : '#8B7355' }} />
                 {pendingRecaps.length === 0 && coffeeChatsCount > 0 && (
-                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
+                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
                   </div>
                 )}
               </div>
-              <p className="text-2xl font-bold text-stone-700">{pendingRecaps.length}</p>
-              <p className="text-xs text-stone-500">Recaps</p>
+              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{pendingRecaps.length}</p>
+              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Recaps</p>
             </button>
 
             {/* Follow-up Card */}
             <button
               onClick={() => setCurrentView('messages')}
-              className={`p-4 border-0 transition-all text-left ${
-                momentum.step === 4 && unreadMessageCount > 0 ? 'ring-2 ring-[#6B4F3F] ring-offset-2' : 'hover:opacity-80'
-              }`}
-              style={{ backgroundColor: '#F8F5F2', borderRadius: '12px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+              style={{
+                padding: '16px',
+                backgroundColor: momentum.step === 4 && unreadMessageCount > 0 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
+                borderRadius: '16px',
+                border: momentum.step === 4 && unreadMessageCount > 0 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <MessageCircle className={`w-5 h-5 ${unreadMessageCount === 0 ? 'text-[#6B4F3F]' : 'text-stone-400'}`} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <MessageCircle style={{ width: '20px', height: '20px', color: unreadMessageCount === 0 ? '#5C4033' : '#8B7355' }} />
                 {unreadMessageCount === 0 && (
-                  <div className="w-5 h-5 bg-[#6B4F3F] rounded-full flex items-center justify-center">
-                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
+                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
                   </div>
                 )}
               </div>
-              <p className="text-2xl font-bold text-stone-700">{unreadMessageCount}</p>
-              <p className="text-xs text-stone-500">Follow-up</p>
+              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{unreadMessageCount}</p>
+              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Follow-up</p>
             </button>
           </div>
         </div>
 
         {/* Connection Requests Section */}
         {connectionRequests.length > 0 && (
-          <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center">
-                <div className="w-8 h-8 bg-rose-100 rounded-full flex items-center justify-center mr-3">
-                  <Heart className="w-4 h-4 text-rose-500" />
+          <div style={homeStyles.card}>
+            <div style={homeStyles.cardHeader}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ width: '32px', height: '32px', backgroundColor: 'rgba(244, 114, 182, 0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px' }}>
+                  <Heart style={{ width: '16px', height: '16px', color: '#EC4899' }} />
                 </div>
                 <div>
-                  <h3 className="text-lg font-semibold text-stone-700">
+                  <h3 style={{ ...homeStyles.cardTitle, fontSize: '16px' }}>
                     {connectionRequests.length} {connectionRequests.length === 1 ? 'person wants' : 'people want'} to connect
                   </h3>
-                  <p className="text-sm text-stone-500">Accept to start a conversation</p>
+                  <p style={{ fontSize: '13px', color: '#8B7355', margin: 0 }}>Accept to start a conversation</p>
                 </div>
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {connectionRequests.slice(0, 3).map(request => {
                 const user = request.user
                 const requestDate = new Date(request.requested_at)
@@ -1685,36 +1794,56 @@ function MainApp({ currentUser, onSignOut }) {
                 return (
                   <div
                     key={request.id}
-                    className="flex items-center justify-between p-4 bg-[#FDFBF9] rounded-xl border border-[#E6D5C3]"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '16px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(139, 111, 92, 0.1)',
+                    }}
                   >
-                    <div className="flex items-center">
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
                       {user.profile_picture ? (
                         <img
                           src={user.profile_picture}
                           alt={user.name}
-                          className="w-12 h-12 rounded-full object-cover mr-3"
+                          style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', marginRight: '12px' }}
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 flex items-center justify-center text-white font-semibold mr-3">
+                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #EC4899, #F472B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '600', marginRight: '12px' }}>
                           {user.name?.[0] || '?'}
                         </div>
                       )}
                       <div>
-                        <h4 className="font-semibold text-stone-700">{user.name}</h4>
-                        <p className="text-sm text-stone-500">{user.career || 'Professional'}</p>
+                        <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>{user.name}</h4>
+                        <p style={{ fontSize: '13px', color: '#8B7355', margin: 0 }}>{user.career || 'Professional'}</p>
                         {user.city && (
-                          <p className="text-xs text-stone-400">{user.city}{user.state ? `, ${user.state}` : ''}</p>
+                          <p style={{ fontSize: '11px', color: '#A89080', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-stone-400 mr-2">{timeAgo}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <span style={{ fontSize: '12px', color: '#A89080' }}>{timeAgo}</span>
                       <button
                         onClick={() => handleShowInterest(request.id, user.name)}
-                        className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm flex items-center"
+                        style={{
+                          padding: '10px 20px',
+                          backgroundColor: '#8B6F5C',
+                          border: 'none',
+                          borderRadius: '100px',
+                          color: 'white',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
                       >
-                        <Heart className="w-4 h-4 mr-1" />
+                        <Heart style={{ width: '14px', height: '14px' }} />
                         Accept
                       </button>
                     </div>
@@ -1726,39 +1855,39 @@ function MainApp({ currentUser, onSignOut }) {
             {connectionRequests.length > 3 && (
               <button
                 onClick={() => setCurrentView('discover')}
-                className="w-full mt-3 text-sm text-[#6B4F3F] hover:text-[#5A4235] font-medium py-2"
+                style={{ ...homeStyles.seeAllBtn, width: '100%', marginTop: '12px', textAlign: 'center' }}
               >
-                View all {connectionRequests.length} requests &gt;
+                View all {connectionRequests.length} requests →
               </button>
             )}
           </div>
         )}
 
         {/* Upcoming Events Section */}
-        <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-stone-700">Upcoming events</h3>
+        <div style={homeStyles.card}>
+          <div style={homeStyles.cardHeader}>
+            <h3 style={homeStyles.cardTitle}>Upcoming Events</h3>
             <button
               onClick={() => setCurrentView('meetupProposals')}
-              className="text-sm text-stone-500 hover:text-stone-700 font-medium"
+              style={homeStyles.seeAllBtn}
             >
-              View all &gt;
+              View all →
             </button>
           </div>
 
           {loadingMeetups ? (
-            <div className="py-8 text-center">
-              <div className="w-8 h-8 border-4 border-stone-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-stone-500">Loading events...</p>
+            <div style={{ padding: '32px', textAlign: 'center' }}>
+              <div style={{ width: '32px', height: '32px', border: '3px solid rgba(139, 111, 92, 0.2)', borderTopColor: '#8B6F5C', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
+              <p style={{ color: '#8B7355', fontSize: '14px' }}>Loading events...</p>
             </div>
           ) : upcomingMeetups.length === 0 ? (
-            <div className="py-8 text-center">
-              <Calendar className="w-12 h-12 text-stone-300 mx-auto mb-3" />
-              <p className="text-stone-500">No upcoming events</p>
-              <p className="text-sm text-stone-400 mt-1">Check back soon for new circles!</p>
+            <div style={{ padding: '32px', textAlign: 'center' }}>
+              <Calendar style={{ width: '48px', height: '48px', color: '#D4C4B4', margin: '0 auto 12px' }} />
+              <p style={{ color: '#8B7355', fontSize: '15px' }}>No upcoming events</p>
+              <p style={{ color: '#A89080', fontSize: '13px', marginTop: '4px' }}>Check back soon for new circles!</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {upcomingMeetups.slice(0, 3).map(meetup => {
                 const isSignedUp = userSignups.includes(meetup.id)
                 const meetupSignups = signups[meetup.id] || []
@@ -1767,46 +1896,64 @@ function MainApp({ currentUser, onSignOut }) {
                 return (
                   <div
                     key={meetup.id}
-                    className="bg-white border border-[#E6D5C3] p-4 hover:border-[#D4A574] transition-colors rounded-xl"
-                    style={{ boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '16px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(139, 111, 92, 0.1)',
+                    }}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-stone-700">Circle Meetup</h4>
-                        <div className="flex items-center text-stone-500 text-sm mt-1">
-                          <Calendar className="w-4 h-4 mr-1" />
+                    <div style={{ flex: 1 }}>
+                      <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>Circle Meetup</h4>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6B5344' }}>
+                          <Calendar style={{ width: '14px', height: '14px' }} />
                           {formatDate(meetup.date)}
-                          <Clock className="w-4 h-4 ml-3 mr-1" />
+                        </span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6B5344' }}>
+                          <Clock style={{ width: '14px', height: '14px' }} />
                           {formatTime(meetup.time)}
-                        </div>
-                        {participantCount > 0 && (
-                          <p className="text-xs text-stone-400 mt-1">
-                            {participantCount} {participantCount === 1 ? 'person' : 'people'} attending
-                          </p>
-                        )}
+                        </span>
                       </div>
-
-                      {isSignedUp ? (
-                        <div className="flex flex-col items-end gap-2">
-                          <span className="bg-[#F4EEE6] text-[#6B4F3F] text-xs font-medium px-2 py-1 rounded">
-                            Signed up
-                          </span>
-                          <button
-                            onClick={() => handleJoinVideoCall(meetup.id)}
-                            className="text-sm text-[#6B4F3F] hover:text-[#5A4235] font-medium"
-                          >
-                            Join &gt;
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleSignUp(meetup.id)}
-                          className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-                        >
-                          Reserve my spot &gt;
-                        </button>
+                      {participantCount > 0 && (
+                        <p style={{ fontSize: '12px', color: '#A89080', marginTop: '4px' }}>
+                          {participantCount} {participantCount === 1 ? 'person' : 'people'} attending
+                        </p>
                       )}
                     </div>
+
+                    {isSignedUp ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                        <span style={{ padding: '4px 12px', backgroundColor: 'rgba(139, 111, 92, 0.12)', color: '#5C4033', fontSize: '12px', fontWeight: '600', borderRadius: '100px' }}>
+                          Signed up
+                        </span>
+                        <button
+                          onClick={() => handleJoinVideoCall(meetup.id)}
+                          style={{ backgroundColor: 'transparent', border: 'none', color: '#8B6F5C', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                        >
+                          Join →
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleSignUp(meetup.id)}
+                        style={{
+                          padding: '10px 20px',
+                          backgroundColor: '#8B6F5C',
+                          border: 'none',
+                          borderRadius: '100px',
+                          color: 'white',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Reserve my spot →
+                      </button>
+                    )}
                   </div>
                 )
               })}
@@ -1816,26 +1963,37 @@ function MainApp({ currentUser, onSignOut }) {
 
         {/* Pending Recaps Checklist */}
         {pendingRecaps.length > 0 && (
-          <div className="bg-white rounded-xl p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-stone-700">Pending recaps</h3>
+          <div style={homeStyles.card}>
+            <div style={homeStyles.cardHeader}>
+              <h3 style={homeStyles.cardTitle}>Pending Recaps</h3>
               <button
                 onClick={() => setCurrentView('callHistory')}
-                className="text-sm text-stone-500 hover:text-stone-700 font-medium"
+                style={homeStyles.seeAllBtn}
               >
-                View all recaps &gt;
+                View all recaps →
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {pendingRecaps.slice(0, 3).map(recap => (
-                <div key={recap.id} className="flex items-start gap-3 p-3 bg-stone-50 rounded-lg">
-                  <div className="w-5 h-5 border-2 border-stone-400 rounded-full flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="text-sm text-stone-700 font-medium">
+                <div
+                  key={recap.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '16px',
+                    backgroundColor: 'rgba(139, 111, 92, 0.06)',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(139, 111, 92, 0.08)',
+                  }}
+                >
+                  <div style={{ width: '20px', height: '20px', border: '2px solid #8B6F5C', borderRadius: '50%', flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: '14px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>
                       Review call recap
                     </p>
-                    <p className="text-xs text-stone-500 mt-1">
+                    <p style={{ fontSize: '12px', color: '#8B7355', margin: 0, marginTop: '2px' }}>
                       {new Date(recap.created_at).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -1845,9 +2003,9 @@ function MainApp({ currentUser, onSignOut }) {
                   </div>
                   <button
                     onClick={() => setCurrentView('callHistory')}
-                    className="text-sm text-stone-600 hover:text-stone-800 font-medium"
+                    style={{ backgroundColor: 'transparent', border: 'none', color: '#8B6F5C', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
                   >
-                    Open &gt;
+                    Open →
                   </button>
                 </div>
               ))}
@@ -2248,21 +2406,106 @@ function MainApp({ currentUser, onSignOut }) {
       )}
 
       {/* Header */}
-      <div className="bg-[#6B4F3F] text-white shadow-lg">
-        <div className="max-w-4xl mx-auto px-4 py-3 md:px-6 md:py-4">
+      <header
+        className="sticky top-0 z-50 backdrop-blur-md"
+        style={{
+          backgroundColor: 'rgba(253, 248, 243, 0.9)',
+          borderBottom: '1px solid rgba(139, 111, 92, 0.1)'
+        }}
+      >
+        <div className="max-w-5xl mx-auto px-4 py-5 md:px-6">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl md:text-2xl font-bold flex items-center">
+            {/* Logo */}
+            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#5C4033]" style={{ fontFamily: '"Playfair Display", serif' }}>
               <svg width="36" height="36" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-10 md:h-10">
-                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
-                <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="40"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="5"
+                  strokeDasharray="189 63"
+                  strokeLinecap="round"
+                  transform="rotate(-30 50 50)"
+                />
+                <path
+                  d="M 28 42 L 36 66 L 50 48 L 64 66 L 72 42"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
               CircleW
             </h1>
+
+            {/* Navigation */}
+            <nav className="hidden md:flex items-center gap-1">
+              <button
+                onClick={() => setCurrentView('home')}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                  currentView === 'home'
+                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Home</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('discover')}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                  currentView === 'discover'
+                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                }`}
+              >
+                <Compass className="w-4 h-4" />
+                <span>Discover</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('meetups')}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                  currentView === 'meetups'
+                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Meetups</span>
+              </button>
+              <button
+                onClick={() => setCurrentView('connectionGroups')}
+                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                  currentView === 'connectionGroups'
+                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Circles</span>
+              </button>
+            </nav>
+
+            {/* Search */}
+            <div className="hidden md:flex items-center">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8B6F5C]" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="pl-9 pr-4 py-2 w-48 text-sm rounded-full border border-[rgba(139,111,92,0.2)] bg-white/50 text-[#5C4033] placeholder-[#8B6F5C]/60 focus:outline-none focus:border-[#8B6F5C] focus:ring-1 focus:ring-[#8B6F5C]/20"
+                />
+              </div>
+            </div>
+
             {/* Profile Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-[#D4A574] focus:outline-none focus:ring-2 focus:ring-[#D4A574]"
+                className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-[#8B6F5C] focus:outline-none focus:ring-2 focus:ring-[#8B6F5C]"
                 style={{
                   backgroundColor: currentUser.profile_picture ? 'transparent' : '#E6D5C3'
                 }}
@@ -2274,7 +2517,7 @@ function MainApp({ currentUser, onSignOut }) {
                     className="w-full h-full rounded-full object-cover"
                   />
                 ) : (
-                  <span className="text-[#6B4F3F]">
+                  <span className="text-[#5C4033]">
                     {(currentUser.name || currentUser.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
                   </span>
                 )}
@@ -2288,18 +2531,18 @@ function MainApp({ currentUser, onSignOut }) {
                     className="fixed inset-0 z-40"
                     onClick={() => setShowProfileDropdown(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg border border-[#E6D5C3] py-1 z-50" style={{ boxShadow: '0 4px 12px rgba(107, 79, 63, 0.12)' }}>
+                  <div className="absolute right-0 mt-2 w-48 bg-[#FDF8F3] rounded-lg border border-[#E6D5C3] py-1 z-50" style={{ boxShadow: '0 4px 12px rgba(139, 111, 92, 0.12)' }}>
                     <button
                       onClick={() => {
                         setShowProfileDropdown(false)
                         setCurrentView('profile')
                       }}
-                      className="w-full text-left px-4 py-2 text-sm text-stone-700 hover:bg-stone-50 flex items-center"
+                      className="w-full text-left px-4 py-2 text-sm text-[#6B5344] hover:bg-[#8B6F5C]/10 flex items-center"
                     >
                       <User className="w-4 h-4 mr-2" />
                       View Profile
                     </button>
-                    <hr className="my-1 border-stone-200" />
+                    <hr className="my-1 border-[#E6D5C3]" />
                     <button
                       onClick={() => {
                         setShowProfileDropdown(false)
@@ -2317,85 +2560,67 @@ function MainApp({ currentUser, onSignOut }) {
           </div>
         </div>
 
-        {/* Navigation Bar */}
-        <div className="bg-[#5A4235] border-t border-[#7D5F4F]">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex overflow-x-auto scrollbar-hide">
-              <button
-                onClick={() => setCurrentView('home')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentView === 'home'
-                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
-                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                <span>Home</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('meetups')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentView === 'meetups'
-                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
-                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
-                }`}
-              >
-                <Calendar className="w-4 h-4" />
-                <span>Meetups</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('discover')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentView === 'discover'
-                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
-                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
-                }`}
-              >
-                <Compass className="w-4 h-4" />
-                <span>Discover</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('connectionGroups')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentView === 'connectionGroups'
-                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
-                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
-                }`}
-              >
-                <Users className="w-4 h-4" />
-                <span>Circles</span>
-              </button>
-              <button
-                onClick={() => setCurrentView('messages')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors relative ${
-                  currentView === 'messages'
-                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
-                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
-                }`}
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>Messages</span>
-                {unreadMessageCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#6B4F3F] text-white text-xs px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                    {unreadMessageCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={() => setCurrentView('callHistory')}
-                className={`flex items-center gap-1.5 px-3 py-2.5 md:px-4 md:py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                  currentView === 'callHistory'
-                    ? 'text-white bg-[#5A4235] border-b-2 border-[#D4A574]'
-                    : 'text-[#E8DDD0] hover:text-white hover:bg-[#5A4235]'
-                }`}
-              >
-                <Video className="w-4 h-4" />
-                <span>Recaps</span>
-              </button>
+        {/* Mobile Navigation Bar */}
+        <div className="md:hidden border-t border-[rgba(139,111,92,0.1)] overflow-x-auto">
+          <div className="flex px-2 py-1">
+            <button
+              onClick={() => setCurrentView('home')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
+                currentView === 'home'
+                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                  : 'text-[#6B5344]'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Home</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('discover')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
+                currentView === 'discover'
+                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                  : 'text-[#6B5344]'
+              }`}
+            >
+              <Compass className="w-4 h-4" />
+              <span>Discover</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('meetups')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
+                currentView === 'meetups'
+                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                  : 'text-[#6B5344]'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Meetups</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('connectionGroups')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
+                currentView === 'connectionGroups'
+                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
+                  : 'text-[#6B5344]'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Circles</span>
+            </button>
+            {/* Mobile Search */}
+            <div className="flex items-center ml-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8B6F5C]" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="pl-8 pr-3 py-1.5 w-32 text-sm rounded-full border border-[rgba(139,111,92,0.2)] bg-white/50 text-[#5C4033] placeholder-[#8B6F5C]/60 focus:outline-none focus:border-[#8B6F5C]"
+                />
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Main Content */}
       <div className="max-w-4xl mx-auto p-6">

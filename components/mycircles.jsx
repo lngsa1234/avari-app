@@ -97,7 +97,6 @@ const MyCircles = () => {
           <section style={styles.card}>
             <div style={styles.cardHeader}>
               <h2 style={styles.cardTitle}>
-                <span style={styles.cardIcon}>✨</span>
                 Active Connections
               </h2>
               <span style={styles.onlineBadge}>
@@ -144,7 +143,6 @@ const MyCircles = () => {
           <section style={styles.card}>
             <div style={styles.cardHeader}>
               <h2 style={styles.cardTitle}>
-                <span style={styles.cardIcon}>💬</span>
                 Recent Conversations
               </h2>
               <div style={styles.tabGroup}>
@@ -209,7 +207,6 @@ const MyCircles = () => {
           <section style={styles.card}>
             <div style={styles.cardHeader}>
               <h2 style={styles.cardTitle}>
-                <span style={styles.cardIcon}>🌸</span>
                 My Groups
               </h2>
               <button style={styles.addGroupBtn}>+ Join</button>
@@ -481,7 +478,7 @@ const styles = {
     fontFamily: '"Playfair Display", serif',
     fontSize: '42px',
     fontWeight: '600',
-    color: '#3D2B1F',
+    color: '#5C4033',
     letterSpacing: '-1px',
     marginBottom: '4px',
   },

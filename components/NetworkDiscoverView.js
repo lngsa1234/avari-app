@@ -1,52 +1,47 @@
 // components/NetworkDiscoverView.js
-// Network discovery page with Vibe Bar, Creation Duo, and Dynamic Results Feed
+// Network discovery page with Vibe Bar, Recommended Section, and Dynamic Results Feed
 'use client';
 
 import { useState, useEffect } from 'react';
 import {
-  Compass,
-  Heart,
-  MessageCircle,
-  Rocket,
+  Search,
   Calendar,
-  Lightbulb,
-  Plus,
-  Users,
-  User,
-  Coffee,
-  Lock,
-  ThumbsUp,
   Clock,
   MapPin,
   ChevronRight,
-  AlertCircle,
+  Plus,
+  Users,
+  User,
+  Lock,
+  ThumbsUp,
   Sparkles
 } from 'lucide-react';
 
-// Vibe categories mapping
-const VIBE_CATEGORIES = {
-  advice: {
-    id: 'advice',
-    label: 'I need advice',
-    icon: Heart,
-    color: 'rose',
-    description: 'Find mentors & career guidance'
-  },
-  vent: {
-    id: 'vent',
-    label: 'I want to vent',
-    icon: MessageCircle,
-    color: 'amber',
-    description: 'Support groups & casual meetups'
-  },
-  grow: {
-    id: 'grow',
-    label: 'I want to grow',
-    icon: Rocket,
-    color: 'emerald',
-    description: 'Skill workshops & learning'
-  }
+// Color palette - Mocha Brown theme
+const colors = {
+  primary: '#8B6F5C',
+  primaryDark: '#6B5344',
+  primaryLight: '#A89080',
+  cream: '#FDF8F3',
+  warmWhite: '#FFFAF5',
+  text: '#4A3728',
+  textLight: '#7A6855',
+  textMuted: '#A89080',
+  border: '#EDE6DF',
 };
+
+// Font families
+const fonts = {
+  serif: "'Playfair Display', Georgia, serif",
+  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+};
+
+// Vibe categories
+const VIBE_CATEGORIES = [
+  { id: 'advice', emoji: '🧘', label: 'Get advice', description: 'Connect with mentors & leaders' },
+  { id: 'peers', emoji: '🗣️', label: 'Find support', description: 'Find your community' },
+  { id: 'grow', emoji: '🚀', label: 'Career Growth', description: 'Level up your skills' },
+];
 
 export default function NetworkDiscoverView({
   currentUser,
@@ -57,7 +52,7 @@ export default function NetworkDiscoverView({
   onHostMeetup,
   onRequestMeetup
 }) {
-  const [selectedVibe, setSelectedVibe] = useState(null);
+  const [selectedVibe, setSelectedVibe] = useState('peers');
   const [connectionGroups, setConnectionGroups] = useState([]);
   const [meetupRequests, setMeetupRequests] = useState([]);
   const [peerSuggestions, setPeerSuggestions] = useState([]);
@@ -68,13 +63,11 @@ export default function NetworkDiscoverView({
   const [requestDescription, setRequestDescription] = useState('');
   const [requestVibe, setRequestVibe] = useState('grow');
 
-  // Check if user is new (no meetups attended, no connections)
   const isNewUser = connections.length === 0;
 
-  // Calculate profile completion for nudge banner
+  // Calculate profile completion
   const getProfileCompletion = () => {
     if (!currentUser) return { percentage: 0, missing: [] };
-
     const fields = [
       { key: 'name', label: 'name' },
       { key: 'career', label: 'role' },
@@ -85,11 +78,9 @@ export default function NetworkDiscoverView({
       { key: 'city', label: 'location' },
       { key: 'profile_picture', label: 'photo' }
     ];
-
     const filled = fields.filter(f => currentUser[f.key]);
     const missing = fields.filter(f => !currentUser[f.key]).map(f => f.label);
     const percentage = Math.round((filled.length / fields.length) * 100);
-
     return { percentage, missing };
   };
 
@@ -116,15 +107,12 @@ export default function NetworkDiscoverView({
 
   const loadConnectionGroups = async () => {
     try {
-      // Get all active connection groups
       const { data: groups, error } = await supabase
         .from('connection_groups')
         .select('id, name, creator_id, is_active, vibe_category, created_at')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(10);
-
-      console.log('Connection groups query result:', { groups, error });
 
       if (error) {
         console.error('Error fetching connection groups:', error);
@@ -133,12 +121,10 @@ export default function NetworkDiscoverView({
       }
 
       if (!groups || groups.length === 0) {
-        console.log('No connection groups found');
         setConnectionGroups([]);
         return;
       }
 
-      // Fetch members for each group
       const groupIds = groups.map(g => g.id);
       const { data: allMembers, error: membersError } = await supabase
         .from('connection_group_members')
@@ -150,7 +136,6 @@ export default function NetworkDiscoverView({
         console.error('Error fetching group members:', membersError);
       }
 
-      // Fetch profiles for all members
       const memberUserIds = [...new Set((allMembers || []).map(m => m.user_id))];
       let profileMap = {};
 
@@ -166,7 +151,6 @@ export default function NetworkDiscoverView({
         }, {});
       }
 
-      // Attach members with profiles to groups
       let enrichedGroups = groups.map(g => ({
         ...g,
         members: (allMembers || [])
@@ -177,7 +161,6 @@ export default function NetworkDiscoverView({
           }))
       }));
 
-      // Filter by vibe if selected
       if (selectedVibe) {
         enrichedGroups = enrichedGroups.filter(g => g.vibe_category === selectedVibe || !g.vibe_category);
       }
@@ -191,7 +174,6 @@ export default function NetworkDiscoverView({
 
   const loadMeetupRequests = async () => {
     try {
-      // Load community wishlist/requests (simple query first)
       const { data, error } = await supabase
         .from('meetup_requests')
         .select('*')
@@ -206,7 +188,6 @@ export default function NetworkDiscoverView({
       }
 
       if (data && data.length > 0) {
-        // Fetch user profiles separately
         const userIds = [...new Set(data.map(r => r.user_id))];
         const { data: profiles } = await supabase
           .from('profiles')
@@ -218,7 +199,6 @@ export default function NetworkDiscoverView({
           return acc;
         }, {});
 
-        // Fetch supporters for current user to check "Me Too" status
         const requestIds = data.map(r => r.id);
         const { data: supporters } = await supabase
           .from('meetup_request_supporters')
@@ -228,7 +208,6 @@ export default function NetworkDiscoverView({
 
         const supportedSet = new Set((supporters || []).map(s => s.request_id));
 
-        // Attach user info and support status to requests
         let requests = data.map(r => ({
           ...r,
           user: profileMap[r.user_id] || null,
@@ -250,11 +229,9 @@ export default function NetworkDiscoverView({
 
   const loadPeerSuggestions = async () => {
     try {
-      // Get profiles who attended same meetups but aren't connected
-      // Note: bio field may not exist, so we query basic fields first
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, name, career, city, state, photo_url')
+        .select('id, name, career, city, state, photo_url, hook')
         .neq('id', currentUser.id)
         .not('name', 'is', null)
         .limit(10);
@@ -265,11 +242,8 @@ export default function NetworkDiscoverView({
         return;
       }
 
-      // Filter out already connected users
       const connectedIds = connections.map(c => c.connected_user_id || c.id);
       const suggestions = (data || []).filter(u => !connectedIds.includes(u.id));
-
-      console.log('Peer suggestions loaded:', suggestions.length);
       setPeerSuggestions(suggestions.slice(0, 4));
     } catch (error) {
       console.error('Error loading peer suggestions:', error);
@@ -282,13 +256,11 @@ export default function NetworkDiscoverView({
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-      // Count users active this week
       const { count: activeCount } = await supabase
         .from('meetup_signups')
         .select('user_id', { count: 'exact', head: true })
         .gte('created_at', oneWeekAgo.toISOString());
 
-      // Count meetups this week
       const { count: meetupCount } = await supabase
         .from('meetups')
         .select('id', { count: 'exact', head: true })
@@ -312,13 +284,11 @@ export default function NetworkDiscoverView({
           user_id: currentUser.id
         });
 
-      if (error && error.code !== '23505') { // Ignore duplicate key error
+      if (error && error.code !== '23505') {
         throw error;
       }
 
-      // Increment supporter count
       await supabase.rpc('increment_request_supporters', { request_id: requestId });
-
       await loadMeetupRequests();
     } catch (error) {
       console.error('Error supporting request:', error);
@@ -376,224 +346,525 @@ export default function NetworkDiscoverView({
   // Get featured meetups (upcoming, with most signups)
   const featuredMeetups = filteredMeetups
     .filter(m => new Date(m.date) >= new Date())
-    .slice(0, 3);
+    .slice(0, 4);
 
-  const getVibeColor = (vibe) => {
-    const colors = {
-      advice: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', button: 'bg-rose-500 hover:bg-rose-600' },
-      vent: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', button: 'bg-amber-500 hover:bg-amber-600' },
-      grow: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', button: 'bg-emerald-500 hover:bg-emerald-600' }
+  // Get recommended meetup based on vibe
+  const getRecommendedContent = () => {
+    const vibeContent = {
+      advice: {
+        title: featuredMeetups[0]?.topic || 'Career Pivot AMA',
+        subtitle: featuredMeetups[0]?.description || 'Connect with experienced leaders',
+        groupSize: 'Small group (6-8)',
+        matchReason: 'Advice',
+        isGroup: false,
+      },
+      peers: {
+        title: featuredMeetups[0]?.topic || 'Coffee Chat Meetup',
+        subtitle: featuredMeetups[0]?.description || 'Career transition support',
+        groupSize: 'Small group (4-6)',
+        matchReason: 'Support',
+        isGroup: true,
+      },
+      grow: {
+        title: featuredMeetups[0]?.topic || 'Skills Workshop',
+        subtitle: featuredMeetups[0]?.description || 'Interactive learning session',
+        groupSize: 'Interactive (12-15)',
+        matchReason: 'Growth',
+        isGroup: false,
+      },
     };
-    return colors[vibe] || colors.grow;
+
+    const content = vibeContent[selectedVibe] || vibeContent.peers;
+    const meetup = featuredMeetups[0];
+
+    return {
+      ...content,
+      date: meetup ? new Date(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Thu, Feb 6',
+      time: meetup?.time || '7 PM',
+      location: meetup?.location || 'Virtual',
+      spots: meetup ? Math.max(1, (meetup.max_attendees || 8) - (meetup.signups?.length || 0)) : 2,
+      totalSpots: meetup?.max_attendees || 8,
+      attendees: (meetup?.signups || []).slice(0, 3).map(s => ({
+        name: s.user?.name || 'Member',
+        emoji: '👩🏻'
+      })),
+      extraCount: Math.max(0, (meetup?.signups?.length || 0) - 3),
+      meetupId: meetup?.id,
+    };
   };
+
+  const recommendedContent = getRecommendedContent();
 
   if (loading && connectionGroups.length === 0) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading network...</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '32px',
+            height: '32px',
+            border: `4px solid ${colors.primary}`,
+            borderTopColor: 'transparent',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 16px'
+          }} />
+          <p style={{ color: colors.textLight }}>Loading network...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Welcoming State - Social Proof Banner for New Users */}
-      {isNewUser && socialProofStats.activeThisWeek > 0 && (
-        <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white rounded-xl p-4 shadow-lg">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-lg">
-                {socialProofStats.activeThisWeek} women in your industry are meeting this week
-              </p>
-              <p className="text-rose-100 text-sm mt-1">
-                Join them and start building your network!
-              </p>
-            </div>
-            <Users className="w-12 h-12 text-rose-200" />
-          </div>
-        </div>
-      )}
+    <div style={{ fontFamily: fonts.sans, paddingBottom: '100px' }}>
+      {/* Page Title */}
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{
+          fontSize: '28px',
+          fontWeight: '600',
+          color: colors.text,
+          margin: '0 0 6px',
+          fontFamily: fonts.serif
+        }}>
+          Discover
+        </h1>
+        <p style={{ fontSize: '15px', color: colors.textLight, margin: 0 }}>
+          Find your people. Take the next step.
+        </p>
+      </div>
 
       {/* Profile Completion Nudge */}
       {profileCompletion.percentage < 100 && profileCompletion.percentage > 0 && (
         <button
           onClick={() => onNavigate?.('profile')}
-          className="w-full bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 text-left hover:shadow-md transition-shadow"
+          style={{
+            width: '100%',
+            background: `linear-gradient(to right, ${colors.cream}, #FFF5EB)`,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '16px',
+            padding: '16px',
+            textAlign: 'left',
+            cursor: 'pointer',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+          }}
         >
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                <Sparkles className="w-6 h-6 text-amber-600" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 bg-white rounded-full px-1.5 py-0.5 text-xs font-bold text-amber-600 border border-amber-200">
-                {profileCompletion.percentage}%
-              </div>
+          <div style={{ position: 'relative' }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '50%',
+              backgroundColor: `${colors.primary}20`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <Sparkles style={{ width: '24px', height: '24px', color: colors.primary }} />
             </div>
-            <div className="flex-1">
-              <p className="font-semibold text-gray-800">
-                Complete your profile
-              </p>
-              <p className="text-sm text-amber-700">
-                Add {profileCompletion.missing.slice(0, 2).join(' & ')} to get 2x more connections
-              </p>
+            <div style={{
+              position: 'absolute',
+              bottom: '-4px',
+              right: '-4px',
+              backgroundColor: 'white',
+              borderRadius: '9999px',
+              padding: '2px 6px',
+              fontSize: '11px',
+              fontWeight: '700',
+              color: colors.primary,
+              border: `1px solid ${colors.border}`,
+            }}>
+              {profileCompletion.percentage}%
             </div>
-            <ChevronRight className="w-5 h-5 text-amber-500" />
           </div>
-
-          {/* Progress bar */}
-          <div className="mt-3 h-2 bg-amber-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-amber-400 to-orange-400 transition-all duration-500"
-              style={{ width: `${profileCompletion.percentage}%` }}
-            />
+          <div style={{ flex: 1 }}>
+            <p style={{ fontWeight: '600', color: colors.text, margin: 0 }}>
+              Complete your profile
+            </p>
+            <p style={{ fontSize: '13px', color: colors.textLight, margin: '4px 0 0' }}>
+              Add {profileCompletion.missing.slice(0, 2).join(' & ')} to get 2x more connections
+            </p>
           </div>
+          <ChevronRight style={{ width: '20px', height: '20px', color: colors.primaryLight }} />
         </button>
       )}
 
-      {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-200">
-        <div className="flex items-center mb-2">
-          <Compass className="w-6 h-6 mr-2 text-indigo-600" />
-          <h2 className="text-xl font-bold text-gray-800">Discover</h2>
-        </div>
-        <p className="text-gray-600">Find your community, your way</p>
-      </div>
+      {/* Vibe Bar */}
+      <div style={{
+        backgroundColor: colors.warmWhite,
+        borderRadius: '20px',
+        padding: '20px',
+        marginBottom: '24px',
+        boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
+      }}>
+        <p style={{
+          fontSize: '14px',
+          fontWeight: '600',
+          color: colors.text,
+          marginBottom: '16px',
+        }}>
+          What are you here for today?
+        </p>
 
-      {/* 1. The Vibe Bar */}
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">
-          What's your vibe today?
-        </h3>
-        <div className="grid grid-cols-3 gap-3">
-          {Object.values(VIBE_CATEGORIES).map((vibe) => {
-            const Icon = vibe.icon;
-            const isSelected = selectedVibe === vibe.id;
-            const colors = getVibeColor(vibe.id);
-
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {VIBE_CATEGORIES.map((vibe) => {
+            const isActive = selectedVibe === vibe.id;
             return (
               <button
                 key={vibe.id}
-                onClick={() => setSelectedVibe(isSelected ? null : vibe.id)}
-                className={`p-4 rounded-xl border-2 transition-all text-center ${
-                  isSelected
-                    ? `${colors.bg} ${colors.border} ${colors.text} shadow-md scale-[1.02]`
-                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
+                onClick={() => setSelectedVibe(vibe.id)}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '14px 12px',
+                  borderRadius: '12px',
+                  border: isActive ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
+                  backgroundColor: isActive ? `${colors.primaryLight}30` : 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
               >
-                <Icon className={`w-6 h-6 mx-auto mb-2 ${isSelected ? colors.text : 'text-gray-400'}`} />
-                <p className="text-xs font-medium leading-tight">{vibe.label}</p>
+                <span style={{ fontSize: '20px' }}>{vibe.emoji}</span>
+                <span style={{
+                  fontSize: '13px',
+                  fontWeight: isActive ? '600' : '500',
+                  color: isActive ? colors.primary : colors.text,
+                }}>
+                  {vibe.label}
+                </span>
               </button>
             );
           })}
         </div>
-        {selectedVibe && (
-          <p className="text-sm text-gray-500 text-center">
-            {VIBE_CATEGORIES[selectedVibe].description}
-          </p>
-        )}
       </div>
 
-      {/* 2. The Creation Duo (Action Hub) - Always Visible */}
-      <div className="grid grid-cols-2 gap-4">
-        <button
-          onClick={() => onHostMeetup ? onHostMeetup() : onNavigate?.('meetupProposals')}
-          className="bg-white border-2 border-dashed border-indigo-300 rounded-xl p-5 hover:border-indigo-500 hover:bg-indigo-50 transition-all group"
-        >
-          <div className="flex flex-col items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center mb-3 group-hover:bg-indigo-200 transition-colors">
-              <Calendar className="w-6 h-6 text-indigo-600" />
-            </div>
-            <p className="font-semibold text-gray-800">Host a Meetup</p>
-            <p className="text-xs text-gray-500 mt-1">Lead a session</p>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setShowRequestModal(true)}
-          className="bg-white border-2 border-dashed border-amber-300 rounded-xl p-5 hover:border-amber-500 hover:bg-amber-50 transition-all group"
-        >
-          <div className="flex flex-col items-center text-center">
-            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mb-3 group-hover:bg-amber-200 transition-colors">
-              <Lightbulb className="w-6 h-6 text-amber-600" />
-            </div>
-            <p className="font-semibold text-gray-800">Request a Meetup</p>
-            <p className="text-xs text-gray-500 mt-1">Suggest a topic</p>
-          </div>
-        </button>
-      </div>
-
-      {/* 3. Dynamic Results Feed */}
-
-      {/* A. Large Meetup Cards (Featured Events) - Horizontal Scroll */}
+      {/* Recommended for You */}
       {featuredMeetups.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-800">Featured Meetups</h3>
+        <div style={{ marginBottom: '32px' }}>
+          <h2 style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: colors.text,
+            margin: '0 0 14px',
+            fontFamily: fonts.serif
+          }}>
+            Recommended for you
+          </h2>
+
+          <div style={{
+            backgroundColor: colors.warmWhite,
+            borderRadius: '20px',
+            padding: '20px',
+            boxShadow: '0 4px 20px rgba(139, 111, 92, 0.12)',
+            border: `1px solid ${colors.primary}30`,
+          }}>
+            {/* Spots Badge */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+              <span style={{
+                padding: '4px 10px',
+                backgroundColor: `${colors.primary}15`,
+                color: colors.primary,
+                fontSize: '11px',
+                fontWeight: '600',
+                borderRadius: '8px',
+              }}>
+                {recommendedContent.spots} spots left
+              </span>
+            </div>
+
+            {/* Title */}
+            <h3 style={{
+              fontSize: '20px',
+              fontWeight: '600',
+              color: colors.text,
+              margin: '0 0 4px',
+              fontFamily: fonts.serif
+            }}>
+              {recommendedContent.title}
+            </h3>
+            <p style={{ fontSize: '14px', color: colors.textLight, margin: '0 0 14px' }}>
+              {recommendedContent.subtitle}
+            </p>
+
+            {/* Group Size */}
+            <p style={{
+              fontSize: '13px',
+              color: colors.textLight,
+              margin: '0 0 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}>
+              👥 {recommendedContent.groupSize}
+            </p>
+
+            {/* Date, Time, Location */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              fontSize: '13px',
+              color: colors.textLight,
+              marginBottom: '16px',
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Calendar size={14} /> {recommendedContent.date}
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Clock size={14} /> {recommendedContent.time}
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <MapPin size={14} /> {recommendedContent.location}
+              </span>
+            </div>
+
+            {/* Social Proof - Attendees */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              paddingTop: '14px',
+              borderTop: `1px solid ${colors.border}`,
+            }}>
+              <div style={{ display: 'flex', marginRight: '10px' }}>
+                {recommendedContent.attendees.map((person, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: colors.primaryLight,
+                      border: '2px solid white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '14px',
+                      marginLeft: idx > 0 ? '-8px' : 0,
+                    }}
+                  >
+                    {person.emoji}
+                  </div>
+                ))}
+                {recommendedContent.extraCount > 0 && (
+                  <div style={{
+                    width: '28px',
+                    height: '28px',
+                    borderRadius: '50%',
+                    backgroundColor: colors.primary,
+                    border: '2px solid white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '10px',
+                    fontWeight: '600',
+                    color: 'white',
+                    marginLeft: '-8px',
+                  }}>
+                    +{recommendedContent.extraCount}
+                  </div>
+                )}
+              </div>
+              <span style={{ fontSize: '12px', color: colors.textLight }}>
+                {recommendedContent.attendees.length + recommendedContent.extraCount > 0
+                  ? `${recommendedContent.attendees.length + recommendedContent.extraCount} going`
+                  : 'Be the first to join!'
+                }
+              </span>
+            </div>
+
+            {/* Match Reason + CTA */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: '16px',
+            }}>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontSize: '12px',
+                fontWeight: '500',
+                color: colors.primary,
+                backgroundColor: `${colors.primary}15`,
+                padding: '6px 12px',
+                borderRadius: '16px',
+              }}>
+                🤎 {recommendedContent.matchReason}
+              </span>
+              <button
+                onClick={() => onNavigate?.('home')}
+                style={{
+                  padding: '12px 24px',
+                  backgroundColor: colors.primary,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: `0 4px 12px ${colors.primary}40`,
+                }}>
+                {recommendedContent.isGroup ? 'Join group' : 'RSVP'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Happening This Week */}
+      {featuredMeetups.length > 0 && (
+        <div style={{ marginBottom: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
+              Happening This Week
+            </h2>
             <button
               onClick={() => onNavigate?.('home')}
-              className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
-            >
-              See all <ChevronRight className="w-4 h-4" />
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                background: 'none',
+                border: 'none',
+                color: colors.primary,
+                fontSize: '13px',
+                fontWeight: '600',
+                cursor: 'pointer',
+              }}>
+              See all <ChevronRight size={14} />
             </button>
           </div>
 
-          <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
-            {featuredMeetups.map((meetup) => {
-              const vibeColors = getVibeColor(meetup.vibe_category || 'grow');
+          <div style={{
+            display: 'flex',
+            gap: '14px',
+            overflowX: 'auto',
+            paddingBottom: '8px',
+            marginLeft: '-24px',
+            marginRight: '-24px',
+            paddingLeft: '24px',
+            paddingRight: '24px',
+          }}>
+            {featuredMeetups.map((meetup, index) => {
               const signupCount = meetup.signups?.length || 0;
+              const spotsLeft = Math.max(0, (meetup.max_attendees || 8) - signupCount);
+              const emojis = ['☕', '🎯', '🍷', '💼'];
+              const gradients = [
+                `linear-gradient(135deg, ${colors.primaryLight} 0%, ${colors.primary}30 100%)`,
+                `linear-gradient(135deg, ${colors.cream} 0%, #E8DFD8 100%)`,
+                `linear-gradient(135deg, #F5EDE8 0%, #EBE0D8 100%)`,
+                `linear-gradient(135deg, #EDE6DF 0%, #E0D8D0 100%)`,
+              ];
 
               return (
                 <div
                   key={meetup.id}
-                  className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow snap-start"
-                >
-                  <div className={`h-2 ${vibeColors.button.split(' ')[0]}`} />
-                  <div className="p-4">
-                    <h4 className="font-semibold text-gray-800 text-base line-clamp-2 mb-2">{meetup.topic}</h4>
-                    <div className="flex items-center text-sm text-gray-600 mb-1">
-                      <Calendar className="w-4 h-4 mr-1 flex-shrink-0" />
-                      {new Date(meetup.date).toLocaleDateString('en-US', {
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600 mb-3">
-                      <Clock className="w-4 h-4 mr-1 flex-shrink-0" />
-                      {meetup.time}
-                    </div>
-
-                    {/* Who's Going Avatars */}
-                    <div className="flex items-center mb-3">
-                      <div className="flex -space-x-2">
-                        {(meetup.signups || []).slice(0, 3).map((signup, idx) => (
-                          <div
-                            key={idx}
-                            className="w-7 h-7 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 border-2 border-white flex items-center justify-center text-white text-xs font-medium"
-                          >
-                            {signup.user?.name?.[0] || '?'}
-                          </div>
-                        ))}
-                        {signupCount > 3 && (
-                          <div className="w-7 h-7 rounded-full bg-gray-100 border-2 border-white flex items-center justify-center text-gray-600 text-xs font-medium">
-                            +{signupCount - 3}
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-xs text-gray-500 ml-2">
-                        {signupCount > 0 ? `${signupCount} going` : 'Be first!'}
+                  style={{
+                    minWidth: '280px',
+                    backgroundColor: colors.warmWhite,
+                    borderRadius: '16px',
+                    overflow: 'hidden',
+                    boxShadow: '0 2px 12px rgba(139, 111, 92, 0.1)',
+                    flexShrink: 0,
+                  }}>
+                  <div style={{
+                    height: '90px',
+                    background: gradients[index % 4],
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '36px',
+                    position: 'relative',
+                  }}>
+                    {emojis[index % 4]}
+                    <span style={{
+                      position: 'absolute',
+                      top: '10px',
+                      right: '10px',
+                      padding: '4px 8px',
+                      backgroundColor: colors.primary,
+                      borderRadius: '6px',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      color: 'white',
+                    }}>
+                      {spotsLeft} spots left
+                    </span>
+                  </div>
+                  <div style={{ padding: '14px 16px' }}>
+                    <h4 style={{
+                      fontSize: '15px',
+                      fontWeight: '600',
+                      color: colors.text,
+                      margin: '0 0 4px',
+                      fontFamily: fonts.serif,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {meetup.topic}
+                    </h4>
+                    <p style={{ fontSize: '12px', color: colors.textLight, margin: '0 0 8px' }}>
+                      {meetup.host_name || 'Community Event'}
+                    </p>
+                    <p style={{ fontSize: '11px', color: colors.primary, margin: '0 0 10px', fontWeight: '500' }}>
+                      👥 Small group ({meetup.max_attendees || 8})
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: colors.textLight, flexWrap: 'wrap' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Calendar size={11} /> {new Date(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={11} /> {meetup.time}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <MapPin size={11} /> {meetup.location || 'Virtual'}
                       </span>
                     </div>
-
-                    <button
-                      onClick={() => onNavigate?.('home')}
-                      className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2 rounded-lg transition-colors text-sm"
-                    >
-                      Join Meetup
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', marginRight: '8px' }}>
+                          {['👩🏻', '👩🏾', '👩🏼'].slice(0, Math.min(3, signupCount || 1)).map((emoji, idx) => (
+                            <div key={idx} style={{
+                              width: '22px',
+                              height: '22px',
+                              borderRadius: '50%',
+                              backgroundColor: colors.cream,
+                              border: '2px solid white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '11px',
+                              marginLeft: idx > 0 ? '-6px' : 0,
+                            }}>
+                              {emoji}
+                            </div>
+                          ))}
+                        </div>
+                        <span style={{ fontSize: '11px', color: colors.textLight }}>
+                          {signupCount > 0 ? `${signupCount} going` : 'Be first!'}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => onNavigate?.('home')}
+                        style={{
+                          padding: '6px 12px',
+                          backgroundColor: colors.primary,
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                        }}>
+                        RSVP
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -602,199 +873,171 @@ export default function NetworkDiscoverView({
         </div>
       )}
 
-      {/* B. Connection Group Cards (The Ring) - Horizontal Scroll */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-800">Connection Groups</h3>
-          <button
-            onClick={() => onNavigate?.('connectionGroups')}
-            className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
-          >
-            See all <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
-          {connectionGroups.length === 0 ? (
-            <div className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-purple-50 border border-purple-200 rounded-xl p-5 text-center snap-start">
-              <div className="flex justify-center mb-3">
-                <div className="flex -space-x-1">
-                  {[1, 2, 3, 4].map((_, idx) => (
-                    <div
-                      key={idx}
-                      className="w-8 h-8 rounded-full border-2 border-dashed border-purple-300 flex items-center justify-center text-purple-300"
-                    >
-                      <Plus className="w-3 h-3" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <h4 className="font-medium text-purple-800 text-sm mb-1">No groups yet</h4>
-              <p className="text-xs text-purple-600 mb-3">
-                Create a small group for video chats
-              </p>
-              <button
-                onClick={() => onNavigate?.('connectionGroups')}
-                className="bg-purple-500 hover:bg-purple-600 text-white font-medium px-3 py-1.5 rounded-lg transition-colors text-xs"
-              >
-                Create Group
-              </button>
-            </div>
-          ) : (
-            connectionGroups.map((group) => {
-              const members = group.members?.filter(m => m.status === 'accepted') || [];
-              const maxSlots = 4;
-              const filledSlots = members.length;
-              const emptySlots = maxSlots - filledSlots;
-
-              return (
-                <div
-                  key={group.id}
-                  className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-white rounded-xl shadow-sm border border-gray-200 p-4 snap-start"
-                >
-                  <h4 className="font-semibold text-gray-800 text-sm mb-3 line-clamp-1">{group.name}</h4>
-
-                  {/* The Ring Visualization */}
-                  <div className="flex items-center justify-center mb-3">
-                    <div className="flex -space-x-1">
-                      {members.slice(0, maxSlots).map((member, idx) => (
-                        <div
-                          key={idx}
-                          className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 border-2 border-white flex items-center justify-center text-white text-xs font-medium shadow-sm"
-                          title={member.user?.name}
-                        >
-                          {member.user?.name?.[0] || '?'}
-                        </div>
-                      ))}
-                      {Array.from({ length: Math.max(0, emptySlots) }).map((_, idx) => (
-                        <div
-                          key={`empty-${idx}`}
-                          className="w-9 h-9 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-gray-500 text-center mb-3">
-                    {filledSlots}/{maxSlots} members
-                  </p>
-
-                  <button
-                    onClick={() => onNavigate?.('connectionGroups')}
-                    className="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-1.5 rounded-lg transition-colors text-sm"
-                  >
-                    Claim a Slot
-                  </button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* C. Community Wishlist (Requests) - Horizontal Scroll */}
-      {meetupRequests.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-lg font-semibold text-gray-800">Community Wishlist</h3>
-
-          <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
-            {meetupRequests.map((request) => {
-              const supporterCount = request.supporter_count || request.supporters?.length || 0;
-              const hasSupported = request.supporters?.some(s => s.user_id === currentUser.id);
-
-              return (
-                <div
-                  key={request.id}
-                  className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-sm bg-gradient-to-r from-gray-50 to-slate-50 rounded-xl border border-gray-200 p-4 sm:p-5 snap-start"
-                >
-                  <p className="font-medium text-gray-800 text-sm sm:text-base line-clamp-2 mb-1">{request.topic}</p>
-                  {request.description && (
-                    <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-2">{request.description}</p>
-                  )}
-                  <p className="text-xs sm:text-sm text-gray-500 mb-3">
-                    {supporterCount} {supporterCount === 1 ? 'person wants' : 'people want'} this
-                  </p>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleHostRequest(request)}
-                      className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs sm:text-sm font-medium py-2 sm:py-2.5 rounded-lg transition-colors"
-                    >
-                      Host This
-                    </button>
-                    <button
-                      onClick={() => !hasSupported && handleSupportRequest(request.id)}
-                      disabled={hasSupported}
-                      className={`flex-1 text-xs sm:text-sm font-medium py-2 sm:py-2.5 rounded-lg transition-colors flex items-center justify-center ${
-                        hasSupported
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-                      }`}
-                    >
-                      <ThumbsUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                      {hasSupported ? 'Supported' : 'Me Too'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+      {/* Connect with People */}
+      <div style={{ marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: '600', color: colors.text, margin: '0 0 4px', fontFamily: fonts.serif }}>
+              Connect with people
+            </h2>
+            <p style={{ fontSize: '13px', color: colors.textLight, margin: 0 }}>
+              Find women you can start a conversation with
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* D. Peer Discovery (1:1) - Horizontal Scroll */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-800">People to Meet</h3>
           <button
             onClick={() => onNavigate?.('connections')}
-            className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center"
-          >
-            See all <ChevronRight className="w-4 h-4" />
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'none',
+              border: 'none',
+              color: colors.primary,
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer',
+            }}>
+            See all <ChevronRight size={14} />
           </button>
         </div>
 
-        <div className="flex overflow-x-auto gap-3 pb-2 -mx-2 px-2 scrollbar-hide snap-x snap-mandatory">
+        {/* People Cards */}
+        <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '8px' }}>
           {peerSuggestions.length === 0 ? (
-            <div className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-rose-50 border border-rose-200 rounded-xl p-4 sm:p-5 text-center snap-start">
-              <div className="flex justify-center mb-3">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-rose-100 flex items-center justify-center">
-                  <User className="w-7 h-7 sm:w-8 sm:h-8 text-rose-400" />
-                </div>
+            <div style={{
+              minWidth: '260px',
+              backgroundColor: colors.cream,
+              borderRadius: '16px',
+              padding: '20px',
+              textAlign: 'center',
+            }}>
+              <div style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                backgroundColor: `${colors.primary}20`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+              }}>
+                <User size={28} style={{ color: colors.primary }} />
               </div>
-              <h4 className="font-medium text-rose-800 text-sm sm:text-base mb-1">Meet people</h4>
-              <p className="text-xs sm:text-sm text-rose-600 mb-3">
+              <h4 style={{ fontSize: '15px', fontWeight: '600', color: colors.text, margin: '0 0 4px' }}>
+                Meet people
+              </h4>
+              <p style={{ fontSize: '12px', color: colors.textLight, margin: '0 0 12px' }}>
                 Join meetups to grow your network
               </p>
               <button
                 onClick={() => onNavigate?.('home')}
-                className="bg-rose-500 hover:bg-rose-600 text-white font-medium px-4 py-2 rounded-lg transition-colors text-xs sm:text-sm"
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: colors.primary,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
               >
                 Find Meetups
               </button>
             </div>
           ) : (
-            peerSuggestions.map((peer) => (
+            peerSuggestions.map((person) => (
               <div
-                key={peer.id}
-                className="flex-shrink-0 w-[calc(100vw-3rem)] sm:w-[calc(50vw-2rem)] lg:w-[calc(33vw-2rem)] max-w-xs bg-white rounded-xl border border-gray-200 p-4 sm:p-5 hover:shadow-md transition-shadow snap-start"
+                key={person.id}
+                style={{
+                  minWidth: '260px',
+                  backgroundColor: colors.text,
+                  borderRadius: '16px',
+                  padding: '20px',
+                  boxShadow: '0 4px 16px rgba(74, 55, 40, 0.15)',
+                }}
               >
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-rose-400 to-pink-400 flex items-center justify-center text-white text-xl sm:text-2xl font-semibold mb-3">
-                    {peer.name?.[0] || '?'}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{
+                    width: '56px',
+                    height: '56px',
+                    borderRadius: '50%',
+                    backgroundColor: colors.primaryLight,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '28px',
+                    flexShrink: 0,
+                    color: 'white',
+                    fontWeight: '600',
+                  }}>
+                    {person.photo_url ? (
+                      <img
+                        src={person.photo_url}
+                        alt={person.name}
+                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      person.name?.[0] || '?'
+                    )}
                   </div>
-                  <h4 className="font-medium text-gray-800 text-sm sm:text-base line-clamp-1">{peer.name}</h4>
-                  <p className="text-xs sm:text-sm text-gray-500 mt-1 line-clamp-1">{peer.career || 'Professional'}</p>
-                  {peer.city && (
-                    <p className="text-xs text-gray-400 mt-1">{peer.city}{peer.state ? `, ${peer.state}` : ''}</p>
+                  <div style={{ flex: 1 }}>
+                    <p style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.7)',
+                      margin: '0 0 4px',
+                    }}>
+                      Ask me about:
+                    </p>
+                    <h4 style={{
+                      fontSize: '15px',
+                      fontWeight: '600',
+                      color: 'white',
+                      margin: '0 0 8px',
+                      lineHeight: '1.3',
+                      fontFamily: fonts.serif,
+                    }}>
+                      {person.hook || person.career || 'Professional networking'}
+                    </h4>
+                    <p style={{
+                      fontSize: '12px',
+                      color: 'rgba(255,255,255,0.6)',
+                      margin: 0,
+                    }}>
+                      {person.name} | {person.career || 'Professional'}
+                    </p>
+                  </div>
+                </div>
+                {/* Tags at bottom */}
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  marginTop: '14px',
+                  paddingTop: '14px',
+                  borderTop: '1px solid rgba(255,255,255,0.1)',
+                }}>
+                  {person.city && (
+                    <span style={{
+                      padding: '5px 10px',
+                      backgroundColor: 'rgba(255,255,255,0.12)',
+                      color: 'rgba(255,255,255,0.85)',
+                      fontSize: '11px',
+                      fontWeight: '500',
+                      borderRadius: '6px',
+                    }}>
+                      Nearby
+                    </span>
                   )}
-
-                  <div className="flex items-center text-xs sm:text-sm text-gray-400 mt-3">
-                    <Lock className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                    Connect to chat
-                  </div>
+                  <span style={{
+                    padding: '5px 10px',
+                    backgroundColor: 'rgba(255,255,255,0.12)',
+                    color: 'rgba(255,255,255,0.85)',
+                    fontSize: '11px',
+                    fontWeight: '500',
+                    borderRadius: '6px',
+                  }}>
+                    {person.career ? 'Similar' : 'Connect'}
+                  </span>
                 </div>
               </div>
             ))
@@ -802,108 +1045,230 @@ export default function NetworkDiscoverView({
         </div>
       </div>
 
-      {/* Vibe-filtered Empty State */}
-      {selectedVibe && featuredMeetups.length === 0 && meetupRequests.length === 0 && (
-        <div className="bg-gray-50 rounded-xl p-6 text-center">
-          <p className="text-gray-600 mb-3">
-            No "{VIBE_CATEGORIES[selectedVibe].label.toLowerCase()}" events yet
+      {/* Empty state when no meetups */}
+      {featuredMeetups.length === 0 && (
+        <div style={{
+          backgroundColor: colors.warmWhite,
+          borderRadius: '20px',
+          padding: '40px 20px',
+          textAlign: 'center',
+          marginBottom: '32px',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🌱</div>
+          <h3 style={{
+            fontSize: '18px',
+            fontWeight: '600',
+            color: colors.text,
+            margin: '0 0 8px',
+            fontFamily: fonts.serif,
+          }}>
+            No meetups scheduled yet
+          </h3>
+          <p style={{ fontSize: '14px', color: colors.textLight, margin: '0 0 20px' }}>
+            Be the first to host a meetup and bring people together!
           </p>
           <button
             onClick={() => onHostMeetup ? onHostMeetup() : onNavigate?.('meetupProposals')}
-            className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm"
+            style={{
+              padding: '12px 24px',
+              backgroundColor: colors.primary,
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              boxShadow: `0 4px 12px ${colors.primary}40`,
+            }}
           >
-            Host One
+            Host a Meetup
           </button>
         </div>
       )}
 
+      {/* Floating Action Button */}
+      <div style={{
+        position: 'fixed',
+        bottom: '100px',
+        right: '24px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
+        gap: '12px',
+        zIndex: 50,
+      }}>
+        <button
+          onClick={() => onHostMeetup ? onHostMeetup() : setShowRequestModal(true)}
+          style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            border: 'none',
+            background: colors.primary,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 20px rgba(139, 111, 92, 0.35)',
+            cursor: 'pointer',
+            color: 'white',
+            fontSize: '28px',
+            fontWeight: '300',
+          }}>
+          +
+        </button>
+      </div>
+
       {/* Request Meetup Modal */}
       {showRequestModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-gray-800">Request a Meetup</h3>
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '16px',
+          zIndex: 100,
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            maxWidth: '400px',
+            width: '100%',
+            padding: '24px',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ fontSize: '20px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
+                Request a Meetup
+              </h3>
               <button
                 onClick={() => setShowRequestModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  color: colors.textLight,
+                  cursor: 'pointer',
+                }}
               >
                 ×
               </button>
             </div>
 
-            <p className="text-sm text-gray-600 mb-4">
-              Suggest a topic you'd like to see. Others can support your idea, and someone might host it!
+            <p style={{ fontSize: '14px', color: colors.textLight, marginBottom: '20px' }}>
+              Suggest a topic you'd like to see. Others can support your idea!
             </p>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Topic *
-                </label>
-                <input
-                  type="text"
-                  value={requestTopic}
-                  onChange={(e) => setRequestTopic(e.target.value)}
-                  placeholder="e.g., Grief in the Workplace Support Group"
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-indigo-500"
-                  maxLength={200}
-                />
-              </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: colors.text, marginBottom: '8px' }}>
+                Topic *
+              </label>
+              <input
+                type="text"
+                value={requestTopic}
+                onChange={(e) => setRequestTopic(e.target.value)}
+                placeholder="e.g., Career Transition Support Group"
+                style={{
+                  width: '100%',
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '12px',
+                  padding: '12px',
+                  fontSize: '14px',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+                maxLength={200}
+              />
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  What vibe is this?
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {Object.values(VIBE_CATEGORIES).map((vibe) => {
-                    const Icon = vibe.icon;
-                    const isSelected = requestVibe === vibe.id;
-                    const colors = getVibeColor(vibe.id);
-
-                    return (
-                      <button
-                        key={vibe.id}
-                        type="button"
-                        onClick={() => setRequestVibe(vibe.id)}
-                        className={`p-2 rounded-lg border transition-all text-center ${
-                          isSelected
-                            ? `${colors.bg} ${colors.border} ${colors.text}`
-                            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                        }`}
-                      >
-                        <Icon className={`w-4 h-4 mx-auto mb-1 ${isSelected ? colors.text : 'text-gray-400'}`} />
-                        <p className="text-xs">{vibe.id}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description (Optional)
-                </label>
-                <textarea
-                  value={requestDescription}
-                  onChange={(e) => setRequestDescription(e.target.value)}
-                  placeholder="Tell us more about what you're looking for..."
-                  className="w-full border border-gray-300 rounded-lg p-3 h-20 resize-none focus:outline-none focus:border-indigo-500"
-                  maxLength={500}
-                />
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: colors.text, marginBottom: '8px' }}>
+                What vibe is this?
+              </label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {VIBE_CATEGORIES.map((vibe) => {
+                  const isSelected = requestVibe === vibe.id;
+                  return (
+                    <button
+                      key={vibe.id}
+                      type="button"
+                      onClick={() => setRequestVibe(vibe.id)}
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        borderRadius: '10px',
+                        border: isSelected ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
+                        backgroundColor: isSelected ? `${colors.primary}15` : 'white',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                      }}
+                    >
+                      <span style={{ fontSize: '18px', display: 'block', marginBottom: '4px' }}>{vibe.emoji}</span>
+                      <span style={{ fontSize: '11px', color: isSelected ? colors.primary : colors.textLight }}>
+                        {vibe.id}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: colors.text, marginBottom: '8px' }}>
+                Description (Optional)
+              </label>
+              <textarea
+                value={requestDescription}
+                onChange={(e) => setRequestDescription(e.target.value)}
+                placeholder="Tell us more about what you're looking for..."
+                style={{
+                  width: '100%',
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '12px',
+                  padding: '12px',
+                  fontSize: '14px',
+                  height: '80px',
+                  resize: 'none',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+                maxLength={500}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 onClick={() => setShowRequestModal(false)}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2.5 rounded-lg transition-colors"
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: colors.cream,
+                  color: colors.text,
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitRequest}
                 disabled={!requestTopic.trim()}
-                className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-2.5 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: requestTopic.trim() ? colors.primary : colors.border,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: requestTopic.trim() ? 'pointer' : 'not-allowed',
+                }}
               >
                 Submit Request
               </button>
@@ -911,6 +1276,12 @@ export default function NetworkDiscoverView({
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }

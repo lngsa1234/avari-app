@@ -355,28 +355,24 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       {/* Quick Stats */}
       <div style={styles.statsRow}>
         <div style={styles.statCard}>
-          <div style={styles.statIcon}>☕</div>
           <div style={styles.statInfo}>
             <span style={styles.statNumber}>{stats.coffeeChats}</span>
             <span style={styles.statLabel}>Coffee Chats</span>
           </div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statIcon}>🎉</div>
           <div style={styles.statInfo}>
             <span style={styles.statNumber}>{stats.groupEvents}</span>
             <span style={styles.statLabel}>Group Events</span>
           </div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statIcon}>📅</div>
           <div style={styles.statInfo}>
             <span style={styles.statNumber}>{stats.thisMonth}</span>
             <span style={styles.statLabel}>This Month</span>
           </div>
         </div>
         <div style={styles.statCard}>
-          <div style={styles.statIcon}>🤝</div>
           <div style={styles.statInfo}>
             <span style={styles.statNumber}>{stats.allTime}</span>
             <span style={styles.statLabel}>All Time</span>
@@ -854,7 +850,6 @@ const styles = {
     flexWrap: 'wrap',
   },
   groupCard: {
-    borderLeft: '4px solid #A67B5B',
   },
   cardLeft: {
     display: 'flex',
