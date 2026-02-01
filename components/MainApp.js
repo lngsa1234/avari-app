@@ -17,6 +17,11 @@ import JourneyProgress from './JourneyProgress'
 import NextStepPrompt from './NextStepPrompt'
 import { createAgoraRoom, hasAgoraRoom } from '@/lib/agoraHelpers'
 import NetworkDiscoverView from './NetworkDiscoverView'
+import AllEventsView from './AllEventsView'
+import AllPeopleView from './AllPeopleView'
+import AllCirclesView from './AllCirclesView'
+import CreateCircleView from './CreateCircleView'
+import CircleDetailView from './CircleDetailView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 
 function MainApp({ currentUser, onSignOut }) {
@@ -52,6 +57,7 @@ function MainApp({ currentUser, onSignOut }) {
   }, [onSignOut])
   
   const [currentView, setCurrentView] = useState('home')
+  const [selectedCircleId, setSelectedCircleId] = useState(null)
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -78,6 +84,16 @@ function MainApp({ currentUser, onSignOut }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false) // Profile dropdown in header
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
+
+  // Navigation handler that supports passing extra data like circleId
+  const handleNavigate = useCallback((view, data = {}) => {
+    console.log('🧭 handleNavigate called:', view, data)
+    if (data.circleId) {
+      console.log('🔵 Setting circleId:', data.circleId)
+      setSelectedCircleId(data.circleId)
+    }
+    setCurrentView(view)
+  }, [])
 
   // DEBUGGING: Detect prop changes
   const prevPropsRef = useRef({ currentUser, onSignOut, supabase })
@@ -267,9 +283,12 @@ function MainApp({ currentUser, onSignOut }) {
   const loadMeetupsFromDatabase = useCallback(async () => {
     try {
       setLoadingMeetups(true)
+      // Only load public meetups (not circle-specific ones)
+      // Circle meetups are shown in CircleDetailView
       const { data, error } = await supabase
         .from('meetups')
         .select('*')
+        .is('circle_id', null)
         .order('date', { ascending: true })
         .order('time', { ascending: true })
 
@@ -1275,7 +1294,7 @@ function MainApp({ currentUser, onSignOut }) {
   }
 
   const handleSaveProfile = async () => {
-    if (!editedProfile.name || !editedProfile.career || !editedProfile.age || !editedProfile.city || !editedProfile.state) {
+    if (!editedProfile.name || !editedProfile.career || !editedProfile.city || !editedProfile.state) {
       alert('Please fill in all required fields')
       return
     }
@@ -1286,7 +1305,12 @@ function MainApp({ currentUser, onSignOut }) {
         .update({
           name: editedProfile.name,
           career: editedProfile.career,
-          age: parseInt(editedProfile.age),
+          industry: editedProfile.industry || null,
+          vibe_category: editedProfile.vibe_category || null,
+          career_stage: editedProfile.career_stage || null,
+          hook: editedProfile.hook || null,
+          open_to_hosting: editedProfile.open_to_hosting || false,
+          age: editedProfile.age ? parseInt(editedProfile.age) : null,
           city: editedProfile.city,
           state: editedProfile.state.toUpperCase(),
           bio: editedProfile.bio,
@@ -1884,7 +1908,7 @@ function MainApp({ currentUser, onSignOut }) {
             <div style={{ padding: '32px', textAlign: 'center' }}>
               <Calendar style={{ width: '48px', height: '48px', color: '#D4C4B4', margin: '0 auto 12px' }} />
               <p style={{ color: '#8B7355', fontSize: '15px' }}>No upcoming events</p>
-              <p style={{ color: '#A89080', fontSize: '13px', marginTop: '4px' }}>Check back soon for new circles!</p>
+              <p style={{ color: '#A89080', fontSize: '13px', marginTop: '4px' }}>Check back soon for new events!</p>
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1907,7 +1931,7 @@ function MainApp({ currentUser, onSignOut }) {
                     }}
                   >
                     <div style={{ flex: 1 }}>
-                      <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>Circle Meetup</h4>
+                      <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>{meetup.topic || 'Community Event'}</h4>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6B5344' }}>
                           <Calendar style={{ width: '14px', height: '14px' }} />
@@ -2628,13 +2652,18 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={setCurrentView} />}
         {currentView === 'connections' && <ConnectionsView />}
-        {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={setCurrentView} onHostMeetup={() => setShowCreateMeetup(true)} />}
+        {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={() => setShowCreateMeetup(true)} />}
         {currentView === 'messages' && <MessagesView currentUser={currentUser} supabase={supabase} onUnreadCountChange={loadUnreadMessageCount} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'meetupProposals' && <MeetupProposalsView currentUser={currentUser} supabase={supabase} isAdmin={currentUser.role === 'admin'} />}
         {currentView === 'profile' && <ProfileView />}
         {currentView === 'admin' && currentUser.role === 'admin' && <AdminDashboard />}
         {currentView === 'adminFeedback' && currentUser.role === 'admin' && <AdminFeedbackView currentUser={currentUser} supabase={supabase} />}
+        {currentView === 'allEvents' && <AllEventsView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'allPeople' && <AllPeopleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'allCircles' && <AllCirclesView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
+        {currentView === 'createCircle' && <CreateCircleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'circleDetail' && <CircleDetailView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} circleId={selectedCircleId} />}
       </div>
 
       {/* Chat Modal */}
@@ -2737,20 +2766,89 @@ function MainApp({ currentUser, onSignOut }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Career</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
                 <input
                   type="text"
                   value={editedProfile.career}
                   onChange={(e) => setEditedProfile({ ...editedProfile, career: e.target.value })}
                   className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  placeholder="e.g. Product Manager"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
+                <select
+                  value={editedProfile.industry || ''}
+                  onChange={(e) => setEditedProfile({ ...editedProfile, industry: e.target.value })}
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                >
+                  <option value="">Select industry</option>
+                  <option value="Fintech">Fintech</option>
+                  <option value="AI / Machine Learning">AI / Machine Learning</option>
+                  <option value="HealthTech">HealthTech</option>
+                  <option value="SaaS">SaaS</option>
+                  <option value="E-commerce">E-commerce</option>
+                  <option value="EdTech">EdTech</option>
+                  <option value="Media & Entertainment">Media & Entertainment</option>
+                  <option value="Consulting">Consulting</option>
+                  <option value="Finance & Banking">Finance & Banking</option>
+                  <option value="Healthcare">Healthcare</option>
+                  <option value="Retail">Retail</option>
+                  <option value="Manufacturing">Manufacturing</option>
+                  <option value="Non-profit">Non-profit</option>
+                  <option value="Government">Government</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Career Stage</label>
+                <select
+                  value={editedProfile.career_stage || ''}
+                  onChange={(e) => setEditedProfile({ ...editedProfile, career_stage: e.target.value })}
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                >
+                  <option value="">Select stage</option>
+                  <option value="emerging">Emerging (Early Career)</option>
+                  <option value="scaling">Scaling (Mid-Career)</option>
+                  <option value="leading">Leading (Manager/Director)</option>
+                  <option value="legacy">Legacy (Executive/Founder)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">What's your vibe?</label>
+                <select
+                  value={editedProfile.vibe_category || ''}
+                  onChange={(e) => setEditedProfile({ ...editedProfile, vibe_category: e.target.value })}
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                >
+                  <option value="">Select vibe</option>
+                  <option value="advice">I need advice</option>
+                  <option value="vent">I want to vent</option>
+                  <option value="grow">I want to grow</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ask me about (Hook)</label>
+                <input
+                  type="text"
+                  value={editedProfile.hook || ''}
+                  onChange={(e) => setEditedProfile({ ...editedProfile, hook: e.target.value })}
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  placeholder="e.g. Career transitions, leadership, work-life balance"
+                  maxLength={150}
+                />
+                <p className="text-xs text-gray-400 mt-1">{(editedProfile.hook || '').length}/150</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
                 <input
                   type="number"
-                  value={editedProfile.age}
+                  value={editedProfile.age || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, age: e.target.value })}
                   className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
                 />
@@ -2785,6 +2883,26 @@ function MainApp({ currentUser, onSignOut }) {
                   onChange={(e) => setEditedProfile({ ...editedProfile, bio: e.target.value })}
                   className="w-full border border-gray-300 rounded p-2 h-24 resize-none focus:outline-none focus:border-rose-500"
                 />
+              </div>
+
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="font-medium text-gray-700">Open to hosting meetups?</p>
+                  <p className="text-xs text-gray-500">You'll be notified when people need your expertise</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditedProfile({ ...editedProfile, open_to_hosting: !editedProfile.open_to_hosting })}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    editedProfile.open_to_hosting ? 'bg-rose-500' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      editedProfile.open_to_hosting ? 'translate-x-6' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 

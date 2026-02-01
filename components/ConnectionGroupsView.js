@@ -333,8 +333,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     if (selectedConnections.includes(connectionId)) {
       setSelectedConnections(selectedConnections.filter(id => id !== connectionId));
     } else {
-      if (selectedConnections.length >= 3) {
-        alert('Maximum group size is 4 people (you + 3 others)');
+      if (selectedConnections.length >= 9) {
+        alert('Maximum group size is 10 people (you + 9 others)');
         return;
       }
       setSelectedConnections([...selectedConnections, connectionId]);
@@ -347,8 +347,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       return;
     }
 
-    if (selectedConnections.length < 2 || selectedConnections.length > 3) {
-      alert('Please select 2-3 people to invite');
+    if (selectedConnections.length < 2 || selectedConnections.length > 9) {
+      alert('Please select 2-9 people to invite');
       return;
     }
 
@@ -787,8 +787,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               </div>
 
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Select 2-3 Connections</label>
-                <p style={styles.formHint}>{selectedConnections.length}/3 selected</p>
+                <label style={styles.formLabel}>Select 2-9 Connections</label>
+                <p style={styles.formHint}>{selectedConnections.length}/9 selected</p>
 
                 <div style={styles.connectionsList}>
                   {eligibleConnections.map(connection => (
