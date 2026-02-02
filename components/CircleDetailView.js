@@ -291,9 +291,8 @@ export default function CircleDetailView({
   };
 
   const handleEnterChat = () => {
-    // Navigate to the circles page with chat open
-    // This could be enhanced to open chat directly
-    onNavigate?.('connectionGroups');
+    // Navigate to messages page with this circle's chat open
+    onNavigate?.('messages', { chatId: circleId, chatType: 'circle' });
   };
 
   const handleStartCall = async () => {

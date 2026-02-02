@@ -22,6 +22,7 @@ import AllPeopleView from './AllPeopleView'
 import AllCirclesView from './AllCirclesView'
 import CreateCircleView from './CreateCircleView'
 import CircleDetailView from './CircleDetailView'
+import MessagesPageView from './MessagesPageView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 
 function MainApp({ currentUser, onSignOut }) {
@@ -58,6 +59,8 @@ function MainApp({ currentUser, onSignOut }) {
   
   const [currentView, setCurrentView] = useState('home')
   const [selectedCircleId, setSelectedCircleId] = useState(null)
+  const [selectedChatId, setSelectedChatId] = useState(null)
+  const [selectedChatType, setSelectedChatType] = useState(null) // 'user' or 'circle'
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -85,12 +88,17 @@ function MainApp({ currentUser, onSignOut }) {
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
 
-  // Navigation handler that supports passing extra data like circleId
+  // Navigation handler that supports passing extra data like circleId, chatId
   const handleNavigate = useCallback((view, data = {}) => {
     console.log('🧭 handleNavigate called:', view, data)
     if (data.circleId) {
       console.log('🔵 Setting circleId:', data.circleId)
       setSelectedCircleId(data.circleId)
+    }
+    if (data.chatId) {
+      console.log('💬 Setting chatId:', data.chatId, 'type:', data.chatType)
+      setSelectedChatId(data.chatId)
+      setSelectedChatType(data.chatType || 'user')
     }
     setCurrentView(view)
   }, [])
@@ -2653,7 +2661,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={setCurrentView} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={() => setShowCreateMeetup(true)} />}
-        {currentView === 'messages' && <MessagesView currentUser={currentUser} supabase={supabase} onUnreadCountChange={loadUnreadMessageCount} />}
+        {currentView === 'messages' && <MessagesPageView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} initialChatId={selectedChatId} initialChatType={selectedChatType} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'meetupProposals' && <MeetupProposalsView currentUser={currentUser} supabase={supabase} isAdmin={currentUser.role === 'admin'} />}
         {currentView === 'profile' && <ProfileView />}

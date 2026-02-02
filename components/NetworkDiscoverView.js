@@ -80,6 +80,8 @@ export default function NetworkDiscoverView({
   const [requestTopic, setRequestTopic] = useState('');
   const [requestDescription, setRequestDescription] = useState('');
   const [requestVibe, setRequestVibe] = useState('grow');
+  const [userRsvps, setUserRsvps] = useState(new Set()); // Track user's RSVPs
+  const [rsvpLoading, setRsvpLoading] = useState(false);
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -90,6 +92,72 @@ export default function NetworkDiscoverView({
   useEffect(() => {
     loadData();
   }, [selectedVibe]);
+
+  // Load user's RSVPs on mount
+  useEffect(() => {
+    loadUserRsvps();
+  }, [currentUser.id]);
+
+  const loadUserRsvps = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('meetup_signups')
+        .select('meetup_id')
+        .eq('user_id', currentUser.id);
+
+      if (!error && data) {
+        setUserRsvps(new Set(data.map(r => r.meetup_id)));
+      }
+    } catch (err) {
+      console.error('Error loading user RSVPs:', err);
+    }
+  };
+
+  const handleRsvp = async (meetupId) => {
+    if (!meetupId) return;
+
+    setRsvpLoading(true);
+    try {
+      const isRsvped = userRsvps.has(meetupId);
+
+      if (isRsvped) {
+        // Cancel RSVP
+        const { error } = await supabase
+          .from('meetup_signups')
+          .delete()
+          .eq('meetup_id', meetupId)
+          .eq('user_id', currentUser.id);
+
+        if (error) throw error;
+
+        setUserRsvps(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(meetupId);
+          return newSet;
+        });
+      } else {
+        // Add RSVP
+        const { error } = await supabase
+          .from('meetup_signups')
+          .insert({
+            meetup_id: meetupId,
+            user_id: currentUser.id
+          });
+
+        if (error) throw error;
+
+        setUserRsvps(prev => new Set([...prev, meetupId]));
+      }
+
+      // Reload data to update attendee counts
+      await loadData();
+    } catch (err) {
+      console.error('Error handling RSVP:', err);
+      alert('Failed to update RSVP. Please try again.');
+    } finally {
+      setRsvpLoading(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -344,53 +412,71 @@ export default function NetworkDiscoverView({
     ? meetups.filter(m => m.vibe_category === selectedVibe || !m.vibe_category)
     : meetups;
 
-  // Get featured meetups (upcoming, with most signups)
-  const featuredMeetups = filteredMeetups
+  // Get upcoming meetups (for Trending This Week - shows all events)
+  const upcomingMeetups = filteredMeetups
     .filter(m => new Date(m.date) >= new Date())
-    .slice(0, 4);
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-  // Get recommended meetup based on vibe
+  // Featured meetups for "Trending This Week" section (all upcoming events)
+  const featuredMeetups = upcomingMeetups.slice(0, 4);
+
+  // Recommended meetups (non-RSVP'd only for "Recommended for you" section)
+  const recommendedMeetups = upcomingMeetups.filter(m => !userRsvps.has(m.id)).slice(0, 4);
+
+  // Format time for display
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '7:00 PM';
+    try {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const hour12 = hours % 12 || 12;
+      return `${hour12}:${minutes.toString().padStart(2, '0')} ${period}`;
+    } catch {
+      return timeStr;
+    }
+  };
+
+  // Get recommended meetup based on vibe (only non-RSVP'd events)
   const getRecommendedContent = () => {
+    const meetup = recommendedMeetups[0];
+
     const vibeContent = {
       advice: {
-        title: featuredMeetups[0]?.topic || 'Career Pivot AMA',
-        subtitle: featuredMeetups[0]?.description || 'Connect with experienced leaders',
-        groupSize: 'Small group (6-8)',
+        title: meetup?.topic || 'Career Pivot AMA',
+        subtitle: meetup?.description || 'Connect with experienced leaders',
+        groupSize: `Small group (${meetup?.participant_limit || 8})`,
         matchReason: 'Advice',
-        isGroup: false,
       },
       peers: {
-        title: featuredMeetups[0]?.topic || 'Coffee Chat Meetup',
-        subtitle: featuredMeetups[0]?.description || 'Career transition support',
-        groupSize: 'Small group (4-6)',
+        title: meetup?.topic || 'Coffee Chat Meetup',
+        subtitle: meetup?.description || 'Career transition support',
+        groupSize: `Small group (${meetup?.participant_limit || 8})`,
         matchReason: 'Support',
-        isGroup: true,
       },
       grow: {
-        title: featuredMeetups[0]?.topic || 'Skills Workshop',
-        subtitle: featuredMeetups[0]?.description || 'Interactive learning session',
-        groupSize: 'Interactive (12-15)',
+        title: meetup?.topic || 'Skills Workshop',
+        subtitle: meetup?.description || 'Interactive learning session',
+        groupSize: `Small group (${meetup?.participant_limit || 12})`,
         matchReason: 'Growth',
-        isGroup: false,
       },
     };
 
     const content = vibeContent[selectedVibe] || vibeContent.peers;
-    const meetup = featuredMeetups[0];
 
     return {
       ...content,
       date: meetup ? new Date(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Thu, Feb 6',
-      time: meetup?.time || '7 PM',
+      time: formatTime(meetup?.time),
       location: meetup?.location || 'Virtual',
-      spots: meetup ? Math.max(1, (meetup.max_attendees || 8) - (meetup.signups?.length || 0)) : 2,
-      totalSpots: meetup?.max_attendees || 8,
+      spots: meetup ? Math.max(1, (meetup.participant_limit || 8) - (meetup.signups?.length || 0)) : 2,
+      totalSpots: meetup?.participant_limit || 8,
       attendees: (meetup?.signups || []).slice(0, 3).map(s => ({
         name: s.user?.name || 'Member',
         emoji: '👩🏻'
       })),
       extraCount: Math.max(0, (meetup?.signups?.length || 0) - 3),
       meetupId: meetup?.id,
+      isGroup: !meetup, // Only show as group if there's no actual meetup
     };
   };
 
@@ -489,189 +575,232 @@ export default function NetworkDiscoverView({
         </div>
       </div>
 
-      {/* Recommended for You */}
-      {featuredMeetups.length > 0 && (
-        <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
-          <h2 style={{
-            fontSize: isMobile ? '16px' : '18px',
-            fontWeight: '600',
-            color: colors.text,
-            margin: '0 0 14px',
-            fontFamily: fonts.serif
-          }}>
-            Recommended for you
-          </h2>
+      {/* Recommended for You - only shows events user hasn't RSVP'd to */}
+      <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
+        <h2 style={{
+          fontSize: isMobile ? '16px' : '18px',
+          fontWeight: '600',
+          color: colors.text,
+          margin: '0 0 14px',
+          fontFamily: fonts.serif
+        }}>
+          Recommended for you
+        </h2>
 
-          <div style={{
-            backgroundColor: colors.warmWhite,
-            borderRadius: isMobile ? '16px' : '20px',
-            padding: isMobile ? '16px' : '20px',
-            boxShadow: '0 4px 20px rgba(139, 111, 92, 0.12)',
-            border: `1px solid ${colors.primary}30`,
-          }}>
-            {/* Spots Badge */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: isMobile ? '10px' : '12px' }}>
-              <span style={{
-                padding: '4px 10px',
-                backgroundColor: `${colors.primary}15`,
-                color: colors.primary,
-                fontSize: isMobile ? '10px' : '11px',
+        <div style={{
+          backgroundColor: colors.warmWhite,
+          borderRadius: isMobile ? '16px' : '20px',
+          padding: isMobile ? '16px' : '20px',
+          boxShadow: '0 4px 20px rgba(139, 111, 92, 0.12)',
+          border: `1px solid ${colors.primary}30`,
+        }}>
+          {recommendedMeetups.length > 0 ? (
+            <>
+              {/* Spots Badge */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: isMobile ? '10px' : '12px' }}>
+                <span style={{
+                  padding: '4px 10px',
+                  backgroundColor: `${colors.primary}15`,
+                  color: colors.primary,
+                  fontSize: isMobile ? '10px' : '11px',
+                  fontWeight: '600',
+                  borderRadius: '8px',
+                }}>
+                  {recommendedContent.spots} spots left
+                </span>
+              </div>
+
+              {/* Title */}
+              <h3 style={{
+                fontSize: isMobile ? '18px' : '20px',
                 fontWeight: '600',
-                borderRadius: '8px',
+                color: colors.text,
+                margin: '0 0 4px',
+                fontFamily: fonts.serif
               }}>
-                {recommendedContent.spots} spots left
-              </span>
-            </div>
+                {recommendedContent.title}
+              </h3>
+              <p style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, margin: '0 0 14px' }}>
+                {recommendedContent.subtitle}
+              </p>
 
-            {/* Title */}
-            <h3 style={{
-              fontSize: isMobile ? '18px' : '20px',
-              fontWeight: '600',
-              color: colors.text,
-              margin: '0 0 4px',
-              fontFamily: fonts.serif
-            }}>
-              {recommendedContent.title}
-            </h3>
-            <p style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, margin: '0 0 14px' }}>
-              {recommendedContent.subtitle}
-            </p>
+              {/* Group Size */}
+              <p style={{
+                fontSize: isMobile ? '12px' : '13px',
+                color: colors.textLight,
+                margin: '0 0 12px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}>
+                👥 {recommendedContent.groupSize}
+              </p>
 
-            {/* Group Size */}
-            <p style={{
-              fontSize: isMobile ? '12px' : '13px',
-              color: colors.textLight,
-              margin: '0 0 12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}>
-              👥 {recommendedContent.groupSize}
-            </p>
+              {/* Date, Time, Location */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: isMobile ? '8px' : '12px',
+                fontSize: isMobile ? '12px' : '13px',
+                color: colors.textLight,
+                marginBottom: '16px',
+                flexWrap: 'wrap',
+              }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Calendar size={isMobile ? 12 : 14} /> {recommendedContent.date}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={isMobile ? 12 : 14} /> {recommendedContent.time}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <MapPin size={isMobile ? 12 : 14} /> {recommendedContent.location}
+                </span>
+              </div>
 
-            {/* Date, Time, Location */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: isMobile ? '8px' : '12px',
-              fontSize: isMobile ? '12px' : '13px',
-              color: colors.textLight,
-              marginBottom: '16px',
-              flexWrap: 'wrap',
-            }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Calendar size={isMobile ? 12 : 14} /> {recommendedContent.date}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Clock size={isMobile ? 12 : 14} /> {recommendedContent.time}
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <MapPin size={isMobile ? 12 : 14} /> {recommendedContent.location}
-              </span>
-            </div>
-
-            {/* Social Proof - Attendees */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              paddingTop: '14px',
-              borderTop: `1px solid ${colors.border}`,
-            }}>
-              <div style={{ display: 'flex', marginRight: '10px' }}>
-                {recommendedContent.attendees.map((person, idx) => (
-                  <div
-                    key={idx}
-                    style={{
+              {/* Social Proof - Attendees */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                paddingTop: '14px',
+                borderTop: `1px solid ${colors.border}`,
+              }}>
+                <div style={{ display: 'flex', marginRight: '10px' }}>
+                  {recommendedContent.attendees.map((person, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        width: isMobile ? '24px' : '28px',
+                        height: isMobile ? '24px' : '28px',
+                        borderRadius: '50%',
+                        backgroundColor: colors.primaryLight,
+                        border: '2px solid white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: isMobile ? '12px' : '14px',
+                        marginLeft: idx > 0 ? '-8px' : 0,
+                      }}
+                    >
+                      {person.emoji}
+                    </div>
+                  ))}
+                  {recommendedContent.extraCount > 0 && (
+                    <div style={{
                       width: isMobile ? '24px' : '28px',
                       height: isMobile ? '24px' : '28px',
                       borderRadius: '50%',
-                      backgroundColor: colors.primaryLight,
+                      backgroundColor: colors.primary,
                       border: '2px solid white',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: isMobile ? '12px' : '14px',
-                      marginLeft: idx > 0 ? '-8px' : 0,
-                    }}
-                  >
-                    {person.emoji}
-                  </div>
-                ))}
-                {recommendedContent.extraCount > 0 && (
-                  <div style={{
-                    width: isMobile ? '24px' : '28px',
-                    height: isMobile ? '24px' : '28px',
-                    borderRadius: '50%',
-                    backgroundColor: colors.primary,
-                    border: '2px solid white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: isMobile ? '9px' : '10px',
-                    fontWeight: '600',
-                    color: 'white',
-                    marginLeft: '-8px',
-                  }}>
-                    +{recommendedContent.extraCount}
-                  </div>
-                )}
-              </div>
-              <span style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textLight }}>
-                {recommendedContent.attendees.length + recommendedContent.extraCount > 0
-                  ? `${recommendedContent.attendees.length + recommendedContent.extraCount} going`
-                  : 'Be the first to join!'
-                }
-              </span>
-            </div>
-
-            {/* Match Reason + CTA */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: '16px',
-              flexWrap: isMobile ? 'wrap' : 'nowrap',
-              gap: isMobile ? '12px' : '0',
-            }}>
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontSize: isMobile ? '11px' : '12px',
-                fontWeight: '500',
-                color: colors.primary,
-                backgroundColor: `${colors.primary}15`,
-                padding: isMobile ? '5px 10px' : '6px 12px',
-                borderRadius: '16px',
-              }}>
-                🤎 {recommendedContent.matchReason}
-              </span>
-              <button
-                onClick={() => {
-                  if (recommendedContent.isGroup) {
-                    onNavigate?.('connectionGroups');
-                  } else {
-                    onNavigate?.('allEvents');
+                      fontSize: isMobile ? '9px' : '10px',
+                      fontWeight: '600',
+                      color: 'white',
+                      marginLeft: '-8px',
+                    }}>
+                      +{recommendedContent.extraCount}
+                    </div>
+                  )}
+                </div>
+                <span style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textLight }}>
+                  {recommendedContent.attendees.length + recommendedContent.extraCount > 0
+                    ? `${recommendedContent.attendees.length + recommendedContent.extraCount} going`
+                    : 'Be the first to join!'
                   }
-                }}
+                </span>
+              </div>
+
+              {/* Match Reason + CTA */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: '16px',
+                flexWrap: isMobile ? 'wrap' : 'nowrap',
+                gap: isMobile ? '12px' : '0',
+              }}>
+                <span style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: isMobile ? '11px' : '12px',
+                  fontWeight: '500',
+                  color: colors.primary,
+                  backgroundColor: `${colors.primary}15`,
+                  padding: isMobile ? '5px 10px' : '6px 12px',
+                  borderRadius: '16px',
+                }}>
+                  🤎 {recommendedContent.matchReason}
+                </span>
+                <button
+                  onClick={() => handleRsvp(recommendedContent.meetupId)}
+                  disabled={rsvpLoading}
+                  style={{
+                    padding: isMobile ? '10px 20px' : '12px 24px',
+                    backgroundColor: colors.primary,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: isMobile ? '13px' : '14px',
+                    fontWeight: '600',
+                    cursor: rsvpLoading ? 'wait' : 'pointer',
+                    boxShadow: `0 4px 12px ${colors.primary}40`,
+                    flex: isMobile ? 1 : 'none',
+                    opacity: rsvpLoading ? 0.7 : 1,
+                    transition: 'all 0.2s ease',
+                  }}>
+                  {rsvpLoading ? '...' : 'RSVP'}
+                </button>
+              </div>
+            </>
+          ) : (
+            /* Empty State - All caught up! */
+            <div style={{
+              textAlign: 'center',
+              padding: isMobile ? '24px 16px' : '32px 24px',
+            }}>
+              <div style={{
+                fontSize: '48px',
+                marginBottom: '12px',
+              }}>
+                🎉
+              </div>
+              <h3 style={{
+                fontSize: isMobile ? '16px' : '18px',
+                fontWeight: '600',
+                color: colors.text,
+                margin: '0 0 8px',
+                fontFamily: fonts.serif,
+              }}>
+                You're all set!
+              </h3>
+              <p style={{
+                fontSize: isMobile ? '13px' : '14px',
+                color: colors.textLight,
+                margin: '0 0 16px',
+                lineHeight: '1.5',
+              }}>
+                You've RSVP'd to all available events. Check back later for new events!
+              </p>
+              <button
+                onClick={() => onNavigate?.('allEvents')}
                 style={{
                   padding: isMobile ? '10px 20px' : '12px 24px',
-                  backgroundColor: colors.primary,
-                  color: 'white',
-                  border: 'none',
+                  backgroundColor: 'transparent',
+                  color: colors.primary,
+                  border: `2px solid ${colors.primary}`,
                   borderRadius: '12px',
                   fontSize: isMobile ? '13px' : '14px',
                   fontWeight: '600',
                   cursor: 'pointer',
-                  boxShadow: `0 4px 12px ${colors.primary}40`,
-                  flex: isMobile ? 1 : 'none',
                 }}>
-                {recommendedContent.isGroup ? 'Join group' : 'RSVP'}
+                View All Events
               </button>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Join an Intimate Circle */}
       {(() => {
