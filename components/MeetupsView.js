@@ -14,11 +14,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const [groupEvents, setGroupEvents] = useState([]);
   const [pastMeetups, setPastMeetups] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [pendingRequests, setPendingRequests] = useState({
     coffeeChats: 0,
-    groupEvents: 0,
-    thisMonth: 0,
-    allTime: 0
+    circleInvites: 0
   });
 
   useEffect(() => {
@@ -31,14 +29,14 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       loadCoffeeChats(),
       loadGroupEvents(),
       loadPastMeetups(),
-      loadStats()
+      loadPendingRequests()
     ]);
     setLoading(false);
   };
 
   const loadCoffeeChats = useCallback(async () => {
     try {
-      // Load scheduled coffee chats (1:1 calls)
+      // Load all coffee chats for the user
       const { data, error } = await supabase
         .from('coffee_chats')
         .select(`
@@ -46,24 +44,39 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           requester_id,
           recipient_id,
           status,
-          scheduled_date,
           scheduled_time,
-          topic,
-          location,
+          notes,
+          room_url,
           created_at
         `)
         .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
-        .in('status', ['pending', 'confirmed', 'scheduled'])
-        .order('scheduled_date', { ascending: true });
+        .in('status', ['pending', 'accepted', 'scheduled'])
+        .order('scheduled_time', { ascending: true });
 
       if (error) {
-        console.log('Coffee chats table may not exist:', error.message);
+        // Silently handle missing table - feature not yet set up
+        if (error.message.includes('does not exist') || error.code === '42P01') {
+          setCoffeeChats([]);
+          return;
+        }
+        console.log('Coffee chats error:', error.message);
         setCoffeeChats([]);
         return;
       }
 
+      // Filter to only upcoming chats (client-side filter)
+      // Allow 1 hour grace period for recently started chats
+      const now = new Date();
+      const gracePeriod = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const upcomingChats = (data || []).filter(chat => {
+        if (!chat.scheduled_time) return false;
+        const chatTime = new Date(chat.scheduled_time);
+        return chatTime >= gracePeriod;
+      });
+
       // Get profile info for the other person in each chat
-      const otherUserIds = (data || []).map(chat =>
+      const otherUserIds = upcomingChats.map(chat =>
         chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
       );
 
@@ -78,18 +91,21 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
       const profileMap = new Map(profiles.map(p => [p.id, p]));
 
-      const chatsWithProfiles = (data || []).map(chat => {
+      const chatsWithProfiles = upcomingChats.map(chat => {
         const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id;
         const profile = profileMap.get(otherId);
+        // Extract date and time from scheduled_time timestamp
+        const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : null;
         return {
           ...chat,
           type: 'coffee',
           with: profile?.name || 'Unknown',
           avatar: profile?.profile_picture,
           role: profile?.career || 'Professional',
-          date: formatDate(chat.scheduled_date),
-          time: formatTime(chat.scheduled_time),
-          duration: '30 min'
+          date: scheduledDate ? formatDate(scheduledDate.toISOString()) : 'TBD',
+          time: scheduledDate ? formatTime(scheduledDate.toTimeString().slice(0, 5)) : 'TBD',
+          duration: '30 min',
+          scheduled_date: chat.scheduled_time // Keep for sorting
         };
       });
 
@@ -102,12 +118,32 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
   const loadGroupEvents = useCallback(async () => {
     try {
-      // Get upcoming meetups the user is signed up for
       const signedUpMeetupIds = userSignups || [];
 
-      // Filter meetups to upcoming ones
+      // Fetch meetups user is signed up for OR created (for circle meetups)
+      let query = supabase
+        .from('meetups')
+        .select('*, connection_groups(id, name)')
+        .order('date', { ascending: true });
+
+      // Get signed up meetups OR circle meetups created by user
+      if (signedUpMeetupIds.length > 0) {
+        query = query.or(`id.in.(${signedUpMeetupIds.join(',')}),created_by.eq.${currentUser.id}`);
+      } else {
+        query = query.eq('created_by', currentUser.id);
+      }
+
+      const { data: signedUpMeetups, error } = await query;
+
+      if (error) {
+        console.error('Error fetching signed up meetups:', error);
+        setGroupEvents([]);
+        return;
+      }
+
+      // Filter to upcoming ones
       const now = new Date();
-      const upcomingEvents = (meetups || []).filter(meetup => {
+      const upcomingEvents = (signedUpMeetups || []).filter(meetup => {
         try {
           let meetupDate;
           const dateStr = meetup.date;
@@ -133,48 +169,72 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         } catch {
           return false;
         }
-      }).map(meetup => ({
-        ...meetup,
-        type: 'group',
-        title: meetup.topic || 'Circle Meetup',
-        emoji: getEventEmoji(meetup.topic),
-        host: 'CircleW Community',
-        date: formatDate(meetup.date),
-        time: formatTime(meetup.time),
-        duration: `${meetup.duration || 60} min`,
-        location: meetup.location || 'Virtual',
-        attendees: meetup.signupCount || 0,
-        maxAttendees: meetup.participantLimit || 100,
-        status: signedUpMeetupIds.includes(meetup.id) ? 'going' : 'open',
-        description: meetup.description || 'Join us for meaningful connections.'
-      }));
+      }).map(meetup => {
+        const isCircleMeetup = !!meetup.circle_id;
+        const circleName = meetup.connection_groups?.name;
+
+        return {
+          ...meetup,
+          type: 'group',
+          title: meetup.topic || (isCircleMeetup ? `${circleName} Meetup` : 'Community Meetup'),
+          emoji: isCircleMeetup ? '🔒' : getEventEmoji(meetup.topic),
+          host: isCircleMeetup ? circleName : 'CircleW Community',
+          originalDate: meetup.date,
+          date: formatDate(meetup.date),
+          time: formatTime(meetup.time),
+          duration: `${meetup.duration || 60} min`,
+          location: meetup.location || 'Virtual',
+          attendees: meetup.signupCount || 0,
+          maxAttendees: meetup.participantLimit || meetup.max_attendees || 100,
+          status: 'going', // User is signed up
+          description: meetup.description || (isCircleMeetup ? `Private meetup for ${circleName}` : 'Join us for meaningful connections.'),
+          isCircleMeetup
+        };
+      });
 
       setGroupEvents(upcomingEvents);
     } catch (err) {
       console.error('Error loading group events:', err);
       setGroupEvents([]);
     }
-  }, [meetups, userSignups]);
+  }, [userSignups, supabase]);
 
   const loadPastMeetups = useCallback(async () => {
     try {
-      // Load past call recaps
+      // Load all coffee chats for the user
       const { data, error } = await supabase
-        .from('call_recaps')
+        .from('coffee_chats')
         .select('*')
-        .or(`caller_id.eq.${currentUser.id},callee_id.eq.${currentUser.id}`)
-        .order('created_at', { ascending: false })
-        .limit(10);
+        .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+        .order('scheduled_time', { ascending: false })
+        .limit(20);
 
       if (error) {
-        console.log('Call recaps not available:', error.message);
+        // Silently handle missing table
+        if (error.message.includes('does not exist') || error.code === '42P01') {
+          setPastMeetups([]);
+          return;
+        }
+        console.log('Past meetups error:', error.message);
         setPastMeetups([]);
         return;
       }
 
+      // Filter to only past chats (client-side)
+      // Past = scheduled_time is before now (with 1 hour grace period)
+      const now = new Date();
+      const gracePeriod = new Date(now.getTime() - 60 * 60 * 1000);
+
+      const pastChats = (data || []).filter(chat => {
+        if (!chat.scheduled_time) return false;
+        const chatTime = new Date(chat.scheduled_time);
+        // Include completed status OR chats that are past the grace period
+        return chat.status === 'completed' || chatTime < gracePeriod;
+      });
+
       // Get profile info for other participants
-      const otherUserIds = (data || []).map(recap =>
-        recap.caller_id === currentUser.id ? recap.callee_id : recap.caller_id
+      const otherUserIds = pastChats.map(chat =>
+        chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
       ).filter(Boolean);
 
       let profiles = [];
@@ -188,19 +248,19 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
       const profileMap = new Map(profiles.map(p => [p.id, p]));
 
-      const pastWithProfiles = (data || []).map(recap => {
-        const otherId = recap.caller_id === currentUser.id ? recap.callee_id : recap.caller_id;
+      const pastWithProfiles = pastChats.map(chat => {
+        const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id;
         const profile = profileMap.get(otherId);
         return {
-          id: recap.id,
-          type: recap.call_type === '1on1' ? 'coffee' : 'group',
+          id: chat.id,
+          type: 'coffee',
           with: profile?.name || 'Unknown',
-          title: recap.call_type === 'group' ? 'Group Call' : `Coffee with ${profile?.name || 'Unknown'}`,
-          emoji: recap.call_type === 'group' ? '👥' : '☕',
-          date: formatDate(recap.created_at),
-          topic: recap.summary || 'No summary available',
-          notes: recap.key_points,
-          followUp: !recap.reviewed
+          title: `Coffee with ${profile?.name || 'Unknown'}`,
+          emoji: '☕',
+          date: formatDate(chat.scheduled_time || chat.created_at),
+          topic: chat.notes || 'Coffee chat',
+          notes: null,
+          followUp: chat.status !== 'completed'
         };
       });
 
@@ -211,44 +271,31 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     }
   }, [currentUser.id, supabase]);
 
-  const loadStats = useCallback(async () => {
+  const loadPendingRequests = useCallback(async () => {
     try {
-      // Count coffee chats
-      const { count: coffeeCount } = await supabase
+      // Count pending coffee chat requests (where user is recipient)
+      const { count: pendingCoffee, error: coffeeError } = await supabase
         .from('coffee_chats')
         .select('id', { count: 'exact', head: true })
-        .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`);
+        .eq('recipient_id', currentUser.id)
+        .eq('status', 'pending');
 
-      // Count group events (signups)
-      const groupCount = userSignups?.length || 0;
-
-      // Count this month's activities
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
-
-      const { count: monthCount } = await supabase
-        .from('call_recaps')
+      // Count pending circle invites
+      const { count: pendingCircles, error: circleError } = await supabase
+        .from('connection_group_members')
         .select('id', { count: 'exact', head: true })
-        .or(`caller_id.eq.${currentUser.id},callee_id.eq.${currentUser.id}`)
-        .gte('created_at', startOfMonth.toISOString());
+        .eq('user_id', currentUser.id)
+        .eq('status', 'invited');
 
-      // Count all time
-      const { count: allTimeCount } = await supabase
-        .from('call_recaps')
-        .select('id', { count: 'exact', head: true })
-        .or(`caller_id.eq.${currentUser.id},callee_id.eq.${currentUser.id}`);
-
-      setStats({
-        coffeeChats: coffeeCount || 0,
-        groupEvents: groupCount,
-        thisMonth: monthCount || 0,
-        allTime: allTimeCount || 0
+      setPendingRequests({
+        coffeeChats: coffeeError ? 0 : (pendingCoffee || 0),
+        circleInvites: circleError ? 0 : (pendingCircles || 0)
       });
     } catch (err) {
-      console.error('Error loading stats:', err);
+      // Silently handle errors
+      setPendingRequests({ coffeeChats: 0, circleInvites: 0 });
     }
-  }, [currentUser.id, supabase, userSignups]);
+  }, [currentUser.id, supabase]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return 'TBD';
@@ -295,10 +342,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     switch(status) {
       case 'confirmed':
       case 'going':
-        return { bg: 'rgba(76, 175, 80, 0.1)', color: '#2E7D32', text: status === 'confirmed' ? '✓ Confirmed' : '✓ Going' };
+        return { bg: 'rgba(92, 64, 51, 0.12)', color: '#5C4033', text: status === 'confirmed' ? '✓ Confirmed' : '✓ Going' };
       case 'pending':
       case 'scheduled':
-        return { bg: 'rgba(255, 167, 38, 0.1)', color: '#E65100', text: '⏳ Pending' };
+        return { bg: 'rgba(196, 149, 106, 0.2)', color: '#8B6F5C', text: '⏳ Pending' };
       case 'open':
         return { bg: 'rgba(139, 111, 92, 0.1)', color: '#5C4033', text: 'Open' };
       default:
@@ -311,20 +358,28 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   };
 
   const handleScheduleCoffeeChat = () => {
-    // Navigate to connections to schedule a coffee chat
-    if (onNavigate) onNavigate('connectionGroups');
+    // Navigate to unified schedule meetup page
+    if (onNavigate) onNavigate('scheduleMeetup');
   };
 
+  // Separate circle and public events
+  const circleEvents = groupEvents.filter(e => e.isCircleMeetup);
+  const publicEvents = groupEvents.filter(e => !e.isCircleMeetup);
+
   const allUpcoming = [...coffeeChats, ...groupEvents].sort((a, b) => {
-    // Sort by date
-    return new Date(a.scheduled_date || a.date) - new Date(b.scheduled_date || b.date);
+    // Sort by date - use scheduled_date for coffee chats, original date for group events
+    const dateA = a.scheduled_date ? new Date(a.scheduled_date) : new Date(a.originalDate || a.date);
+    const dateB = b.scheduled_date ? new Date(b.scheduled_date) : new Date(b.originalDate || b.date);
+    return dateA - dateB;
   });
 
   const filteredItems = activeFilter === 'all'
     ? allUpcoming
     : activeFilter === 'coffee'
       ? coffeeChats
-      : groupEvents;
+      : activeFilter === 'circle'
+        ? circleEvents
+        : publicEvents;
 
   if (loading) {
     return (
@@ -348,7 +403,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         </div>
         <button style={styles.scheduleBtn} onClick={handleScheduleCoffeeChat}>
           <Plus size={18} />
-          Schedule a Chat
+          Schedule Meetup
         </button>
       </section>
 
@@ -356,28 +411,41 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       <div style={styles.statsRow}>
         <div style={styles.statCard}>
           <div style={styles.statInfo}>
-            <span style={styles.statNumber}>{stats.coffeeChats}</span>
-            <span style={styles.statLabel}>Coffee Chats</span>
+            <span style={styles.statNumber}>{coffeeChats.length}</span>
+            <span style={styles.statLabel}>☕ 1:1 Chats</span>
           </div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statInfo}>
-            <span style={styles.statNumber}>{stats.groupEvents}</span>
-            <span style={styles.statLabel}>Group Events</span>
+            <span style={styles.statNumber}>{circleEvents.length}</span>
+            <span style={styles.statLabel}>🔒 Circle</span>
           </div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statInfo}>
-            <span style={styles.statNumber}>{stats.thisMonth}</span>
-            <span style={styles.statLabel}>This Month</span>
+            <span style={styles.statNumber}>{publicEvents.length}</span>
+            <span style={styles.statLabel}>🌐 Public</span>
           </div>
         </div>
-        <div style={styles.statCard}>
-          <div style={styles.statInfo}>
-            <span style={styles.statNumber}>{stats.allTime}</span>
-            <span style={styles.statLabel}>All Time</span>
+        {(pendingRequests.coffeeChats + pendingRequests.circleInvites) > 0 ? (
+          <div
+            style={{...styles.statCard, ...styles.pendingCard}}
+            onClick={() => onNavigate && onNavigate(pendingRequests.coffeeChats > 0 ? 'coffeeChats' : 'connectionGroups')}
+          >
+            <div style={styles.statInfo}>
+              <span style={styles.statNumber}>{pendingRequests.coffeeChats + pendingRequests.circleInvites}</span>
+              <span style={styles.statLabel}>🔔 Pending</span>
+            </div>
+            <span style={styles.pendingBadge}>Action needed</span>
           </div>
-        </div>
+        ) : (
+          <div style={styles.statCard}>
+            <div style={styles.statInfo}>
+              <span style={styles.statNumber}>{allUpcoming.length}</span>
+              <span style={styles.statLabel}>📋 Total</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* View Toggle & Filters */}
@@ -400,9 +468,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         {activeView === 'upcoming' && (
           <div style={styles.filterTabs}>
             {[
-              { key: 'all', label: 'All', icon: '📋' },
-              { key: 'coffee', label: 'Coffee', icon: '☕' },
-              { key: 'group', label: 'Groups', icon: '👥' },
+              { key: 'all', label: 'All', icon: '📋', count: allUpcoming.length },
+              { key: 'coffee', label: '1:1', icon: '☕', count: coffeeChats.length },
+              { key: 'circle', label: 'Circle', icon: '🔒', count: circleEvents.length },
+              { key: 'public', label: 'Public', icon: '🌐', count: publicEvents.length },
             ].map(filter => (
               <button
                 key={filter.key}
@@ -411,6 +480,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               >
                 <span style={styles.filterIcon}>{filter.icon}</span>
                 {filter.label}
+                {filter.count > 0 && <span style={styles.filterCount}>{filter.count}</span>}
               </button>
             ))}
           </div>
@@ -489,15 +559,24 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   </div>
                 </div>
               ) : (
-                // Group Event Card
-                <div key={item.id} style={{...styles.meetupCard, ...styles.groupCard, animationDelay: `${index * 0.1}s`}}>
+                // Group Event Card (Circle or Public)
+                <div key={item.id} style={{
+                  ...styles.meetupCard,
+                  ...styles.groupCard,
+                  ...(item.isCircleMeetup ? styles.circleCard : styles.publicCard),
+                  animationDelay: `${index * 0.1}s`
+                }}>
                   <div style={styles.cardLeft}>
-                    <div style={styles.groupIcon}>{item.emoji}</div>
+                    <div style={item.isCircleMeetup ? styles.circleIcon : styles.publicIcon}>
+                      {item.isCircleMeetup ? '🔒' : '🌐'}
+                    </div>
                   </div>
 
                   <div style={styles.cardContent}>
                     <div style={styles.cardHeader}>
-                      <div style={styles.cardTypeGroup}>Group Event</div>
+                      <div style={item.isCircleMeetup ? styles.cardTypeCircle : styles.cardTypePublic}>
+                        {item.isCircleMeetup ? 'Intimate Circle' : 'Public Event'}
+                      </div>
                       <div style={{
                         ...styles.statusBadge,
                         backgroundColor: getStatusStyle(item.status).bg,
@@ -733,6 +812,25 @@ const styles = {
     fontSize: '11px',
     color: '#8B7355',
   },
+  pendingCard: {
+    cursor: 'pointer',
+    backgroundColor: 'rgba(196, 149, 106, 0.15)',
+    border: '1px solid rgba(196, 149, 106, 0.3)',
+    transition: 'all 0.2s ease',
+    position: 'relative',
+  },
+  pendingBadge: {
+    position: 'absolute',
+    top: '-8px',
+    right: '-8px',
+    backgroundColor: '#C4956A',
+    color: 'white',
+    fontSize: '9px',
+    fontWeight: '600',
+    padding: '3px 8px',
+    borderRadius: '10px',
+    textTransform: 'uppercase',
+  },
   controlsRow: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -791,6 +889,14 @@ const styles = {
   },
   filterIcon: {
     fontSize: '14px',
+  },
+  filterCount: {
+    fontSize: '11px',
+    fontWeight: '600',
+    backgroundColor: 'rgba(139, 111, 92, 0.2)',
+    padding: '2px 6px',
+    borderRadius: '10px',
+    marginLeft: '4px',
   },
   meetupsList: {
     display: 'flex',
@@ -851,6 +957,10 @@ const styles = {
   },
   groupCard: {
   },
+  circleCard: {
+  },
+  publicCard: {
+  },
   cardLeft: {
     display: 'flex',
     alignItems: 'flex-start',
@@ -871,6 +981,28 @@ const styles = {
     height: '52px',
     borderRadius: '14px',
     background: 'linear-gradient(135deg, #8B6F5C 0%, #6B4423 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '24px',
+    flexShrink: 0,
+  },
+  circleIcon: {
+    width: '52px',
+    height: '52px',
+    borderRadius: '14px',
+    background: 'linear-gradient(135deg, #5C4033 0%, #3D2B1F 100%)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '24px',
+    flexShrink: 0,
+  },
+  publicIcon: {
+    width: '52px',
+    height: '52px',
+    borderRadius: '14px',
+    background: 'linear-gradient(135deg, #C4956A 0%, #A67B5B 100%)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -899,6 +1031,20 @@ const styles = {
     fontSize: '11px',
     fontWeight: '600',
     color: '#8B6F5C',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
+  cardTypeCircle: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#5C4033',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
+  cardTypePublic: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#A67B5B',
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
   },
@@ -1042,10 +1188,10 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     padding: '10px 20px',
-    backgroundColor: 'rgba(76, 175, 80, 0.1)',
-    border: '1px solid rgba(76, 175, 80, 0.3)',
+    backgroundColor: 'rgba(92, 64, 51, 0.1)',
+    border: '1px solid rgba(92, 64, 51, 0.3)',
     borderRadius: '10px',
-    color: '#2E7D32',
+    color: '#5C4033',
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',

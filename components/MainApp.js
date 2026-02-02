@@ -23,6 +23,8 @@ import AllCirclesView from './AllCirclesView'
 import CreateCircleView from './CreateCircleView'
 import CircleDetailView from './CircleDetailView'
 import MessagesPageView from './MessagesPageView'
+import CoffeeChatsView from './CoffeeChatsView'
+import ScheduleMeetupView from './ScheduleMeetupView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 
 function MainApp({ currentUser, onSignOut }) {
@@ -88,6 +90,15 @@ function MainApp({ currentUser, onSignOut }) {
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
 
+  // Schedule meetup context (for pre-filling)
+  const [scheduleMeetupContext, setScheduleMeetupContext] = useState({
+    type: null,           // 'coffee' or 'circle'
+    circleId: null,
+    circleName: null,
+    connectionId: null,
+    connectionName: null
+  })
+
   // Navigation handler that supports passing extra data like circleId, chatId
   const handleNavigate = useCallback((view, data = {}) => {
     console.log('🧭 handleNavigate called:', view, data)
@@ -99,6 +110,17 @@ function MainApp({ currentUser, onSignOut }) {
       console.log('💬 Setting chatId:', data.chatId, 'type:', data.chatType)
       setSelectedChatId(data.chatId)
       setSelectedChatType(data.chatType || 'user')
+    }
+    // Handle schedule meetup context
+    if (view === 'scheduleMeetup') {
+      console.log('📅 Setting scheduleMeetup context:', data)
+      setScheduleMeetupContext({
+        type: data.meetupType || null,
+        circleId: data.scheduleCircleId || null,
+        circleName: data.scheduleCircleName || null,
+        connectionId: data.scheduleConnectionId || null,
+        connectionName: data.scheduleConnectionName || null
+      })
     }
     setCurrentView(view)
   }, [])
@@ -291,27 +313,59 @@ function MainApp({ currentUser, onSignOut }) {
   const loadMeetupsFromDatabase = useCallback(async () => {
     try {
       setLoadingMeetups(true)
-      // Only load public meetups (not circle-specific ones)
-      // Circle meetups are shown in CircleDetailView
-      const { data, error } = await supabase
-        .from('meetups')
-        .select('*')
-        .is('circle_id', null)
-        .order('date', { ascending: true })
-        .order('time', { ascending: true })
+
+      // Get circles where user is a member
+      const { data: memberCircles, error: circleError } = await supabase
+        .from('connection_group_members')
+        .select('group_id')
+        .eq('user_id', currentUser.id)
+        .eq('status', 'accepted')
+
+      console.log('Member circles:', memberCircles, 'Error:', circleError)
+
+      const memberCircleIds = (memberCircles || []).map(m => m.group_id)
+      console.log('Member circle IDs:', memberCircleIds)
+
+      // Load public meetups AND circle meetups from user's circles
+      let data, error
+
+      if (memberCircleIds.length > 0) {
+        // Get public meetups OR meetups from user's circles
+        const result = await supabase
+          .from('meetups')
+          .select('*, connection_groups(id, name)')
+          .or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
+          .order('date', { ascending: true })
+          .order('time', { ascending: true })
+
+        data = result.data
+        error = result.error
+      } else {
+        // No circle memberships, just get public meetups
+        const result = await supabase
+          .from('meetups')
+          .select('*, connection_groups(id, name)')
+          .is('circle_id', null)
+          .order('date', { ascending: true })
+          .order('time', { ascending: true })
+
+        data = result.data
+        error = result.error
+      }
+
+      console.log('Loaded meetups:', data, 'Error:', error)
 
       if (error) {
         console.error('Error loading meetups:', error)
       } else {
         setMeetups(data || [])
-        // Note: loadSignupsForMeetups will be called separately in useEffect
       }
     } catch (err) {
       console.error('Error:', err)
     } finally {
       setLoadingMeetups(false)
     }
-  }, [supabase])
+  }, [supabase, currentUser.id])
 
 
   const loadSignupsForMeetups = useCallback(async (meetupsList) => {
@@ -2672,6 +2726,20 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'allCircles' && <AllCirclesView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
         {currentView === 'createCircle' && <CreateCircleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'circleDetail' && <CircleDetailView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} circleId={selectedCircleId} />}
+        {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
+        {currentView === 'scheduleMeetup' && (
+          <ScheduleMeetupView
+            currentUser={currentUser}
+            supabase={supabase}
+            connections={connections}
+            onNavigate={handleNavigate}
+            initialType={scheduleMeetupContext.type}
+            initialCircleId={scheduleMeetupContext.circleId}
+            initialCircleName={scheduleMeetupContext.circleName}
+            initialConnectionId={scheduleMeetupContext.connectionId}
+            initialConnectionName={scheduleMeetupContext.connectionName}
+          />
+        )}
       </div>
 
       {/* Chat Modal */}

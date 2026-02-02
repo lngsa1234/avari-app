@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Check, UserPlus } from 'lucide-react';
+import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Check, UserPlus, Plus } from 'lucide-react';
 import {
   getOrCreateCircleMeetups,
   getUserRSVPStatus,
@@ -700,6 +700,19 @@ export default function CircleDetailView({
 
         {isMember && (
           <div style={styles.memberActions}>
+            {circle?.cadence === 'As needed' && circle?.creator_id === currentUser?.id && (
+              <button
+                style={styles.actionButton}
+                onClick={() => onNavigate?.('scheduleMeetup', {
+                  meetupType: 'circle',
+                  scheduleCircleId: circle.id,
+                  scheduleCircleName: circle.name
+                })}
+              >
+                <Plus size={18} />
+                <span>Schedule</span>
+              </button>
+            )}
             <button style={styles.actionButton} onClick={handleEnterChat}>
               <MessageCircle size={18} />
               <span>Chat</span>
