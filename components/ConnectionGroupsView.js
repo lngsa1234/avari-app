@@ -720,7 +720,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     </div>
                     <div style={styles.circleInfo}>
                       <h3 style={styles.circleName}>{group.name}</h3>
-                      <p style={styles.circleDesc}>{theme.desc}</p>
                       <div style={styles.circleMeta}>
                         <span style={styles.memberCount}>
                           👥 {acceptedMembers.length} members
@@ -732,11 +731,31 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                           </span>
                         )}
                       </div>
+                      <div style={styles.circleActivityLine}>
+                        {group.nextMeetup ? (
+                          <>
+                            <span style={styles.activityIcon}>📅</span>
+                            <span style={styles.activityText}>
+                              Next: {new Date(group.nextMeetup.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {group.nextMeetup.time}
+                            </span>
+                          </>
+                        ) : group.lastMessage ? (
+                          <>
+                            <span style={styles.activityIcon}>💬</span>
+                            <span style={styles.activityText}>
+                              {group.lastMessage.sender?.name?.split(' ')[0] || 'Someone'}: {group.lastMessage.message.length > 25 ? group.lastMessage.message.substring(0, 25) + '...' : group.lastMessage.message}
+                            </span>
+                            <span style={styles.activityTime}>{formatTimeAgo(group.lastMessage.created_at)}</span>
+                          </>
+                        ) : (
+                          <span style={styles.noActivityText}>No recent activity</span>
+                        )}
+                      </div>
                     </div>
                     <button
                       style={styles.enterBtn}
                       className="circles-enter-btn"
-                      onClick={() => handleOpenGroupChat(group)}
+                      onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}
                     >
                       Enter
                     </button>
@@ -1747,6 +1766,35 @@ const styles = {
     color: '#8B7355',
     margin: 0,
     marginBottom: '6px',
+  },
+  circleActivityLine: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontSize: '11px',
+    color: '#6B5344',
+    marginTop: '6px',
+    overflow: 'hidden',
+  },
+  activityIcon: {
+    fontSize: '11px',
+    flexShrink: 0,
+  },
+  activityText: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    flex: 1,
+  },
+  activityTime: {
+    fontSize: '10px',
+    color: '#A89080',
+    flexShrink: 0,
+  },
+  noActivityText: {
+    fontSize: '11px',
+    color: '#A89080',
+    fontStyle: 'italic',
   },
   circleMeta: {
     display: 'flex',
