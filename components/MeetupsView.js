@@ -5,7 +5,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Video, Calendar, MapPin, Clock, Users, Plus } from 'lucide-react';
+import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles } from 'lucide-react';
+import PostMeetingSummary from './PostMeetingSummary';
 
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate }) {
   const [activeView, setActiveView] = useState('upcoming');
@@ -18,6 +19,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     coffeeChats: 0,
     circleInvites: 0
   });
+
+  // Recap modal state
+  const [showRecapModal, setShowRecapModal] = useState(false);
+  const [selectedRecap, setSelectedRecap] = useState(null);
+  const [loadingRecap, setLoadingRecap] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -201,75 +207,271 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
   const loadPastMeetups = useCallback(async () => {
     try {
-      // Load all coffee chats for the user
-      const { data, error } = await supabase
-        .from('coffee_chats')
-        .select('*')
-        .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
-        .order('scheduled_time', { ascending: false })
-        .limit(20);
-
-      if (error) {
-        // Silently handle missing table
-        if (error.message.includes('does not exist') || error.code === '42P01') {
-          setPastMeetups([]);
-          return;
-        }
-        console.log('Past meetups error:', error.message);
-        setPastMeetups([]);
-        return;
-      }
-
-      // Filter to only past chats (client-side)
-      // Past = scheduled_time is before now (with 1 hour grace period)
       const now = new Date();
       const gracePeriod = new Date(now.getTime() - 60 * 60 * 1000);
+      const allPastMeetups = [];
 
-      const pastChats = (data || []).filter(chat => {
-        if (!chat.scheduled_time) return false;
-        const chatTime = new Date(chat.scheduled_time);
-        // Include completed status OR chats that are past the grace period
-        return chat.status === 'completed' || chatTime < gracePeriod;
-      });
+      // 1. Load past coffee chats
+      try {
+        const { data: coffeeData } = await supabase
+          .from('coffee_chats')
+          .select('*')
+          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+          .order('scheduled_time', { ascending: false })
+          .limit(20);
 
-      // Get profile info for other participants
-      const otherUserIds = pastChats.map(chat =>
-        chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
-      ).filter(Boolean);
+        const pastChats = (coffeeData || []).filter(chat => {
+          if (!chat.scheduled_time) return false;
+          const chatTime = new Date(chat.scheduled_time);
+          return chat.status === 'completed' || chatTime < gracePeriod;
+        });
 
-      let profiles = [];
-      if (otherUserIds.length > 0) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', otherUserIds);
-        profiles = profileData || [];
+        // Get profile info for coffee chat partners
+        const otherUserIds = pastChats.map(chat =>
+          chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
+        ).filter(Boolean);
+
+        let profiles = [];
+        if (otherUserIds.length > 0) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('id, name, profile_picture, career')
+            .in('id', otherUserIds);
+          profiles = profileData || [];
+        }
+
+        const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+        pastChats.forEach(chat => {
+          const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id;
+          const profile = profileMap.get(otherId);
+          allPastMeetups.push({
+            id: `coffee-${chat.id}`,
+            sourceId: chat.id,
+            type: 'coffee',
+            with: profile?.name || 'Unknown',
+            withProfile: profile,
+            title: `☕ Coffee with ${profile?.name || 'Unknown'}`,
+            emoji: '☕',
+            date: formatDate(chat.scheduled_time || chat.created_at),
+            rawDate: new Date(chat.scheduled_time || chat.created_at),
+            topic: chat.notes || 'Coffee chat',
+            notes: null,
+            followUp: chat.status !== 'completed',
+          });
+        });
+      } catch (e) {
+        console.log('Coffee chats not available:', e.message);
       }
 
-      const profileMap = new Map(profiles.map(p => [p.id, p]));
+      // 2. Load past meetups user attended (both circle and public)
+      try {
+        // Get meetup IDs the user signed up for
+        const { data: signups } = await supabase
+          .from('meetup_signups')
+          .select('meetup_id')
+          .eq('user_id', currentUser.id);
 
-      const pastWithProfiles = pastChats.map(chat => {
-        const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id;
-        const profile = profileMap.get(otherId);
-        return {
-          id: chat.id,
-          type: 'coffee',
-          with: profile?.name || 'Unknown',
-          title: `Coffee with ${profile?.name || 'Unknown'}`,
-          emoji: '☕',
-          date: formatDate(chat.scheduled_time || chat.created_at),
-          topic: chat.notes || 'Coffee chat',
-          notes: null,
-          followUp: chat.status !== 'completed'
-        };
+        const signedUpIds = (signups || []).map(s => s.meetup_id);
+
+        // Also include meetups user created
+        let meetupsQuery = supabase
+          .from('meetups')
+          .select('*, connection_groups(id, name)')
+          .order('date', { ascending: false })
+          .limit(30);
+
+        if (signedUpIds.length > 0) {
+          meetupsQuery = meetupsQuery.or(`id.in.(${signedUpIds.join(',')}),created_by.eq.${currentUser.id}`);
+        } else {
+          meetupsQuery = meetupsQuery.eq('created_by', currentUser.id);
+        }
+
+        const { data: meetupsData } = await meetupsQuery;
+
+        // Filter to past meetups
+        const pastMeetups = (meetupsData || []).filter(meetup => {
+          const meetupDate = new Date(`${meetup.date}T${meetup.time || '00:00'}`);
+          return meetupDate < gracePeriod;
+        });
+
+        pastMeetups.forEach(meetup => {
+          const isCircle = !!meetup.circle_id;
+          const circleName = meetup.connection_groups?.name;
+
+          allPastMeetups.push({
+            id: `meetup-${meetup.id}`,
+            sourceId: meetup.id,
+            type: isCircle ? 'circle' : 'public',
+            with: isCircle ? circleName : null,
+            title: isCircle
+              ? `🔒 ${circleName || 'Circle'} Meetup`
+              : `🎉 ${meetup.topic || 'Event'}`,
+            emoji: isCircle ? '🔒' : '🎉',
+            date: formatDate(meetup.date),
+            rawDate: new Date(`${meetup.date}T${meetup.time || '00:00'}`),
+            topic: meetup.topic || meetup.description || (isCircle ? 'Circle meetup' : 'Public event'),
+            notes: meetup.description,
+            location: meetup.location,
+            followUp: false,
+            circleName: circleName,
+            circleId: meetup.circle_id,
+          });
+        });
+      } catch (e) {
+        console.log('Meetups not available:', e.message);
+      }
+
+      // 3. Fetch call recaps to match with past meetups
+      let recaps = [];
+      try {
+        const { data: recapData } = await supabase
+          .from('call_recaps')
+          .select('*')
+          .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
+          .order('created_at', { ascending: false })
+          .limit(50);
+        recaps = recapData || [];
+      } catch (e) {
+        console.log('Call recaps not available');
+      }
+
+      // Match recaps to meetups and extract topics
+      allPastMeetups.forEach(item => {
+        const matchingRecap = recaps.find(r => {
+          const recapTime = new Date(r.started_at || r.created_at);
+          const timeDiff = Math.abs(item.rawDate - recapTime);
+          // Match if within 4 hours
+          return timeDiff < 4 * 60 * 60 * 1000;
+        });
+
+        if (matchingRecap) {
+          item.hasRecap = true;
+          item.recapId = matchingRecap.id;
+          item.recapData = matchingRecap;
+
+          // Extract topics from AI summary
+          if (matchingRecap.ai_summary?.topicsDiscussed) {
+            item.topicsDiscussed = matchingRecap.ai_summary.topicsDiscussed.slice(0, 3);
+          }
+        }
       });
 
-      setPastMeetups(pastWithProfiles);
+      // 4. Fetch participants for group meetups
+      const meetupIds = allPastMeetups
+        .filter(m => m.type === 'circle' || m.type === 'public')
+        .map(m => m.sourceId);
+
+      if (meetupIds.length > 0) {
+        try {
+          const { data: signupData } = await supabase
+            .from('meetup_signups')
+            .select('meetup_id, user_id, profiles(id, name, profile_picture, career)')
+            .in('meetup_id', meetupIds);
+
+          // Group participants by meetup
+          const participantsByMeetup = {};
+          (signupData || []).forEach(signup => {
+            if (!participantsByMeetup[signup.meetup_id]) {
+              participantsByMeetup[signup.meetup_id] = [];
+            }
+            if (signup.profiles) {
+              participantsByMeetup[signup.meetup_id].push(signup.profiles);
+            }
+          });
+
+          // Attach participants to meetups
+          allPastMeetups.forEach(item => {
+            if (item.type === 'circle' || item.type === 'public') {
+              item.participants = participantsByMeetup[item.sourceId] || [];
+            }
+          });
+        } catch (e) {
+          console.log('Could not fetch participants:', e.message);
+        }
+      }
+
+      // Sort by date descending
+      allPastMeetups.sort((a, b) => b.rawDate - a.rawDate);
+
+      setPastMeetups(allPastMeetups);
     } catch (err) {
       console.error('Error loading past meetups:', err);
       setPastMeetups([]);
     }
   }, [currentUser.id, supabase]);
+
+  // View recap for a past meetup
+  const handleViewRecap = async (item) => {
+    // Generate appropriate summary based on meetup type
+    const getSummaryForType = () => {
+      if (item.type === 'coffee') {
+        return {
+          summary: `You had a coffee chat with ${item.with}. ${item.topic ? `Topic: ${item.topic}` : ''}`,
+          sentiment: { overall: 'Productive', emoji: '☕', highlights: ['Connection made'] },
+          keyTakeaways: [{ emoji: '🤝', text: `Connected with ${item.with}` }],
+          topicsDiscussed: item.topic ? [{ topic: item.topic, mentions: 1 }] : [],
+          memorableQuotes: [],
+          actionItems: [{ text: `Follow up with ${item.with}`, done: false }],
+          suggestedFollowUps: [{ personName: item.with, reason: 'Continue building the relationship', suggestedTopic: 'Catch up and discuss next steps' }]
+        };
+      } else if (item.type === 'circle') {
+        return {
+          summary: `You attended a ${item.circleName || 'circle'} meetup. ${item.topic ? `Topic: ${item.topic}` : ''}`,
+          sentiment: { overall: 'Engaging', emoji: '🔒', highlights: ['Circle connection', 'Group discussion'] },
+          keyTakeaways: [{ emoji: '👥', text: `Participated in ${item.circleName || 'circle'} meetup` }],
+          topicsDiscussed: item.topic ? [{ topic: item.topic, mentions: 1 }] : [],
+          memorableQuotes: [],
+          actionItems: [{ text: `Review notes from ${item.circleName || 'circle'} meetup`, done: false }],
+          suggestedFollowUps: []
+        };
+      } else {
+        // Public event
+        return {
+          summary: `You attended "${item.topic}". ${item.location ? `Location: ${item.location}` : ''}`,
+          sentiment: { overall: 'Inspiring', emoji: '🎉', highlights: ['Networking', 'Learning'] },
+          keyTakeaways: [{ emoji: '✨', text: `Attended ${item.topic}` }],
+          topicsDiscussed: item.topic ? [{ topic: item.topic, mentions: 1 }] : [],
+          memorableQuotes: [],
+          actionItems: [{ text: 'Follow up with people you met', done: false }],
+          suggestedFollowUps: []
+        };
+      }
+    };
+
+    if (item.recapData && item.recapData.ai_summary) {
+      // We have stored AI recap data
+      setSelectedRecap({
+        meeting: {
+          title: item.title,
+          type: item.type,
+          emoji: item.emoji,
+          host: item.type === 'coffee' ? 'You' : (item.circleName || 'Host'),
+          date: item.date,
+          duration: item.recapData.duration_seconds,
+          location: item.location || 'Video Call'
+        },
+        summary: item.recapData.ai_summary,
+        participants: item.withProfile ? [item.withProfile] : []
+      });
+    } else {
+      // Generate a basic recap on the fly
+      setSelectedRecap({
+        meeting: {
+          title: item.title,
+          type: item.type,
+          emoji: item.emoji,
+          host: item.type === 'coffee' ? 'You' : (item.circleName || 'Host'),
+          date: item.date,
+          duration: 0,
+          location: item.location || 'Video Call'
+        },
+        summary: getSummaryForType(),
+        participants: item.withProfile ? [item.withProfile] : []
+      });
+    }
+    setShowRecapModal(true);
+  };
 
   const loadPendingRequests = useCallback(async () => {
     try {
@@ -353,8 +555,20 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     }
   };
 
-  const handleJoinCall = (meetupId) => {
-    window.location.href = `/meeting/${meetupId}`;
+  const handleJoinCall = (meetup) => {
+    // Route based on meetup type
+    if (meetup.isCircleMeetup || meetup.circle_id) {
+      // Circle meetup - use Agora via /call/circle/
+      const channelName = `connection-group-${meetup.circle_id}`;
+      window.location.href = `/call/circle/${channelName}`;
+    } else if (meetup.type === 'coffee' || meetup.type === '1on1') {
+      // Coffee chat - use WebRTC via /call/coffee/
+      window.location.href = `/call/coffee/${meetup.room_id || meetup.id}`;
+    } else {
+      // Regular group meetup - use LiveKit via /call/meetup/
+      const channelName = `meetup-${meetup.id}`;
+      window.location.href = `/call/meetup/${channelName}`;
+    }
   };
 
   const handleScheduleCoffeeChat = () => {
@@ -551,7 +765,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       <span style={styles.locationText}>{item.location || 'Virtual'}</span>
                     </div>
                     <div style={styles.cardActions}>
-                      <button style={styles.actionBtnPrimary} onClick={() => handleJoinCall(item.id)}>
+                      <button style={styles.actionBtnPrimary} onClick={() => handleJoinCall(item)}>
                         <Video size={14} style={{ marginRight: 6 }} />
                         Join
                       </button>
@@ -606,7 +820,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                     </div>
                     <div style={styles.cardActions}>
                       {item.status === 'going' ? (
-                        <button style={styles.actionBtnGoing} onClick={() => handleJoinCall(item.id)}>
+                        <button style={styles.actionBtnGoing} onClick={() => handleJoinCall(item)}>
                           <Video size={14} style={{ marginRight: 6 }} />
                           Join Room
                         </button>
@@ -633,29 +847,119 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             </div>
           ) : (
             pastMeetups.map((item, index) => (
-              <div key={item.id} style={{...styles.pastCard, animationDelay: `${index * 0.1}s`}}>
-                <div style={styles.pastIcon}>
-                  {item.type === 'coffee' ? '☕' : item.emoji}
-                </div>
-                <div style={styles.pastContent}>
-                  <div style={styles.pastHeader}>
-                    <span style={styles.pastType}>
-                      {item.type === 'coffee' ? `Coffee with ${item.with}` : item.title}
-                    </span>
-                    <span style={styles.pastDate}>{item.date}</span>
+              <div key={item.id} style={{...styles.pastCardNew, animationDelay: `${index * 0.1}s`}}>
+                {/* Card Header */}
+                <div style={styles.pastCardHeader}>
+                  <div style={styles.pastCardLeft}>
+                    <div style={{
+                      ...styles.pastIconNew,
+                      background: item.type === 'coffee'
+                        ? 'linear-gradient(135deg, #D4A574 0%, #C4956A 100%)'
+                        : item.type === 'circle'
+                          ? 'linear-gradient(135deg, #5C4033 0%, #3D2B1F 100%)'
+                          : 'linear-gradient(135deg, #C4956A 0%, #A67B5B 100%)'
+                    }}>
+                      {item.emoji}
+                    </div>
+                    <div style={styles.pastCardInfo}>
+                      <span style={styles.pastCardType}>
+                        {item.type === 'coffee' && `Coffee Chat`}
+                        {item.type === 'circle' && `Circle Meetup`}
+                        {item.type === 'public' && `Public Event`}
+                      </span>
+                      <span style={styles.pastCardTitle}>
+                        {item.type === 'coffee' && item.with}
+                        {item.type === 'circle' && (item.circleName || 'Circle')}
+                        {item.type === 'public' && (item.topic || 'Event')}
+                      </span>
+                      <span style={styles.pastCardDate}>{item.date}</span>
+                    </div>
                   </div>
-                  <p style={styles.pastDetail}>{item.topic}</p>
-                  {item.notes && (
-                    <p style={styles.pastNotes}>📝 {item.notes}</p>
-                  )}
+                  <div style={styles.pastCardActions}>
+                    <button
+                      style={styles.viewRecapBtnNew}
+                      onClick={() => handleViewRecap(item)}
+                    >
+                      <Sparkles size={14} />
+                      {item.hasRecap ? 'View Recap' : 'Summary'}
+                    </button>
+                  </div>
                 </div>
-                <div style={styles.pastActions}>
-                  {item.followUp && (
-                    <button style={styles.followUpBtn} onClick={handleScheduleCoffeeChat}>
+
+                {/* Participants Section */}
+                {(item.type === 'coffee' && item.withProfile) && (
+                  <div style={styles.pastSection}>
+                    <span style={styles.pastSectionLabel}>Participant</span>
+                    <div style={styles.participantsList}>
+                      <div style={styles.participantChip}>
+                        {item.withProfile.profile_picture ? (
+                          <img src={item.withProfile.profile_picture} alt="" style={styles.participantAvatar} />
+                        ) : (
+                          <span style={styles.participantAvatarPlaceholder}>👤</span>
+                        )}
+                        <span style={styles.participantName}>{item.withProfile.name}</span>
+                        {item.withProfile.career && (
+                          <span style={styles.participantRole}>{item.withProfile.career}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {((item.type === 'circle' || item.type === 'public') && item.participants?.length > 0) && (
+                  <div style={styles.pastSection}>
+                    <span style={styles.pastSectionLabel}>
+                      {item.participants.length} Participant{item.participants.length > 1 ? 's' : ''}
+                    </span>
+                    <div style={styles.participantsList}>
+                      {item.participants.slice(0, 4).map((p, idx) => (
+                        <div key={p.id || idx} style={styles.participantChip}>
+                          {p.profile_picture ? (
+                            <img src={p.profile_picture} alt="" style={styles.participantAvatar} />
+                          ) : (
+                            <span style={styles.participantAvatarPlaceholder}>👤</span>
+                          )}
+                          <span style={styles.participantName}>{p.name}</span>
+                        </div>
+                      ))}
+                      {item.participants.length > 4 && (
+                        <span style={styles.moreParticipants}>+{item.participants.length - 4} more</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Topics Discussed Section */}
+                {item.topicsDiscussed?.length > 0 && (
+                  <div style={styles.pastSection}>
+                    <span style={styles.pastSectionLabel}>Topics Discussed</span>
+                    <div style={styles.topicsList}>
+                      {item.topicsDiscussed.map((t, idx) => (
+                        <span key={idx} style={styles.topicChip}>
+                          {t.topic}
+                          {t.mentions > 1 && <span style={styles.topicMentions}>{t.mentions}x</span>}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Fallback: Show topic/notes if no AI topics */}
+                {!item.topicsDiscussed?.length && item.topic && item.type !== 'public' && (
+                  <div style={styles.pastSection}>
+                    <span style={styles.pastSectionLabel}>Topic</span>
+                    <p style={styles.pastTopicText}>{item.topic}</p>
+                  </div>
+                )}
+
+                {/* Follow-up action for coffee chats */}
+                {item.followUp && item.type === 'coffee' && (
+                  <div style={styles.pastFooter}>
+                    <button style={styles.followUpBtnNew} onClick={handleScheduleCoffeeChat}>
                       Schedule Follow-up
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ))
           )}
@@ -679,6 +983,28 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       )}
 
       <style>{keyframeStyles}</style>
+
+      {/* Recap Modal */}
+      {showRecapModal && selectedRecap && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <PostMeetingSummary
+              meeting={selectedRecap.meeting}
+              summary={selectedRecap.summary}
+              participants={selectedRecap.participants}
+              currentUserId={currentUser.id}
+              onClose={() => {
+                setShowRecapModal(false);
+                setSelectedRecap(null);
+              }}
+              onScheduleFollowUp={(followUp) => {
+                setShowRecapModal(false);
+                handleScheduleCoffeeChat();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1200,7 +1526,7 @@ const styles = {
   pastList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '16px',
     marginBottom: '32px',
   },
   pastCard: {
@@ -1258,7 +1584,26 @@ const styles = {
     fontStyle: 'italic',
     margin: '6px 0 0 0',
   },
-  pastActions: {},
+  pastActions: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
+  },
+  viewRecapBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 14px',
+    backgroundColor: '#8B6F5C',
+    border: 'none',
+    borderRadius: '100px',
+    color: 'white',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+    transition: 'background-color 0.2s',
+  },
   followUpBtn: {
     padding: '8px 16px',
     backgroundColor: 'rgba(139, 111, 92, 0.1)',
@@ -1269,6 +1614,209 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     fontFamily: '"DM Sans", sans-serif',
+  },
+  // New past card styles
+  pastCardNew: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    padding: '20px',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderRadius: '20px',
+    boxShadow: '0 4px 20px rgba(139, 111, 92, 0.08)',
+    border: '1px solid rgba(139, 111, 92, 0.08)',
+    animation: 'fadeInUp 0.5s ease-out forwards',
+    opacity: 0,
+  },
+  pastCardHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: '16px',
+    flexWrap: 'wrap',
+  },
+  pastCardLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    flex: 1,
+    minWidth: '200px',
+  },
+  pastIconNew: {
+    width: '48px',
+    height: '48px',
+    borderRadius: '14px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '22px',
+    flexShrink: 0,
+  },
+  pastCardInfo: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  pastCardType: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#8B7355',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+  },
+  pastCardTitle: {
+    fontFamily: '"Playfair Display", serif',
+    fontSize: '17px',
+    fontWeight: '600',
+    color: '#3D2B1F',
+  },
+  pastCardDate: {
+    fontSize: '13px',
+    color: '#8B7355',
+  },
+  pastCardActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
+  viewRecapBtnNew: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '10px 16px',
+    backgroundColor: '#8B6F5C',
+    border: 'none',
+    borderRadius: '100px',
+    color: 'white',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 8px rgba(139, 111, 92, 0.2)',
+  },
+  pastSection: {
+    paddingTop: '10px',
+    borderTop: '1px solid rgba(139, 111, 92, 0.08)',
+  },
+  pastSectionLabel: {
+    display: 'block',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#8B7355',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    marginBottom: '10px',
+  },
+  participantsList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  participantChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '6px 12px 6px 6px',
+    backgroundColor: 'rgba(139, 111, 92, 0.08)',
+    borderRadius: '100px',
+  },
+  participantAvatar: {
+    width: '26px',
+    height: '26px',
+    borderRadius: '50%',
+    objectFit: 'cover',
+  },
+  participantAvatarPlaceholder: {
+    width: '26px',
+    height: '26px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(139, 111, 92, 0.15)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '14px',
+  },
+  participantName: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#3D2B1F',
+  },
+  participantRole: {
+    fontSize: '11px',
+    color: '#8B7355',
+    marginLeft: '4px',
+  },
+  moreParticipants: {
+    fontSize: '12px',
+    color: '#8B7355',
+    fontStyle: 'italic',
+  },
+  topicsList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  topicChip: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '6px 12px',
+    backgroundColor: 'rgba(196, 149, 106, 0.15)',
+    borderRadius: '100px',
+    fontSize: '13px',
+    color: '#5C4033',
+    fontWeight: '500',
+  },
+  topicMentions: {
+    fontSize: '10px',
+    color: '#8B7355',
+    backgroundColor: 'rgba(139, 111, 92, 0.15)',
+    padding: '2px 6px',
+    borderRadius: '10px',
+  },
+  pastTopicText: {
+    fontSize: '14px',
+    color: '#5C4033',
+    margin: 0,
+    lineHeight: '1.5',
+  },
+  pastFooter: {
+    paddingTop: '10px',
+    borderTop: '1px solid rgba(139, 111, 92, 0.08)',
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+  followUpBtnNew: {
+    padding: '10px 18px',
+    backgroundColor: 'rgba(139, 111, 92, 0.1)',
+    border: '1px solid rgba(139, 111, 92, 0.2)',
+    borderRadius: '100px',
+    color: '#5C4033',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+    transition: 'all 0.2s ease',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    padding: '20px',
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: '700px',
+    maxHeight: '90vh',
+    overflow: 'auto',
+    borderRadius: '24px',
+    backgroundColor: '#F5F0EB',
   },
   suggestedSection: {
     padding: '24px',

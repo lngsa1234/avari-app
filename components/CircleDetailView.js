@@ -298,7 +298,7 @@ export default function CircleDetailView({
   const handleStartCall = async () => {
     try {
       const channelName = `connection-group-${circleId}`;
-      window.location.href = `/connection-group-call/${channelName}`;
+      window.location.href = `/call/circle/${channelName}`;
     } catch (error) {
       alert('Could not start video call: ' + error.message);
     }

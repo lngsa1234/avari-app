@@ -398,7 +398,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       }
 
       const { channelName } = await createConnectionGroupRoom(groupId);
-      window.location.href = `/connection-group-call/${channelName}`;
+      window.location.href = `/call/circle/${channelName}`;
     } catch (error) {
       alert('Could not join video call: ' + error.message);
     }

@@ -2,7 +2,7 @@
 
 import { supabase } from '@/lib/supabase'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search } from 'lucide-react'
+import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search, Sparkles } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import MeetupsView from './MeetupsView'
@@ -1470,14 +1470,25 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }
 
-  const handleJoinVideoCall = async (meetupId) => {
+  const handleJoinVideoCall = async (meetup) => {
     try {
-      console.log('📹 Creating/joining video call for meetup:', meetupId);
+      const meetupId = typeof meetup === 'object' ? meetup.id : meetup;
+      const circleId = typeof meetup === 'object' ? meetup.circle_id : null;
 
-      // Check Agora App ID is configured
+      console.log('📹 Creating/joining video call for meetup:', meetupId, 'circleId:', circleId);
+
+      // If this is a circle meetup, route to circle call (Agora)
+      if (circleId) {
+        const channelName = `connection-group-${circleId}`;
+        window.location.href = `/call/circle/${channelName}`;
+        return;
+      }
+
+      // Regular meetup - use LiveKit via /call/meetup/
+      // Check Agora App ID is configured (for room creation)
       const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
       if (!appId) {
-        alert('❌ Agora not configured\n\nPlease add NEXT_PUBLIC_AGORA_APP_ID to your .env.local file and restart the server.\n\nSee AGORA_SETUP.md for instructions.');
+        alert('❌ Video not configured\n\nPlease add NEXT_PUBLIC_AGORA_APP_ID to your .env.local file and restart the server.\n\nSee AGORA_SETUP.md for instructions.');
         return;
       }
 
@@ -1485,8 +1496,8 @@ function MainApp({ currentUser, onSignOut }) {
       const exists = await hasAgoraRoom(meetupId);
 
       if (!exists) {
-        // Create new Agora room
-        console.log('🎥 Creating new Agora room...');
+        // Create new room
+        console.log('🎥 Creating new video room...');
         const { channelName, link } = await createAgoraRoom(meetupId);
         console.log('✅ Video room created:', link);
       } else {
@@ -1495,7 +1506,7 @@ function MainApp({ currentUser, onSignOut }) {
 
       // Navigate to the video call
       const channelName = `meetup-${meetupId}`;
-      window.location.href = `/group-meeting/${channelName}`;
+      window.location.href = `/call/meetup/${channelName}`;
     } catch (error) {
       console.error('❌ Error joining video call:', error);
 
@@ -1722,7 +1733,7 @@ function MainApp({ currentUser, onSignOut }) {
             </p>
 
             <button
-              onClick={() => handleJoinVideoCall(nextMeeting.id)}
+              onClick={() => handleJoinVideoCall(nextMeeting)}
               style={{
                 width: '100%',
                 padding: '14px',
@@ -1851,6 +1862,42 @@ function MainApp({ currentUser, onSignOut }) {
               <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Follow-up</p>
             </button>
           </div>
+
+          {/* AI Insights Button */}
+          <button
+            onClick={() => window.location.href = '/ai-insights'}
+            style={{
+              marginTop: '12px',
+              width: '100%',
+              padding: '14px 20px',
+              background: 'linear-gradient(135deg, #E6DCD4 0%, #D4C8BC 100%)',
+              borderRadius: '16px',
+              border: '1px solid rgba(139, 111, 92, 0.2)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                background: 'linear-gradient(135deg, #8B6F5C 0%, #6B5344 100%)',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <Sparkles style={{ width: '20px', height: '20px', color: 'white' }} />
+              </div>
+              <div style={{ textAlign: 'left' }}>
+                <p style={{ fontWeight: '600', color: '#5C4033', margin: 0, fontSize: '15px' }}>AI Insights</p>
+                <p style={{ fontSize: '12px', color: '#8B7355', margin: 0 }}>View your personalized recap</p>
+              </div>
+            </div>
+            <div style={{ color: '#8B6F5C', fontSize: '18px' }}>→</div>
+          </button>
         </div>
 
         {/* Connection Requests Section */}
@@ -2017,7 +2064,7 @@ function MainApp({ currentUser, onSignOut }) {
                           Signed up
                         </span>
                         <button
-                          onClick={() => handleJoinVideoCall(meetup.id)}
+                          onClick={() => handleJoinVideoCall(meetup)}
                           style={{ backgroundColor: 'transparent', border: 'none', color: '#8B6F5C', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
                         >
                           Join →

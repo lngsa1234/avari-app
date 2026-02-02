@@ -4,16 +4,20 @@ import { NextResponse } from 'next/server';
  * Generate AI summary for call recap
  *
  * POST /api/generate-recap-summary
- * Body: { transcript, messages, participants, duration }
+ * Body: { transcript, messages, participants, duration, meetingTitle, meetingType }
  *
- * Returns structured recap:
+ * Returns structured recap matching UX design:
  * - summary: Brief overview of the call
- * - topicsDiscussed: Array of topics discussed
- * - keyTakeaways: Array of key insights/takeaways
+ * - sentiment: { overall, emoji, highlights }
+ * - keyTakeaways: [{ emoji, text }]
+ * - topicsDiscussed: [{ topic, mentions }]
+ * - memorableQuotes: [{ quote, author }]
+ * - actionItems: [{ text, done }]
+ * - suggestedFollowUps: [{ personName, reason, suggestedTopic }]
  */
 export async function POST(request) {
   try {
-    const { transcript, messages, participants, duration } = await request.json();
+    const { transcript, messages, participants, duration, meetingTitle, meetingType } = await request.json();
 
     // Check if we have content to summarize
     if ((!transcript || transcript.length === 0) && (!messages || messages.length === 0)) {
@@ -25,6 +29,7 @@ export async function POST(request) {
 
     // Helper to get display name
     const getDisplayName = (p) => {
+      if (typeof p === 'string') return p;
       if (p.name && p.name !== 'Unknown' && !p.name.includes('-')) {
         return p.name;
       }
@@ -38,9 +43,9 @@ export async function POST(request) {
     // Build context for summary
     const participantNames = participants
       ?.map(p => getDisplayName(p))
-      .filter(Boolean)
-      .join(', ') || 'the participants';
+      .filter(Boolean) || [];
 
+    const participantList = participantNames.join(', ') || 'the participants';
     const durationMinutes = Math.floor((duration || 0) / 60);
 
     // Prepare content for summarization
@@ -62,21 +67,14 @@ export async function POST(request) {
     const openaiKey = process.env.OPENAI_API_KEY;
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
-    let result = {
-      summary: '',
-      topicsDiscussed: [],
-      keyTakeaways: []
-    };
+    let result = generateSimpleSummary(transcript, messages, participantNames, durationMinutes, meetingTitle);
 
     if (openaiKey) {
       // Use OpenAI
-      result = await generateWithOpenAI(openaiKey, contentToSummarize, participantNames, durationMinutes);
+      result = await generateWithOpenAI(openaiKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
     } else if (anthropicKey) {
       // Use Anthropic Claude
-      result = await generateWithAnthropic(anthropicKey, contentToSummarize, participantNames, durationMinutes);
-    } else {
-      // Generate simple summary without AI
-      result = generateSimpleSummary(transcript, messages, participantNames, durationMinutes);
+      result = await generateWithAnthropic(anthropicKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
     }
 
     return NextResponse.json(result);
@@ -89,10 +87,49 @@ export async function POST(request) {
   }
 }
 
+const ENHANCED_SYSTEM_PROMPT = `You are a helpful assistant that analyzes video call conversations and generates comprehensive meeting summaries. Return a JSON object with the following structure:
+
+{
+  "summary": "A brief 2-3 sentence overview of the call highlighting the main purpose and outcome",
+  "sentiment": {
+    "overall": "A 2-3 word description of the meeting vibe (e.g., 'Energizing & Inspiring', 'Productive & Focused', 'Warm & Supportive')",
+    "emoji": "A single emoji that represents the vibe",
+    "highlights": ["3 short highlight tags like 'Great energy', 'Actionable advice', 'Deep connection'"]
+  },
+  "keyTakeaways": [
+    { "emoji": "💡", "text": "Key insight or learning from the conversation" },
+    { "emoji": "🎯", "text": "Another important takeaway" }
+  ],
+  "topicsDiscussed": [
+    { "topic": "Topic name", "mentions": 5 },
+    { "topic": "Another topic", "mentions": 3 }
+  ],
+  "memorableQuotes": [
+    { "quote": "An impactful or memorable statement from the conversation", "author": "Speaker Name" }
+  ],
+  "actionItems": [
+    { "text": "Specific action item or follow-up task mentioned", "done": false }
+  ],
+  "suggestedFollowUps": [
+    { "personName": "Name", "reason": "Why you should follow up", "suggestedTopic": "What to discuss" }
+  ]
+}
+
+Guidelines:
+- summary: 2-3 sentences, professional but warm tone
+- sentiment: Capture the emotional tone and energy of the meeting
+- keyTakeaways: 3-5 items, each with a relevant emoji (💡🎯⚡🤝💪🌟✨🔥)
+- topicsDiscussed: 3-6 main topics with estimated mention frequency
+- memorableQuotes: 1-3 impactful quotes if present (skip if none stand out)
+- actionItems: 2-5 concrete next steps or tasks mentioned
+- suggestedFollowUps: 1-3 suggested follow-up conversations based on shared interests
+
+Return ONLY valid JSON, no additional text or markdown.`;
+
 /**
  * Generate structured summary using OpenAI
  */
-async function generateWithOpenAI(apiKey, content, participants, duration) {
+async function generateWithOpenAI(apiKey, content, participants, duration, meetingTitle, meetingType) {
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -101,30 +138,18 @@ async function generateWithOpenAI(apiKey, content, participants, duration) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
-            content: `You are a helpful assistant that analyzes video call conversations. Return a JSON object with the following structure:
-{
-  "summary": "A brief 1-2 sentence overview of the call",
-  "topicsDiscussed": ["topic 1", "topic 2", ...],
-  "keyTakeaways": ["takeaway 1", "takeaway 2", ...]
-}
-
-Guidelines:
-- summary: Brief, professional overview (1-2 sentences)
-- topicsDiscussed: 2-5 main topics or themes discussed (short phrases)
-- keyTakeaways: 2-4 key insights, action items, or memorable moments from the call
-
-Return ONLY valid JSON, no additional text.`
+            content: ENHANCED_SYSTEM_PROMPT
           },
           {
             role: 'user',
-            content: `Analyze this ${duration} minute call with ${participants}:\n\n${content}`
+            content: `Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}:\n\n${content}`
           }
         ],
-        max_tokens: 500,
+        max_tokens: 1500,
         temperature: 0.7
       })
     });
@@ -134,33 +159,31 @@ Return ONLY valid JSON, no additional text.`
       const responseText = data.choices[0]?.message?.content;
 
       try {
-        const parsed = JSON.parse(responseText);
-        return {
-          summary: parsed.summary || '',
-          topicsDiscussed: Array.isArray(parsed.topicsDiscussed) ? parsed.topicsDiscussed : [],
-          keyTakeaways: Array.isArray(parsed.keyTakeaways) ? parsed.keyTakeaways : []
-        };
+        // Try to extract JSON from the response (handle markdown code blocks)
+        let jsonStr = responseText;
+        const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1].trim();
+        }
+
+        const parsed = JSON.parse(jsonStr);
+        return normalizeResponse(parsed, participants, duration, meetingTitle);
       } catch (parseError) {
         console.error('Failed to parse OpenAI JSON response:', parseError);
-        // Fall back to using the response as summary
-        return {
-          summary: responseText || '',
-          topicsDiscussed: [],
-          keyTakeaways: []
-        };
+        return generateSimpleSummary(null, null, participants, duration, meetingTitle);
       }
     }
   } catch (e) {
     console.error('OpenAI error:', e);
   }
 
-  return generateSimpleSummary(null, null, participants, duration);
+  return generateSimpleSummary(null, null, participants, duration, meetingTitle);
 }
 
 /**
  * Generate structured summary using Anthropic Claude
  */
-async function generateWithAnthropic(apiKey, content, participants, duration) {
+async function generateWithAnthropic(apiKey, content, participants, duration, meetingTitle, meetingType) {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -171,25 +194,14 @@ async function generateWithAnthropic(apiKey, content, participants, duration) {
       },
       body: JSON.stringify({
         model: 'claude-3-haiku-20240307',
-        max_tokens: 500,
+        max_tokens: 1500,
         messages: [
           {
             role: 'user',
-            content: `Analyze this ${duration} minute video call with ${participants}. Return a JSON object with the following structure:
-{
-  "summary": "A brief 1-2 sentence overview of the call",
-  "topicsDiscussed": ["topic 1", "topic 2", ...],
-  "keyTakeaways": ["takeaway 1", "takeaway 2", ...]
-}
+            content: `${ENHANCED_SYSTEM_PROMPT}
 
-Guidelines:
-- summary: Brief, professional overview (1-2 sentences)
-- topicsDiscussed: 2-5 main topics or themes discussed (short phrases)
-- keyTakeaways: 2-4 key insights, action items, or memorable moments from the call
+Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}:
 
-Return ONLY valid JSON, no additional text.
-
-Call content:
 ${content}`
           }
         ]
@@ -201,134 +213,176 @@ ${content}`
       const responseText = data.content[0]?.text;
 
       try {
-        const parsed = JSON.parse(responseText);
-        return {
-          summary: parsed.summary || '',
-          topicsDiscussed: Array.isArray(parsed.topicsDiscussed) ? parsed.topicsDiscussed : [],
-          keyTakeaways: Array.isArray(parsed.keyTakeaways) ? parsed.keyTakeaways : []
-        };
+        // Try to extract JSON from the response (handle markdown code blocks)
+        let jsonStr = responseText;
+        const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (jsonMatch) {
+          jsonStr = jsonMatch[1].trim();
+        }
+
+        const parsed = JSON.parse(jsonStr);
+        return normalizeResponse(parsed, participants, duration, meetingTitle);
       } catch (parseError) {
         console.error('Failed to parse Anthropic JSON response:', parseError);
-        // Fall back to using the response as summary
-        return {
-          summary: responseText || '',
-          topicsDiscussed: [],
-          keyTakeaways: []
-        };
+        return generateSimpleSummary(null, null, participants, duration, meetingTitle);
       }
     }
   } catch (e) {
     console.error('Anthropic error:', e);
   }
 
-  return generateSimpleSummary(null, null, participants, duration);
+  return generateSimpleSummary(null, null, participants, duration, meetingTitle);
+}
+
+/**
+ * Normalize and validate the AI response
+ */
+function normalizeResponse(parsed, participants, duration, meetingTitle) {
+  return {
+    summary: parsed.summary || `A ${duration} minute meeting${meetingTitle ? ` about ${meetingTitle}` : ''}.`,
+    sentiment: {
+      overall: parsed.sentiment?.overall || 'Productive & Engaging',
+      emoji: parsed.sentiment?.emoji || '✨',
+      highlights: Array.isArray(parsed.sentiment?.highlights) ? parsed.sentiment.highlights : ['Good conversation']
+    },
+    keyTakeaways: Array.isArray(parsed.keyTakeaways)
+      ? parsed.keyTakeaways.map(t => ({
+          emoji: t.emoji || '💡',
+          text: typeof t === 'string' ? t : (t.text || '')
+        }))
+      : [{ emoji: '💡', text: 'Connection made' }],
+    topicsDiscussed: Array.isArray(parsed.topicsDiscussed)
+      ? parsed.topicsDiscussed.map(t => ({
+          topic: typeof t === 'string' ? t : (t.topic || ''),
+          mentions: t.mentions || 1
+        }))
+      : [{ topic: 'General conversation', mentions: 1 }],
+    memorableQuotes: Array.isArray(parsed.memorableQuotes) ? parsed.memorableQuotes : [],
+    actionItems: Array.isArray(parsed.actionItems)
+      ? parsed.actionItems.map(a => ({
+          text: typeof a === 'string' ? a : (a.text || ''),
+          done: a.done || false
+        }))
+      : [],
+    suggestedFollowUps: Array.isArray(parsed.suggestedFollowUps)
+      ? parsed.suggestedFollowUps.map(f => ({
+          personName: f.personName || f.person?.name || '',
+          reason: f.reason || '',
+          suggestedTopic: f.suggestedTopic || ''
+        }))
+      : participants.slice(0, 2).map(p => ({
+          personName: typeof p === 'string' ? p : (p.name || ''),
+          reason: 'Continue the conversation',
+          suggestedTopic: 'Follow up on discussion'
+        }))
+  };
 }
 
 /**
  * Generate a simple structured summary without AI
  */
-function generateSimpleSummary(transcript, messages, participants, duration) {
+function generateSimpleSummary(transcript, messages, participants, duration, meetingTitle) {
   const transcriptCount = transcript?.length || 0;
   const messageCount = messages?.length || 0;
+  const participantList = Array.isArray(participants) ? participants : [];
 
-  // Build a more engaging summary
+  // Build summary
   let summary = '';
-  const topicsDiscussed = [];
-  const keyTakeaways = [];
-
   if (duration > 0) {
     summary = `You had a ${duration} minute video call`;
-    if (participants && participants !== 'the participants') {
-      summary += ` with ${participants}`;
+    if (participantList.length > 0) {
+      summary += ` with ${participantList.join(', ')}`;
     }
     summary += '.';
   } else {
-    summary = participants && participants !== 'the participants'
-      ? `You connected with ${participants}.`
+    summary = participantList.length > 0
+      ? `You connected with ${participantList.join(', ')}.`
       : 'A video call session.';
   }
 
-  if (transcriptCount > 0) {
-    // Extract unique speakers
-    const speakers = [...new Set(transcript.map(t => t.speakerName).filter(Boolean))];
-    if (speakers.length > 0) {
-      summary += ` The conversation included ${speakers.length} active speaker${speakers.length > 1 ? 's' : ''}.`;
-      keyTakeaways.push(`Active conversation with ${speakers.length} participant${speakers.length > 1 ? 's' : ''}`);
-    }
+  // Detect topics and sentiment from content
+  const topicsDiscussed = [];
+  const keyTakeaways = [];
+  const actionItems = [];
+  let sentiment = { overall: 'Productive', emoji: '✨', highlights: ['Connection made'] };
 
-    // Try to identify topics from keywords
-    const allText = transcript.map(t => t.text).join(' ').toLowerCase();
+  const allText = transcript?.map(t => t.text).join(' ').toLowerCase() ||
+                  messages?.map(m => m.message || m.text || '').join(' ').toLowerCase() || '';
 
-    // Topic detection with more categories
-    if (allText.includes('project') || allText.includes('work') || allText.includes('team')) {
-      topicsDiscussed.push('Work & Projects');
-    }
-    if (allText.includes('idea') || allText.includes('think') || allText.includes('suggest') || allText.includes('plan')) {
-      topicsDiscussed.push('Ideas & Planning');
-    }
-    if (allText.includes('question') || allText.includes('help') || allText.includes('how') || allText.includes('what')) {
-      topicsDiscussed.push('Q&A Discussion');
-    }
-    if (allText.includes('coffee') || allText.includes('meet') || allText.includes('connect') || allText.includes('network')) {
-      topicsDiscussed.push('Networking');
-    }
-    if (allText.includes('learn') || allText.includes('study') || allText.includes('course') || allText.includes('skill')) {
-      topicsDiscussed.push('Learning & Growth');
-    }
-    if (allText.includes('business') || allText.includes('startup') || allText.includes('company') || allText.includes('entrepreneur')) {
-      topicsDiscussed.push('Business & Startups');
-    }
-    if (allText.includes('tech') || allText.includes('software') || allText.includes('code') || allText.includes('developer')) {
-      topicsDiscussed.push('Technology');
-    }
-    if (allText.includes('career') || allText.includes('job') || allText.includes('hire') || allText.includes('interview')) {
-      topicsDiscussed.push('Career Development');
-    }
+  // Topic detection
+  const topicKeywords = {
+    'Career & Growth': ['career', 'job', 'growth', 'promotion', 'skill', 'learn'],
+    'Networking': ['connect', 'network', 'meet', 'coffee', 'intro'],
+    'Business & Strategy': ['business', 'startup', 'company', 'strategy', 'market'],
+    'Technology': ['tech', 'software', 'code', 'developer', 'app'],
+    'Work & Projects': ['project', 'work', 'team', 'deadline', 'task'],
+    'Personal Development': ['mindset', 'habit', 'goal', 'balance', 'wellness']
+  };
 
-    // Generate key takeaways from content
-    if (allText.includes('thanks') || allText.includes('thank') || allText.includes('appreciate')) {
-      keyTakeaways.push('Mutual appreciation shared');
-    }
-    if (allText.includes('follow up') || allText.includes('next time') || allText.includes('schedule')) {
-      keyTakeaways.push('Follow-up planned');
-    }
-    if (allText.includes('great') || allText.includes('awesome') || allText.includes('love')) {
-      keyTakeaways.push('Positive interaction');
-    }
-    if (allText.includes('share') || allText.includes('send') || allText.includes('link')) {
-      keyTakeaways.push('Resources shared');
-    }
-  } else if (messageCount > 0) {
-    summary += ` You exchanged ${messageCount} chat message${messageCount > 1 ? 's' : ''} during the call.`;
-
-    // Try to extract topics from messages
-    const allMessages = messages?.map(m => m.message || m.text || '').join(' ').toLowerCase() || '';
-
-    if (allMessages.includes('nice') || allMessages.includes('great') || allMessages.includes('good')) {
-      topicsDiscussed.push('General conversation');
-      keyTakeaways.push('Positive exchange');
-    }
-    if (allMessages.includes('help') || allMessages.includes('question')) {
-      topicsDiscussed.push('Helpful discussion');
-    }
-    if (allMessages.includes('thanks') || allMessages.includes('thank')) {
-      keyTakeaways.push('Gratitude expressed');
+  for (const [topic, keywords] of Object.entries(topicKeywords)) {
+    const mentions = keywords.filter(k => allText.includes(k)).length;
+    if (mentions > 0) {
+      topicsDiscussed.push({ topic, mentions: mentions * 2 });
     }
   }
 
-  // Ensure we have at least one topic if we had a conversation
-  if (topicsDiscussed.length === 0 && (transcriptCount > 0 || messageCount > 0)) {
-    topicsDiscussed.push('General conversation');
+  if (topicsDiscussed.length === 0) {
+    topicsDiscussed.push({ topic: 'General conversation', mentions: 1 });
   }
 
-  // Add a general takeaway if none detected
-  if (keyTakeaways.length === 0 && (transcriptCount > 0 || messageCount > 0)) {
-    keyTakeaways.push('Connection made');
+  // Sort by mentions
+  topicsDiscussed.sort((a, b) => b.mentions - a.mentions);
+
+  // Sentiment detection
+  const positiveWords = ['great', 'awesome', 'love', 'amazing', 'excited', 'happy', 'wonderful'];
+  const actionWords = ['thanks', 'follow up', 'schedule', 'send', 'share', 'help'];
+
+  const positiveCount = positiveWords.filter(w => allText.includes(w)).length;
+  if (positiveCount >= 3) {
+    sentiment = { overall: 'Energizing & Inspiring', emoji: '🔥', highlights: ['Great energy', 'Positive vibes', 'Authentic connection'] };
+  } else if (positiveCount >= 1) {
+    sentiment = { overall: 'Warm & Supportive', emoji: '🤝', highlights: ['Good conversation', 'Mutual support'] };
   }
+
+  // Key takeaways
+  if (allText.includes('learn') || allText.includes('insight')) {
+    keyTakeaways.push({ emoji: '💡', text: 'New insights shared' });
+  }
+  if (allText.includes('connect') || allText.includes('network')) {
+    keyTakeaways.push({ emoji: '🤝', text: 'Valuable networking opportunity' });
+  }
+  if (allText.includes('help') || allText.includes('support')) {
+    keyTakeaways.push({ emoji: '💪', text: 'Mutual support offered' });
+  }
+  if (keyTakeaways.length === 0) {
+    keyTakeaways.push({ emoji: '✨', text: 'Meaningful connection made' });
+  }
+
+  // Action items
+  if (allText.includes('follow up') || allText.includes('next time')) {
+    actionItems.push({ text: 'Schedule a follow-up conversation', done: false });
+  }
+  if (allText.includes('send') || allText.includes('share')) {
+    actionItems.push({ text: 'Share resources discussed', done: false });
+  }
+  if (allText.includes('connect') && allText.includes('linkedin')) {
+    actionItems.push({ text: 'Connect on LinkedIn', done: false });
+  }
+
+  // Suggested follow-ups
+  const suggestedFollowUps = participantList.slice(0, 2).map(name => ({
+    personName: name,
+    reason: 'Continue building the connection',
+    suggestedTopic: topicsDiscussed[0]?.topic || 'Catch up'
+  }));
 
   return {
     summary,
-    topicsDiscussed,
-    keyTakeaways
+    sentiment,
+    keyTakeaways,
+    topicsDiscussed: topicsDiscussed.slice(0, 5),
+    memorableQuotes: [],
+    actionItems,
+    suggestedFollowUps
   };
 }
