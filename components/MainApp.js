@@ -26,6 +26,8 @@ import MessagesPageView from './MessagesPageView'
 import CoffeeChatsView from './CoffeeChatsView'
 import ScheduleMeetupView from './ScheduleMeetupView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
+import NudgeBanner from './NudgeBanner'
+import EventRecommendations from './EventRecommendations'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -1708,6 +1710,9 @@ function MainApp({ currentUser, onSignOut }) {
           </div>
         </section>
 
+        {/* AI Agent: Personalized Nudge */}
+        <NudgeBanner className="mb-5" />
+
         {/* Hero "Next Step" Card - Only shows if meeting within 60 min */}
         {nextMeeting && (
           <div style={{
@@ -2093,6 +2098,13 @@ function MainApp({ currentUser, onSignOut }) {
             </div>
           )}
         </div>
+
+        {/* AI Agent: Event Recommendations */}
+        <EventRecommendations
+          className="mb-5"
+          maxItems={3}
+          showRefresh={false}
+        />
 
         {/* Pending Recaps Checklist */}
         {pendingRecaps.length > 0 && (
