@@ -1,34 +1,66 @@
 'use client';
 
 /**
- * Live Transcript Overlay
- * Displays recent transcript entries over the video
+ * Live Transcript Overlay (Closed Captions Style)
+ * Displays recent transcript entries at the bottom of the video area
  */
 export default function TranscriptOverlay({
   transcript = [],
   isTranscribing = false,
-  maxEntries = 3,
+  interimText = '',
+  speakerName = 'You',
+  maxEntries = 2,
 }) {
-  // Only show if transcribing and has entries
-  if (!isTranscribing || transcript.length === 0) {
+  // Only show if transcribing and has entries or interim text
+  if (!isTranscribing || (transcript.length === 0 && !interimText)) {
     return null;
   }
 
   const recentEntries = transcript.slice(-maxEntries);
 
   return (
-    <div className="absolute bottom-24 left-4 right-4 pointer-events-none z-30">
-      <div className="bg-stone-900 bg-opacity-80 rounded-lg p-3 max-h-24 overflow-hidden border border-stone-700">
-        <div className="space-y-1">
-          {recentEntries.map((entry, idx) => (
-            <p key={idx} className="text-white text-sm">
-              <span className="text-amber-400 font-medium">
-                {entry.speakerName}:{' '}
-              </span>
+    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-[95%] max-w-2xl pointer-events-none z-40">
+      <div className="flex flex-col items-center gap-1">
+        {recentEntries.map((entry, idx) => (
+          <div
+            key={idx}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-center animate-fade-in"
+            style={{
+              background: 'rgba(0, 0, 0, 0.75)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <span
+              className="text-xs font-semibold flex-shrink-0"
+              style={{ color: '#D4A574' }}
+            >
+              {entry.speakerName}:
+            </span>
+            <span className="text-white text-sm font-medium">
               {entry.text}
-            </p>
-          ))}
-        </div>
+            </span>
+          </div>
+        ))}
+        {/* Show interim text while speaking */}
+        {interimText && (
+          <div
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-center animate-fade-in"
+            style={{
+              background: 'rgba(0, 0, 0, 0.6)',
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <span
+              className="text-xs font-semibold flex-shrink-0 animate-pulse"
+              style={{ color: '#6BBF6A' }}
+            >
+              {speakerName}:
+            </span>
+            <span className="text-white/80 text-sm font-medium italic">
+              {interimText}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

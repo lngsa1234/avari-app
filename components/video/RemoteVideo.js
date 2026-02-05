@@ -1,6 +1,9 @@
 'use client';
 
 import { memo, useRef, useEffect, useState } from 'react';
+import { VIDEO_SIZE_CLASSES, LABEL_SIZE_CLASSES } from '@/lib/video/videoConstants';
+import { attachTrack, detachTrack } from '@/lib/video/trackManager';
+import VideoAvatar from './VideoAvatar';
 
 /**
  * Unified Remote Video Player
@@ -133,30 +136,14 @@ const RemoteVideo = memo(function RemoteVideo({
 
   // Get display name
   const displayName = participant.name || participant.identity || `User ${participant.uid || participant.id}`;
-  const initial = displayName.charAt(0).toUpperCase();
 
-  // Size-based classes
-  const sizeClasses = {
-    full: 'w-full h-full',
-    grid: 'w-full h-full min-h-0',
-    thumbnail: 'w-48 h-36 flex-shrink-0',
-  };
-
-  const avatarSizes = {
-    full: 'w-32 h-32 text-5xl',
-    grid: 'w-20 h-20 text-2xl',
-    thumbnail: 'w-10 h-10 text-sm',
-  };
-
-  const labelSizes = {
-    full: 'bottom-4 left-4 px-3 py-2',
-    grid: 'bottom-2 left-2 px-2 py-1 text-xs',
-    thumbnail: 'bottom-1 left-1 px-2 py-1 text-xs',
-  };
+  // Use shared constants
+  const containerClass = VIDEO_SIZE_CLASSES[size] || VIDEO_SIZE_CLASSES.grid;
+  const labelClass = LABEL_SIZE_CLASSES[size] || LABEL_SIZE_CLASSES.grid;
 
   return (
     <div
-      className={`bg-stone-800 rounded-lg overflow-hidden relative ${sizeClasses[size]}`}
+      className={`bg-stone-800 rounded-lg relative ${containerClass}`}
       onClick={onClick}
       style={onClick ? { cursor: 'pointer' } : undefined}
     >
@@ -168,7 +155,7 @@ const RemoteVideo = memo(function RemoteVideo({
       {/* Video layer */}
       <div
         ref={videoRef}
-        className="absolute inset-0"
+        className={`absolute inset-0 overflow-hidden rounded-lg ${providerType === 'agora' ? 'agora-video-player' : ''}`}
         style={{
           backgroundColor: '#292524',
           zIndex: hasVideo ? 10 : 1
@@ -177,35 +164,30 @@ const RemoteVideo = memo(function RemoteVideo({
 
       {/* Placeholder when no video */}
       <div
-        className="absolute inset-0 bg-stone-700 flex items-center justify-center"
+        className="absolute inset-0 bg-stone-700 flex items-center justify-center overflow-hidden rounded-lg"
         style={{ zIndex: hasVideo ? 1 : 10 }}
       >
-        <div className="text-center">
-          <div className={`bg-amber-700 rounded-full flex items-center justify-center mx-auto mb-2 ${avatarSizes[size]}`}>
-            <span className="text-white">{initial}</span>
-          </div>
-          {size !== 'thumbnail' && (
-            <>
-              <p className="text-white text-sm">{displayName}</p>
-              <p className="text-white text-xs opacity-70">Camera off</p>
-            </>
-          )}
-        </div>
+        <VideoAvatar
+          name={displayName}
+          size={size}
+          accentColor="mocha"
+          showName={size !== 'thumbnail'}
+          subtitle={size !== 'thumbnail' ? 'Camera off' : undefined}
+        />
       </div>
 
       {/* Connection quality indicator */}
-      {participant.connectionQuality && participant.connectionQuality !== 'excellent' && (
-        <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs z-20 ${
+      {participant.connectionQuality && participant.connectionQuality !== 'excellent' && participant.connectionQuality !== 'good' && (
+        <div className={`absolute top-2 left-2 px-2 py-1 rounded text-xs z-30 ${
           participant.connectionQuality === 'poor' ? 'bg-red-600 text-white' :
           participant.connectionQuality === 'fair' ? 'bg-amber-500 text-black' : 'bg-amber-600 text-white'
         }`}>
-          {participant.connectionQuality === 'poor' ? '📶 Poor' :
-           participant.connectionQuality === 'fair' ? '📶 Fair' : '📶 Good'}
+          {participant.connectionQuality === 'poor' ? '📶 Poor' : '📶 Fair'}
         </div>
       )}
 
       {/* Name label */}
-      <div className={`absolute bg-black bg-opacity-60 text-white rounded z-20 ${labelSizes[size]}`}>
+      <div className={`absolute bg-black/60 text-white rounded z-50 ${labelClass}`}>
         {displayName}
         {participant.isSpeaking && ' 🔊'}
         {participant.hasScreen && ' 🖥️'}
@@ -217,6 +199,7 @@ const RemoteVideo = memo(function RemoteVideo({
   return (
     prevProps.participant.id === nextProps.participant.id &&
     prevProps.participant.uid === nextProps.participant.uid &&
+    prevProps.participant.name === nextProps.participant.name &&
     prevProps.participant.hasVideo === nextProps.participant.hasVideo &&
     prevProps.participant.hasAudio === nextProps.participant.hasAudio &&
     prevProps.participant.hasScreen === nextProps.participant.hasScreen &&
@@ -228,65 +211,5 @@ const RemoteVideo = memo(function RemoteVideo({
     prevProps.providerType === nextProps.providerType
   );
 });
-
-/**
- * Attach track to element based on provider type
- */
-function attachTrack(track, element, providerType, trackType) {
-  switch (providerType) {
-    case 'agora':
-      // Agora uses .play()
-      if (trackType === 'video') {
-        track.play(element, { fit: 'contain' });
-      } else {
-        track.play();
-      }
-      break;
-
-    case 'livekit':
-      // LiveKit uses .attach()
-      track.attach(element);
-      // Safari needs explicit play()
-      if (element.play) {
-        element.play().catch(() => {
-          element.muted = true;
-          element.play().catch(() => {});
-        });
-      }
-      break;
-
-    case 'webrtc':
-      // WebRTC - set srcObject
-      if (track instanceof MediaStreamTrack) {
-        element.srcObject = new MediaStream([track]);
-      } else if (track.mediaStreamTrack) {
-        element.srcObject = new MediaStream([track.mediaStreamTrack]);
-      }
-      element.play().catch(() => {});
-      break;
-
-    default:
-      console.warn('[RemoteVideo] Unknown provider type:', providerType);
-  }
-}
-
-/**
- * Detach track from element based on provider type
- */
-function detachTrack(track, element, providerType) {
-  switch (providerType) {
-    case 'agora':
-      if (track.stop) track.stop();
-      break;
-
-    case 'livekit':
-      if (track.detach) track.detach(element);
-      break;
-
-    case 'webrtc':
-      element.srcObject = null;
-      break;
-  }
-}
 
 export default RemoteVideo;

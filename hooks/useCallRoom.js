@@ -112,39 +112,48 @@ export function useCallRoom(callType, roomId) {
         }
 
         case 'circle': {
-          // Circle/Connection Group - uses connection_group_rooms table
-          const { data, error: roomError } = await supabase
-            .from('connection_group_rooms')
-            .select(`
-              *,
-              group:connection_groups (
-                id,
-                name,
-                creator_id
-              )
-            `)
-            .eq('channel_name', roomId)
-            .single();
+          // Circle/Connection Group
+          // Channel name format: "connection-group-{groupId}"
+          console.log('[useCallRoom] Fetching circle room:', roomId);
 
-          if (roomError && roomError.code !== 'PGRST116') throw roomError;
-          roomData = data;
+          // Extract group ID from channel name
+          const groupIdMatch = roomId.match(/connection-group-(.+)/);
+          const groupId = groupIdMatch ? groupIdMatch[1] : null;
+          console.log('[useCallRoom] Extracted group ID:', groupId);
 
-          if (data?.group) {
-            related = data.group;
-            // Fetch group members
-            const { data: members } = await supabase
-              .from('connection_group_members')
-              .select('user_id')
-              .eq('group_id', data.group.id)
-              .eq('status', 'accepted');
+          if (groupId) {
+            // Fetch group info directly using the extracted group ID
+            const { data: groupData, error: groupError } = await supabase
+              .from('connection_groups')
+              .select('id, name, creator_id')
+              .eq('id', groupId)
+              .single();
 
-            if (members && members.length > 0) {
-              const userIds = members.map(m => m.user_id).filter(Boolean);
-              const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, name, email, profile_picture, career')
-                .in('id', userIds);
-              participantsList = profiles || [];
+            console.log('[useCallRoom] Group data:', groupData, 'Error:', groupError);
+
+            if (groupData) {
+              related = groupData;
+              roomData = { channel_name: roomId, group_id: groupId };
+
+              // Fetch group members
+              const { data: members, error: membersError } = await supabase
+                .from('connection_group_members')
+                .select('user_id')
+                .eq('group_id', groupId)
+                .eq('status', 'accepted');
+
+              console.log('[useCallRoom] Members:', members, 'Error:', membersError);
+
+              if (members && members.length > 0) {
+                const userIds = members.map(m => m.user_id).filter(Boolean);
+                console.log('[useCallRoom] Fetching profiles for:', userIds);
+                const { data: profiles, error: profilesError } = await supabase
+                  .from('profiles')
+                  .select('id, name, email, profile_picture, career')
+                  .in('id', userIds);
+                console.log('[useCallRoom] Profiles:', profiles, 'Error:', profilesError);
+                participantsList = profiles || [];
+              }
             }
           }
           break;

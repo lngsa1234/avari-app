@@ -39,9 +39,16 @@ export default function PostMeetingSummary({
   onScheduleFollowUp,
   onConnect,
   onNavigate,
+  // New props for sharing features
+  circleId,
+  onShareToCircle,
+  onSendToParticipant,
 }) {
   const [actionItems, setActionItems] = useState(summary.actionItems || []);
   const [feedbackGiven, setFeedbackGiven] = useState(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareSuccess, setShareSuccess] = useState(false);
+  const [sentTo, setSentTo] = useState([]);
 
   useEffect(() => {
     if (summary.actionItems) {
@@ -53,6 +60,65 @@ export default function PostMeetingSummary({
     const updated = [...actionItems];
     updated[index].done = !updated[index].done;
     setActionItems(updated);
+  };
+
+  // Format summary for sharing
+  const formatSummaryForSharing = () => {
+    const parts = [];
+    parts.push(`📋 Meeting Summary: ${meeting.title || 'Meeting'}`);
+    parts.push(`📅 ${meeting.date || 'Date not available'}`);
+    parts.push(`⏱️ Duration: ${formatDuration(meeting.duration)}`);
+    parts.push('');
+
+    if (summary.summary) {
+      parts.push(`📝 Summary:`);
+      parts.push(summary.summary);
+      parts.push('');
+    }
+
+    if (summary.keyTakeaways?.length > 0) {
+      parts.push(`💡 Key Takeaways:`);
+      summary.keyTakeaways.forEach(t => {
+        parts.push(`• ${t.emoji || '•'} ${t.text}`);
+      });
+      parts.push('');
+    }
+
+    if (summary.topicsDiscussed?.length > 0) {
+      parts.push(`💬 Topics Discussed: ${summary.topicsDiscussed.map(t => t.topic).join(', ')}`);
+    }
+
+    return parts.join('\n');
+  };
+
+  // Handle share to circle
+  const handleShareToCircle = async () => {
+    if (!onShareToCircle) return;
+
+    setSharing(true);
+    try {
+      const summaryText = formatSummaryForSharing();
+      await onShareToCircle(summaryText);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 3000);
+    } catch (error) {
+      console.error('Error sharing to circle:', error);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  // Handle send to participant
+  const handleSendToParticipant = async (participantId) => {
+    if (!onSendToParticipant || sentTo.includes(participantId)) return;
+
+    try {
+      const summaryText = formatSummaryForSharing();
+      await onSendToParticipant(participantId, summaryText);
+      setSentTo(prev => [...prev, participantId]);
+    } catch (error) {
+      console.error('Error sending to participant:', error);
+    }
   };
 
   // Format duration
@@ -245,14 +311,28 @@ export default function PostMeetingSummary({
                       </div>
                     )}
                   </div>
-                  {!person.connected && onConnect && (
-                    <button
-                      style={styles.connectBtn}
-                      onClick={() => onConnect(person)}
-                    >
-                      Connect
-                    </button>
-                  )}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {!person.connected && onConnect && (
+                      <button
+                        style={styles.connectBtn}
+                        onClick={() => onConnect(person)}
+                      >
+                        Connect
+                      </button>
+                    )}
+                    {onSendToParticipant && (
+                      <button
+                        style={{
+                          ...styles.sendSummaryBtn,
+                          ...(sentTo.includes(person.id) ? styles.sendSummaryBtnSent : {}),
+                        }}
+                        onClick={() => handleSendToParticipant(person.id)}
+                        disabled={sentTo.includes(person.id)}
+                      >
+                        {sentTo.includes(person.id) ? '✓ Sent' : '📤 Send Summary'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -355,10 +435,25 @@ export default function PostMeetingSummary({
 
         {/* Actions */}
         <div style={styles.actionsRow}>
-          <button style={styles.primaryAction}>
-            <Share2 size={18} />
-            Share Summary
-          </button>
+          {circleId && onShareToCircle ? (
+            <button
+              style={{
+                ...styles.primaryAction,
+                ...(shareSuccess ? styles.primaryActionSuccess : {}),
+                ...(sharing ? { opacity: 0.7 } : {}),
+              }}
+              onClick={handleShareToCircle}
+              disabled={sharing || shareSuccess}
+            >
+              <Share2 size={18} />
+              {shareSuccess ? 'Shared to Circle!' : sharing ? 'Sharing...' : 'Share to Circle'}
+            </button>
+          ) : (
+            <button style={styles.primaryAction}>
+              <Share2 size={18} />
+              Share Summary
+            </button>
+          )}
           <button style={styles.secondaryAction}>
             <Download size={18} />
             Export
@@ -715,6 +810,23 @@ const styles = {
     borderRadius: '12px',
     cursor: 'pointer',
   },
+  sendSummaryBtn: {
+    padding: '6px 12px',
+    backgroundColor: colors.highlight,
+    color: colors.textLight,
+    fontSize: '12px',
+    fontWeight: '500',
+    border: `1px solid ${colors.border}`,
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  sendSummaryBtnSent: {
+    backgroundColor: colors.successBg,
+    color: colors.success,
+    borderColor: colors.success,
+    cursor: 'default',
+  },
   followUpsList: {
     display: 'flex',
     flexDirection: 'column',
@@ -866,6 +978,10 @@ const styles = {
     border: 'none',
     borderRadius: '12px',
     cursor: 'pointer',
+    transition: 'all 0.2s',
+  },
+  primaryActionSuccess: {
+    backgroundColor: colors.success,
   },
   secondaryAction: {
     display: 'flex',

@@ -1,6 +1,9 @@
 'use client';
 
 import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { VIDEO_SIZE_CLASSES, LABEL_SIZE_CLASSES } from '@/lib/video/videoConstants';
+import { attachLocalTrack, detachLocalTrack } from '@/lib/video/trackManager';
+import VideoAvatar from './VideoAvatar';
 
 /**
  * Local Video Component
@@ -78,122 +81,60 @@ const LocalVideo = forwardRef(function LocalVideo({
     };
   }, [track, isVideoOff, providerType]);
 
-  const initial = userName.charAt(0).toUpperCase();
+  // Use shared constants
+  const containerClass = VIDEO_SIZE_CLASSES[size] || VIDEO_SIZE_CLASSES.grid;
+  const labelClass = LABEL_SIZE_CLASSES[size] || LABEL_SIZE_CLASSES.grid;
 
-  // Size-based classes
-  const sizeClasses = {
-    full: 'w-full h-full',
-    grid: 'w-full h-full min-h-0',
-    thumbnail: 'w-48 h-36 flex-shrink-0',
-  };
-
-  const avatarSizes = {
-    full: 'w-32 h-32 text-5xl',
-    grid: 'w-20 h-20 text-2xl',
-    thumbnail: 'w-12 h-12 text-lg',
-  };
-
-  const labelSizes = {
-    full: 'bottom-4 left-4 px-3 py-2',
-    grid: 'bottom-2 left-2 px-2 py-1 text-xs',
-    thumbnail: 'bottom-1 left-1 px-2 py-1 text-xs',
-  };
-
-  // Accent color variants - mocha theme
-  const accentColors = {
-    rose: 'bg-amber-700',
-    purple: 'bg-amber-700',
-    blue: 'bg-amber-600',
-    green: 'bg-amber-600',
-    mocha: 'bg-amber-700',
-  };
+  // Agora uses container div, others use video element
+  const isAgora = providerType === 'agora';
 
   return (
     <div
-      className={`bg-stone-800 rounded-lg overflow-hidden relative ${sizeClasses[size]}`}
+      className={`bg-stone-800 rounded-lg relative ${containerClass}`}
       onClick={onClick}
       style={onClick ? { cursor: 'pointer' } : undefined}
     >
       {/* Video element - always rendered for ref stability */}
       {!isVideoOff ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover"
-          style={{ transform: 'scaleX(-1)' }}
-        />
+        isAgora ? (
+          // Agora: use div container - Agora creates its own video element inside
+          <div
+            ref={videoRef}
+            className="absolute inset-0 overflow-hidden rounded-lg agora-video-player"
+            style={{ transform: 'scaleX(-1)' }}
+          />
+        ) : (
+          // Other providers: use video element directly
+          <div className="absolute inset-0 overflow-hidden rounded-lg">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+              style={{ transform: 'scaleX(-1)' }}
+            />
+          </div>
+        )
       ) : (
         // Placeholder when video is off
-        <div className="absolute inset-0 bg-stone-700 flex items-center justify-center">
-          <div className="text-center">
-            <div className={`${accentColors[accentColor] || accentColors.mocha} rounded-full flex items-center justify-center mx-auto mb-2 ${avatarSizes[size]}`}>
-              <span className="text-white">{initial}</span>
-            </div>
-            {size !== 'thumbnail' && (
-              <p className="text-white text-sm">You (Camera off)</p>
-            )}
-          </div>
+        <div className="absolute inset-0 bg-stone-700 flex items-center justify-center rounded-lg">
+          <VideoAvatar
+            name={userName}
+            size={size}
+            accentColor={accentColor}
+            showName={size !== 'thumbnail'}
+            subtitle={size !== 'thumbnail' ? 'Camera off' : undefined}
+          />
         </div>
       )}
 
-      {/* Name label */}
-      <div className={`absolute bg-black bg-opacity-60 text-white rounded z-20 ${labelSizes[size]}`}>
-        You {isMuted && '🔇'}
+      {/* Name label - positioned outside overflow-hidden area */}
+      <div className={`absolute bg-black/80 text-white rounded z-50 ${labelClass}`}>
+        {userName && userName !== 'You' ? userName : 'You'}
       </div>
     </div>
   );
 });
-
-/**
- * Attach local track to video element
- */
-function attachLocalTrack(track, element, providerType) {
-  switch (providerType) {
-    case 'agora':
-      track.play(element);
-      break;
-
-    case 'livekit':
-      track.attach(element);
-      element.play().catch(e => {
-        if (e.name !== 'AbortError') {
-          console.log('[LocalVideo] Autoplay prevented:', e.name);
-        }
-      });
-      break;
-
-    case 'webrtc':
-      if (track instanceof MediaStream) {
-        element.srcObject = track;
-      } else if (track instanceof MediaStreamTrack) {
-        element.srcObject = new MediaStream([track]);
-      } else if (track.mediaStreamTrack) {
-        element.srcObject = new MediaStream([track.mediaStreamTrack]);
-      }
-      element.play().catch(() => {});
-      break;
-  }
-}
-
-/**
- * Detach local track from video element
- */
-function detachLocalTrack(track, element, providerType) {
-  switch (providerType) {
-    case 'agora':
-      // Agora tracks don't need explicit detachment
-      break;
-
-    case 'livekit':
-      if (track.detach) track.detach(element);
-      break;
-
-    case 'webrtc':
-      element.srcObject = null;
-      break;
-  }
-}
 
 export default LocalVideo;

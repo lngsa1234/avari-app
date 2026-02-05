@@ -8,6 +8,7 @@ import { useCallRoom } from '@/hooks/useCallRoom';
 import { useRecording } from '@/hooks/useRecording';
 import useTranscription from '@/hooks/useTranscription';
 import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
+import useDeviceSelection from '@/hooks/useDeviceSelection';
 import PostMeetingSummary from '@/components/PostMeetingSummary';
 
 import {
@@ -20,29 +21,13 @@ import {
   ParticipantsPanel,
 } from '@/components/video';
 
-// Topic suggestions for meetups
-const TOPIC_SUGGESTIONS = {
-  advice: [
-    "What's the best career advice you've received?",
-    "How do you handle difficult conversations at work?",
-    "What strategies help you with work-life balance?",
-  ],
-  vent: [
-    "What's been challenging for you lately?",
-    "How do you decompress after a tough day?",
-    "What support do you wish you had more of?",
-  ],
-  grow: [
-    "What are you currently learning or developing?",
-    "What's a skill you'd like to master this year?",
-    "How do you approach professional development?",
-  ],
-  general: [
-    "What brought you to this industry?",
-    "What's your proudest professional achievement?",
-    "How do you approach networking authentically?",
-  ]
-};
+// Fallback topic suggestions (used when icebreakers fail to load)
+const FALLBACK_TOPICS = [
+  { question: "What brings you here today?", category: "intro" },
+  { question: "What's something you're excited about right now?", category: "general" },
+  { question: "What's the best advice you've received recently?", category: "learning" },
+  { question: "What's a skill you'd like to develop this year?", category: "growth" }
+];
 
 /**
  * Unified Video Call Page
@@ -75,6 +60,7 @@ export default function UnifiedCallPage() {
   // Provider state - varies by type
   const [isJoined, setIsJoined] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
   const [remoteParticipants, setRemoteParticipants] = useState([]);
@@ -85,6 +71,8 @@ export default function UnifiedCallPage() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [gridView, setGridView] = useState(true);
   const [isLocalMain, setIsLocalMain] = useState(false);
+  const [isVideoDeviceSwitching, setIsVideoDeviceSwitching] = useState(false);
+  const [isAudioDeviceSwitching, setIsAudioDeviceSwitching] = useState(false);
 
   // UI state
   const [showChat, setShowChat] = useState(false);
@@ -100,10 +88,21 @@ export default function UnifiedCallPage() {
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('en-US');
   const [pendingLanguageRestart, setPendingLanguageRestart] = useState(false);
 
-  // Topics state (for meetups)
+  // Topics/Icebreakers state (for meetups)
   const [currentTopic, setCurrentTopic] = useState(null);
   const [usedTopicIndices, setUsedTopicIndices] = useState(new Set());
-  const [userVibeCategory, setUserVibeCategory] = useState('general');
+  const [icebreakers, setIcebreakers] = useState([]);
+  const [icebreakersLoading, setIcebreakersLoading] = useState(false);
+  const [isAIGenerated, setIsAIGenerated] = useState(false);
+
+  // Screen share state
+  const [localScreenTrack, setLocalScreenTrack] = useState(null);
+  const [remoteScreenTrack, setRemoteScreenTrack] = useState(null);
+  const [screenSharerName, setScreenSharerName] = useState('');
+
+  // Meeting info state
+  const [callDuration, setCallDuration] = useState(0);
+  const [connectionQuality, setConnectionQuality] = useState('good');
 
   // Recap state
   const [showRecap, setShowRecap] = useState(false);
@@ -118,12 +117,19 @@ export default function UnifiedCallPage() {
   const isInitializing = useRef(false);
   const messagesEndRef = useRef(null);
   const callStartTimeRef = useRef(null);
+  // Refs for keyboard shortcuts (to avoid stale closures)
+  const handleToggleMuteRef = useRef(null);
+  const handleToggleVideoRef = useRef(null);
+  // Ref to store latest roomParticipants for use in event handler closures
+  const roomParticipantsRef = useRef([]);
 
   // Provider-specific refs
   const roomRef = useRef(null); // LiveKit room
   const peerConnectionRef = useRef(null); // WebRTC
   const realtimeChannelRef = useRef(null); // Supabase channel
-  const agoraClientRef = useRef(null); // Agora client
+  const agoraClientRef = useRef(null); // Agora client (camera/audio)
+  const agoraScreenClientRef = useRef(null); // Agora screen share client (separate to allow simultaneous camera+screen)
+  const agoraUidRef = useRef(null); // Store Agora UID for screen client
   const screenTrackRef = useRef(null);
 
   // Hooks
@@ -142,13 +148,100 @@ export default function UnifiedCallPage() {
     toggleBlur: toggleBlurHook
   } = useBackgroundBlur(config?.provider || 'webrtc');
 
-  // Transcription handler
-  const handleTranscript = useCallback(({ text, isFinal, timestamp }) => {
-    if (isFinal && text.trim()) {
+  // Device selection hook
+  const {
+    videoDevices,
+    audioDevices,
+    selectedVideoDevice,
+    selectedAudioDevice,
+    setSelectedVideoDevice,
+    setSelectedAudioDevice,
+    switchVideoDevice,
+    switchAudioDevice,
+    refreshDevices
+  } = useDeviceSelection();
+
+  // Interim transcript (what's currently being spoken)
+  const [interimText, setInterimText] = useState('');
+  const interimTimeoutRef = useRef(null);
+  const lastInterimRef = useRef('');
+  // Ref to store restart function (set after hook is called)
+  const restartListeningRef = useRef(null);
+  // Track last auto-finalized text to skip duplicate from browser's final event
+  const lastAutoFinalizedRef = useRef('');
+
+  // Auto-finalize interim text after pause
+  const finalizeInterim = useCallback(() => {
+    if (lastInterimRef.current.trim()) {
+      const textToFinalize = lastInterimRef.current.trim();
+      console.log('[Transcript] Auto-finalizing:', textToFinalize);
+
+      // Track this so we skip it if browser sends it as final
+      lastAutoFinalizedRef.current = textToFinalize;
+
       const entry = {
         speakerId: user?.id || 'local',
         speakerName: user?.name || 'You',
-        text: text.trim(),
+        text: textToFinalize,
+        timestamp: Date.now(),
+        isFinal: true
+      };
+      setTranscript(prev => [...prev, entry]);
+      setInterimText('');
+      lastInterimRef.current = '';
+
+      // Save to database
+      if (roomId) {
+        supabase.from('call_transcripts').insert({
+          channel_name: roomId,
+          user_id: user?.id,
+          speaker_name: entry.speakerName,
+          text: entry.text,
+          timestamp: entry.timestamp,
+          is_final: true
+        }).then(({ error }) => {
+          if (error) console.error('Failed to save transcript:', error);
+        });
+      }
+
+      // Restart recognition to clear browser's accumulated buffer
+      if (restartListeningRef.current) {
+        console.log('[Transcript] Restarting recognition to clear buffer');
+        restartListeningRef.current();
+      }
+    }
+  }, [user, roomId]);
+
+  // Transcription handler
+  const handleTranscript = useCallback(({ text, isFinal, timestamp }) => {
+    // Clear any pending auto-finalize
+    if (interimTimeoutRef.current) {
+      clearTimeout(interimTimeoutRef.current);
+      interimTimeoutRef.current = null;
+    }
+
+    if (isFinal && text.trim()) {
+      const finalText = text.trim();
+
+      // Skip if this is a duplicate of what we just auto-finalized
+      // (happens when browser sends final event during restart)
+      if (lastAutoFinalizedRef.current && finalText.includes(lastAutoFinalizedRef.current)) {
+        console.log('[Transcript] Skipping duplicate final:', finalText);
+        lastAutoFinalizedRef.current = '';
+        setInterimText('');
+        lastInterimRef.current = '';
+        return;
+      }
+
+      // Browser marked it final
+      setInterimText('');
+      lastInterimRef.current = '';
+      lastAutoFinalizedRef.current = '';
+
+      const entry = {
+        speakerId: user?.id || 'local',
+        speakerName: user?.name || 'You',
+        text: finalText,
         timestamp,
         isFinal: true
       };
@@ -163,10 +256,22 @@ export default function UnifiedCallPage() {
           text: entry.text,
           timestamp: entry.timestamp,
           is_final: true
-        }).catch(e => console.error('Failed to save transcript:', e));
+        }).then(({ error }) => {
+          if (error) console.error('Failed to save transcript:', error);
+        });
       }
+    } else if (!isFinal && text.trim()) {
+      // Show interim text directly
+      console.log('[Transcript] Interim:', text.trim());
+      setInterimText(text.trim());
+      lastInterimRef.current = text.trim();
+
+      // Auto-finalize after 800ms of no new input
+      interimTimeoutRef.current = setTimeout(() => {
+        finalizeInterim();
+      }, 800);
     }
-  }, [user, roomId]);
+  }, [user, roomId, finalizeInterim]);
 
   const {
     isListening: isSpeechListening,
@@ -174,13 +279,19 @@ export default function UnifiedCallPage() {
     isSafari,
     error: speechError,
     startListening,
-    stopListening
+    stopListening,
+    restartListening
   } = useTranscription({
     onTranscript: handleTranscript,
     language: transcriptionLanguage,
     continuous: true,
-    interimResults: false
+    interimResults: true
   });
+
+  // Store restartListening in ref so finalizeInterim can access it
+  useEffect(() => {
+    restartListeningRef.current = restartListening;
+  }, [restartListening]);
 
   // Calculate derived state
   const showSidebar = showChat || showTopics || showParticipants;
@@ -224,6 +335,45 @@ export default function UnifiedCallPage() {
     }
   }, [callType, router]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Don't trigger shortcuts when typing in input fields
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        return;
+      }
+
+      switch (e.code) {
+        case 'Space':
+          // Space to toggle mute
+          e.preventDefault();
+          handleToggleMuteRef.current?.();
+          break;
+        case 'KeyV':
+          // V to toggle video
+          e.preventDefault();
+          handleToggleVideoRef.current?.();
+          break;
+        case 'KeyM':
+          // M to toggle mute (alternative)
+          e.preventDefault();
+          handleToggleMuteRef.current?.();
+          break;
+        case 'Escape':
+          // Escape to close sidebar
+          setShowChat(false);
+          setShowTopics(false);
+          setShowParticipants(false);
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Initialize call when user is ready
   useEffect(() => {
     if (user && config && !hasInitialized.current && !isInitializing.current) {
@@ -233,6 +383,10 @@ export default function UnifiedCallPage() {
     return () => {
       if (hasInitialized.current) {
         leaveCall();
+      }
+      // Clean up interim timeout
+      if (interimTimeoutRef.current) {
+        clearTimeout(interimTimeoutRef.current);
       }
     };
   }, [user, config]);
@@ -273,21 +427,94 @@ export default function UnifiedCallPage() {
     };
   }, [roomId, user]);
 
-  // Load user vibe category for topics
+  // Load icebreakers for meetup calls
   useEffect(() => {
-    if (user?.id && config?.features.topics) {
-      supabase
-        .from('profiles')
-        .select('vibe_category')
-        .eq('id', user.id)
-        .single()
-        .then(({ data }) => {
-          if (data?.vibe_category) {
-            setUserVibeCategory(data.vibe_category);
-          }
-        });
+    if (callType === 'meetup' && roomId && config?.features.topics) {
+      loadIcebreakers();
     }
-  }, [user?.id, config?.features.topics]);
+  }, [callType, roomId, config?.features.topics]);
+
+  // Load icebreakers from API
+  const loadIcebreakers = async () => {
+    setIcebreakersLoading(true);
+    try {
+      // First try to get cached icebreakers
+      const getResponse = await fetch(`/api/agent/icebreakers?meetupId=${roomId}`);
+      const getData = await getResponse.json();
+
+      if (getData.found && getData.icebreakers) {
+        setIcebreakers(getData.icebreakers);
+        setIsAIGenerated(getData.tier === 'light_ai' || getData.tier === 'ai');
+        setIcebreakersLoading(false);
+        return;
+      }
+
+      // Generate new icebreakers if we have enough context
+      const postResponse = await fetch('/api/agent/icebreakers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meetupId: roomId,
+          title: relatedData?.topic || relatedData?.name || 'Networking Meetup',
+          description: relatedData?.description || '',
+          attendees: roomParticipants?.map(p => ({
+            career: p.career,
+            interests: p.interests
+          })) || []
+        })
+      });
+
+      const postData = await postResponse.json();
+      if (postData.icebreakers) {
+        setIcebreakers(postData.icebreakers);
+        setIsAIGenerated(postData.tier === 'light_ai' || postData.tier === 'ai');
+      } else {
+        // Fallback to default topics
+        setIcebreakers(FALLBACK_TOPICS);
+        setIsAIGenerated(false);
+      }
+    } catch (e) {
+      console.error('[Call] Error loading icebreakers:', e);
+      setIcebreakers(FALLBACK_TOPICS);
+      setIsAIGenerated(false);
+    } finally {
+      setIcebreakersLoading(false);
+    }
+  };
+
+  // Call duration timer
+  useEffect(() => {
+    if (!isJoined || !callStartTime) return;
+
+    const interval = setInterval(() => {
+      const start = new Date(callStartTime);
+      const now = new Date();
+      const seconds = Math.floor((now - start) / 1000);
+      setCallDuration(seconds);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isJoined, callStartTime]);
+
+  // Keep roomParticipantsRef updated for use in event handler closures
+  // Also re-update remote participant names when roomParticipants loads
+  useEffect(() => {
+    roomParticipantsRef.current = roomParticipants || [];
+
+    // If we have remote participants and roomParticipants just loaded, refresh names
+    if (roomParticipants?.length > 0 && remoteParticipants.length > 0) {
+      console.log('[Call] roomParticipants loaded, refreshing remote participant names');
+
+      // For Agora, re-run the participant update
+      if (config?.provider === 'agora' && agoraClientRef.current) {
+        updateAgoraParticipants(agoraClientRef.current);
+      }
+      // For LiveKit, re-run the participant update
+      else if (config?.provider === 'livekit' && roomRef.current) {
+        updateLiveKitParticipants(roomRef.current);
+      }
+    }
+  }, [roomParticipants]);
 
   // Handle language change
   const handleLanguageChange = useCallback((newLanguage) => {
@@ -323,6 +550,9 @@ export default function UnifiedCallPage() {
         audio: true
       });
       testStream.getTracks().forEach(track => track.stop());
+
+      // Refresh device list now that we have permission
+      await refreshDevices();
 
       switch (config.provider) {
         case 'webrtc':
@@ -495,20 +725,37 @@ export default function UnifiedCallPage() {
 
     // Event handlers
     client.on('user-published', async (remoteUser, mediaType) => {
+      console.log('[Agora] user-published:', remoteUser.uid, mediaType);
       await client.subscribe(remoteUser, mediaType);
+      console.log('[Agora] Subscribed to:', remoteUser.uid, 'videoTrack:', !!remoteUser.videoTrack);
       updateAgoraParticipants(client);
     });
 
-    client.on('user-unpublished', () => updateAgoraParticipants(client));
-    client.on('user-joined', () => updateAgoraParticipants(client));
-    client.on('user-left', () => updateAgoraParticipants(client));
+    client.on('user-unpublished', (remoteUser, mediaType) => {
+      console.log('[Agora] user-unpublished:', remoteUser.uid, mediaType);
+      updateAgoraParticipants(client);
+    });
+    client.on('user-joined', (remoteUser) => {
+      console.log('[Agora] user-joined:', remoteUser.uid);
+      updateAgoraParticipants(client);
+    });
+    client.on('user-left', (remoteUser) => {
+      console.log('[Agora] user-left:', remoteUser.uid);
+      updateAgoraParticipants(client);
+    });
 
-    // Generate numeric UID from user ID
-    const numericUid = Math.abs(user.id.split('').reduce((hash, char) => {
-      return ((hash << 5) - hash) + char.charCodeAt(0);
-    }, 0));
+    // Use user ID as string UID (Agora supports ASCII strings 1-255 chars)
+    // Fallback to a constrained numeric UID if needed
+    const agoraUid = user.id.length <= 255 && /^[\x00-\x7F]+$/.test(user.id)
+      ? user.id
+      : Math.abs(user.id.split('').reduce((hash, char) => {
+          return ((hash << 5) - hash) + char.charCodeAt(0);
+        }, 0)) % 10000;
 
-    await client.join(appId, roomId, null, numericUid);
+    // Store UID for screen sharing client
+    agoraUidRef.current = agoraUid;
+
+    await client.join(appId, roomId, null, agoraUid);
 
     const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
     await client.publish([audioTrack, videoTrack]);
@@ -521,18 +768,51 @@ export default function UnifiedCallPage() {
     }
   };
 
+  // Helper to get participant name from roomParticipants by UID
+  // Uses ref to avoid stale closure issues in event handlers
+  const getParticipantName = (uid) => {
+    const uidStr = String(uid);
+    const participants = roomParticipantsRef.current;
+    console.log('[getParticipantName] Looking for UID:', uidStr);
+    console.log('[getParticipantName] roomParticipants:', participants?.map(p => ({ id: p.id, name: p.name })));
+
+    // Try to find by exact ID match
+    const participant = participants?.find(p => p.id === uidStr);
+    if (participant?.name) {
+      console.log('[getParticipantName] Found:', participant.name);
+      return participant.name;
+    }
+
+    // Fallback to a shorter display
+    const fallback = uidStr.length > 8 ? `User ${uidStr.slice(0, 8)}...` : `User ${uidStr}`;
+    console.log('[getParticipantName] Not found, using fallback:', fallback);
+    return fallback;
+  };
+
   // Update LiveKit participants
   const updateLiveKitParticipants = (room) => {
     if (!room || room.state === 'disconnected') return;
+
+    let foundScreenShare = null;
+    let screenShareParticipantName = '';
 
     const participants = Array.from(room.remoteParticipants.values()).map(p => {
       const videoPublication = p.getTrackPublication('camera');
       const audioPublication = p.getTrackPublication('microphone');
       const screenPublication = p.getTrackPublication('screen_share');
 
+      // Get display name - prefer LiveKit name, fallback to our lookup
+      const displayName = p.name || getParticipantName(p.identity);
+
+      // Track remote screen share
+      if (screenPublication?.track) {
+        foundScreenShare = screenPublication.track;
+        screenShareParticipantName = displayName;
+      }
+
       return {
         id: p.identity,
-        name: p.name || p.identity,
+        name: displayName,
         videoTrack: videoPublication?.track,
         audioTrack: audioPublication?.track,
         screenTrack: screenPublication?.track,
@@ -545,25 +825,83 @@ export default function UnifiedCallPage() {
     });
 
     setRemoteParticipants(participants);
+    setRemoteScreenTrack(foundScreenShare);
+    setScreenSharerName(screenShareParticipantName);
+
+    // Update connection quality from local participant
+    if (room.localParticipant) {
+      const quality = room.localParticipant.connectionQuality;
+      if (quality === 3) setConnectionQuality('excellent');
+      else if (quality === 2) setConnectionQuality('good');
+      else if (quality === 1) setConnectionQuality('fair');
+      else setConnectionQuality('poor');
+    }
   };
 
   // Update Agora participants
   const updateAgoraParticipants = (client) => {
     if (!client) return;
 
-    const participants = client.remoteUsers.map(u => ({
-      id: u.uid,
-      uid: u.uid,
-      name: `User ${u.uid}`,
-      videoTrack: u.videoTrack,
-      audioTrack: u.audioTrack,
-      hasVideo: !!u.videoTrack,
-      hasAudio: !!u.audioTrack,
-      _videoEnabled: u._videoEnabled !== false,
-      _lastUpdate: Date.now(),
-    }));
+    let foundScreenTrack = null;
+    let foundScreenSharerName = '';
 
+    // Our own screen UID (to exclude from remote screen detection)
+    const myScreenUid = agoraUidRef.current ? `${agoraUidRef.current}_screen` : null;
+
+    console.log('[Agora] updateParticipants - remoteUsers:', client.remoteUsers.map(u => ({
+      uid: u.uid,
+      hasVideo: !!u.videoTrack,
+      hasAudio: !!u.audioTrack
+    })));
+    console.log('[Agora] myScreenUid:', myScreenUid);
+
+    // Separate screen share users from regular users
+    // Exclude our own screen client from screen users
+    const screenUsers = client.remoteUsers.filter(u => {
+      const uid = String(u.uid);
+      return uid.endsWith('_screen') && uid !== myScreenUid;
+    });
+    const regularUsers = client.remoteUsers.filter(u => !String(u.uid).endsWith('_screen'));
+
+    console.log('[Agora] screenUsers:', screenUsers.map(u => u.uid));
+    console.log('[Agora] regularUsers:', regularUsers.map(u => u.uid));
+
+    // Find active remote screen share (not our own)
+    for (const screenUser of screenUsers) {
+      console.log('[Agora] Checking screen user:', screenUser.uid, 'videoTrack:', !!screenUser.videoTrack);
+      if (screenUser.videoTrack) {
+        foundScreenTrack = screenUser.videoTrack;
+        // Extract the main user ID by removing '_screen' suffix
+        const mainUid = String(screenUser.uid).replace('_screen', '');
+        foundScreenSharerName = getParticipantName(mainUid);
+        console.log('[Agora] Found remote screen share from:', mainUid, 'name:', foundScreenSharerName);
+        break;
+      }
+    }
+
+    // Build participants from regular users only (excluding screen share clients)
+    const participants = regularUsers.map(u => {
+      const isScreenSharing = screenUsers.some(
+        s => String(s.uid) === `${u.uid}_screen` && s.videoTrack
+      );
+      return {
+        id: u.uid,
+        uid: u.uid,
+        name: getParticipantName(u.uid),
+        videoTrack: u.videoTrack,
+        audioTrack: u.audioTrack,
+        hasVideo: !!u.videoTrack,
+        hasAudio: !!u.audioTrack,
+        hasScreen: isScreenSharing,
+        _videoEnabled: u._videoEnabled !== false,
+        _lastUpdate: Date.now(),
+      };
+    });
+
+    console.log('[Agora] Setting remoteScreenTrack:', !!foundScreenTrack, 'participants:', participants.length);
     setRemoteParticipants(participants);
+    setRemoteScreenTrack(foundScreenTrack);
+    setScreenSharerName(foundScreenSharerName);
   };
 
   // WebRTC signaling handlers
@@ -641,6 +979,103 @@ export default function UnifiedCallPage() {
     }
   };
 
+  // Update refs for keyboard shortcuts
+  handleToggleMuteRef.current = handleToggleMute;
+  handleToggleVideoRef.current = handleToggleVideo;
+
+  // Handle video device change
+  const handleVideoDeviceChange = async (deviceId) => {
+    setIsVideoDeviceSwitching(true);
+    try {
+      const constraints = switchVideoDevice(deviceId);
+
+      if (config.provider === 'webrtc' && localVideoTrack instanceof MediaStream) {
+        // Stop old video track
+        localVideoTrack.getVideoTracks().forEach(t => t.stop());
+
+        // Get new video track
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const newVideoTrack = newStream.getVideoTracks()[0];
+
+        // Replace in peer connection
+        if (peerConnectionRef.current) {
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(newVideoTrack);
+          }
+        }
+
+        // Update local stream
+        localVideoTrack.getVideoTracks().forEach(t => localVideoTrack.removeTrack(t));
+        localVideoTrack.addTrack(newVideoTrack);
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = localVideoTrack;
+        }
+      } else if (config.provider === 'livekit' && roomRef.current) {
+        await roomRef.current.switchActiveDevice('videoinput', deviceId);
+      } else if (config.provider === 'agora' && agoraClientRef.current) {
+        const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+        // Close old track and create new one
+        if (localVideoTrack?.close) localVideoTrack.close();
+        const newVideoTrack = await AgoraRTC.createCameraVideoTrack({ cameraId: deviceId });
+        await agoraClientRef.current.unpublish([localVideoTrack]);
+        await agoraClientRef.current.publish([newVideoTrack]);
+        setLocalVideoTrack(newVideoTrack);
+        if (localVideoRef.current) {
+          newVideoTrack.play(localVideoRef.current);
+        }
+      }
+    } catch (error) {
+      console.error('[UnifiedCall] Error switching video device:', error);
+    } finally {
+      setIsVideoDeviceSwitching(false);
+    }
+  };
+
+  // Handle audio device change
+  const handleAudioDeviceChange = async (deviceId) => {
+    setIsAudioDeviceSwitching(true);
+    try {
+      const constraints = switchAudioDevice(deviceId);
+
+      if (config.provider === 'webrtc' && localVideoTrack instanceof MediaStream) {
+        // Stop old audio track
+        localVideoTrack.getAudioTracks().forEach(t => t.stop());
+
+        // Get new audio track
+        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const newAudioTrack = newStream.getAudioTracks()[0];
+
+        // Replace in peer connection
+        if (peerConnectionRef.current) {
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'audio');
+          if (sender) {
+            await sender.replaceTrack(newAudioTrack);
+          }
+        }
+
+        // Update local stream
+        localVideoTrack.getAudioTracks().forEach(t => localVideoTrack.removeTrack(t));
+        localVideoTrack.addTrack(newAudioTrack);
+      } else if (config.provider === 'livekit' && roomRef.current) {
+        await roomRef.current.switchActiveDevice('audioinput', deviceId);
+      } else if (config.provider === 'agora' && agoraClientRef.current) {
+        const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+        // Close old track and create new one
+        if (localAudioTrack?.close) localAudioTrack.close();
+        const newAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({ microphoneId: deviceId });
+        await agoraClientRef.current.unpublish([localAudioTrack]);
+        await agoraClientRef.current.publish([newAudioTrack]);
+        setLocalAudioTrack(newAudioTrack);
+      }
+    } catch (error) {
+      console.error('[UnifiedCall] Error switching audio device:', error);
+    } finally {
+      setIsAudioDeviceSwitching(false);
+    }
+  };
+
   const handleToggleScreenShare = async () => {
     try {
       if (isScreenSharing) {
@@ -649,12 +1084,24 @@ export default function UnifiedCallPage() {
           await roomRef.current?.localParticipant.unpublishTrack(screenTrackRef.current);
           screenTrackRef.current.stop();
           screenTrackRef.current = null;
-        } else if (config.provider === 'agora' && agoraClientRef.current && screenTrackRef.current) {
-          await agoraClientRef.current.unpublish([screenTrackRef.current]);
-          screenTrackRef.current.close();
-          screenTrackRef.current = null;
+        } else if (config.provider === 'agora') {
+          // Agora dual-client: leave the screen client
+          if (agoraScreenClientRef.current) {
+            try {
+              if (screenTrackRef.current) {
+                await agoraScreenClientRef.current.unpublish([screenTrackRef.current]);
+                screenTrackRef.current.close();
+                screenTrackRef.current = null;
+              }
+              await agoraScreenClientRef.current.leave();
+            } catch (e) {
+              console.log('[UnifiedCall] Cleanup screen client:', e.message);
+            }
+            agoraScreenClientRef.current = null;
+          }
         }
         setIsScreenSharing(false);
+        setLocalScreenTrack(null);
       } else {
         // Start sharing
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
@@ -662,27 +1109,50 @@ export default function UnifiedCallPage() {
           audio: false
         });
 
+        const screenVideoTrack = screenStream.getVideoTracks()[0];
+
         if (config.provider === 'livekit') {
           const { LocalVideoTrack, Track } = await import('livekit-client');
-          const screenTrack = new LocalVideoTrack(screenStream.getVideoTracks()[0]);
+          const screenTrack = new LocalVideoTrack(screenVideoTrack);
           screenTrackRef.current = screenTrack;
+          setLocalScreenTrack(screenTrack);
           await roomRef.current?.localParticipant.publishTrack(screenTrack, {
             name: 'screen',
             source: Track.Source.ScreenShare
           });
         } else if (config.provider === 'agora') {
+          // Agora dual-client approach: use a separate client for screen sharing
+          // This allows camera to stay published on the main client
+          const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
           const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+
+          // Create a separate client for screen sharing
+          const screenClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
+          agoraScreenClientRef.current = screenClient;
+
+          // Join with a screen-specific UID
+          const screenUid = `${agoraUidRef.current}_screen`;
+          console.log('[Agora] Screen client joining with UID:', screenUid);
+          await screenClient.join(appId, roomId, null, screenUid);
+
+          // Create and publish screen track on the screen client
           const screenTrack = AgoraRTC.createCustomVideoTrack({
-            mediaStreamTrack: screenStream.getVideoTracks()[0]
+            mediaStreamTrack: screenVideoTrack
           });
           screenTrackRef.current = screenTrack;
-          await agoraClientRef.current?.publish([screenTrack]);
+          setLocalScreenTrack(screenTrack);
+          await screenClient.publish([screenTrack]);
+
+          console.log('[Agora] Screen share published via dual-client, UID:', screenUid);
+        } else {
+          // WebRTC - store the screen stream directly
+          setLocalScreenTrack(screenStream);
         }
 
         setIsScreenSharing(true);
 
         // Handle user stopping via browser UI
-        screenStream.getVideoTracks()[0].onended = () => {
+        screenVideoTrack.onended = () => {
           handleToggleScreenShare();
         };
       }
@@ -692,19 +1162,31 @@ export default function UnifiedCallPage() {
     }
   };
 
+  // Stop screen share handler (for ScreenShareView)
+  const handleStopScreenShare = () => {
+    handleToggleScreenShare();
+  };
+
   const toggleTranscription = useCallback(() => {
     if (isTranscribing) {
       stopListening();
       setIsTranscribing(false);
+      // Clear interim state
+      setInterimText('');
+      lastInterimRef.current = '';
+      if (interimTimeoutRef.current) {
+        clearTimeout(interimTimeoutRef.current);
+        interimTimeoutRef.current = null;
+      }
     } else {
       const started = startListening();
       if (started) setIsTranscribing(true);
     }
   }, [isTranscribing, startListening, stopListening]);
 
-  // Shuffle topic (for meetups)
+  // Shuffle topic (for meetups) - uses icebreakers from API
   const shuffleTopic = useCallback(() => {
-    const topics = TOPIC_SUGGESTIONS[userVibeCategory] || TOPIC_SUGGESTIONS.general;
+    const topics = icebreakers.length > 0 ? icebreakers : FALLBACK_TOPICS;
     const availableIndices = topics
       .map((_, index) => index)
       .filter(index => !usedTopicIndices.has(index));
@@ -719,7 +1201,7 @@ export default function UnifiedCallPage() {
       setCurrentTopic(topics[randomIndex]);
       setUsedTopicIndices(prev => new Set([...prev, randomIndex]));
     }
-  }, [userVibeCategory, usedTopicIndices]);
+  }, [icebreakers, usedTopicIndices]);
 
   // Send message
   const handleSendMessage = async (e) => {
@@ -753,13 +1235,32 @@ export default function UnifiedCallPage() {
 
   // Leave call
   const leaveCall = async () => {
+    console.log('[UnifiedCall] Leaving call...');
+
     if (isTranscribing) {
       stopListening();
       setIsTranscribing(false);
+      // Clear interim state
+      setInterimText('');
+      lastInterimRef.current = '';
+      if (interimTimeoutRef.current) {
+        clearTimeout(interimTimeoutRef.current);
+        interimTimeoutRef.current = null;
+      }
     }
 
     if (isRecording) {
       stopRecording();
+    }
+
+    // Stop screen share track if active
+    if (screenTrackRef.current) {
+      try {
+        screenTrackRef.current.stop();
+      } catch (e) {
+        console.log('[UnifiedCall] Screen track stop error:', e);
+      }
+      screenTrackRef.current = null;
     }
 
     // Cleanup based on provider
@@ -768,34 +1269,69 @@ export default function UnifiedCallPage() {
         localVideoTrack.getTracks().forEach(t => t.stop());
       }
       peerConnectionRef.current?.close();
+      peerConnectionRef.current = null;
       realtimeChannelRef.current?.unsubscribe();
+      realtimeChannelRef.current = null;
     } else if (config?.provider === 'livekit') {
-      if (screenTrackRef.current) {
-        screenTrackRef.current.stop();
-        screenTrackRef.current = null;
+      try {
+        await roomRef.current?.disconnect();
+      } catch (e) {
+        console.log('[UnifiedCall] LiveKit disconnect error:', e);
       }
-      await roomRef.current?.disconnect();
       roomRef.current = null;
     } else if (config?.provider === 'agora') {
-      if (localVideoTrack?.close) localVideoTrack.close();
-      if (localAudioTrack?.close) localAudioTrack.close();
-      await agoraClientRef.current?.leave();
+      try {
+        if (localVideoTrack?.close) localVideoTrack.close();
+        if (localAudioTrack?.close) localAudioTrack.close();
+        await agoraClientRef.current?.leave();
+        // Cleanup screen client if active
+        if (agoraScreenClientRef.current) {
+          await agoraScreenClientRef.current.leave();
+          agoraScreenClientRef.current = null;
+        }
+      } catch (e) {
+        console.log('[UnifiedCall] Agora leave error:', e);
+      }
       agoraClientRef.current = null;
     }
 
     hasInitialized.current = false;
     isInitializing.current = false;
     setIsJoined(false);
+    console.log('[UnifiedCall] Call left successfully');
   };
 
   // Handle leave call and show recap
   const handleLeaveCall = async () => {
-    const participantIds = [user?.id, ...remoteParticipants.map(p => p.id)].filter(Boolean);
+    // Step 1: Show "Ending call..." transition immediately
+    setIsLeaving(true);
 
+    // Capture participant IDs before cleanup
+    const participantIds = [user?.id, ...remoteParticipants.map(p => p.id)].filter(Boolean);
+    const currentTranscript = [...transcript];
+    const currentMessages = [...messages];
+    const startTime = callStartTimeRef.current || callStartTime;
+    const endTime = new Date().toISOString();
+
+    // Step 2: End room and cleanup video call
     await endRoom();
     await leaveCall();
 
-    // Get profiles for recap
+    // Step 3: Clear all video-related state
+    setLocalVideoTrack(null);
+    setLocalAudioTrack(null);
+    setRemoteParticipants([]);
+    setLocalScreenTrack(null);
+    setRemoteScreenTrack(null);
+    setIsScreenSharing(false);
+    setShowChat(false);
+    setShowTopics(false);
+    setShowParticipants(false);
+
+    // Small delay to ensure video cleanup is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Step 4: Prepare recap data
     let allParticipants = [];
     if (participantIds.length > 0) {
       const { data: profiles } = await supabase
@@ -805,9 +1341,6 @@ export default function UnifiedCallPage() {
       allParticipants = profiles || [];
     }
 
-    const endTime = new Date().toISOString();
-    const startTime = callStartTimeRef.current || callStartTime;
-
     setRecapData({
       channelName: roomId,
       callType: config.internalType,
@@ -816,12 +1349,15 @@ export default function UnifiedCallPage() {
       endedAt: endTime,
       duration: startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0,
       participants: allParticipants,
-      transcript,
-      messages,
+      transcript: currentTranscript,
+      messages: currentMessages,
     });
+
+    // Step 5: Hide transition and show recap
+    setIsLeaving(false);
     setShowRecap(true);
 
-    // Generate AI summary
+    // Step 6: Generate AI summary in background
     setLoadingSummary(true);
     try {
       const duration = startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0;
@@ -829,8 +1365,8 @@ export default function UnifiedCallPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transcript,
-          messages,
+          transcript: currentTranscript,
+          messages: currentMessages,
           participants: allParticipants.map(p => p.name || p.email?.split('@')[0]),
           duration,
           meetingTitle: relatedData?.topic || relatedData?.name || config.ui.title,
@@ -850,7 +1386,8 @@ export default function UnifiedCallPage() {
   };
 
   const handleRecapClose = () => {
-    setShowRecap(false);
+    // Navigate directly without setting showRecap to false
+    // This prevents the video call UI from briefly showing during navigation
     router.push('/');
   };
 
@@ -863,6 +1400,43 @@ export default function UnifiedCallPage() {
       alert('Connection request sent!');
     } catch (err) {
       console.error('Error connecting:', err);
+    }
+  };
+
+  // Handle sharing summary to circle (for circle calls)
+  const handleShareToCircle = async (summaryText) => {
+    if (!relatedData?.id || callType !== 'circle') return;
+
+    try {
+      const { error } = await supabase.from('connection_group_messages').insert({
+        group_id: relatedData.id,
+        user_id: user.id,
+        message: summaryText
+      });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error sharing to circle:', err);
+      throw err;
+    }
+  };
+
+  // Handle sending summary to a participant via messages
+  const handleSendToParticipant = async (participantId, summaryText) => {
+    if (!participantId || !user?.id) return;
+
+    try {
+      const { error } = await supabase.from('messages').insert({
+        sender_id: user.id,
+        receiver_id: participantId,
+        content: summaryText,
+        read: false
+      });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error sending to participant:', err);
+      throw err;
     }
   };
 
@@ -879,6 +1453,24 @@ export default function UnifiedCallPage() {
     }
     alert(errorMsg);
   };
+
+  // Show "Ending call..." transition
+  if (isLeaving) {
+    return (
+      <div
+        className="h-screen flex flex-col items-center justify-center"
+        style={{
+          background: 'linear-gradient(165deg, #1E1410 0%, #2D1E14 40%, #1A120E 100%)',
+        }}
+      >
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-amber-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+          <h2 className="text-2xl font-semibold text-white mb-2">Ending Call</h2>
+          <p className="text-stone-400">Preparing your meeting summary...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show recap
   if (showRecap && recapData) {
@@ -914,6 +1506,9 @@ export default function UnifiedCallPage() {
           onClose={handleRecapClose}
           onConnect={handleConnectFromRecap}
           onScheduleFollowUp={() => router.push('/')}
+          circleId={callType === 'circle' ? relatedData?.id : null}
+          onShareToCircle={callType === 'circle' ? handleShareToCircle : null}
+          onSendToParticipant={handleSendToParticipant}
         />
       </div>
     );
@@ -922,7 +1517,12 @@ export default function UnifiedCallPage() {
   // Invalid call type
   if (!config) {
     return (
-      <div className="min-h-screen bg-stone-900 flex items-center justify-center">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(165deg, #1E1410 0%, #2D1E14 40%, #1A120E 100%)',
+        }}
+      >
         <div className="text-white text-center">
           <p className="text-xl mb-4">Invalid call type</p>
           <button
@@ -949,7 +1549,12 @@ export default function UnifiedCallPage() {
   };
 
   return (
-    <div className="h-screen bg-stone-900 flex flex-col overflow-hidden">
+    <div
+      className="h-screen flex flex-col overflow-hidden"
+      style={{
+        background: 'linear-gradient(165deg, #1E1410 0%, #2D1E14 40%, #1A120E 100%)',
+      }}
+    >
       {/* Agora global styles */}
       {config.provider === 'agora' && (
         <style jsx global>{`
@@ -967,20 +1572,21 @@ export default function UnifiedCallPage() {
         title={config.ui.title}
         brandName={config.ui.brandName}
         subtitle={getSubtitle()}
-        emoji={config.ui.emoji}
-        gradient={config.ui.gradient}
         participantCount={participantCount}
         providerBadge={config.provider === 'livekit' ? 'LiveKit' : undefined}
         isConnecting={isConnecting}
         isTranscribing={isTranscribing && callType === 'coffee'}
+        isRecording={isRecording}
         gridView={gridView}
         showGridToggle={remoteParticipants.length > 0}
         onToggleView={() => setGridView(!gridView)}
-        onLeave={handleLeaveCall}
+        meetingId={roomId}
+        callDuration={callDuration}
+        connectionQuality={connectionQuality}
       />
 
       {/* Video Area */}
-      <div className={`flex-1 p-3 relative overflow-hidden transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`} style={{ minHeight: 0 }}>
+      <div className={`flex-1 p-2 sm:p-3 relative overflow-hidden transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`} style={{ minHeight: 0 }}>
         {gridView ? (
           <VideoGrid
             localVideoRef={localVideoRef}
@@ -991,6 +1597,10 @@ export default function UnifiedCallPage() {
             accentColor={config.ui.accentColor}
             remoteParticipants={remoteParticipants}
             providerType={config.provider}
+            localScreenTrack={localScreenTrack}
+            remoteScreenTrack={remoteScreenTrack}
+            screenSharerName={screenSharerName}
+            onStopScreenShare={handleStopScreenShare}
           />
         ) : (
           <VideoSpeakerView
@@ -1004,6 +1614,10 @@ export default function UnifiedCallPage() {
             providerType={config.provider}
             isLocalMain={isLocalMain}
             onSwap={() => setIsLocalMain(!isLocalMain)}
+            localScreenTrack={localScreenTrack}
+            remoteScreenTrack={remoteScreenTrack}
+            screenSharerName={screenSharerName}
+            onStopScreenShare={handleStopScreenShare}
           />
         )}
 
@@ -1011,6 +1625,8 @@ export default function UnifiedCallPage() {
         <TranscriptOverlay
           transcript={transcript}
           isTranscribing={isTranscribing}
+          interimText={interimText}
+          speakerName={user?.name || 'You'}
         />
       </div>
 
@@ -1032,7 +1648,16 @@ export default function UnifiedCallPage() {
           showTopics={showTopics}
           showParticipants={showParticipants}
           messagesCount={messages.length}
+          participantCount={remoteParticipants.length + 1}
           transcriptionLanguage={transcriptionLanguage}
+          videoDevices={videoDevices}
+          audioDevices={audioDevices}
+          selectedVideoDevice={selectedVideoDevice}
+          selectedAudioDevice={selectedAudioDevice}
+          onVideoDeviceChange={handleVideoDeviceChange}
+          onAudioDeviceChange={handleAudioDeviceChange}
+          isVideoDeviceSwitching={isVideoDeviceSwitching}
+          isAudioDeviceSwitching={isAudioDeviceSwitching}
           features={config.features}
           onToggleMute={handleToggleMute}
           onToggleVideo={handleToggleVideo}
@@ -1058,66 +1683,104 @@ export default function UnifiedCallPage() {
         />
       </div>
 
-      {/* Sidebar */}
+      {/* Sidebar - Modal/Drawer on mobile, Fixed panel on desktop */}
       {showSidebar && (
-        <div className="fixed right-0 top-0 bottom-0 w-full md:w-80 bg-stone-800 border-l border-stone-700 flex flex-col z-50">
+        <>
+          {/* Mobile backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+            onClick={() => {
+              setShowChat(false);
+              setShowTopics(false);
+              setShowParticipants(false);
+            }}
+          />
+          {/* Sidebar panel - Glass morphism */}
+          <div
+            className="fixed right-0 top-0 bottom-0 w-[85%] max-w-sm md:w-80 flex flex-col z-50 animate-slide-in-right md:animate-none"
+            style={{
+              background: 'rgba(30, 20, 14, 0.85)',
+              backdropFilter: 'blur(24px) saturate(1.3)',
+              WebkitBackdropFilter: 'blur(24px) saturate(1.3)',
+              borderLeft: '1px solid rgba(245,237,228,0.08)',
+            }}
+          >
           {/* Sidebar Header */}
-          <div className="border-b border-stone-700">
-            <div className="flex items-center justify-between px-4 pt-3 pb-2">
-              <h3 className="text-white font-semibold">
-                {enabledPanels.length > 1 ? 'Meeting Panel' :
-                  showChat ? 'Chat' :
-                  showTopics ? 'Topics' : 'Participants'}
-              </h3>
-              <button
-                onClick={() => {
-                  setShowChat(false);
-                  setShowTopics(false);
-                  setShowParticipants(false);
-                }}
-                className="text-stone-400 hover:text-white p-1"
-              >
-                ✕
-              </button>
-            </div>
+          <div className="flex items-center justify-between px-4 py-3">
+            <span
+              className="text-base font-bold"
+              style={{ color: '#F5EDE4', letterSpacing: '-0.02em' }}
+            >
+              Meeting Panel
+            </span>
+            <button
+              onClick={() => {
+                setShowChat(false);
+                setShowTopics(false);
+                setShowParticipants(false);
+              }}
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-white/10"
+              style={{ background: 'rgba(245,237,228,0.06)', color: 'rgba(245,237,228,0.5)' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
 
-            {/* Tabs */}
-            {enabledPanels.length > 1 && (
-              <div className="flex">
-                {showChat && (
-                  <button
-                    onClick={() => setActiveTab('messages')}
-                    className={`flex-1 py-3 text-sm font-medium transition relative ${
-                      activeTab === 'messages' ? 'text-amber-400' : 'text-stone-400 hover:text-white'
-                    }`}
-                  >
-                    💬 Messages
-                    {activeTab === 'messages' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500" />}
-                  </button>
+          {/* Tabs */}
+          <div className="flex mx-2" style={{ borderBottom: '1px solid rgba(245,237,228,0.08)' }}>
+            {showChat && (
+              <button
+                onClick={() => setActiveTab('messages')}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors relative"
+                style={{ color: activeTab === 'messages' ? '#D4A574' : 'rgba(245,237,228,0.5)' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <span>Messages</span>
+                {activeTab === 'messages' && (
+                  <div className="absolute bottom-0 left-[15%] right-[15%] h-0.5 rounded-full" style={{ background: '#D4A574' }} />
                 )}
-                {showTopics && (
-                  <button
-                    onClick={() => setActiveTab('topics')}
-                    className={`flex-1 py-3 text-sm font-medium transition relative ${
-                      activeTab === 'topics' ? 'text-amber-400' : 'text-stone-400 hover:text-white'
-                    }`}
-                  >
-                    💡 Topics
-                    {activeTab === 'topics' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500" />}
-                  </button>
+              </button>
+            )}
+            {showTopics && (
+              <button
+                onClick={() => setActiveTab('topics')}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors relative"
+                style={{ color: activeTab === 'topics' ? '#D4A574' : 'rgba(245,237,228,0.5)' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2C6.48 2 2 6 2 11c0 2.5 1.1 4.8 2.9 6.5L4 22l4.5-2.3c1.1.3 2.3.5 3.5.5 5.52 0 10-4 10-9s-4.48-9-10-9z" />
+                  <circle cx="8" cy="11" r="1" fill="currentColor" />
+                  <circle cx="12" cy="11" r="1" fill="currentColor" />
+                  <circle cx="16" cy="11" r="1" fill="currentColor" />
+                </svg>
+                <span>Topics</span>
+                {activeTab === 'topics' && (
+                  <div className="absolute bottom-0 left-[15%] right-[15%] h-0.5 rounded-full" style={{ background: '#D4A574' }} />
                 )}
-                {showParticipants && (
-                  <button
-                    onClick={() => setActiveTab('participants')}
-                    className={`flex-1 py-3 text-sm font-medium transition relative ${
-                      activeTab === 'participants' ? 'text-amber-400' : 'text-stone-400 hover:text-white'
-                    }`}
-                  >
-                    👥 People
-                    {activeTab === 'participants' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500" />}
-                  </button>
+              </button>
+            )}
+            {showParticipants && (
+              <button
+                onClick={() => setActiveTab('participants')}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium transition-colors relative"
+                style={{ color: activeTab === 'participants' ? '#D4A574' : 'rgba(245,237,228,0.5)' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <span>People</span>
+                {activeTab === 'participants' && (
+                  <div className="absolute bottom-0 left-[15%] right-[15%] h-0.5 rounded-full" style={{ background: '#D4A574' }} />
                 )}
-              </div>
+              </button>
             )}
           </div>
 
@@ -1129,7 +1792,6 @@ export default function UnifiedCallPage() {
               newMessage={newMessage}
               onNewMessageChange={setNewMessage}
               onSendMessage={handleSendMessage}
-              accentColor={config.ui.accentColor}
             />
           )}
 
@@ -1137,57 +1799,164 @@ export default function UnifiedCallPage() {
           {showTopics && (enabledPanels.length === 1 || activeTab === 'topics') && (
             <div className="flex-1 flex flex-col overflow-hidden">
               {/* Topic Card */}
-              <div className="p-4 border-b border-stone-700">
-                <div className="bg-gradient-to-r from-amber-800/30 to-amber-700/20 rounded-xl p-4 border border-amber-600/30">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <p className="text-xs text-amber-400 font-medium uppercase tracking-wide mb-1">
-                        Current Topic
-                      </p>
-                      <p className="text-white font-medium leading-relaxed">
-                        {currentTopic || 'Click shuffle to get a conversation starter!'}
-                      </p>
+              <div className="p-3.5">
+                {icebreakersLoading ? (
+                  <div
+                    className="rounded-2xl p-4 relative overflow-hidden"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(212,165,116,0.15) 0%, rgba(139,94,60,0.12) 100%)',
+                      border: '1px solid rgba(212,165,116,0.25)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                      <span style={{ color: '#D4A574' }} className="text-sm">Loading icebreakers...</span>
                     </div>
-                    <button
-                      onClick={shuffleTopic}
-                      className="p-2 bg-amber-700 hover:bg-amber-600 rounded-lg transition-all hover:scale-105"
-                      title="Shuffle topic"
-                    >
-                      <span className="text-white text-lg">🔀</span>
-                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div
+                    className="rounded-2xl p-4 relative overflow-hidden"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(212,165,116,0.15) 0%, rgba(139,94,60,0.12) 100%)',
+                      border: '1px solid rgba(212,165,116,0.25)',
+                    }}
+                  >
+                    {/* Subtle glow */}
+                    <div
+                      className="absolute -top-5 -right-5 w-20 h-20"
+                      style={{ background: 'radial-gradient(circle, rgba(212,165,116,0.15) 0%, transparent 70%)' }}
+                    />
+                    <div className="flex items-start gap-3 relative">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span
+                            className="text-[10px] font-bold uppercase"
+                            style={{ color: '#D4A574', letterSpacing: '1.2px' }}
+                          >
+                            Current Topic
+                          </span>
+                          {isAIGenerated && (
+                            <span className="flex items-center gap-1 text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-full font-medium">
+                              ✨ AI
+                            </span>
+                          )}
+                          {currentTopic?.category && (
+                            <span
+                              className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
+                              style={{ background: 'rgba(245,237,228,0.08)', color: 'rgba(245,237,228,0.6)' }}
+                            >
+                              {currentTopic.category}
+                            </span>
+                          )}
+                        </div>
+                        <p
+                          className="text-[15px] font-semibold leading-relaxed"
+                          style={{ color: '#F5EDE4', letterSpacing: '-0.01em' }}
+                        >
+                          {currentTopic?.question || currentTopic || 'Click shuffle to get a conversation starter!'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={shuffleTopic}
+                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95"
+                        style={{
+                          background: '#D4A574',
+                          boxShadow: '0 2px 8px rgba(212,165,116,0.3)',
+                        }}
+                        title="Shuffle topic"
+                        disabled={icebreakersLoading}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="16 3 21 3 21 8" />
+                          <line x1="4" y1="20" x2="21" y2="3" />
+                          <polyline points="21 16 21 21 16 21" />
+                          <line x1="15" y1="15" x2="21" y2="21" />
+                          <line x1="4" y1="4" x2="9" y2="9" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Live Transcript */}
               <div className="flex-1 flex flex-col min-h-0">
-                <div className="px-4 py-3 border-b border-stone-700 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${isTranscribing ? 'bg-amber-400 animate-pulse' : 'bg-stone-500'}`} />
-                    <span className="text-stone-300 text-sm font-medium">Live Transcript</span>
-                  </div>
+                <div className="mx-3.5 mb-2 flex items-center gap-2">
+                  <div
+                    className="w-2 h-2 rounded-full"
+                    style={{
+                      background: isTranscribing ? '#6BBF6A' : 'rgba(245,237,228,0.3)',
+                      animation: isTranscribing ? 'pulse 2s ease infinite' : 'none',
+                    }}
+                  />
+                  <span className="text-xs font-semibold" style={{ color: '#F5EDE4', letterSpacing: '0.02em' }}>
+                    Live Transcript
+                  </span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {transcript.length === 0 ? (
-                    <div className="text-center py-8">
-                      <span className="text-4xl mb-3 block">🎤</span>
-                      <p className="text-stone-400 text-sm">
-                        {isTranscribing ? 'Listening... Start speaking!' : 'Transcript will appear when you speak'}
-                      </p>
+                <div className="flex-1 overflow-y-auto px-3.5 pb-3 space-y-2.5 scrollbar-thin">
+                  {transcript.length === 0 && !interimText ? (
+                    <div className="flex flex-col items-center justify-center pt-12 gap-3">
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(245,237,228,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="23" />
+                        <line x1="8" y1="23" x2="16" y2="23" />
+                      </svg>
+                      <span className="text-sm font-medium" style={{ color: 'rgba(245,237,228,0.5)' }}>
+                        {isTranscribing ? 'Listening... Start speaking!' : 'Transcript will appear here'}
+                      </span>
                     </div>
                   ) : (
-                    transcript.map((entry, idx) => (
-                      <div key={idx} className="flex items-start gap-2">
-                        <div className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-medium bg-amber-700 text-white">
-                          {(entry.speakerName || '?').charAt(0).toUpperCase()}
+                    <>
+                      {transcript.map((entry, idx) => (
+                        <div key={idx} className="animate-slide-up" style={{ animationDelay: `${idx * 0.1}s` }}>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-xs font-semibold" style={{ color: '#D4A574' }}>
+                              {entry.speakerName}
+                            </span>
+                            <span className="text-[10px]" style={{ color: 'rgba(245,237,228,0.3)' }}>
+                              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div
+                            className="rounded-xl px-3 py-2 text-sm"
+                            style={{
+                              background: 'rgba(245,237,228,0.08)',
+                              borderLeft: '2px solid rgba(212,165,116,0.25)',
+                              color: 'rgba(245,237,228,0.8)',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {entry.text}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-stone-400 mb-0.5">{entry.speakerName}</p>
-                          <p className="text-white text-sm leading-relaxed">{entry.text}</p>
+                      ))}
+                      {/* Show interim text while speaking */}
+                      {interimText && (
+                        <div className="animate-slide-up opacity-70">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-xs font-semibold" style={{ color: '#D4A574' }}>
+                              {user?.name || 'You'}
+                            </span>
+                            <span className="text-[10px]" style={{ color: '#6BBF6A' }}>
+                              speaking...
+                            </span>
+                          </div>
+                          <div
+                            className="rounded-xl px-3 py-2 text-sm italic"
+                            style={{
+                              background: 'rgba(245,237,228,0.08)',
+                              borderLeft: '2px solid rgba(107,191,106,0.4)',
+                              color: 'rgba(245,237,228,0.7)',
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {interimText}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -1201,11 +1970,25 @@ export default function UnifiedCallPage() {
               remoteParticipants={remoteParticipants}
               isMuted={isMuted}
               isVideoOff={isVideoOff}
+              isScreenSharing={isScreenSharing}
               participantCount={participantCount}
-              accentColor={config.ui.accentColor}
             />
           )}
-        </div>
+
+          {/* Brand footer */}
+          <div
+            className="py-2 flex items-center justify-center"
+            style={{ borderTop: '1px solid rgba(245,237,228,0.08)' }}
+          >
+            <span
+              className="text-[10px] font-semibold uppercase"
+              style={{ color: 'rgba(245,237,228,0.2)', letterSpacing: '1.5px' }}
+            >
+              CircleW
+            </span>
+          </div>
+          </div>
+        </>
       )}
     </div>
   );
