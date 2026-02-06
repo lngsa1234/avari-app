@@ -1841,11 +1841,9 @@ function MainApp({ currentUser, onSignOut }) {
       // AI Insights Banner
       aiBanner: {
         background: 'linear-gradient(135deg, #5E4530 0%, #7A5C42 50%, #C9A96E 100%)',
-        borderRadius: isMobile ? '0' : '24px',
-        padding: isMobile ? '18px 16px' : '24px 28px',
-        marginBottom: isMobile ? '12px' : '28px',
-        marginLeft: isMobile ? '-16px' : '0',
-        marginRight: isMobile ? '-16px' : '0',
+        borderRadius: isMobile ? '16px' : '24px',
+        padding: isMobile ? '18px 20px' : '24px 28px',
+        marginBottom: isMobile ? '20px' : '28px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -1856,16 +1854,10 @@ function MainApp({ currentUser, onSignOut }) {
       },
       card: {
         backgroundColor: 'white',
-        borderRadius: isMobile ? '0' : '24px',
+        borderRadius: isMobile ? '16px' : '24px',
         padding: isMobile ? '16px' : '24px',
-        border: isMobile ? 'none' : '1px solid rgba(184, 160, 137, 0.1)',
-        borderTop: isMobile ? '1px solid rgba(184, 160, 137, 0.1)' : undefined,
-        borderBottom: isMobile ? '1px solid rgba(184, 160, 137, 0.1)' : undefined,
-        marginBottom: isMobile ? '12px' : '20px',
-        marginLeft: isMobile ? '-16px' : '0',
-        marginRight: isMobile ? '-16px' : '0',
-        paddingLeft: isMobile ? '16px' : '24px',
-        paddingRight: isMobile ? '16px' : '24px',
+        border: '1px solid rgba(184, 160, 137, 0.1)',
+        marginBottom: isMobile ? '16px' : '20px',
       },
       cardHeader: {
         display: 'flex',
@@ -2052,19 +2044,16 @@ function MainApp({ currentUser, onSignOut }) {
           <div style={{
             display: 'grid',
             gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)',
-            gap: isMobile ? '0' : '12px',
-            marginLeft: isMobile ? '-16px' : '0',
-            marginRight: isMobile ? '-16px' : '0',
+            gap: '12px',
           }}>
             {/* Meetups Card */}
             <button
               onClick={() => setCurrentView('meetups')}
               style={{
                 background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: isMobile ? '0' : '16px',
+                borderRadius: '16px',
                 padding: '16px',
-                border: isMobile ? 'none' : '1px solid rgba(184, 160, 137, 0.15)',
-                borderBottom: isMobile ? '1px solid rgba(184, 160, 137, 0.15)' : undefined,
+                border: '1px solid rgba(184, 160, 137, 0.15)',
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s ease',
@@ -2108,10 +2097,9 @@ function MainApp({ currentUser, onSignOut }) {
               onClick={() => setCurrentView('discover')}
               style={{
                 background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: isMobile ? '0' : '16px',
+                borderRadius: '16px',
                 padding: '16px',
-                border: isMobile ? 'none' : '1px solid rgba(184, 160, 137, 0.15)',
-                borderBottom: isMobile ? '1px solid rgba(184, 160, 137, 0.15)' : undefined,
+                border: '1px solid rgba(184, 160, 137, 0.15)',
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s ease',
@@ -2155,9 +2143,9 @@ function MainApp({ currentUser, onSignOut }) {
               onClick={() => setCurrentView('messages')}
               style={{
                 background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: isMobile ? '0' : '16px',
+                borderRadius: '16px',
                 padding: '16px',
-                border: isMobile ? 'none' : '1px solid rgba(184, 160, 137, 0.15)',
+                border: '1px solid rgba(184, 160, 137, 0.15)',
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'all 0.2s ease',
@@ -2430,11 +2418,10 @@ function MainApp({ currentUser, onSignOut }) {
                         key={meetup.id}
                         style={{
                           display: 'flex',
-                          flexDirection: isMobile ? 'column' : 'row',
-                          alignItems: isMobile ? 'stretch' : 'center',
+                          alignItems: 'center',
                           gap: isMobile ? '12px' : '16px',
                           padding: isMobile ? '14px 0' : '16px',
-                          borderRadius: isMobile ? '0' : '12px',
+                          borderRadius: '12px',
                           transition: 'all 0.25s ease',
                           cursor: 'pointer',
                           position: 'relative',
@@ -2443,43 +2430,32 @@ function MainApp({ currentUser, onSignOut }) {
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '12px' : '16px', flex: 1, minWidth: 0 }}>
-                          <EventDateBadge date={meetup.date} />
+                        <EventDateBadge date={meetup.date} />
 
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <h4 style={{
-                              fontSize: isMobile ? '15px' : '14px',
-                              fontWeight: '600',
-                              color: '#3D2B1A',
-                              margin: 0,
-                              marginBottom: '4px',
-                              lineHeight: 1.3,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                            }}>
-                              {meetup.topic || 'Community Event'}
-                            </h4>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#B8A089' }}>
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Clock style={{ width: '12px', height: '12px' }} />
-                                {formatTime(meetup.time)}
-                              </span>
-                            </div>
-                            {!isMobile && <AttendeeAvatars meetupId={meetup.id} />}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            color: '#3D2B1A',
+                            margin: 0,
+                            marginBottom: '4px',
+                            lineHeight: 1.3,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: isMobile ? 'normal' : 'nowrap',
+                          }}>
+                            {meetup.topic || 'Community Event'}
+                          </h4>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#B8A089' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Clock style={{ width: '12px', height: '12px' }} />
+                              {formatTime(meetup.time)}
+                            </span>
                           </div>
+                          <AttendeeAvatars meetupId={meetup.id} />
                         </div>
 
-                        <div style={{
-                          flexShrink: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: isMobile ? 'space-between' : 'flex-end',
-                          gap: '12px',
-                        }}>
-                          {isMobile && <AttendeeAvatars meetupId={meetup.id} />}
+                        <div style={{ flexShrink: 0 }}>
                           {isSignedUp ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
@@ -2748,20 +2724,17 @@ function MainApp({ currentUser, onSignOut }) {
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)',
-                  gap: isMobile ? '0' : '12px',
-                  marginLeft: isMobile ? '-16px' : '0',
-                  marginRight: isMobile ? '-16px' : '0',
+                  gap: '12px',
                 }}>
-                  {topActions.map((action, index) => (
+                  {topActions.map((action) => (
                     <div
                       key={action.id}
                       onClick={action.onClick}
                       style={{
                         background: action.gradient,
-                        borderRadius: isMobile ? '0' : '16px',
+                        borderRadius: '16px',
                         padding: isMobile ? '14px 16px' : '16px',
                         cursor: 'pointer',
-                        borderBottom: isMobile && index < topActions.length - 1 ? '1px solid rgba(139, 111, 92, 0.1)' : 'none',
                         transition: 'all 0.2s ease',
                         border: '1px solid rgba(139, 111, 92, 0.08)',
                         position: 'relative',
@@ -3546,7 +3519,7 @@ function MainApp({ currentUser, onSignOut }) {
       </header>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto px-4 py-6 md:px-6">
+      <div className="max-w-4xl mx-auto p-4 md:p-6">
         {currentView === 'home' && <HomeView />}
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
