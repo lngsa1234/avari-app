@@ -1803,13 +1803,14 @@ function MainApp({ currentUser, onSignOut }) {
       container: {
         fontFamily: '"DM Sans", sans-serif',
         position: 'relative',
-        padding: '24px 0',
+        padding: isMobile ? '16px 0' : '24px 0',
       },
       titleSection: {
         display: 'flex',
         justifyContent: 'space-between',
-        alignItems: 'flex-end',
-        marginBottom: '24px',
+        alignItems: isMobile ? 'flex-start' : 'flex-end',
+        flexDirection: isMobile ? 'column' : 'row',
+        marginBottom: isMobile ? '20px' : '24px',
         paddingBottom: '20px',
         borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
         flexWrap: 'wrap',
@@ -1817,7 +1818,7 @@ function MainApp({ currentUser, onSignOut }) {
       },
       pageTitle: {
         fontFamily: '"Playfair Display", serif',
-        fontSize: '34px',
+        fontSize: isMobile ? '28px' : '34px',
         fontWeight: '600',
         color: '#2A1D10',
         letterSpacing: '-0.5px',
@@ -1835,14 +1836,14 @@ function MainApp({ currentUser, onSignOut }) {
       contentGrid: {
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        gap: isMobile ? '16px' : '20px',
       },
       // AI Insights Banner
       aiBanner: {
         background: 'linear-gradient(135deg, #5E4530 0%, #7A5C42 50%, #C9A96E 100%)',
-        borderRadius: '24px',
-        padding: '24px 28px',
-        marginBottom: '28px',
+        borderRadius: isMobile ? '16px' : '24px',
+        padding: isMobile ? '18px 20px' : '24px 28px',
+        marginBottom: isMobile ? '20px' : '28px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -1853,10 +1854,10 @@ function MainApp({ currentUser, onSignOut }) {
       },
       card: {
         backgroundColor: 'white',
-        borderRadius: '24px',
-        padding: '24px',
+        borderRadius: isMobile ? '16px' : '24px',
+        padding: isMobile ? '16px' : '24px',
         border: '1px solid rgba(184, 160, 137, 0.1)',
-        marginBottom: '20px',
+        marginBottom: isMobile ? '16px' : '20px',
       },
       cardHeader: {
         display: 'flex',
@@ -2042,7 +2043,7 @@ function MainApp({ currentUser, onSignOut }) {
           {/* Achievement Cards Grid */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
+            gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)',
             gap: '12px',
           }}>
             {/* Meetups Card */}
@@ -2710,7 +2711,7 @@ function MainApp({ currentUser, onSignOut }) {
                 .slice(0, 3)
 
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)', gap: '12px' }}>
                   {topActions.map((action) => (
                     <div
                       key={action.id}
@@ -2718,15 +2719,17 @@ function MainApp({ currentUser, onSignOut }) {
                       style={{
                         background: action.gradient,
                         borderRadius: '16px',
-                        padding: '16px',
+                        padding: isMobile ? '14px 16px' : '16px',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                         border: '1px solid rgba(139, 111, 92, 0.08)',
                         position: 'relative',
-                        minHeight: '120px',
+                        minHeight: isMobile ? 'auto' : '120px',
                         display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
+                        flexDirection: isMobile ? 'row' : 'column',
+                        alignItems: isMobile ? 'center' : 'stretch',
+                        gap: isMobile ? '14px' : '0',
+                        justifyContent: isMobile ? 'flex-start' : 'space-between',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)'
@@ -2762,11 +2765,12 @@ function MainApp({ currentUser, onSignOut }) {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginBottom: '12px',
+                        marginBottom: isMobile ? '0' : '12px',
+                        flexShrink: 0,
                       }}>
                         {action.icon}
                       </div>
-                      <div>
+                      <div style={{ flex: isMobile ? 1 : 'none' }}>
                         <h4 style={{
                           fontSize: '14px',
                           fontWeight: '600',
@@ -2785,6 +2789,9 @@ function MainApp({ currentUser, onSignOut }) {
                           {action.description}
                         </p>
                       </div>
+                      {isMobile && (
+                        <ChevronRight style={{ width: '18px', height: '18px', color: '#D4C4B0', flexShrink: 0 }} />
+                      )}
                     </div>
                   ))}
                 </div>
