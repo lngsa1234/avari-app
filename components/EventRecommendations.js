@@ -41,16 +41,10 @@ export default function EventRecommendations({
         return;
       }
 
-      const { data, error } = await supabase
+      // Fetch recommendations without join
+      const { data: recsData, error } = await supabase
         .from('event_recommendations')
-        .select(`
-          *,
-          meetup:meetups(
-            id, title, description, date, time, location, is_virtual,
-            host_id, profiles!meetups_host_id_fkey(name, profile_picture),
-            meetup_attendees(count)
-          )
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .in('status', ['pending', 'viewed'])
         .order('match_score', { ascending: false })
@@ -62,10 +56,58 @@ export default function EventRecommendations({
         return;
       }
 
-      // Filter out past events
-      const now = new Date();
-      const activeRecs = (data || [])
-        .filter(r => r.meetup && new Date(r.meetup.date) > now)
+      if (!recsData || recsData.length === 0) {
+        setRecommendations([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch meetups separately
+      const meetupIds = recsData.map(r => r.meetup_id).filter(Boolean);
+      let meetupMap = {};
+
+      if (meetupIds.length > 0) {
+        const { data: meetups, error: meetupError } = await supabase
+          .from('meetups')
+          .select('id, topic, description, date, time, location, created_by')
+          .in('id', meetupIds);
+
+        if (meetupError) {
+          console.error('[EventRecs] Meetup fetch error:', meetupError);
+        }
+
+        // Fetch attendee counts
+        const { data: attendeeCounts } = await supabase
+          .from('meetup_attendees')
+          .select('meetup_id')
+          .in('meetup_id', meetupIds);
+
+        // Count attendees per meetup
+        const countMap = {};
+        (attendeeCounts || []).forEach(a => {
+          countMap[a.meetup_id] = (countMap[a.meetup_id] || 0) + 1;
+        });
+
+        // Build meetup map with attendee counts
+        (meetups || []).forEach(m => {
+          meetupMap[m.id] = {
+            ...m,
+            meetup_attendees: [{ count: countMap[m.id] || 0 }]
+          };
+        });
+      }
+
+      // Merge recommendations with meetups
+      const recsWithMeetups = recsData.map(rec => ({
+        ...rec,
+        meetup: meetupMap[rec.meetup_id] || null
+      }));
+
+      // Filter out past events (keep today's events)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const activeRecs = recsWithMeetups
+        .filter(r => r.meetup && new Date(r.meetup.date) >= today)
         .slice(0, maxItems);
 
       setRecommendations(activeRecs);
@@ -319,7 +361,7 @@ export default function EventRecommendations({
               <div style={{ flex: 1, minWidth: 0 }}>
                 {/* Event title */}
                 <h4 style={styles.eventTitle}>
-                  {rec.meetup?.title || rec.meetup?.topic || 'Community Event'}
+                  {rec.meetup?.topic || 'Community Event'}
                 </h4>
 
                 {/* Event details */}
@@ -467,7 +509,7 @@ export function EventRecommendationCard({ recommendation, onRSVP, onDismiss }) {
     <div style={cardStyles.container}>
       <div style={cardStyles.header}>
         <h4 style={cardStyles.title}>
-          {rec.meetup?.title || rec.meetup?.topic}
+          {rec.meetup?.topic}
         </h4>
         <button onClick={() => onDismiss?.(rec)} style={cardStyles.dismissBtn}>
           <X size={14} />

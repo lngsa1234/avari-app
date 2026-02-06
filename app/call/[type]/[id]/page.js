@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCallTypeConfig, isValidCallType } from '@/lib/video/callTypeConfig';
+import { saveCallRecap } from '@/lib/callRecapHelpers';
 import { useCallRoom } from '@/hooks/useCallRoom';
 import { useRecording } from '@/hooks/useRecording';
 import useTranscription from '@/hooks/useTranscription';
@@ -1377,9 +1378,64 @@ export default function UnifiedCallPage() {
       if (response.ok) {
         const summaryData = await response.json();
         setAiSummary(summaryData);
+
+        // Build full summary text for storage
+        let fullSummaryText = summaryData.summary || '';
+        if (summaryData.keyTakeaways?.length > 0) {
+          fullSummaryText += '\n\nKey Takeaways:\n';
+          summaryData.keyTakeaways.forEach(t => {
+            const text = typeof t === 'string' ? t : (t.text || t);
+            const emoji = typeof t === 'object' && t.emoji ? t.emoji + ' ' : '• ';
+            fullSummaryText += `${emoji}${text}\n`;
+          });
+        }
+        if (summaryData.actionItems?.length > 0) {
+          fullSummaryText += '\nAction Items:\n';
+          summaryData.actionItems.forEach(a => {
+            const text = typeof a === 'string' ? a : (a.text || a);
+            fullSummaryText += `• ${text}\n`;
+          });
+        }
+
+        // Save recap to database
+        try {
+          await saveCallRecap({
+            channelName: roomId,
+            callType: config.internalType,
+            provider: config.provider,
+            startedAt: startTime,
+            endedAt: endTime,
+            participants: allParticipants,
+            transcript: currentTranscript,
+            aiSummary: fullSummaryText.trim(),
+            metrics: {},
+            userId: user?.id
+          });
+          console.log('[UnifiedCall] Recap saved to database');
+        } catch (saveErr) {
+          console.error('[UnifiedCall] Failed to save recap:', saveErr);
+        }
       }
     } catch (err) {
       console.error('Failed to generate AI summary:', err);
+      // Still save the recap without AI summary
+      try {
+        await saveCallRecap({
+          channelName: roomId,
+          callType: config.internalType,
+          provider: config.provider,
+          startedAt: startTime,
+          endedAt: endTime,
+          participants: allParticipants,
+          transcript: currentTranscript,
+          aiSummary: null,
+          metrics: {},
+          userId: user?.id
+        });
+        console.log('[UnifiedCall] Recap saved to database (without AI summary)');
+      } catch (saveErr) {
+        console.error('[UnifiedCall] Failed to save recap:', saveErr);
+      }
     } finally {
       setLoadingSummary(false);
     }

@@ -1,0 +1,1269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CircleW — Home</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF5EF;
+    --cream-dark: #F3ECE2;
+    --mocha-100: #E8DDD0;
+    --mocha-200: #D4C4B0;
+    --mocha-300: #B8A089;
+    --mocha-400: #9C8068;
+    --mocha-500: #7A5C42;
+    --mocha-600: #5E4530;
+    --mocha-700: #3D2B1A;
+    --mocha-800: #2A1D10;
+    --gold: #C9A96E;
+    --gold-light: #E8D5A8;
+    --sage: #8B9E7E;
+    --sage-light: #D4DECE;
+    --rose: #C4868B;
+    --rose-light: #F0D4D6;
+    --white: #FFFFFF;
+    --shadow-sm: 0 1px 3px rgba(61,43,26,0.06);
+    --shadow-md: 0 4px 16px rgba(61,43,26,0.08);
+    --shadow-lg: 0 8px 32px rgba(61,43,26,0.1);
+    --shadow-xl: 0 16px 48px rgba(61,43,26,0.12);
+    --radius-sm: 12px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--mocha-700);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Nav ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(250,245,239,0.85);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border-bottom: 1px solid rgba(184,160,137,0.12);
+    padding: 0 40px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--mocha-600);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cream);
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .logo-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--mocha-700);
+    letter-spacing: -0.3px;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 100px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--mocha-400);
+    text-decoration: none;
+    transition: all 0.25s ease;
+    cursor: pointer;
+  }
+
+  .nav-link:hover {
+    color: var(--mocha-600);
+    background: var(--mocha-100);
+  }
+
+  .nav-link.active {
+    background: var(--mocha-600);
+    color: var(--cream);
+  }
+
+  .nav-link svg { width: 16px; height: 16px; }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .search-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--white);
+    border: 1px solid var(--mocha-100);
+    border-radius: 100px;
+    padding: 8px 16px;
+    width: 200px;
+    transition: all 0.3s ease;
+  }
+
+  .search-bar:focus-within {
+    width: 260px;
+    border-color: var(--mocha-300);
+    box-shadow: 0 0 0 3px rgba(122,92,66,0.08);
+  }
+
+  .search-bar input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--mocha-600);
+    width: 100%;
+  }
+
+  .search-bar input::placeholder { color: var(--mocha-300); }
+  .search-bar svg { color: var(--mocha-300); flex-shrink: 0; }
+
+  .notif-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--mocha-100);
+    background: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    color: var(--mocha-500);
+  }
+
+  .notif-btn:hover { background: var(--mocha-100); }
+
+  .notif-dot {
+    position: absolute;
+    top: 7px;
+    right: 8px;
+    width: 7px;
+    height: 7px;
+    background: var(--rose);
+    border-radius: 50%;
+    border: 1.5px solid var(--white);
+  }
+
+  .avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--mocha-400), var(--mocha-600));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cream);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+
+  .avatar:hover { transform: scale(1.05); }
+
+  /* ── Main ── */
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 36px 24px 80px;
+  }
+
+  /* ── Hero Greeting ── */
+  .hero {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 36px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .hero-text h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 34px;
+    font-weight: 600;
+    color: var(--mocha-800);
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+
+  .hero-text p {
+    font-size: 15px;
+    color: var(--mocha-400);
+    margin-top: 6px;
+    font-weight: 400;
+  }
+
+  .hero-date {
+    font-size: 13px;
+    color: var(--mocha-300);
+    font-weight: 500;
+    text-align: right;
+  }
+
+  .hero-date span {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 2px;
+    color: var(--mocha-300);
+  }
+
+  /* ── AI Insights Banner ── */
+  .ai-banner {
+    background: linear-gradient(135deg, var(--mocha-600) 0%, var(--mocha-500) 50%, var(--gold) 100%);
+    border-radius: var(--radius-lg);
+    padding: 24px 28px;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    animation: fadeUp 0.6s ease 0.1s both;
+  }
+
+  .ai-banner:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .ai-banner::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .ai-banner::after {
+    content: '';
+    position: absolute;
+    bottom: -60%;
+    left: 10%;
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle, rgba(201,169,110,0.15) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+
+  .ai-banner-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .ai-icon {
+    width: 48px;
+    height: 48px;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+
+  .ai-banner-text h3 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 3px;
+  }
+
+  .ai-banner-text p {
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+    font-weight: 400;
+  }
+
+  .ai-badge {
+    background: rgba(255,255,255,0.2);
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 100px;
+    letter-spacing: 0.5px;
+    position: relative;
+    z-index: 1;
+    text-transform: uppercase;
+  }
+
+  .ai-arrow {
+    position: relative;
+    z-index: 1;
+    color: rgba(255,255,255,0.6);
+    transition: transform 0.3s ease;
+  }
+
+  .ai-banner:hover .ai-arrow {
+    transform: translateX(4px);
+    color: var(--white);
+  }
+
+  /* ── Momentum Section ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--mocha-700);
+  }
+
+  .section-badge {
+    font-size: 12px;
+    color: var(--sage);
+    font-weight: 600;
+    background: var(--sage-light);
+    padding: 4px 12px;
+    border-radius: 100px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .momentum-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 36px;
+    animation: fadeUp 0.6s ease 0.2s both;
+  }
+
+  .momentum-card {
+    background: var(--white);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+    cursor: pointer;
+  }
+
+  .momentum-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--mocha-100);
+  }
+
+  .momentum-card.completed::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--sage);
+    border-radius: 3px 3px 0 0;
+  }
+
+  .momentum-card.pending::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--mocha-200);
+    border-radius: 3px 3px 0 0;
+  }
+
+  .mc-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .mc-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--white);
+    font-size: 16px;
+  }
+
+  .mc-icon.connections { background: linear-gradient(135deg, var(--mocha-400), var(--mocha-500)); }
+  .mc-icon.meetings { background: linear-gradient(135deg, var(--gold), var(--mocha-400)); }
+  .mc-icon.recaps { background: linear-gradient(135deg, var(--rose), var(--mocha-400)); }
+  .mc-icon.followup { background: linear-gradient(135deg, var(--sage), var(--mocha-400)); }
+
+  .mc-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+  }
+
+  .mc-check.done {
+    background: var(--sage-light);
+    color: var(--sage);
+  }
+
+  .mc-check.todo {
+    background: var(--mocha-100);
+    color: var(--mocha-300);
+  }
+
+  .mc-number {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--mocha-700);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .mc-label {
+    font-size: 13px;
+    color: var(--mocha-400);
+    font-weight: 500;
+  }
+
+  /* ── Two-Column Layout ── */
+  .content-grid {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    animation: fadeUp 0.6s ease 0.3s both;
+  }
+
+  /* ── Events ── */
+  .events-section {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    border: 1px solid rgba(184,160,137,0.1);
+  }
+
+  .events-section .section-header { margin-bottom: 20px; }
+
+  .view-all {
+    font-size: 13px;
+    color: var(--mocha-400);
+    font-weight: 500;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s ease;
+    cursor: pointer;
+  }
+
+  .view-all:hover { color: var(--mocha-600); }
+
+  .event-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    transition: all 0.25s ease;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .event-card:hover {
+    background: var(--cream);
+  }
+
+  .event-card + .event-card {
+    border-top: 1px solid var(--cream-dark);
+  }
+
+  .event-card:hover + .event-card,
+  .event-card + .event-card:hover {
+    border-top-color: transparent;
+  }
+
+  .event-date-badge {
+    width: 52px;
+    height: 56px;
+    background: var(--cream);
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid var(--mocha-100);
+  }
+
+  .event-card:hover .event-date-badge {
+    background: var(--white);
+  }
+
+  .event-date-badge .month {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--mocha-400);
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .event-date-badge .day {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--mocha-700);
+    line-height: 1.1;
+  }
+
+  .event-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .event-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--mocha-700);
+    margin-bottom: 4px;
+    line-height: 1.3;
+  }
+
+  .event-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--mocha-300);
+  }
+
+  .event-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .event-meta svg { width: 12px; height: 12px; }
+
+  .event-attendees {
+    display: flex;
+    align-items: center;
+    margin-top: 6px;
+  }
+
+  .event-attendee {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--white);
+    margin-left: -6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--white);
+  }
+
+  .event-attendee:first-child { margin-left: 0; }
+  .event-attendee.a1 { background: var(--mocha-400); }
+  .event-attendee.a2 { background: var(--gold); }
+  .event-attendee.a3 { background: var(--sage); }
+
+  .event-attendee-count {
+    font-size: 11px;
+    color: var(--mocha-300);
+    margin-left: 8px;
+  }
+
+  .event-action {
+    flex-shrink: 0;
+  }
+
+  .btn-primary {
+    background: var(--mocha-600);
+    color: var(--cream);
+    border: none;
+    padding: 9px 18px;
+    border-radius: 100px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+  }
+
+  .btn-primary:hover {
+    background: var(--mocha-700);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--mocha-500);
+    border: 1.5px solid var(--mocha-200);
+    padding: 8px 16px;
+    border-radius: 100px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn-outline:hover {
+    border-color: var(--mocha-400);
+    background: var(--cream);
+  }
+
+  .btn-signed {
+    background: var(--sage-light);
+    color: var(--sage);
+    border: none;
+    padding: 9px 18px;
+    border-radius: 100px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .sidebar-card {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    padding: 22px;
+    border: 1px solid rgba(184,160,137,0.1);
+  }
+
+  .sidebar-card .section-title {
+    font-size: 17px;
+    margin-bottom: 16px;
+  }
+
+  /* ── Quick Actions ── */
+  .quick-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .quick-action {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+
+  .quick-action:hover {
+    background: var(--cream);
+    border-color: var(--mocha-100);
+  }
+
+  .qa-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .qa-icon.discover { background: var(--gold-light); }
+  .qa-icon.create { background: var(--rose-light); }
+  .qa-icon.invite { background: var(--sage-light); }
+
+  .qa-text {
+    flex: 1;
+  }
+
+  .qa-text h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mocha-700);
+    margin-bottom: 1px;
+  }
+
+  .qa-text p {
+    font-size: 11px;
+    color: var(--mocha-300);
+  }
+
+  .qa-arrow {
+    color: var(--mocha-200);
+    transition: all 0.2s ease;
+  }
+
+  .quick-action:hover .qa-arrow {
+    color: var(--mocha-500);
+    transform: translateX(2px);
+  }
+
+  /* ── Connection Suggestions ── */
+  .suggestion {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .suggestion + .suggestion {
+    border-top: 1px solid var(--cream-dark);
+  }
+
+  .suggestion-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--white);
+    font-weight: 600;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .suggestion-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .suggestion-info h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mocha-700);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .suggestion-info p {
+    font-size: 11px;
+    color: var(--mocha-300);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .connect-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1.5px solid var(--mocha-200);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--mocha-400);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .connect-btn:hover {
+    background: var(--mocha-600);
+    border-color: var(--mocha-600);
+    color: var(--white);
+  }
+
+  /* ── Progress Ring ── */
+  .progress-section {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 4px 0;
+  }
+
+  .progress-ring-container {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    flex-shrink: 0;
+  }
+
+  .progress-ring {
+    transform: rotate(-90deg);
+    width: 64px;
+    height: 64px;
+  }
+
+  .progress-ring-bg {
+    fill: none;
+    stroke: var(--cream-dark);
+    stroke-width: 5;
+  }
+
+  .progress-ring-fill {
+    fill: none;
+    stroke: var(--mocha-500);
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 163.36;
+    stroke-dashoffset: 81.68;
+    transition: stroke-dashoffset 1s ease;
+  }
+
+  .progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--mocha-700);
+  }
+
+  .progress-info h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mocha-700);
+    margin-bottom: 3px;
+  }
+
+  .progress-info p {
+    font-size: 11px;
+    color: var(--mocha-300);
+    line-height: 1.4;
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 860px) {
+    .content-grid {
+      grid-template-columns: 1fr;
+    }
+    .momentum-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+    nav { padding: 0 20px; }
+    main { padding: 28px 16px 60px; }
+    .hero-date { display: none; }
+  }
+
+  @media (max-width: 520px) {
+    .momentum-grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Navigation ── -->
+<nav>
+  <div class="nav-left">
+    <a class="logo" href="#">
+      <div class="logo-icon">W</div>
+      <span class="logo-text">CircleW</span>
+    </a>
+    <div class="nav-links">
+      <a class="nav-link active" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+        Home
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        Discover
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Meetups
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Circles
+      </a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <div class="search-bar">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" placeholder="Search...">
+    </div>
+    <button class="notif-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+      <div class="notif-dot"></div>
+    </button>
+    <div class="avatar">A</div>
+  </div>
+</nav>
+
+<!-- ── Main Content ── -->
+<main>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-text">
+      <h1>Good evening, Admin</h1>
+      <p>Your community awaits — you've got momentum building ✨</p>
+    </div>
+    <div class="hero-date">
+      <span>Today</span>
+      Thursday, Feb 5
+    </div>
+  </div>
+
+  <!-- AI Insights Banner -->
+  <div class="ai-banner" onclick="this.style.opacity='0.9'">
+    <div class="ai-banner-left">
+      <div class="ai-icon">✦</div>
+      <div class="ai-banner-text">
+        <h3>Your Weekly AI Insights are ready</h3>
+        <p>Personalized recap of your connections and community trends</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;position:relative;z-index:1;">
+      <span class="ai-badge">New</span>
+      <svg class="ai-arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+  </div>
+
+  <!-- Momentum Cards -->
+  <div class="section-header" style="animation: fadeUp 0.6s ease 0.15s both;">
+    <h2 class="section-title">Your Momentum</h2>
+    <div class="section-badge">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      Step 4 of 4 — All caught up!
+    </div>
+  </div>
+
+  <div class="momentum-grid">
+    <div class="momentum-card completed">
+      <div class="mc-top">
+        <div class="mc-icon connections">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <div class="mc-check done">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+      </div>
+      <div class="mc-number">2</div>
+      <div class="mc-label">Connections</div>
+    </div>
+
+    <div class="momentum-card completed">
+      <div class="mc-top">
+        <div class="mc-icon meetings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        </div>
+        <div class="mc-check done">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+      </div>
+      <div class="mc-number">26</div>
+      <div class="mc-label">Meetings</div>
+    </div>
+
+    <div class="momentum-card pending">
+      <div class="mc-top">
+        <div class="mc-icon recaps">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        </div>
+        <div class="mc-check todo">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="1"/></svg>
+        </div>
+      </div>
+      <div class="mc-number">0</div>
+      <div class="mc-label">Recaps</div>
+    </div>
+
+    <div class="momentum-card completed">
+      <div class="mc-top">
+        <div class="mc-icon followup">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <div class="mc-check done">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+      </div>
+      <div class="mc-number">0</div>
+      <div class="mc-label">Follow-ups</div>
+    </div>
+  </div>
+
+  <!-- Two Column: Events + Sidebar -->
+  <div class="content-grid">
+
+    <!-- Events -->
+    <div class="events-section">
+      <div class="section-header">
+        <h2 class="section-title">Upcoming Events</h2>
+        <a class="view-all" href="#">View all <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+      </div>
+
+      <!-- Event 1 -->
+      <div class="event-card">
+        <div class="event-date-badge">
+          <span class="month">Feb</span>
+          <span class="day">6</span>
+        </div>
+        <div class="event-info">
+          <div class="event-title">PM to Founder Transition Circle Meetup</div>
+          <div class="event-meta">
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              7:00 PM
+            </span>
+            <span>Friday</span>
+          </div>
+          <div class="event-attendees">
+            <div class="event-attendee a1">J</div>
+            <div class="event-attendee a2">M</div>
+            <span class="event-attendee-count">2 attending</span>
+          </div>
+        </div>
+        <div class="event-action">
+          <button class="btn-signed">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Signed up
+          </button>
+        </div>
+      </div>
+
+      <!-- Event 2 -->
+      <div class="event-card">
+        <div class="event-date-badge">
+          <span class="month">Feb</span>
+          <span class="day">9</span>
+        </div>
+        <div class="event-info">
+          <div class="event-title">UX Design Meetup</div>
+          <div class="event-meta">
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              7:00 PM
+            </span>
+            <span>Monday</span>
+          </div>
+          <div class="event-attendees">
+            <div class="event-attendee a2">S</div>
+            <div class="event-attendee a3">K</div>
+            <span class="event-attendee-count">2 attending</span>
+          </div>
+        </div>
+        <div class="event-action">
+          <button class="btn-primary">Reserve spot →</button>
+        </div>
+      </div>
+
+      <!-- Event 3 -->
+      <div class="event-card">
+        <div class="event-date-badge">
+          <span class="month">Feb</span>
+          <span class="day">13</span>
+        </div>
+        <div class="event-info">
+          <div class="event-title">PM to Founder Transition Circle Meetup</div>
+          <div class="event-meta">
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              7:00 PM
+            </span>
+            <span>Thursday</span>
+          </div>
+          <div class="event-attendees">
+            <div class="event-attendee a1">L</div>
+            <span class="event-attendee-count">1 attending</span>
+          </div>
+        </div>
+        <div class="event-action">
+          <button class="btn-primary">Reserve spot →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <!-- Quick Actions -->
+      <div class="sidebar-card">
+        <h3 class="section-title">Quick Actions</h3>
+        <div class="quick-actions">
+          <div class="quick-action">
+            <div class="qa-icon discover">🔍</div>
+            <div class="qa-text">
+              <h4>Discover Circles</h4>
+              <p>Find your community</p>
+            </div>
+            <svg class="qa-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+          <div class="quick-action">
+            <div class="qa-icon create">📅</div>
+            <div class="qa-text">
+              <h4>Host a Meetup</h4>
+              <p>Bring people together</p>
+            </div>
+            <svg class="qa-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+          <div class="quick-action">
+            <div class="qa-icon invite">💌</div>
+            <div class="qa-text">
+              <h4>Invite Friends</h4>
+              <p>Grow your network</p>
+            </div>
+            <svg class="qa-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Weekly Progress -->
+      <div class="sidebar-card">
+        <h3 class="section-title">This Week</h3>
+        <div class="progress-section">
+          <div class="progress-ring-container">
+            <svg class="progress-ring" viewBox="0 0 64 64">
+              <circle class="progress-ring-bg" cx="32" cy="32" r="26"/>
+              <circle class="progress-ring-fill" cx="32" cy="32" r="26"/>
+            </svg>
+            <span class="progress-ring-text">50%</span>
+          </div>
+          <div class="progress-info">
+            <h4>Community Goal</h4>
+            <p>Attend 2 meetups this week to unlock your next coffee chat</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suggested Connections -->
+      <div class="sidebar-card">
+        <h3 class="section-title">Suggested for You</h3>
+        <div class="suggestion">
+          <div class="suggestion-avatar" style="background:linear-gradient(135deg,var(--mocha-400),var(--gold))">J</div>
+          <div class="suggestion-info">
+            <h4>Jessica Park</h4>
+            <p>PM → Founder · Fintech</p>
+          </div>
+          <button class="connect-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="suggestion">
+          <div class="suggestion-avatar" style="background:linear-gradient(135deg,var(--sage),var(--mocha-400))">M</div>
+          <div class="suggestion-info">
+            <h4>Maya Chen</h4>
+            <p>UX Designer · EdTech</p>
+          </div>
+          <button class="connect-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="suggestion">
+          <div class="suggestion-avatar" style="background:linear-gradient(135deg,var(--rose),var(--mocha-400))">S</div>
+          <div class="suggestion-info">
+            <h4>Sarah Kim</h4>
+            <p>Product Lead · Healthcare</p>
+          </div>
+          <button class="connect-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+</body>
+</html>

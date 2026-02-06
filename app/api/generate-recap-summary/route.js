@@ -87,42 +87,46 @@ export async function POST(request) {
   }
 }
 
-const ENHANCED_SYSTEM_PROMPT = `You are a helpful assistant that analyzes video call conversations and generates comprehensive meeting summaries. Return a JSON object with the following structure:
+const ENHANCED_SYSTEM_PROMPT = `You are a helpful assistant that analyzes video call transcripts. Your job is to summarize ONLY what was ACTUALLY SAID in the transcript.
+
+CRITICAL RULES:
+1. ONLY include information that was explicitly stated in the transcript
+2. DO NOT infer, assume, or make up content based on meeting titles or context
+3. If the transcript is minimal (e.g., just greetings or test messages), return minimal/empty results
+4. NEVER hallucinate or fabricate discussions that didn't happen
+5. If someone just said "hello" or "this is a test", do NOT pretend they discussed business topics
+
+Return a JSON object with this structure:
 
 {
-  "summary": "A brief 2-3 sentence overview of the call highlighting the main purpose and outcome",
+  "summary": "Brief overview of what was ACTUALLY said (or 'Brief call with minimal conversation' if little was said)",
   "sentiment": {
-    "overall": "A 2-3 word description of the meeting vibe (e.g., 'Energizing & Inspiring', 'Productive & Focused', 'Warm & Supportive')",
-    "emoji": "A single emoji that represents the vibe",
-    "highlights": ["3 short highlight tags like 'Great energy', 'Actionable advice', 'Deep connection'"]
+    "overall": "Vibe description based on actual tone",
+    "emoji": "Single emoji",
+    "highlights": ["Only highlights from actual content, empty array if none"]
   },
   "keyTakeaways": [
-    { "emoji": "💡", "text": "Key insight or learning from the conversation" },
-    { "emoji": "🎯", "text": "Another important takeaway" }
+    { "emoji": "💡", "text": "ONLY takeaways from things actually discussed" }
   ],
   "topicsDiscussed": [
-    { "topic": "Topic name", "mentions": 5 },
-    { "topic": "Another topic", "mentions": 3 }
+    { "topic": "ONLY topics actually mentioned", "mentions": 1 }
   ],
   "memorableQuotes": [
-    { "quote": "An impactful or memorable statement from the conversation", "author": "Speaker Name" }
+    { "quote": "Actual quote from transcript", "author": "Speaker Name" }
   ],
   "actionItems": [
-    { "text": "Specific action item or follow-up task mentioned", "done": false }
+    { "text": "ONLY action items explicitly mentioned", "done": false }
   ],
-  "suggestedFollowUps": [
-    { "personName": "Name", "reason": "Why you should follow up", "suggestedTopic": "What to discuss" }
-  ]
+  "suggestedFollowUps": []
 }
 
 Guidelines:
-- summary: 2-3 sentences, professional but warm tone
-- sentiment: Capture the emotional tone and energy of the meeting
-- keyTakeaways: 3-5 items, each with a relevant emoji (💡🎯⚡🤝💪🌟✨🔥)
-- topicsDiscussed: 3-6 main topics with estimated mention frequency
-- memorableQuotes: 1-3 impactful quotes if present (skip if none stand out)
-- actionItems: 2-5 concrete next steps or tasks mentioned
-- suggestedFollowUps: 1-3 suggested follow-up conversations based on shared interests
+- If transcript has minimal content, return mostly empty arrays
+- summary: Describe what actually happened, even if it's just "Brief test call"
+- keyTakeaways: EMPTY array if nothing substantive was discussed
+- topicsDiscussed: EMPTY array if no real topics were covered
+- actionItems: EMPTY array if no actions were mentioned
+- DO NOT make up professional-sounding takeaways that weren't discussed
 
 Return ONLY valid JSON, no additional text or markdown.`;
 
@@ -286,6 +290,12 @@ function generateSimpleSummary(transcript, messages, participants, duration, mee
   const messageCount = messages?.length || 0;
   const participantList = Array.isArray(participants) ? participants : [];
 
+  const allText = transcript?.map(t => t.text).join(' ').toLowerCase() ||
+                  messages?.map(m => m.message || m.text || '').join(' ').toLowerCase() || '';
+
+  // If there's no actual content, return minimal summary without fake insights
+  const hasContent = allText.trim().length > 20; // At least some meaningful content
+
   // Build summary
   let summary = '';
   if (duration > 0) {
@@ -294,10 +304,30 @@ function generateSimpleSummary(transcript, messages, participants, duration, mee
       summary += ` with ${participantList.join(', ')}`;
     }
     summary += '.';
+    if (!hasContent) {
+      summary += ' No conversation was transcribed.';
+    }
   } else {
     summary = participantList.length > 0
       ? `You connected with ${participantList.join(', ')}.`
       : 'A video call session.';
+  }
+
+  // If no real content, return minimal response without fake takeaways
+  if (!hasContent) {
+    return {
+      summary,
+      sentiment: { overall: 'Brief call', emoji: '📞', highlights: [] },
+      keyTakeaways: [],
+      topicsDiscussed: [],
+      memorableQuotes: [],
+      actionItems: [],
+      suggestedFollowUps: participantList.slice(0, 2).map(name => ({
+        personName: name,
+        reason: 'Continue the conversation',
+        suggestedTopic: 'Catch up'
+      }))
+    };
   }
 
   // Detect topics and sentiment from content
@@ -305,9 +335,6 @@ function generateSimpleSummary(transcript, messages, participants, duration, mee
   const keyTakeaways = [];
   const actionItems = [];
   let sentiment = { overall: 'Productive', emoji: '✨', highlights: ['Connection made'] };
-
-  const allText = transcript?.map(t => t.text).join(' ').toLowerCase() ||
-                  messages?.map(m => m.message || m.text || '').join(' ').toLowerCase() || '';
 
   // Topic detection
   const topicKeywords = {
@@ -326,16 +353,11 @@ function generateSimpleSummary(transcript, messages, participants, duration, mee
     }
   }
 
-  if (topicsDiscussed.length === 0) {
-    topicsDiscussed.push({ topic: 'General conversation', mentions: 1 });
-  }
-
   // Sort by mentions
   topicsDiscussed.sort((a, b) => b.mentions - a.mentions);
 
   // Sentiment detection
   const positiveWords = ['great', 'awesome', 'love', 'amazing', 'excited', 'happy', 'wonderful'];
-  const actionWords = ['thanks', 'follow up', 'schedule', 'send', 'share', 'help'];
 
   const positiveCount = positiveWords.filter(w => allText.includes(w)).length;
   if (positiveCount >= 3) {
@@ -344,7 +366,7 @@ function generateSimpleSummary(transcript, messages, participants, duration, mee
     sentiment = { overall: 'Warm & Supportive', emoji: '🤝', highlights: ['Good conversation', 'Mutual support'] };
   }
 
-  // Key takeaways
+  // Key takeaways - only add if detected from actual content
   if (allText.includes('learn') || allText.includes('insight')) {
     keyTakeaways.push({ emoji: '💡', text: 'New insights shared' });
   }
@@ -354,11 +376,8 @@ function generateSimpleSummary(transcript, messages, participants, duration, mee
   if (allText.includes('help') || allText.includes('support')) {
     keyTakeaways.push({ emoji: '💪', text: 'Mutual support offered' });
   }
-  if (keyTakeaways.length === 0) {
-    keyTakeaways.push({ emoji: '✨', text: 'Meaningful connection made' });
-  }
 
-  // Action items
+  // Action items - only add if detected from actual content
   if (allText.includes('follow up') || allText.includes('next time')) {
     actionItems.push({ text: 'Schedule a follow-up conversation', done: false });
   }

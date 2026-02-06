@@ -59,19 +59,37 @@ export default function CompactMessagesView({ currentUser, onBack }) {
     try {
       setLoading(true);
 
+      // Fetch connections without explicit foreign key
       const { data: connections } = await supabase
         .from('connections')
-        .select(`
-          *,
-          connected_user:profiles!connections_connected_user_id_fkey(
-            id, name, career
-          )
-        `)
+        .select('*')
         .eq('user_id', currentUser.id)
         .eq('status', 'accepted');
 
+      if (!connections || connections.length === 0) {
+        setConversations([]);
+        return;
+      }
+
+      // Fetch profiles separately
+      const connectedUserIds = connections.map(c => c.connected_user_id);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, career')
+        .in('id', connectedUserIds);
+
+      // Create a map of profiles by ID
+      const profileMap = {};
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+
+      // Merge connections with profiles
+      const connectionsWithProfiles = connections.map(conn => ({
+        ...conn,
+        connected_user: profileMap[conn.connected_user_id] || { id: conn.connected_user_id, name: 'Unknown', career: '' }
+      }));
+
       const conversationsWithLastMessage = await Promise.all(
-        (connections || []).map(async (conn) => {
+        connectionsWithProfiles.map(async (conn) => {
           const { data: lastMessage } = await supabase
             .from('messages')
             .select('*')

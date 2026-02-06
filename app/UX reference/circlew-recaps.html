@@ -1,0 +1,1795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CircleW — Meetup Recaps</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #FAF5EF;
+    --cream-mid: #F3ECE2;
+    --cream-dark: #EBE1D4;
+    --mocha-50: #E8DDD0;
+    --mocha-100: #D9CABB;
+    --mocha-200: #C4B09A;
+    --mocha-300: #A8917A;
+    --mocha-400: #8D7460;
+    --mocha-500: #6F5842;
+    --mocha-600: #5A4433;
+    --mocha-700: #3D2B1A;
+    --mocha-800: #2A1D10;
+    --white: #FFFFFF;
+    --shadow-sm: 0 1px 3px rgba(61,43,26,0.05);
+    --shadow-md: 0 4px 16px rgba(61,43,26,0.07);
+    --shadow-lg: 0 8px 32px rgba(61,43,26,0.09);
+    --radius-sm: 12px;
+    --radius-md: 16px;
+    --radius-lg: 24px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--mocha-700);
+    min-height: 100vh;
+  }
+
+  /* ── Nav ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(250,245,239,0.88);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border-bottom: 1px solid rgba(184,160,137,0.1);
+    padding: 0 40px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-left { display: flex; align-items: center; gap: 40px; }
+
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+
+  .logo-icon {
+    width: 36px; height: 36px; background: var(--mocha-600); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--cream); font-family: 'Playfair Display', serif; font-size: 16px; font-weight: 600;
+  }
+
+  .logo-text {
+    font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 600;
+    color: var(--mocha-700); letter-spacing: -0.3px;
+  }
+
+  .nav-links { display: flex; gap: 4px; }
+
+  .nav-link {
+    display: flex; align-items: center; gap: 7px; padding: 8px 16px;
+    border-radius: 100px; font-size: 14px; font-weight: 500;
+    color: var(--mocha-300); text-decoration: none; transition: all 0.25s ease; cursor: pointer;
+  }
+
+  .nav-link:hover { color: var(--mocha-600); background: var(--cream-mid); }
+  .nav-link.active { background: var(--mocha-600); color: var(--cream); }
+  .nav-link svg { width: 16px; height: 16px; }
+
+  .nav-right { display: flex; align-items: center; gap: 14px; }
+
+  .search-bar {
+    display: flex; align-items: center; gap: 8px; background: var(--white);
+    border: 1px solid var(--cream-dark); border-radius: 100px; padding: 8px 16px;
+    width: 200px; transition: all 0.3s ease;
+  }
+
+  .search-bar:focus-within { width: 260px; border-color: var(--mocha-200); box-shadow: 0 0 0 3px rgba(122,92,66,0.06); }
+
+  .search-bar input {
+    border: none; outline: none; background: transparent; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; color: var(--mocha-600); width: 100%;
+  }
+
+  .search-bar input::placeholder { color: var(--mocha-200); }
+  .search-bar svg { color: var(--mocha-200); flex-shrink: 0; }
+
+  .avatar {
+    width: 38px; height: 38px; border-radius: 50%; background: var(--mocha-600);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--cream); font-weight: 600; font-size: 14px; cursor: pointer;
+  }
+
+  /* ── Main ── */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 36px 24px 80px;
+  }
+
+  /* ── Breadcrumb ── */
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--mocha-200);
+    margin-bottom: 24px;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .breadcrumb a {
+    color: var(--mocha-300);
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+
+  .breadcrumb a:hover { color: var(--mocha-600); }
+  .breadcrumb .current { color: var(--mocha-500); font-weight: 500; }
+
+  /* ── Page Header ── */
+  .page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    animation: fadeUp 0.5s ease 0.05s both;
+  }
+
+  .page-header-left h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--mocha-800);
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+
+  .page-header-left p {
+    font-size: 14px;
+    color: var(--mocha-300);
+  }
+
+  .header-stats {
+    display: flex;
+    gap: 24px;
+  }
+
+  .header-stat {
+    text-align: center;
+  }
+
+  .header-stat-num {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--mocha-700);
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+
+  .header-stat-label {
+    font-size: 11px;
+    color: var(--mocha-300);
+    font-weight: 500;
+  }
+
+  /* ── Filter Bar ── */
+  .filter-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 20px;
+    animation: fadeUp 0.5s ease 0.1s both;
+  }
+
+  .filter-row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .filter-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--white);
+    border: 1px solid var(--cream-dark);
+    border-radius: 100px;
+    padding: 4px;
+  }
+
+  .filter-tab {
+    padding: 7px 18px;
+    border-radius: 100px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--mocha-300);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    background: none;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .filter-tab:hover { color: var(--mocha-500); }
+
+  .filter-tab.active {
+    background: var(--mocha-600);
+    color: var(--cream);
+  }
+
+  .filter-tab .count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 5px;
+    padding: 0 5px;
+  }
+
+  .filter-tab.active .count {
+    background: rgba(250,245,239,0.2);
+    color: var(--cream);
+  }
+
+  .filter-tab:not(.active) .count {
+    background: var(--cream-mid);
+    color: var(--mocha-400);
+  }
+
+  .filter-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .filter-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 100px;
+    border: 1px solid var(--cream-dark);
+    background: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--mocha-400);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .filter-toggle-btn:hover { border-color: var(--mocha-200); color: var(--mocha-600); }
+
+  .filter-toggle-btn.has-filters {
+    border-color: var(--mocha-400);
+    background: var(--mocha-700);
+    color: var(--cream);
+  }
+
+  .filter-badge {
+    display: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--cream);
+    color: var(--mocha-700);
+    font-size: 10px;
+    font-weight: 700;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .filter-toggle-btn.has-filters .filter-badge {
+    display: flex;
+  }
+
+  .sort-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 100px;
+    border: 1px solid var(--cream-dark);
+    background: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--mocha-400);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .sort-btn:hover { border-color: var(--mocha-200); color: var(--mocha-600); }
+
+  /* ── Filter Panel ── */
+  .filter-panel {
+    display: none;
+    background: var(--white);
+    border: 1px solid var(--cream-dark);
+    border-radius: var(--radius-md);
+    padding: 20px 24px;
+    animation: filterSlide 0.25s ease both;
+  }
+
+  .filter-panel.open { display: block; }
+
+  @keyframes filterSlide {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .filter-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+
+  .filter-panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--mocha-600);
+  }
+
+  .filter-panel-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .filter-clear-btn {
+    background: none;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mocha-300);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 100px;
+    transition: all 0.2s;
+  }
+
+  .filter-clear-btn:hover { color: var(--mocha-600); background: var(--cream); }
+
+  .filter-apply-btn {
+    background: var(--mocha-600);
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--cream);
+    cursor: pointer;
+    padding: 6px 16px;
+    border-radius: 100px;
+    transition: all 0.2s;
+  }
+
+  .filter-apply-btn:hover { background: var(--mocha-700); }
+
+  .filter-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+  }
+
+  .filter-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--mocha-400);
+    margin-bottom: 8px;
+  }
+
+  /* Dropdown select */
+  .filter-select {
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--cream-dark);
+    background: var(--cream);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--mocha-600);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23A8917A' stroke-width='2.5' stroke-linecap='round' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    transition: border-color 0.2s;
+  }
+
+  .filter-select:focus {
+    outline: none;
+    border-color: var(--mocha-300);
+  }
+
+  /* Date inputs */
+  .filter-date-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .filter-date {
+    flex: 1;
+    padding: 9px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--cream-dark);
+    background: var(--cream);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--mocha-600);
+    transition: border-color 0.2s;
+  }
+
+  .filter-date:focus {
+    outline: none;
+    border-color: var(--mocha-300);
+  }
+
+  .filter-date-sep {
+    font-size: 12px;
+    color: var(--mocha-200);
+    flex-shrink: 0;
+  }
+
+  /* Keyword input */
+  .filter-keyword {
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--cream-dark);
+    background: var(--cream);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--mocha-600);
+    transition: border-color 0.2s;
+  }
+
+  .filter-keyword:focus {
+    outline: none;
+    border-color: var(--mocha-300);
+  }
+
+  .filter-keyword::placeholder { color: var(--mocha-200); }
+
+  /* ── Active Filters Chips ── */
+  .active-filters {
+    display: none;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .active-filters.visible {
+    display: flex;
+  }
+
+  .filter-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 100px;
+    background: var(--mocha-50);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--mocha-600);
+  }
+
+  .filter-chip-remove {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: var(--mocha-200);
+    color: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s;
+    padding: 0;
+  }
+
+  .filter-chip-remove:hover { background: var(--mocha-400); }
+
+  .filter-chip-clear-all {
+    background: none;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mocha-300);
+    cursor: pointer;
+    padding: 4px 8px;
+    transition: color 0.2s;
+  }
+
+  .filter-chip-clear-all:hover { color: var(--mocha-600); }
+
+  /* ── Recap Cards ── */
+  .recaps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .recap-card {
+    background: var(--white);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--cream-dark);
+    overflow: hidden;
+    transition: all 0.3s ease;
+    animation: fadeUp 0.5s ease both;
+  }
+
+  .recap-card:nth-child(1) { animation-delay: 0.15s; }
+  .recap-card:nth-child(2) { animation-delay: 0.2s; }
+  .recap-card:nth-child(3) { animation-delay: 0.25s; }
+  .recap-card:nth-child(4) { animation-delay: 0.3s; }
+  .recap-card:nth-child(5) { animation-delay: 0.35s; }
+
+  .recap-card:hover {
+    box-shadow: var(--shadow-md);
+    border-color: var(--mocha-100);
+  }
+
+  .recap-card.unread {
+    /* unread state handled by badge only */
+  }
+
+  /* Card Header */
+  .recap-header {
+    padding: 22px 24px 0;
+    cursor: pointer;
+  }
+
+  .recap-top-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .recap-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .recap-date-badge {
+    width: 48px;
+    height: 52px;
+    background: var(--cream);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--cream-dark);
+    flex-shrink: 0;
+  }
+
+  .recap-date-badge .month {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--mocha-300);
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .recap-date-badge .day {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--mocha-700);
+    line-height: 1.1;
+  }
+
+  .recap-title-group {
+    flex: 1;
+  }
+
+  .recap-title-group h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--mocha-700);
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+
+  .recap-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--mocha-300);
+  }
+
+  .recap-subtitle span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .recap-subtitle svg { width: 12px; height: 12px; }
+
+  .recap-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .badge-unread {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    background: var(--mocha-700);
+    color: var(--cream);
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  .badge-circle {
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--cream-mid);
+    color: var(--mocha-400);
+    padding: 4px 10px;
+    border-radius: 100px;
+  }
+
+  /* Attendees row */
+  .recap-attendees {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 16px;
+  }
+
+  .attendee-stack {
+    display: flex;
+    align-items: center;
+  }
+
+  .attendee-av {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--white);
+    margin-left: -8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--cream);
+    background: var(--mocha-400);
+  }
+
+  .attendee-av:first-child { margin-left: 0; }
+  .attendee-av:nth-child(2) { background: var(--mocha-300); }
+  .attendee-av:nth-child(3) { background: var(--mocha-500); }
+  .attendee-av:nth-child(4) { background: var(--mocha-200); color: var(--mocha-700); }
+
+  .attendee-names {
+    font-size: 12px;
+    color: var(--mocha-300);
+    line-height: 1.3;
+  }
+
+  .attendee-names strong {
+    color: var(--mocha-500);
+    font-weight: 600;
+  }
+
+  /* AI Summary Section */
+  .recap-body {
+    border-top: 1px solid var(--cream-mid);
+    padding: 0 24px;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.3s ease;
+  }
+
+  .recap-card.open .recap-body {
+    max-height: 600px;
+    padding: 20px 24px;
+  }
+
+  .ai-summary-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--mocha-300);
+    margin-bottom: 12px;
+  }
+
+  .ai-summary-label .ai-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--mocha-400);
+  }
+
+  .ai-summary-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--mocha-600);
+    margin-bottom: 18px;
+  }
+
+  /* Key Takeaways */
+  .takeaways {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .takeaways-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mocha-500);
+    margin-bottom: 2px;
+  }
+
+  .takeaway {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    background: var(--cream);
+    border-radius: 10px;
+  }
+
+  .takeaway-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    background: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--mocha-400);
+  }
+
+  .takeaway p {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--mocha-600);
+  }
+
+  /* Action Items */
+  .action-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .action-items-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mocha-500);
+    margin-bottom: 2px;
+  }
+
+  .action-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+  }
+
+  .action-item + .action-item {
+    border-top: 1px solid var(--cream-mid);
+  }
+
+  .action-checkbox {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px solid var(--mocha-200);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    background: transparent;
+  }
+
+  .action-checkbox:hover {
+    border-color: var(--mocha-400);
+    background: var(--cream);
+  }
+
+  .action-checkbox.checked {
+    background: var(--mocha-600);
+    border-color: var(--mocha-600);
+    color: var(--cream);
+  }
+
+  .action-text {
+    font-size: 13px;
+    color: var(--mocha-600);
+    flex: 1;
+  }
+
+  .action-text.done {
+    text-decoration: line-through;
+    color: var(--mocha-200);
+  }
+
+  .action-person {
+    font-size: 11px;
+    color: var(--mocha-300);
+    background: var(--cream-mid);
+    padding: 2px 8px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+
+  /* Expand toggle */
+  .recap-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    cursor: pointer;
+    border-top: 1px solid var(--cream-mid);
+    transition: background 0.2s ease;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--mocha-300);
+  }
+
+  .recap-toggle:hover {
+    background: var(--cream);
+    color: var(--mocha-500);
+  }
+
+  .recap-toggle svg {
+    transition: transform 0.3s ease;
+  }
+
+  .recap-card.open .recap-toggle svg {
+    transform: rotate(180deg);
+  }
+
+  .recap-toggle .toggle-text-show { display: inline; }
+  .recap-toggle .toggle-text-hide { display: none; }
+  .recap-card.open .recap-toggle .toggle-text-show { display: none; }
+  .recap-card.open .recap-toggle .toggle-text-hide { display: inline; }
+
+  /* ── Empty State ── */
+  .empty-state {
+    text-align: center;
+    padding: 60px 24px;
+    animation: fadeUp 0.5s ease 0.15s both;
+  }
+
+  .empty-icon {
+    width: 64px;
+    height: 64px;
+    background: var(--cream-mid);
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+    color: var(--mocha-300);
+  }
+
+  .empty-state h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    color: var(--mocha-600);
+    margin-bottom: 6px;
+  }
+
+  .empty-state p {
+    font-size: 14px;
+    color: var(--mocha-300);
+    max-width: 320px;
+    margin: 0 auto;
+  }
+
+  /* ── Search Indicator ── */
+  .search-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 10px 16px;
+    background: var(--white);
+    border: 1px solid var(--cream-dark);
+    border-radius: 100px;
+    animation: fadeUp 0.3s ease both;
+  }
+
+  .search-indicator-text {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 13px;
+    color: var(--mocha-400);
+  }
+
+  .search-indicator-text strong {
+    color: var(--mocha-600);
+    font-weight: 600;
+  }
+
+  .search-clear {
+    background: none;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mocha-400);
+    cursor: pointer;
+    padding: 4px 12px;
+    border-radius: 100px;
+    transition: all 0.2s ease;
+  }
+
+  .search-clear:hover {
+    background: var(--cream-mid);
+    color: var(--mocha-600);
+  }
+
+  .no-results {
+    text-align: center;
+    padding: 60px 24px;
+  }
+
+  .no-results h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    color: var(--mocha-600);
+    margin-bottom: 6px;
+  }
+
+  .no-results p {
+    font-size: 14px;
+    color: var(--mocha-300);
+  }
+
+  .no-results a {
+    color: var(--mocha-500);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .no-results a:hover { text-decoration: underline; }
+
+  .recap-card.search-hidden {
+    display: none;
+  }
+
+  .recap-card .highlight {
+    background: var(--mocha-50);
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    nav { padding: 0 20px; }
+    .nav-links { display: none; }
+    main { padding: 24px 16px 60px; }
+    .page-header { flex-direction: column; gap: 16px; align-items: flex-start; }
+    .header-stats { gap: 16px; }
+    .filter-row-top { flex-direction: column; gap: 10px; align-items: stretch; }
+    .filter-grid { grid-template-columns: 1fr; }
+    .recap-header { padding: 18px 18px 0; }
+    .recap-card.open .recap-body { padding: 16px 18px; }
+    .recap-top-row { flex-direction: column; gap: 10px; }
+    .recap-badges { order: -1; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav>
+  <div class="nav-left">
+    <a class="logo" href="#">
+      <div class="logo-icon">W</div>
+      <span class="logo-text">CircleW</span>
+    </a>
+    <div class="nav-links">
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+        Home
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        Discover
+      </a>
+      <a class="nav-link active" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        Meetups
+      </a>
+      <a class="nav-link" href="#">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Circles
+      </a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <div class="search-bar">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" placeholder="Search recaps..." id="globalSearch" oninput="searchRecaps(this.value)">
+    </div>
+    <div class="avatar">A</div>
+  </div>
+</nav>
+
+<main>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb">
+    <a href="#">Meetups</a>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
+    <span class="current">Recaps</span>
+  </div>
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1>Meetup Recaps</h1>
+      <p>AI-powered summaries from your meetup conversations</p>
+    </div>
+    <div class="header-stats">
+      <div class="header-stat">
+        <div class="header-stat-num">12</div>
+        <div class="header-stat-label">Total recaps</div>
+      </div>
+      <div class="header-stat">
+        <div class="header-stat-num">5</div>
+        <div class="header-stat-label">Unreviewed</div>
+      </div>
+      <div class="header-stat">
+        <div class="header-stat-num">8</div>
+        <div class="header-stat-label">Action items</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="filter-bar">
+    <div class="filter-row-top">
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all">All<span class="count">12</span></button>
+        <button class="filter-tab" data-filter="unreviewed">Unreviewed<span class="count">5</span></button>
+        <button class="filter-tab" data-filter="actions">Has action items<span class="count">8</span></button>
+      </div>
+      <div class="filter-right">
+        <button class="filter-toggle-btn" id="filterToggle" onclick="toggleFilterPanel()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="12" y1="18" x2="20" y2="18"/><circle cx="6" cy="12" r="1.5" fill="currentColor"/><circle cx="10" cy="18" r="1.5" fill="currentColor"/></svg>
+          Filters
+          <span class="filter-badge" id="filterBadge">0</span>
+        </button>
+        <button class="sort-btn" onclick="toggleSort()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+          <span id="sortLabel">Newest first</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter Panel (hidden by default) -->
+    <div class="filter-panel" id="filterPanel">
+      <div class="filter-panel-header">
+        <span class="filter-panel-title">Filter recaps</span>
+        <div class="filter-panel-actions">
+          <button class="filter-clear-btn" onclick="clearAllFilters()">Clear all</button>
+          <button class="filter-apply-btn" onclick="applyFilters()">Apply filters</button>
+        </div>
+      </div>
+      <div class="filter-grid">
+        <div class="filter-group">
+          <label>Circle / Meeting</label>
+          <select class="filter-select" id="filterCircle">
+            <option value="">All circles</option>
+            <option value="pm-founder">PM → Founder</option>
+            <option value="ux-design">UX Design</option>
+            <option value="leadership">Leadership</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>Date range</label>
+          <div class="filter-date-row">
+            <input type="date" class="filter-date" id="filterDateFrom" placeholder="From">
+            <span class="filter-date-sep">–</span>
+            <input type="date" class="filter-date" id="filterDateTo" placeholder="To">
+          </div>
+        </div>
+        <div class="filter-group">
+          <label>Keyword search</label>
+          <input type="text" class="filter-keyword" id="filterKeyword" placeholder="Search in recaps...">
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Filter Chips -->
+    <div class="active-filters" id="activeFilters">
+      <!-- Chips inserted dynamically -->
+    </div>
+  </div>
+
+  <!-- Search Results Indicator -->
+  <div class="search-indicator" id="searchIndicator" style="display:none;">
+    <div class="search-indicator-text">
+      <span id="searchResultCount"></span>
+      <button class="search-clear" onclick="clearSearch()">Clear search</button>
+    </div>
+  </div>
+
+  <!-- No Results State -->
+  <div class="no-results" id="noResults" style="display:none;">
+    <div class="empty-icon">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    </div>
+    <h3>No recaps found</h3>
+    <p>Try a different search term or <a href="#" onclick="clearSearch(); return false;">clear your search</a></p>
+  </div>
+
+  <!-- Recaps List -->
+  <div class="recaps-list">
+
+    <!-- ═══ Card 1: Unread + Expanded ═══ -->
+    <div class="recap-card unread open" id="card1" data-circle="pm-founder" data-date="2026-02-03" data-status="unread" data-actions="2">
+      <div class="recap-header" onclick="toggleCard('card1')">
+        <div class="recap-top-row">
+          <div class="recap-meta">
+            <div class="recap-date-badge">
+              <span class="month">Feb</span>
+              <span class="day">3</span>
+            </div>
+            <div class="recap-title-group">
+              <h3>PM to Founder Transition Circle Meetup</h3>
+              <div class="recap-subtitle">
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  45 min
+                </span>
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                  Zoom
+                </span>
+                <span>Monday, 7 PM</span>
+              </div>
+            </div>
+          </div>
+          <div class="recap-badges">
+            <span class="badge-unread">New</span>
+            <span class="badge-circle">PM → Founder</span>
+          </div>
+        </div>
+        <div class="recap-attendees">
+          <div class="attendee-stack">
+            <div class="attendee-av">J</div>
+            <div class="attendee-av">M</div>
+            <div class="attendee-av">S</div>
+            <div class="attendee-av">L</div>
+          </div>
+          <div class="attendee-names">
+            <strong>Jessica, Maya, Sarah</strong> and 1 other
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-body">
+        <div class="ai-summary-label">
+          <span class="ai-dot"></span>
+          AI Summary
+        </div>
+        <div class="ai-summary-text">
+          The group discussed the emotional and practical challenges of leaving a stable PM career to pursue entrepreneurship. Jessica shared her experience navigating the first 90 days after leaving her fintech role, while Maya offered insights on validating product ideas before fully committing. The conversation centered around building a financial safety net, finding early customers, and maintaining confidence during the uncertain transition period.
+        </div>
+
+        <div class="takeaways-title">Key Takeaways</div>
+        <div class="takeaways">
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <p>Build a 6-month runway before transitioning — factor in healthcare costs that many people underestimate.</p>
+          </div>
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </div>
+            <p>Talk to 30 potential customers before writing a single line of code — validate the pain point, not the solution.</p>
+          </div>
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <p>Treat the first 3 months as an "exploration sprint" — don't over-commit to one idea too early.</p>
+          </div>
+        </div>
+
+        <div class="action-items-title">Action Items</div>
+        <div class="action-items">
+          <div class="action-item">
+            <button class="action-checkbox" onclick="this.classList.toggle('checked'); this.nextElementSibling.classList.toggle('done');">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" style="opacity:0"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <span class="action-text">Share your 90-day transition plan draft with the group</span>
+            <span class="action-person">You</span>
+          </div>
+          <div class="action-item">
+            <button class="action-checkbox" onclick="this.classList.toggle('checked'); this.nextElementSibling.classList.toggle('done');">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" style="opacity:0"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <span class="action-text">Schedule 1-on-1 coffee chat with Jessica to discuss fintech validation</span>
+            <span class="action-person">You + Jessica</span>
+          </div>
+          <div class="action-item">
+            <button class="action-checkbox checked">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <span class="action-text done">Maya to share customer discovery template</span>
+            <span class="action-person">Maya</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-toggle" onclick="toggleCard('card1')">
+        <span class="toggle-text-show">View AI recap</span>
+        <span class="toggle-text-hide">Collapse</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <!-- ═══ Card 2: Unread + Collapsed ═══ -->
+    <div class="recap-card unread" id="card2" data-circle="ux-design" data-date="2026-01-31" data-status="unread" data-actions="2">
+      <div class="recap-header" onclick="toggleCard('card2')">
+        <div class="recap-top-row">
+          <div class="recap-meta">
+            <div class="recap-date-badge">
+              <span class="month">Jan</span>
+              <span class="day">31</span>
+            </div>
+            <div class="recap-title-group">
+              <h3>UX Design Circle Meetup</h3>
+              <div class="recap-subtitle">
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  38 min
+                </span>
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                  Zoom
+                </span>
+                <span>Friday, 7 PM</span>
+              </div>
+            </div>
+          </div>
+          <div class="recap-badges">
+            <span class="badge-unread">New</span>
+            <span class="badge-circle">UX Design</span>
+          </div>
+        </div>
+        <div class="recap-attendees">
+          <div class="attendee-stack">
+            <div class="attendee-av">K</div>
+            <div class="attendee-av">R</div>
+            <div class="attendee-av">T</div>
+          </div>
+          <div class="attendee-names">
+            <strong>Karen, Rachel</strong> and 1 other
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-body">
+        <div class="ai-summary-label">
+          <span class="ai-dot"></span>
+          AI Summary
+        </div>
+        <div class="ai-summary-text">
+          An energizing session focused on portfolio strategy for career changers. Karen walked through how she restructured her UX portfolio after pivoting from graphic design, emphasizing the importance of showing process over polish. The group workshopped Rachel's case study and discussed how to frame PM experience as a UX asset when applying to design roles.
+        </div>
+
+        <div class="takeaways-title">Key Takeaways</div>
+        <div class="takeaways">
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <p>Lead case studies with the "situation → insight → outcome" format — recruiters spend 8 seconds on first scan.</p>
+          </div>
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </div>
+            <p>Frame PM skills (stakeholder mgmt, data analysis) as UX superpowers — not something to apologize for.</p>
+          </div>
+        </div>
+
+        <div class="action-items-title">Action Items</div>
+        <div class="action-items">
+          <div class="action-item">
+            <button class="action-checkbox" onclick="this.classList.toggle('checked'); this.nextElementSibling.classList.toggle('done');">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" style="opacity:0"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <span class="action-text">Review Karen's portfolio template and adapt for your projects</span>
+            <span class="action-person">You</span>
+          </div>
+          <div class="action-item">
+            <button class="action-checkbox" onclick="this.classList.toggle('checked'); this.nextElementSibling.classList.toggle('done');">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" style="opacity:0"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <span class="action-text">Give feedback on Rachel's case study draft by Friday</span>
+            <span class="action-person">You + Rachel</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-toggle" onclick="toggleCard('card2')">
+        <span class="toggle-text-show">View AI recap</span>
+        <span class="toggle-text-hide">Collapse</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <!-- ═══ Card 3: Read + Collapsed ═══ -->
+    <div class="recap-card" id="card3" data-circle="pm-founder" data-date="2026-01-27" data-status="read" data-actions="2">
+      <div class="recap-header" onclick="toggleCard('card3')">
+        <div class="recap-top-row">
+          <div class="recap-meta">
+            <div class="recap-date-badge">
+              <span class="month">Jan</span>
+              <span class="day">27</span>
+            </div>
+            <div class="recap-title-group">
+              <h3>PM to Founder Transition Circle Meetup</h3>
+              <div class="recap-subtitle">
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  52 min
+                </span>
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                  Zoom
+                </span>
+                <span>Monday, 7 PM</span>
+              </div>
+            </div>
+          </div>
+          <div class="recap-badges">
+            <span class="badge-circle">PM → Founder</span>
+          </div>
+        </div>
+        <div class="recap-attendees">
+          <div class="attendee-stack">
+            <div class="attendee-av">J</div>
+            <div class="attendee-av">A</div>
+            <div class="attendee-av">M</div>
+            <div class="attendee-av">S</div>
+          </div>
+          <div class="attendee-names">
+            <strong>Jessica, Amy, Maya</strong> and 1 other
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-body">
+        <div class="ai-summary-label">
+          <span class="ai-dot"></span>
+          AI Summary
+        </div>
+        <div class="ai-summary-text">
+          A deep-dive into early-stage fundraising for non-technical founders. Amy shared her experience pitching angel investors without a technical co-founder, and the group brainstormed ways to demonstrate traction through design prototypes and early user sign-ups. Jessica shared a pitch deck template that helped her secure a pre-seed round.
+        </div>
+
+        <div class="takeaways-title">Key Takeaways</div>
+        <div class="takeaways">
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <p>A clickable Figma prototype with 50 waitlist sign-ups can substitute for an MVP when pitching angels.</p>
+          </div>
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <p>Focus the pitch on the problem and your unique insight — investors bet on founders who deeply understand the pain.</p>
+          </div>
+        </div>
+
+        <div class="action-items-title">Action Items</div>
+        <div class="action-items">
+          <div class="action-item">
+            <button class="action-checkbox checked">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <span class="action-text done">Review Jessica's pitch deck template</span>
+            <span class="action-person">You</span>
+          </div>
+          <div class="action-item">
+            <button class="action-checkbox checked">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <span class="action-text done">Draft 2-minute pitch for practice next session</span>
+            <span class="action-person">You</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-toggle" onclick="toggleCard('card3')">
+        <span class="toggle-text-show">View AI recap</span>
+        <span class="toggle-text-hide">Collapse</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+    <!-- ═══ Card 4: Read + Collapsed ═══ -->
+    <div class="recap-card" id="card4" data-circle="leadership" data-date="2026-01-20" data-status="read" data-actions="0">
+      <div class="recap-header" onclick="toggleCard('card4')">
+        <div class="recap-top-row">
+          <div class="recap-meta">
+            <div class="recap-date-badge">
+              <span class="month">Jan</span>
+              <span class="day">20</span>
+            </div>
+            <div class="recap-title-group">
+              <h3>Women in Product Leadership Meetup</h3>
+              <div class="recap-subtitle">
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                  40 min
+                </span>
+                <span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+                  Zoom
+                </span>
+                <span>Wednesday, 8 PM</span>
+              </div>
+            </div>
+          </div>
+          <div class="recap-badges">
+            <span class="badge-circle">Leadership</span>
+          </div>
+        </div>
+        <div class="recap-attendees">
+          <div class="attendee-stack">
+            <div class="attendee-av">N</div>
+            <div class="attendee-av">P</div>
+            <div class="attendee-av">E</div>
+          </div>
+          <div class="attendee-names">
+            <strong>Nina, Priya, Elena</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-body">
+        <div class="ai-summary-label">
+          <span class="ai-dot"></span>
+          AI Summary
+        </div>
+        <div class="ai-summary-text">
+          A candid session on navigating organizational politics as a woman in product leadership. Nina shared strategies for getting executive buy-in when you're the only woman at the table, while Priya discussed managing upward when your skip-level doesn't understand product. The group exchanged frameworks for communicating impact in language that resonates with non-product stakeholders.
+        </div>
+
+        <div class="takeaways-title">Key Takeaways</div>
+        <div class="takeaways">
+          <div class="takeaway">
+            <div class="takeaway-icon">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            </div>
+            <p>Frame product decisions in revenue impact and risk reduction — the two things executives always care about.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="recap-toggle" onclick="toggleCard('card4')">
+        <span class="toggle-text-show">View AI recap</span>
+        <span class="toggle-text-hide">Collapse</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  // ── State ──
+  let currentTab = 'all';
+  let sortAsc = false;
+  let activeFilterState = { circle: '', dateFrom: '', dateTo: '', keyword: '' };
+
+  // ── Toggle card expand/collapse ──
+  function toggleCard(id) {
+    document.getElementById(id).classList.toggle('open');
+  }
+
+  // ── Checkboxes ──
+  document.querySelectorAll('.action-checkbox').forEach(cb => {
+    cb.addEventListener('click', function(e) {
+      e.stopPropagation();
+      this.classList.toggle('checked');
+      const svg = this.querySelector('svg');
+      svg.style.opacity = this.classList.contains('checked') ? '1' : '0';
+      const textEl = this.nextElementSibling;
+      if (textEl) textEl.classList.toggle('done');
+    });
+  });
+  document.querySelectorAll('.action-checkbox.checked svg').forEach(svg => { svg.style.opacity = '1'; });
+
+  // ── Filter Panel Toggle ──
+  function toggleFilterPanel() {
+    const panel = document.getElementById('filterPanel');
+    panel.classList.toggle('open');
+  }
+
+  // ── Tab Filters ──
+  document.querySelectorAll('.filter-tab').forEach(tab => {
+    tab.addEventListener('click', function() {
+      document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+      currentTab = this.dataset.filter;
+      runFilters();
+    });
+  });
+
+  // ── Sort Toggle ──
+  function toggleSort() {
+    sortAsc = !sortAsc;
+    document.getElementById('sortLabel').textContent = sortAsc ? 'Oldest first' : 'Newest first';
+    const btn = document.querySelector('.sort-btn svg');
+    btn.style.transform = sortAsc ? 'rotate(180deg)' : 'rotate(0)';
+    btn.style.transition = 'transform 0.2s ease';
+    runFilters();
+  }
+
+  // ── Apply Filters (from panel) ──
+  function applyFilters() {
+    activeFilterState.circle = document.getElementById('filterCircle').value;
+    activeFilterState.dateFrom = document.getElementById('filterDateFrom').value;
+    activeFilterState.dateTo = document.getElementById('filterDateTo').value;
+    activeFilterState.keyword = document.getElementById('filterKeyword').value.trim().toLowerCase();
+
+    updateFilterChips();
+    updateFilterToggleBtn();
+    runFilters();
+  }
+
+  // Also apply on Enter key in keyword field
+  document.getElementById('filterKeyword').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') applyFilters();
+  });
+
+  // ── Clear All Filters ──
+  function clearAllFilters() {
+    document.getElementById('filterCircle').value = '';
+    document.getElementById('filterDateFrom').value = '';
+    document.getElementById('filterDateTo').value = '';
+    document.getElementById('filterKeyword').value = '';
+    activeFilterState = { circle: '', dateFrom: '', dateTo: '', keyword: '' };
+    updateFilterChips();
+    updateFilterToggleBtn();
+    runFilters();
+  }
+
+  // ── Remove Single Filter ──
+  function removeFilter(key) {
+    activeFilterState[key] = '';
+    if (key === 'circle') document.getElementById('filterCircle').value = '';
+    if (key === 'dateFrom') document.getElementById('filterDateFrom').value = '';
+    if (key === 'dateTo') document.getElementById('filterDateTo').value = '';
+    if (key === 'keyword') document.getElementById('filterKeyword').value = '';
+    updateFilterChips();
+    updateFilterToggleBtn();
+    runFilters();
+  }
+
+  // ── Chips ──
+  function updateFilterChips() {
+    const container = document.getElementById('activeFilters');
+    container.innerHTML = '';
+    let count = 0;
+
+    const circleLabels = { 'pm-founder': 'PM → Founder', 'ux-design': 'UX Design', 'leadership': 'Leadership' };
+
+    if (activeFilterState.circle) {
+      count++;
+      container.innerHTML += chipHtml('Circle: ' + (circleLabels[activeFilterState.circle] || activeFilterState.circle), 'circle');
+    }
+    if (activeFilterState.dateFrom) {
+      count++;
+      container.innerHTML += chipHtml('From: ' + formatDateShort(activeFilterState.dateFrom), 'dateFrom');
+    }
+    if (activeFilterState.dateTo) {
+      count++;
+      container.innerHTML += chipHtml('To: ' + formatDateShort(activeFilterState.dateTo), 'dateTo');
+    }
+    if (activeFilterState.keyword) {
+      count++;
+      container.innerHTML += chipHtml('Keyword: "' + activeFilterState.keyword + '"', 'keyword');
+    }
+
+    if (count > 1) {
+      container.innerHTML += '<button class="filter-chip-clear-all" onclick="clearAllFilters()">Clear all</button>';
+    }
+
+    container.classList.toggle('visible', count > 0);
+  }
+
+  function chipHtml(label, key) {
+    return `<div class="filter-chip">
+      ${label}
+      <button class="filter-chip-remove" onclick="removeFilter('${key}')">
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>`;
+  }
+
+  function formatDateShort(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  // ── Filter Toggle Button State ──
+  function updateFilterToggleBtn() {
+    const btn = document.getElementById('filterToggle');
+    const badge = document.getElementById('filterBadge');
+    const count = Object.values(activeFilterState).filter(v => v).length;
+    btn.classList.toggle('has-filters', count > 0);
+    badge.textContent = count;
+  }
+
+  // ── Core Filter Logic ──
+  function runFilters() {
+    const cards = document.querySelectorAll('.recap-card');
+    const recapsList = document.querySelector('.recaps-list');
+    const noResults = document.getElementById('noResults');
+    const indicator = document.getElementById('searchIndicator');
+
+    // Remove old highlights
+    document.querySelectorAll('.highlight').forEach(el => el.replaceWith(el.textContent));
+
+    let visibleCount = 0;
+    let sortedCards = Array.from(cards);
+
+    // Sort
+    sortedCards.sort((a, b) => {
+      const dA = a.dataset.date, dB = b.dataset.date;
+      return sortAsc ? dA.localeCompare(dB) : dB.localeCompare(dA);
+    });
+
+    // Re-order DOM
+    sortedCards.forEach(card => recapsList.appendChild(card));
+
+    sortedCards.forEach(card => {
+      let show = true;
+
+      // Tab filter
+      if (currentTab === 'unreviewed' && card.dataset.status !== 'unread') show = false;
+      if (currentTab === 'actions' && parseInt(card.dataset.actions) === 0) show = false;
+
+      // Circle filter
+      if (show && activeFilterState.circle && card.dataset.circle !== activeFilterState.circle) show = false;
+
+      // Date range
+      if (show && activeFilterState.dateFrom && card.dataset.date < activeFilterState.dateFrom) show = false;
+      if (show && activeFilterState.dateTo && card.dataset.date > activeFilterState.dateTo) show = false;
+
+      // Keyword
+      if (show && activeFilterState.keyword) {
+        const text = card.textContent.toLowerCase();
+        if (!text.includes(activeFilterState.keyword)) {
+          show = false;
+        } else {
+          highlightText(card, activeFilterState.keyword);
+        }
+      }
+
+      card.classList.toggle('search-hidden', !show);
+      if (show) visibleCount++;
+    });
+
+    // Results feedback
+    const hasActiveFilters = Object.values(activeFilterState).some(v => v) || currentTab !== 'all';
+
+    if (hasActiveFilters && activeFilterState.keyword) {
+      indicator.style.display = 'flex';
+      document.getElementById('searchResultCount').innerHTML =
+        `<strong>${visibleCount}</strong> recap${visibleCount !== 1 ? 's' : ''} matching "<strong>${escapeHtml(activeFilterState.keyword)}</strong>"`;
+    } else {
+      indicator.style.display = 'none';
+    }
+
+    if (visibleCount === 0) {
+      noResults.style.display = 'block';
+      recapsList.style.display = 'none';
+    } else {
+      noResults.style.display = 'none';
+      recapsList.style.display = '';
+    }
+  }
+
+  function highlightText(card, query) {
+    const targets = card.querySelectorAll('.recap-title-group h3, .ai-summary-text, .takeaway p, .action-text, .attendee-names');
+    targets.forEach(el => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+      const textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+      textNodes.forEach(node => {
+        const idx = node.textContent.toLowerCase().indexOf(query);
+        if (idx === -1) return;
+        const before = node.textContent.slice(0, idx);
+        const match = node.textContent.slice(idx, idx + query.length);
+        const after = node.textContent.slice(idx + query.length);
+        const span = document.createElement('span');
+        span.className = 'highlight';
+        span.textContent = match;
+        const frag = document.createDocumentFragment();
+        if (before) frag.appendChild(document.createTextNode(before));
+        frag.appendChild(span);
+        if (after) frag.appendChild(document.createTextNode(after));
+        node.parentNode.replaceChild(frag, node);
+      });
+    });
+  }
+
+  // Keep global search bar wired up too
+  function searchRecaps(query) {
+    document.getElementById('filterKeyword').value = query;
+    activeFilterState.keyword = query.trim().toLowerCase();
+    updateFilterChips();
+    updateFilterToggleBtn();
+    runFilters();
+  }
+
+  function clearSearch() {
+    document.getElementById('globalSearch').value = '';
+    removeFilter('keyword');
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>

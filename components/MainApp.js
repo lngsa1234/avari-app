@@ -2,7 +2,7 @@
 
 import { supabase } from '@/lib/supabase'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search, Sparkles } from 'lucide-react'
+import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search, Sparkles, ChevronRight, FileText, CheckCircle } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import MeetupsView from './MeetupsView'
@@ -27,7 +27,6 @@ import CoffeeChatsView from './CoffeeChatsView'
 import ScheduleMeetupView from './ScheduleMeetupView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import NudgeBanner from './NudgeBanner'
-import EventRecommendations from './EventRecommendations'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -614,15 +613,18 @@ function MainApp({ currentUser, onSignOut }) {
   const loadCoffeeChatsCount = useCallback(async () => {
     try {
       // Count call recaps where this user participated in a 1:1 call
+      // Uses created_by or participant_ids array (correct column names)
       const { data, error } = await supabase
         .from('call_recaps')
         .select('id', { count: 'exact' })
         .eq('call_type', '1on1')
-        .or(`caller_id.eq.${currentUser.id},callee_id.eq.${currentUser.id}`)
+        .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
 
       if (error) {
-        // Table might not exist, that's okay
-        console.log('Coffee chats count not available:', error.message)
+        // Table might not exist or has different schema, that's okay
+        if (!error.message?.includes('does not exist')) {
+          console.log('Coffee chats count not available:', error.message)
+        }
         setCoffeeChatsCount(0)
         return
       }
@@ -636,19 +638,105 @@ function MainApp({ currentUser, onSignOut }) {
   // Load pending recaps for the checklist
   const loadPendingRecaps = useCallback(async () => {
     try {
+      // Uses created_by or participant_ids array (correct column names)
       const { data, error } = await supabase
         .from('call_recaps')
         .select('*')
-        .or(`caller_id.eq.${currentUser.id},callee_id.eq.${currentUser.id}`)
+        .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
         .order('created_at', { ascending: false })
         .limit(5)
 
       if (error) {
-        console.log('Pending recaps not available:', error.message)
+        // Silently handle missing table/column errors
+        if (!error.message?.includes('does not exist')) {
+          console.log('Pending recaps not available:', error.message)
+        }
         setPendingRecaps([])
         return
       }
-      setPendingRecaps(data || [])
+
+      const recapsData = data || []
+
+      // Extract IDs from channel_name and separate by call type
+      const meetupIds = []
+      const groupIds = []
+      recapsData.forEach(recap => {
+        const channelName = recap.channel_name || ''
+        const uuidMatch = channelName.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+        if (uuidMatch) {
+          if (recap.call_type === 'group') {
+            groupIds.push(uuidMatch[0])
+          } else {
+            meetupIds.push(uuidMatch[0])
+          }
+        }
+      })
+
+      // Fetch meetup titles
+      let titleMap = {}
+      if (meetupIds.length > 0) {
+        const { data: meetups } = await supabase
+          .from('meetups')
+          .select('id, topic')
+          .in('id', meetupIds)
+
+        ;(meetups || []).forEach(m => {
+          titleMap[m.id] = m.topic
+        })
+      }
+
+      // Fetch connection group names for group calls
+      if (groupIds.length > 0) {
+        const { data: groups } = await supabase
+          .from('connection_groups')
+          .select('id, name')
+          .in('id', groupIds)
+
+        ;(groups || []).forEach(g => {
+          titleMap[g.id] = g.name
+        })
+      }
+
+      // Helper to parse AI summary for counts
+      const parseSummaryCounts = (summary) => {
+        if (!summary) return { takeaways: 0, actionItems: 0 }
+
+        let takeaways = 0
+        let actionItems = 0
+        const lines = summary.split('\n')
+        let section = 'summary'
+
+        for (const line of lines) {
+          const lower = line.toLowerCase()
+          if (lower.includes('key takeaway') || lower.includes('takeaways:')) {
+            section = 'takeaways'
+          } else if (lower.includes('action item') || lower.includes('follow up') || lower.includes('next step')) {
+            section = 'actions'
+          } else if (line.trim().match(/^[-•*]/) || line.trim().match(/^\d+\./)) {
+            if (section === 'takeaways') takeaways++
+            if (section === 'actions') actionItems++
+          }
+        }
+        return { takeaways, actionItems }
+      }
+
+      // Enrich recaps with title and parsed counts
+      const enrichedRecaps = recapsData.map(recap => {
+        const channelName = recap.channel_name || ''
+        const uuidMatch = channelName.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+        const entityId = uuidMatch ? uuidMatch[0] : null
+        const title = entityId ? titleMap[entityId] : null
+        const counts = parseSummaryCounts(recap.ai_summary)
+
+        return {
+          ...recap,
+          meetup_title: title || null,
+          takeaways_count: counts.takeaways,
+          action_items_count: counts.actionItems
+        }
+      })
+
+      setPendingRecaps(enrichedRecaps)
     } catch (err) {
       console.error('Error loading pending recaps:', err)
       setPendingRecaps([])
@@ -1548,6 +1636,15 @@ function MainApp({ currentUser, onSignOut }) {
   }
 
   const HomeView = () => {
+    // Responsive hook for mobile layout
+    const [isMobile, setIsMobile] = useState(false)
+    useEffect(() => {
+      const checkMobile = () => setIsMobile(window.innerWidth < 860)
+      checkMobile()
+      window.addEventListener('resize', checkMobile)
+      return () => window.removeEventListener('resize', checkMobile)
+    }, [])
+
     // Filter to show UPCOMING meetups and recent ones (within 4 hours grace period)
     const upcomingMeetups = useMemo(() => {
       const now = new Date()
@@ -1589,15 +1686,118 @@ function MainApp({ currentUser, onSignOut }) {
     const nextMeeting = getNextUpcomingMeeting(meetups, userSignups)
     const upcomingMeetingCount = getUpcomingMeetingCount(meetups, userSignups)
 
-    // Calculate momentum tracker step
-    const getMomentumStep = () => {
-      if (connections.length === 0) return { step: 1, label: 'Make connections' }
-      if (userSignups.length === 0) return { step: 2, label: 'Schedule meetings' }
-      if (pendingRecaps.length > 0) return { step: 3, label: 'Review recaps' }
-      if (unreadMessageCount > 0) return { step: 4, label: 'Send follow-ups' }
-      return { step: 4, label: 'All caught up!' }
+    // Calculate weekly progress (meetups attended this week)
+    const getWeeklyProgress = () => {
+      const now = new Date()
+      const startOfWeek = new Date(now)
+      startOfWeek.setDate(now.getDate() - now.getDay()) // Sunday
+      startOfWeek.setHours(0, 0, 0, 0)
+
+      const weeklyMeetups = userSignups.filter(signupId => {
+        const meetup = meetups.find(m => m.id === signupId)
+        if (!meetup) return false
+        try {
+          const meetupDate = new Date(meetup.date)
+          return meetupDate >= startOfWeek && meetupDate <= now
+        } catch {
+          return false
+        }
+      })
+
+      const goal = 2
+      const attended = weeklyMeetups.length
+      const percentage = Math.min(Math.round((attended / goal) * 100), 100)
+      return { attended, goal, percentage }
     }
-    const momentum = getMomentumStep()
+    const weeklyProgress = getWeeklyProgress()
+
+    // Event Date Badge Component
+    const EventDateBadge = ({ date }) => {
+      let parsedDate
+      try {
+        if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          const [year, month, day] = date.split('-').map(Number)
+          parsedDate = new Date(year, month - 1, day)
+        } else {
+          const cleanDateStr = date.replace(/^[A-Za-z]+,\s*/, '')
+          parsedDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
+        }
+      } catch {
+        parsedDate = new Date()
+      }
+
+      const month = parsedDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+      const day = parsedDate.getDate()
+
+      return (
+        <div style={{
+          width: '52px',
+          height: '56px',
+          backgroundColor: '#FAF5EF',
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          border: '1px solid #E8DDD0',
+        }}>
+          <span style={{
+            fontSize: '10px',
+            textTransform: 'uppercase',
+            letterSpacing: '1px',
+            color: '#9C8068',
+            fontWeight: '600',
+            lineHeight: 1,
+          }}>{month}</span>
+          <span style={{
+            fontFamily: '"Playfair Display", serif',
+            fontSize: '22px',
+            fontWeight: '700',
+            color: '#3D2B1A',
+            lineHeight: 1.1,
+          }}>{day}</span>
+        </div>
+      )
+    }
+
+    // Attendee Avatars Component
+    const AttendeeAvatars = ({ meetupId }) => {
+      const meetupSignups = signups[meetupId] || []
+      const displayCount = Math.min(meetupSignups.length, 3)
+      const colors = ['#9C8068', '#C9A96E', '#8B9E7E']
+
+      if (meetupSignups.length === 0) return null
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', marginTop: '6px' }}>
+          {meetupSignups.slice(0, 3).map((signup, idx) => (
+            <div
+              key={signup.user_id || idx}
+              style={{
+                width: '22px',
+                height: '22px',
+                borderRadius: '50%',
+                border: '2px solid white',
+                marginLeft: idx === 0 ? 0 : '-6px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '9px',
+                fontWeight: '600',
+                color: 'white',
+                background: colors[idx % 3],
+              }}
+            >
+              {signup.profiles?.name?.[0] || '?'}
+            </div>
+          ))}
+          <span style={{ fontSize: '11px', color: '#B8A089', marginLeft: '8px' }}>
+            {meetupSignups.length} attending
+          </span>
+        </div>
+      )
+    }
 
     const homeStyles = {
       container: {
@@ -1617,57 +1817,45 @@ function MainApp({ currentUser, onSignOut }) {
       },
       pageTitle: {
         fontFamily: '"Playfair Display", serif',
-        fontSize: '36px',
+        fontSize: '34px',
         fontWeight: '600',
-        color: '#5C4033',
-        letterSpacing: '-1px',
+        color: '#2A1D10',
+        letterSpacing: '-0.5px',
         margin: 0,
+        lineHeight: 1.2,
       },
       tagline: {
         fontSize: '15px',
-        color: '#8B7355',
+        color: '#9C8068',
         fontWeight: '400',
         margin: 0,
+        marginTop: '6px',
       },
-      quickStats: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '20px',
-        padding: '14px 24px',
-        backgroundColor: 'rgba(255, 255, 255, 0.6)',
-        borderRadius: '16px',
-        boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
-      },
-      statItem: {
+      // Single column layout
+      contentGrid: {
         display: 'flex',
         flexDirection: 'column',
+        gap: '20px',
+      },
+      // AI Insights Banner
+      aiBanner: {
+        background: 'linear-gradient(135deg, #5E4530 0%, #7A5C42 50%, #C9A96E 100%)',
+        borderRadius: '24px',
+        padding: '24px 28px',
+        marginBottom: '28px',
+        display: 'flex',
         alignItems: 'center',
-      },
-      statNumber: {
-        fontFamily: '"Playfair Display", serif',
-        fontSize: '24px',
-        fontWeight: '600',
-        color: '#5C4033',
-      },
-      statLabel: {
-        fontSize: '11px',
-        color: '#8B7355',
-        fontWeight: '500',
-        textTransform: 'uppercase',
-        letterSpacing: '0.5px',
-      },
-      statDivider: {
-        width: '1px',
-        height: '28px',
-        backgroundColor: 'rgba(139, 111, 92, 0.2)',
+        justifyContent: 'space-between',
+        cursor: 'pointer',
+        position: 'relative',
+        overflow: 'hidden',
+        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
       },
       card: {
-        backgroundColor: 'rgba(255, 255, 255, 0.7)',
+        backgroundColor: 'white',
         borderRadius: '24px',
-        padding: '20px',
-        boxShadow: '0 4px 24px rgba(139, 111, 92, 0.08)',
-        border: '1px solid rgba(139, 111, 92, 0.08)',
-        backdropFilter: 'blur(10px)',
+        padding: '24px',
+        border: '1px solid rgba(184, 160, 137, 0.1)',
         marginBottom: '20px',
       },
       cardHeader: {
@@ -1680,19 +1868,40 @@ function MainApp({ currentUser, onSignOut }) {
       },
       cardTitle: {
         fontFamily: '"Playfair Display", serif',
-        fontSize: '18px',
+        fontSize: '20px',
         fontWeight: '600',
-        color: '#3D2B1F',
+        color: '#3D2B1A',
         margin: 0,
       },
       seeAllBtn: {
-        padding: '8px 16px',
-        backgroundColor: 'transparent',
-        border: 'none',
-        color: '#8B6F5C',
         fontSize: '13px',
-        fontWeight: '600',
+        color: '#9C8068',
+        fontWeight: '500',
+        background: 'transparent',
+        border: 'none',
         cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        transition: 'color 0.2s ease',
+      },
+      // Quick action items
+      quickAction: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '12px 14px',
+        borderRadius: '12px',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        border: '1px solid transparent',
+      },
+      // Suggestion item
+      suggestion: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '10px 0',
       },
     }
 
@@ -1713,6 +1922,269 @@ function MainApp({ currentUser, onSignOut }) {
         {/* AI Agent: Personalized Nudge */}
         <NudgeBanner className="mb-5" />
 
+        {/* AI Insights Banner */}
+        <div
+          onClick={() => window.location.href = '/ai-insights'}
+          style={homeStyles.aiBanner}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)'
+            e.currentTarget.style.boxShadow = '0 16px 48px rgba(61,43,26,0.12)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)'
+            e.currentTarget.style.boxShadow = 'none'
+          }}
+        >
+          {/* Decorative circles */}
+          <div style={{
+            position: 'absolute',
+            top: '-50%',
+            right: '-20%',
+            width: '300px',
+            height: '300px',
+            background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
+            borderRadius: '50%',
+          }} />
+          <div style={{
+            position: 'absolute',
+            bottom: '-60%',
+            left: '10%',
+            width: '200px',
+            height: '200px',
+            background: 'radial-gradient(circle, rgba(201,169,110,0.15) 0%, transparent 70%)',
+            borderRadius: '50%',
+          }} />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative', zIndex: 1 }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              background: 'rgba(255,255,255,0.15)',
+              backdropFilter: 'blur(8px)',
+              borderRadius: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '22px',
+              flexShrink: 0,
+            }}>
+              <Sparkles style={{ width: '22px', height: '22px', color: 'white' }} />
+            </div>
+            <div>
+              <h3 style={{
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: '15px',
+                fontWeight: '600',
+                color: 'white',
+                marginBottom: '3px',
+                margin: 0,
+              }}>Your Weekly AI Insights are ready</h3>
+              <p style={{
+                fontSize: '13px',
+                color: 'rgba(255,255,255,0.7)',
+                fontWeight: '400',
+                margin: 0,
+              }}>Personalized recap of your connections and community trends</p>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 1 }}>
+            <span style={{
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              fontSize: '11px',
+              fontWeight: '600',
+              padding: '4px 10px',
+              borderRadius: '100px',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+            }}>New</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M5 12h14M12 5l7 7-7 7"/>
+            </svg>
+          </div>
+        </div>
+
+        {/* Weekly Momentum - Achievement Cards */}
+        <div style={{ marginBottom: '28px' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{
+              fontFamily: '"Playfair Display", serif',
+              fontSize: '20px',
+              fontWeight: '600',
+              color: '#3D2B1A',
+              margin: 0,
+            }}>Your Weekly Momentum</h2>
+            <button
+              onClick={() => window.location.href = '/ai-insights'}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontSize: '13px',
+                color: '#8B6F5C',
+                fontWeight: '600',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px 0',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#5E4530'}
+              onMouseLeave={(e) => e.currentTarget.style.color = '#8B6F5C'}
+            >
+              <Sparkles style={{ width: '14px', height: '14px' }} />
+              AI Insights
+              <ChevronRight style={{ width: '14px', height: '14px' }} />
+            </button>
+          </div>
+
+          {/* Achievement Cards Grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '12px',
+          }}>
+            {/* Meetups Card */}
+            <button
+              onClick={() => setCurrentView('meetups')}
+              style={{
+                background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
+                borderRadius: '16px',
+                padding: '16px',
+                border: '1px solid rgba(184, 160, 137, 0.15)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 111, 92, 0.15)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            >
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #C9A96E, #9C8068)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '12px',
+              }}>
+                <Calendar style={{ width: '18px', height: '18px', color: 'white' }} />
+              </div>
+              <p style={{
+                fontFamily: '"Playfair Display", serif',
+                fontSize: '28px',
+                fontWeight: '700',
+                color: weeklyProgress.attended > 0 ? '#3D2B1A' : '#B8A089',
+                margin: 0,
+                lineHeight: 1,
+              }}>
+                +{weeklyProgress.attended}
+              </p>
+              <p style={{ fontSize: '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Meetups</p>
+            </button>
+
+            {/* Connections Card */}
+            <button
+              onClick={() => setCurrentView('discover')}
+              style={{
+                background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
+                borderRadius: '16px',
+                padding: '16px',
+                border: '1px solid rgba(184, 160, 137, 0.15)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 111, 92, 0.15)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            >
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #8B9E7E, #6B8E5E)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '12px',
+              }}>
+                <Users style={{ width: '18px', height: '18px', color: 'white' }} />
+              </div>
+              <p style={{
+                fontFamily: '"Playfair Display", serif',
+                fontSize: '28px',
+                fontWeight: '700',
+                color: connections.length > 0 ? '#3D2B1A' : '#B8A089',
+                margin: 0,
+                lineHeight: 1,
+              }}>
+                +{connections.length}
+              </p>
+              <p style={{ fontSize: '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Connections</p>
+            </button>
+
+            {/* Follow-ups Card */}
+            <button
+              onClick={() => setCurrentView('messages')}
+              style={{
+                background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
+                borderRadius: '16px',
+                padding: '16px',
+                border: '1px solid rgba(184, 160, 137, 0.15)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 111, 92, 0.15)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            >
+              <div style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #7986CB, #5C6BC0)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '12px',
+              }}>
+                <MessageCircle style={{ width: '18px', height: '18px', color: 'white' }} />
+              </div>
+              <p style={{
+                fontFamily: '"Playfair Display", serif',
+                fontSize: '28px',
+                fontWeight: '700',
+                color: coffeeChatsCount > 0 ? '#3D2B1A' : '#B8A089',
+                margin: 0,
+                lineHeight: 1,
+              }}>
+                +{coffeeChatsCount}
+              </p>
+              <p style={{ fontSize: '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Follow-ups</p>
+            </button>
+          </div>
+        </div>
+
         {/* Hero "Next Step" Card - Only shows if meeting within 60 min */}
         {nextMeeting && (
           <div style={{
@@ -1726,10 +2198,59 @@ function MainApp({ currentUser, onSignOut }) {
                 <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
               </svg>
               <div style={{ flex: 1 }}>
-                <h3 style={{ ...homeStyles.cardTitle, fontSize: '16px' }}>Circle Meeting</h3>
-                <p style={{ fontSize: '14px', color: '#8B7355', margin: 0 }}>
-                  starts in {nextMeeting.minutesUntil}m
-                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                  <span style={{
+                    fontSize: '10px',
+                    fontWeight: '600',
+                    color: nextMeeting.circle_id ? '#8B6F5C' : '#8B9E7E',
+                    background: nextMeeting.circle_id ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 158, 126, 0.15)',
+                    padding: '2px 8px',
+                    borderRadius: '100px',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}>
+                    {nextMeeting.circle_id ? 'Circle' : 'Public'}
+                  </span>
+                  <h3 style={{ fontFamily: '"Playfair Display", serif', fontSize: '16px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>{nextMeeting.title || nextMeeting.topic || 'Meetup'}</h3>
+                </div>
+                <div style={{ fontSize: '13px', color: '#8B7355', margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span>Starts in {nextMeeting.minutesUntil}m</span>
+                  {(() => {
+                    const meetupSignups = signups[nextMeeting.id] || []
+                    if (meetupSignups.length === 0) return null
+                    const colors = ['#9C8068', '#C9A96E', '#8B9E7E', '#7986CB']
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {meetupSignups.slice(0, 4).map((signup, idx) => (
+                          <div
+                            key={signup.user_id || idx}
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              border: '2px solid white',
+                              marginLeft: idx === 0 ? 0 : '-8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              color: 'white',
+                              background: colors[idx % 4],
+                            }}
+                          >
+                            {signup.profiles?.name?.[0] || '?'}
+                          </div>
+                        ))}
+                        {meetupSignups.length > 4 && (
+                          <span style={{ fontSize: '12px', color: '#9C8068', marginLeft: '6px' }}>
+                            +{meetupSignups.length - 4}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
             </div>
 
@@ -1742,7 +2263,7 @@ function MainApp({ currentUser, onSignOut }) {
               style={{
                 width: '100%',
                 padding: '14px',
-                backgroundColor: '#8B6F5C',
+                backgroundColor: '#5E4530',
                 border: 'none',
                 borderRadius: '12px',
                 color: 'white',
@@ -1761,402 +2282,611 @@ function MainApp({ currentUser, onSignOut }) {
           </div>
         )}
 
-        {/* Momentum Tracker */}
-        <div style={homeStyles.card}>
-          <div style={homeStyles.cardHeader}>
-            <h3 style={homeStyles.cardTitle}>Your Momentum</h3>
-            <span style={{ fontSize: '13px', color: '#8B7355' }}>
-              Step {momentum.step} of 4 — {momentum.label}
-            </span>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-            {/* Connections Card */}
-            <button
-              onClick={() => setCurrentView('meetups')}
-              style={{
-                padding: '16px',
-                backgroundColor: momentum.step === 1 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
-                borderRadius: '16px',
-                border: momentum.step === 1 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <Users style={{ width: '20px', height: '20px', color: connections.length > 0 ? '#5C4033' : '#8B7355' }} />
-                {connections.length > 0 && (
-                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
-                  </div>
-                )}
-              </div>
-              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{connections.length}</p>
-              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Connections</p>
-            </button>
-
-            {/* Meetings Card */}
-            <button
-              onClick={() => setCurrentView('meetups')}
-              style={{
-                padding: '16px',
-                backgroundColor: momentum.step === 2 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
-                borderRadius: '16px',
-                border: momentum.step === 2 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <Calendar style={{ width: '20px', height: '20px', color: userSignups.length > 0 ? '#5C4033' : '#8B7355' }} />
-                {userSignups.length > 0 && (
-                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
-                  </div>
-                )}
-              </div>
-              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{userSignups.length}</p>
-              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Meetings</p>
-            </button>
-
-            {/* Recaps Card */}
-            <button
-              onClick={() => setCurrentView('callHistory')}
-              style={{
-                padding: '16px',
-                backgroundColor: momentum.step === 3 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
-                borderRadius: '16px',
-                border: momentum.step === 3 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <Video style={{ width: '20px', height: '20px', color: pendingRecaps.length === 0 ? '#5C4033' : '#8B7355' }} />
-                {pendingRecaps.length === 0 && coffeeChatsCount > 0 && (
-                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
-                  </div>
-                )}
-              </div>
-              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{pendingRecaps.length}</p>
-              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Recaps</p>
-            </button>
-
-            {/* Follow-up Card */}
-            <button
-              onClick={() => setCurrentView('messages')}
-              style={{
-                padding: '16px',
-                backgroundColor: momentum.step === 4 && unreadMessageCount > 0 ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 111, 92, 0.06)',
-                borderRadius: '16px',
-                border: momentum.step === 4 && unreadMessageCount > 0 ? '2px solid #8B6F5C' : '1px solid rgba(139, 111, 92, 0.1)',
-                cursor: 'pointer',
-                textAlign: 'left',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <MessageCircle style={{ width: '20px', height: '20px', color: unreadMessageCount === 0 ? '#5C4033' : '#8B7355' }} />
-                {unreadMessageCount === 0 && (
-                  <div style={{ width: '20px', height: '20px', backgroundColor: '#8B6F5C', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span style={{ color: 'white', fontSize: '12px' }}>✓</span>
-                  </div>
-                )}
-              </div>
-              <p style={{ fontFamily: '"Playfair Display", serif', fontSize: '24px', fontWeight: '600', color: '#5C4033', margin: 0 }}>{unreadMessageCount}</p>
-              <p style={{ fontSize: '11px', color: '#8B7355', margin: 0 }}>Follow-up</p>
-            </button>
-          </div>
-
-          {/* AI Insights Button */}
-          <button
-            onClick={() => window.location.href = '/ai-insights'}
-            style={{
-              marginTop: '12px',
-              width: '100%',
-              padding: '14px 20px',
-              background: 'linear-gradient(135deg, #E6DCD4 0%, #D4C8BC 100%)',
-              borderRadius: '16px',
-              border: '1px solid rgba(139, 111, 92, 0.2)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                background: 'linear-gradient(135deg, #8B6F5C 0%, #6B5344 100%)',
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <Sparkles style={{ width: '20px', height: '20px', color: 'white' }} />
-              </div>
-              <div style={{ textAlign: 'left' }}>
-                <p style={{ fontWeight: '600', color: '#5C4033', margin: 0, fontSize: '15px' }}>AI Insights</p>
-                <p style={{ fontSize: '12px', color: '#8B7355', margin: 0 }}>View your personalized recap</p>
-              </div>
-            </div>
-            <div style={{ color: '#8B6F5C', fontSize: '18px' }}>→</div>
-          </button>
-        </div>
-
-        {/* Connection Requests Section */}
-        {connectionRequests.length > 0 && (
-          <div style={homeStyles.card}>
-            <div style={homeStyles.cardHeader}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <div style={{ width: '32px', height: '32px', backgroundColor: 'rgba(244, 114, 182, 0.15)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px' }}>
-                  <Heart style={{ width: '16px', height: '16px', color: '#EC4899' }} />
-                </div>
-                <div>
-                  <h3 style={{ ...homeStyles.cardTitle, fontSize: '16px' }}>
-                    {connectionRequests.length} {connectionRequests.length === 1 ? 'person wants' : 'people want'} to connect
-                  </h3>
-                  <p style={{ fontSize: '13px', color: '#8B7355', margin: 0 }}>Accept to start a conversation</p>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {connectionRequests.slice(0, 3).map(request => {
-                const user = request.user
-                const requestDate = new Date(request.requested_at)
-                const daysAgo = Math.floor((Date.now() - requestDate) / (1000 * 60 * 60 * 24))
-                const timeAgo = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`
-
-                return (
-                  <div
-                    key={request.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                      borderRadius: '16px',
-                      border: '1px solid rgba(139, 111, 92, 0.1)',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      {user.profile_picture ? (
-                        <img
-                          src={user.profile_picture}
-                          alt={user.name}
-                          style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', marginRight: '12px' }}
-                        />
-                      ) : (
-                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #EC4899, #F472B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '600', marginRight: '12px' }}>
-                          {user.name?.[0] || '?'}
-                        </div>
-                      )}
-                      <div>
-                        <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>{user.name}</h4>
-                        <p style={{ fontSize: '13px', color: '#8B7355', margin: 0 }}>{user.career || 'Professional'}</p>
-                        {user.city && (
-                          <p style={{ fontSize: '11px', color: '#A89080', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
-                        )}
-                      </div>
+        {/* Main Content */}
+        <div style={homeStyles.contentGrid}>
+          {/* Connection Requests Section */}
+            {connectionRequests.length > 0 && (
+              <div style={homeStyles.card}>
+                <div style={homeStyles.cardHeader}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div style={{ width: '32px', height: '32px', backgroundColor: '#F0D4D6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px' }}>
+                      <Heart style={{ width: '16px', height: '16px', color: '#C4868B' }} />
                     </div>
+                    <div>
+                      <h3 style={{ ...homeStyles.cardTitle, fontSize: '16px' }}>
+                        {connectionRequests.length} {connectionRequests.length === 1 ? 'person wants' : 'people want'} to connect
+                      </h3>
+                      <p style={{ fontSize: '13px', color: '#9C8068', margin: 0 }}>Accept to start a conversation</p>
+                    </div>
+                  </div>
+                </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '12px', color: '#A89080' }}>{timeAgo}</span>
-                      <button
-                        onClick={() => handleShowInterest(request.id, user.name)}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {connectionRequests.slice(0, 3).map(request => {
+                    const user = request.user
+                    const requestDate = new Date(request.requested_at)
+                    const daysAgo = Math.floor((Date.now() - requestDate) / (1000 * 60 * 60 * 24))
+                    const timeAgo = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`
+
+                    return (
+                      <div
+                        key={request.id}
                         style={{
-                          padding: '10px 20px',
-                          backgroundColor: '#8B6F5C',
-                          border: 'none',
-                          borderRadius: '100px',
-                          color: 'white',
-                          fontSize: '13px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '6px',
+                          justifyContent: 'space-between',
+                          padding: '16px',
+                          backgroundColor: '#FAF5EF',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(184, 160, 137, 0.1)',
                         }}
                       >
-                        <Heart style={{ width: '14px', height: '14px' }} />
-                        Accept
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                          {user.profile_picture ? (
+                            <img
+                              src={user.profile_picture}
+                              alt={user.name}
+                              style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', marginRight: '12px' }}
+                            />
+                          ) : (
+                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #C4868B, #9C8068)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '600', marginRight: '12px' }}>
+                              {user.name?.[0] || '?'}
+                            </div>
+                          )}
+                          <div>
+                            <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1A', margin: 0 }}>{user.name}</h4>
+                            <p style={{ fontSize: '13px', color: '#7A5C42', margin: 0 }}>{user.career || 'Professional'}</p>
+                            {user.city && (
+                              <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
+                            )}
+                          </div>
+                        </div>
 
-            {connectionRequests.length > 3 && (
-              <button
-                onClick={() => setCurrentView('discover')}
-                style={{ ...homeStyles.seeAllBtn, width: '100%', marginTop: '12px', textAlign: 'center' }}
-              >
-                View all {connectionRequests.length} requests →
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Upcoming Events Section */}
-        <div style={homeStyles.card}>
-          <div style={homeStyles.cardHeader}>
-            <h3 style={homeStyles.cardTitle}>Upcoming Events</h3>
-            <button
-              onClick={() => setCurrentView('meetupProposals')}
-              style={homeStyles.seeAllBtn}
-            >
-              View all →
-            </button>
-          </div>
-
-          {loadingMeetups ? (
-            <div style={{ padding: '32px', textAlign: 'center' }}>
-              <div style={{ width: '32px', height: '32px', border: '3px solid rgba(139, 111, 92, 0.2)', borderTopColor: '#8B6F5C', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
-              <p style={{ color: '#8B7355', fontSize: '14px' }}>Loading events...</p>
-            </div>
-          ) : upcomingMeetups.length === 0 ? (
-            <div style={{ padding: '32px', textAlign: 'center' }}>
-              <Calendar style={{ width: '48px', height: '48px', color: '#D4C4B4', margin: '0 auto 12px' }} />
-              <p style={{ color: '#8B7355', fontSize: '15px' }}>No upcoming events</p>
-              <p style={{ color: '#A89080', fontSize: '13px', marginTop: '4px' }}>Check back soon for new events!</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {upcomingMeetups.slice(0, 3).map(meetup => {
-                const isSignedUp = userSignups.includes(meetup.id)
-                const meetupSignups = signups[meetup.id] || []
-                const participantCount = meetupSignups.length
-
-                return (
-                  <div
-                    key={meetup.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '16px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                      borderRadius: '16px',
-                      border: '1px solid rgba(139, 111, 92, 0.1)',
-                    }}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>{meetup.topic || 'Community Event'}</h4>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6B5344' }}>
-                          <Calendar style={{ width: '14px', height: '14px' }} />
-                          {formatDate(meetup.date)}
-                        </span>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', color: '#6B5344' }}>
-                          <Clock style={{ width: '14px', height: '14px' }} />
-                          {formatTime(meetup.time)}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontSize: '12px', color: '#B8A089' }}>{timeAgo}</span>
+                          <button
+                            onClick={() => handleShowInterest(request.id, user.name)}
+                            style={{
+                              padding: '10px 20px',
+                              backgroundColor: '#5E4530',
+                              border: 'none',
+                              borderRadius: '100px',
+                              color: 'white',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            <Heart style={{ width: '14px', height: '14px' }} />
+                            Accept
+                          </button>
+                        </div>
                       </div>
-                      {participantCount > 0 && (
-                        <p style={{ fontSize: '12px', color: '#A89080', marginTop: '4px' }}>
-                          {participantCount} {participantCount === 1 ? 'person' : 'people'} attending
-                        </p>
-                      )}
-                    </div>
+                    )
+                  })}
+                </div>
 
-                    {isSignedUp ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                        <span style={{ padding: '4px 12px', backgroundColor: 'rgba(139, 111, 92, 0.12)', color: '#5C4033', fontSize: '12px', fontWeight: '600', borderRadius: '100px' }}>
-                          Signed up
-                        </span>
-                        <button
-                          onClick={() => handleJoinVideoCall(meetup)}
-                          style={{ backgroundColor: 'transparent', border: 'none', color: '#8B6F5C', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
-                        >
-                          Join →
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleSignUp(meetup.id)}
-                        style={{
-                          padding: '10px 20px',
-                          backgroundColor: '#8B6F5C',
-                          border: 'none',
-                          borderRadius: '100px',
-                          color: 'white',
-                          fontSize: '13px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        Reserve my spot →
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* AI Agent: Event Recommendations */}
-        <EventRecommendations
-          className="mb-5"
-          maxItems={3}
-          showRefresh={false}
-        />
-
-        {/* Pending Recaps Checklist */}
-        {pendingRecaps.length > 0 && (
-          <div style={homeStyles.card}>
-            <div style={homeStyles.cardHeader}>
-              <h3 style={homeStyles.cardTitle}>Pending Recaps</h3>
-              <button
-                onClick={() => setCurrentView('callHistory')}
-                style={homeStyles.seeAllBtn}
-              >
-                View all recaps →
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {pendingRecaps.slice(0, 3).map(recap => (
-                <div
-                  key={recap.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '16px',
-                    backgroundColor: 'rgba(139, 111, 92, 0.06)',
-                    borderRadius: '16px',
-                    border: '1px solid rgba(139, 111, 92, 0.08)',
-                  }}
-                >
-                  <div style={{ width: '20px', height: '20px', border: '2px solid #8B6F5C', borderRadius: '50%', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: '14px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>
-                      Review call recap
-                    </p>
-                    <p style={{ fontSize: '12px', color: '#8B7355', margin: 0, marginTop: '2px' }}>
-                      {new Date(recap.created_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </p>
-                  </div>
+                {connectionRequests.length > 3 && (
                   <button
-                    onClick={() => setCurrentView('callHistory')}
-                    style={{ backgroundColor: 'transparent', border: 'none', color: '#8B6F5C', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                    onClick={() => setCurrentView('discover')}
+                    style={{ ...homeStyles.seeAllBtn, width: '100%', marginTop: '12px', textAlign: 'center', justifyContent: 'center' }}
                   >
-                    Open →
+                    View all {connectionRequests.length} requests →
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Upcoming Events Section with Date Badges */}
+            <div style={homeStyles.card}>
+              <div style={homeStyles.cardHeader}>
+                <h3 style={homeStyles.cardTitle}>Upcoming Events</h3>
+                <button
+                  onClick={() => setCurrentView('meetupProposals')}
+                  style={homeStyles.seeAllBtn}
+                >
+                  View all
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <path d="M5 12h14M12 5l7 7-7 7"/>
+                  </svg>
+                </button>
+              </div>
+
+              {loadingMeetups ? (
+                <div style={{ padding: '32px', textAlign: 'center' }}>
+                  <div style={{ width: '32px', height: '32px', border: '3px solid rgba(139, 111, 92, 0.2)', borderTopColor: '#7A5C42', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
+                  <p style={{ color: '#9C8068', fontSize: '14px' }}>Loading events...</p>
+                </div>
+              ) : upcomingMeetups.length === 0 ? (
+                <div style={{ padding: '32px', textAlign: 'center' }}>
+                  <Calendar style={{ width: '48px', height: '48px', color: '#D4C4B0', margin: '0 auto 12px' }} />
+                  <p style={{ color: '#7A5C42', fontSize: '15px', margin: 0 }}>No upcoming events</p>
+                  <p style={{ color: '#B8A089', fontSize: '13px', marginTop: '4px' }}>Check back soon for new events!</p>
+                </div>
+              ) : (
+                <div>
+                  {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
+                    const isSignedUp = userSignups.includes(meetup.id)
+                    const meetupSignups = signups[meetup.id] || []
+
+                    return (
+                      <div
+                        key={meetup.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '16px',
+                          padding: '16px',
+                          borderRadius: '12px',
+                          transition: 'all 0.25s ease',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          borderTop: idx > 0 ? '1px solid #F3ECE2' : 'none',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <EventDateBadge date={meetup.date} />
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#3D2B1A', margin: 0, marginBottom: '4px', lineHeight: 1.3 }}>
+                            {meetup.topic || 'Community Event'}
+                          </h4>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#B8A089' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Clock style={{ width: '12px', height: '12px' }} />
+                              {formatTime(meetup.time)}
+                            </span>
+                          </div>
+                          <AttendeeAvatars meetupId={meetup.id} />
+                        </div>
+
+                        <div style={{ flexShrink: 0 }}>
+                          {isSignedUp ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
+                              style={{
+                                background: 'linear-gradient(135deg, #5E4530, #7A5C42)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '9px 18px',
+                                borderRadius: '100px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.2s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-1px)'
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(94, 69, 48, 0.3)'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)'
+                                e.currentTarget.style.boxShadow = 'none'
+                              }}
+                            >
+                              <Video style={{ width: '14px', height: '14px' }} />
+                              Join
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSignUp(meetup.id) }}
+                              style={{
+                                background: '#5E4530',
+                                color: '#FAF5EF',
+                                border: 'none',
+                                padding: '9px 18px',
+                                borderRadius: '100px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.25s ease',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = '#3D2B1A'
+                                e.currentTarget.style.transform = 'translateY(-1px)'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '#5E4530'
+                                e.currentTarget.style.transform = 'translateY(0)'
+                              }}
+                            >
+                              Reserve spot →
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+
+            {/* Meetup Recaps */}
+            {pendingRecaps.length > 0 && (
+              <div style={homeStyles.card}>
+                <div style={homeStyles.cardHeader}>
+                  <h3 style={homeStyles.cardTitle}>Meetup Recaps</h3>
+                  <button
+                    onClick={() => window.location.href = '/recaps'}
+                    style={homeStyles.seeAllBtn}
+                  >
+                    View all →
                   </button>
                 </div>
-              ))}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {pendingRecaps.slice(0, 3).map(recap => {
+                    const durationMins = recap.duration_seconds ? Math.floor(recap.duration_seconds / 60) : 0;
+                    const callDate = new Date(recap.started_at || recap.created_at);
+                    const isToday = new Date().toDateString() === callDate.toDateString();
+                    const isYesterday = new Date(Date.now() - 86400000).toDateString() === callDate.toDateString();
+                    const dateLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : callDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    const callTypeLabel = recap.call_type === '1on1' ? '1:1 Chat' : (recap.call_type === 'meetup' || recap.call_type === 'group') ? 'Circle Meetup' : 'Group Call';
+
+                    return (
+                      <div
+                        key={recap.id}
+                        onClick={() => window.location.href = '/recaps'}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '14px',
+                          padding: '14px 16px',
+                          backgroundColor: '#FAF5EF',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(184, 160, 137, 0.08)',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = '#F5EDE5';
+                          e.currentTarget.style.transform = 'translateX(2px)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = '#FAF5EF';
+                          e.currentTarget.style.transform = 'translateX(0)';
+                        }}
+                      >
+                        {/* Date badge */}
+                        <div style={{
+                          backgroundColor: '#E8DDD4',
+                          borderRadius: '10px',
+                          padding: '8px 10px',
+                          textAlign: 'center',
+                          minWidth: '50px',
+                        }}>
+                          <p style={{ fontSize: '11px', fontWeight: '600', color: '#8B6F5C', margin: 0, textTransform: 'uppercase' }}>
+                            {dateLabel.split(' ')[0]}
+                          </p>
+                          {!isToday && !isYesterday && (
+                            <p style={{ fontSize: '16px', fontWeight: '700', color: '#3D2B1A', margin: 0, fontFamily: '"Playfair Display", serif' }}>
+                              {callDate.getDate()}
+                            </p>
+                          )}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '14px', fontWeight: '600', color: '#3D2B1A', margin: 0, marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {recap.meetup_title || callTypeLabel}
+                          </p>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#9C8068', flexWrap: 'wrap' }}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Clock style={{ width: '12px', height: '12px' }} />
+                              {durationMins}m
+                            </span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Users style={{ width: '12px', height: '12px' }} />
+                              {recap.participant_count || 0}
+                            </span>
+                            {recap.takeaways_count > 0 && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8B6F5C' }}>
+                                <FileText style={{ width: '12px', height: '12px' }} />
+                                {recap.takeaways_count} takeaways
+                              </span>
+                            )}
+                            {recap.action_items_count > 0 && (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8B9E7E' }}>
+                                <CheckCircle style={{ width: '12px', height: '12px' }} />
+                                {recap.action_items_count} follow-ups
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <ChevronRight style={{ width: '16px', height: '16px', color: '#B8A089', flexShrink: 0 }} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+          {/* Smart Quick Actions - 3 personalized cards based on user progress */}
+            <div style={{ marginBottom: '16px' }}>
+              <h3 style={{
+                fontFamily: '"Playfair Display", serif',
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#3D2B1A',
+                margin: '0 0 4px 0',
+              }}>What's Next?</h3>
+              <p style={{ fontSize: '13px', color: '#9C8068', margin: 0 }}>Personalized for your journey</p>
             </div>
-          </div>
-        )}
+            {(() => {
+              // Determine best actions based on user's networking progress
+              const allActions = [
+                {
+                  id: 'recaps',
+                  priority: pendingRecaps.length > 0 ? 100 : 10,
+                  title: 'Review Recaps',
+                  description: pendingRecaps.length > 0 ? `${pendingRecaps.length} new insights waiting` : 'Revisit your conversations',
+                  icon: <FileText style={{ width: '20px', height: '20px', color: '#8B6F5C' }} />,
+                  gradient: 'linear-gradient(135deg, #F5EDE4 0%, #E8DDD0 100%)',
+                  iconBg: '#E8E0D8',
+                  onClick: () => window.location.href = '/recaps',
+                  badge: pendingRecaps.length > 0 ? pendingRecaps.length : null
+                },
+                {
+                  id: 'circles',
+                  priority: connections.length < 5 ? 90 : 40,
+                  title: 'Discover Circles',
+                  description: connections.length < 3 ? 'Find your first community' : 'Explore new groups',
+                  icon: <Search style={{ width: '20px', height: '20px', color: '#7A5C42' }} />,
+                  gradient: 'linear-gradient(135deg, #FAF3E6 0%, #E8D5A8 100%)',
+                  iconBg: '#E8D5A8',
+                  onClick: () => setCurrentView('circles'),
+                  badge: null
+                },
+                {
+                  id: 'messages',
+                  priority: unreadMessageCount > 0 ? 95 : 5,
+                  title: 'Check Messages',
+                  description: unreadMessageCount > 0 ? `${unreadMessageCount} unread messages` : 'Stay connected',
+                  icon: <MessageCircle style={{ width: '20px', height: '20px', color: '#6B8E7A' }} />,
+                  gradient: 'linear-gradient(135deg, #EDF5EB 0%, #D4DECE 100%)',
+                  iconBg: '#D4DECE',
+                  onClick: () => setCurrentView('messages'),
+                  badge: unreadMessageCount > 0 ? unreadMessageCount : null
+                },
+                {
+                  id: 'meetup',
+                  priority: userSignups.length >= 2 ? 70 : 30,
+                  title: 'Host a Meetup',
+                  description: userSignups.length >= 3 ? 'Share your expertise' : 'Bring people together',
+                  icon: <Calendar style={{ width: '20px', height: '20px', color: '#C4868B' }} />,
+                  gradient: 'linear-gradient(135deg, #FCF0F1 0%, #F0D4D6 100%)',
+                  iconBg: '#F0D4D6',
+                  onClick: () => setCurrentView('scheduleMeetup'),
+                  badge: null
+                },
+                {
+                  id: 'invite',
+                  priority: connections.length >= 5 ? 60 : 20,
+                  title: 'Invite Friends',
+                  description: 'Grow your network',
+                  icon: <Send style={{ width: '20px', height: '20px', color: '#8B9E7E' }} />,
+                  gradient: 'linear-gradient(135deg, #EDF5EB 0%, #D4DECE 100%)',
+                  iconBg: '#D4DECE',
+                  onClick: () => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: 'Join me on CircleW',
+                        text: 'I\'d love for you to join my professional community on CircleW!',
+                        url: window.location.origin,
+                      }).catch(() => {})
+                    } else {
+                      navigator.clipboard.writeText(window.location.origin)
+                      alert('Link copied to clipboard!')
+                    }
+                  },
+                  badge: null
+                },
+                {
+                  id: 'connections',
+                  priority: potentialConnections.length > 0 ? 75 : 15,
+                  title: 'View Connections',
+                  description: potentialConnections.length > 0 ? `${potentialConnections.length} people to meet` : 'See your network',
+                  icon: <Users style={{ width: '20px', height: '20px', color: '#9B7EC4' }} />,
+                  gradient: 'linear-gradient(135deg, #F5F0FA 0%, #E8DEF5 100%)',
+                  iconBg: '#E8DEF5',
+                  onClick: () => setCurrentView('connections'),
+                  badge: potentialConnections.length > 3 ? potentialConnections.length : null
+                }
+              ]
+
+              // Sort by priority and take top 3
+              const topActions = allActions
+                .sort((a, b) => b.priority - a.priority)
+                .slice(0, 3)
+
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                  {topActions.map((action) => (
+                    <div
+                      key={action.id}
+                      onClick={action.onClick}
+                      style={{
+                        background: action.gradient,
+                        borderRadius: '16px',
+                        padding: '16px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        border: '1px solid rgba(139, 111, 92, 0.08)',
+                        position: 'relative',
+                        minHeight: '120px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)'
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 111, 92, 0.15)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)'
+                        e.currentTarget.style.boxShadow = 'none'
+                      }}
+                    >
+                      {action.badge && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '10px',
+                          right: '10px',
+                          backgroundColor: '#C4868B',
+                          color: 'white',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          padding: '2px 8px',
+                          borderRadius: '10px',
+                          minWidth: '20px',
+                          textAlign: 'center',
+                        }}>
+                          {action.badge}
+                        </div>
+                      )}
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '12px',
+                        backgroundColor: 'rgba(255, 255, 255, 0.7)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginBottom: '12px',
+                      }}>
+                        {action.icon}
+                      </div>
+                      <div>
+                        <h4 style={{
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: '#3D2B1A',
+                          margin: 0,
+                          marginBottom: '4px',
+                        }}>
+                          {action.title}
+                        </h4>
+                        <p style={{
+                          fontSize: '11px',
+                          color: '#7A5C42',
+                          margin: 0,
+                          lineHeight: 1.3,
+                        }}>
+                          {action.description}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+
+            {/* Suggested Connections */}
+            {potentialConnections.length > 0 && (
+              <div style={homeStyles.card}>
+                <h3 style={{ ...homeStyles.cardTitle, fontSize: '17px', marginBottom: '16px' }}>Suggested for You</h3>
+                {potentialConnections.slice(0, 3).map((person, idx) => (
+                  <div
+                    key={person.id}
+                    style={{
+                      ...homeStyles.suggestion,
+                      borderTop: idx > 0 ? '1px solid #F3ECE2' : 'none',
+                    }}
+                  >
+                    {person.profile_picture ? (
+                      <img
+                        src={person.profile_picture}
+                        alt={person.name}
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          borderRadius: '50%',
+                          objectFit: 'cover',
+                          flexShrink: 0,
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        background: `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E', '#C4868B'][idx % 4]}, #7A5C42)`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white',
+                        fontWeight: '600',
+                        fontSize: '14px',
+                        flexShrink: 0,
+                      }}>
+                        {person.name?.[0] || '?'}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h4 style={{
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        color: '#3D2B1A',
+                        margin: 0,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>{person.name}</h4>
+                      <p style={{
+                        fontSize: '11px',
+                        color: '#B8A089',
+                        margin: 0,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>{person.career || 'Professional'}</p>
+                    </div>
+                    <button
+                      onClick={() => handleShowInterest(person.id, person.name)}
+                      style={{
+                        width: '30px',
+                        height: '30px',
+                        borderRadius: '50%',
+                        border: '1.5px solid #D4C4B0',
+                        background: 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: '#9C8068',
+                        transition: 'all 0.2s ease',
+                        flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#5E4530'
+                        e.currentTarget.style.borderColor = '#5E4530'
+                        e.currentTarget.style.color = 'white'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.borderColor = '#D4C4B0'
+                        e.currentTarget.style.color = '#9C8068'
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <path d="M12 5v14M5 12h14"/>
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
       </div>
     )
   }

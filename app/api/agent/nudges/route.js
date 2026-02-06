@@ -147,7 +147,7 @@ async function generateUserNudges(supabase, userId) {
       .limit(5),
 
     supabase.from('connection_recommendations')
-      .select('*, recommended_user:profiles!connection_recommendations_recommended_user_id_fkey(name)')
+      .select('*')
       .eq('user_id', userId)
       .eq('status', 'pending')
       .order('match_score', { ascending: false })
@@ -168,9 +168,27 @@ async function generateUserNudges(supabase, userId) {
 
   const profile = profileResult.data;
   const recentMeetups = recentMeetupsResult.data || [];
-  const pendingConnections = pendingConnectionsResult.data || [];
   const circleRecs = circleRecsResult.data || [];
   const upcomingMeetups = upcomingMeetupsResult.data || [];
+
+  // Fetch profiles separately for pending connection recommendations
+  const pendingConnectionsRaw = pendingConnectionsResult.data || [];
+  let pendingConnections = pendingConnectionsRaw;
+  if (pendingConnectionsRaw.length > 0) {
+    const recUserIds = pendingConnectionsRaw.map(r => r.recommended_user_id).filter(Boolean);
+    if (recUserIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', recUserIds);
+      const profileMap = {};
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+      pendingConnections = pendingConnectionsRaw.map(rec => ({
+        ...rec,
+        recommended_user: profileMap[rec.recommended_user_id] || null
+      }));
+    }
+  }
 
   const nudges = [];
 

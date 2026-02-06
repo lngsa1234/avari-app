@@ -51,16 +51,10 @@ export async function GET(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
 
-    const { data, error } = await supabase
+    // Fetch recommendations without join
+    const { data: recsData, error } = await supabase
       .from('event_recommendations')
-      .select(`
-        *,
-        meetup:meetups(
-          id, title, description, date, location, is_virtual,
-          host_id, profiles!meetups_host_id_fkey(name, profile_picture),
-          meetup_attendees(count)
-        )
-      `)
+      .select('*')
       .eq('user_id', userId)
       .in('status', ['pending', 'viewed'])
       .order('match_score', { ascending: false })
@@ -71,11 +65,43 @@ export async function GET(request) {
       return NextResponse.json({ error: 'Failed to fetch recommendations' }, { status: 500 });
     }
 
-    // Filter out past events
+    if (!recsData || recsData.length === 0) {
+      return NextResponse.json({ recommendations: [] });
+    }
+
+    // Fetch meetups separately
+    const meetupIds = recsData.map(r => r.meetup_id).filter(Boolean);
+    let meetupMap = {};
+
+    if (meetupIds.length > 0) {
+      const { data: meetups } = await supabase
+        .from('meetups')
+        .select('id, title, description, date, location, is_virtual, created_by')
+        .in('id', meetupIds);
+
+      const { data: attendeeCounts } = await supabase
+        .from('meetup_attendees')
+        .select('meetup_id')
+        .in('meetup_id', meetupIds);
+
+      const countMap = {};
+      (attendeeCounts || []).forEach(a => {
+        countMap[a.meetup_id] = (countMap[a.meetup_id] || 0) + 1;
+      });
+
+      (meetups || []).forEach(m => {
+        meetupMap[m.id] = {
+          ...m,
+          meetup_attendees: [{ count: countMap[m.id] || 0 }]
+        };
+      });
+    }
+
+    // Merge and filter out past events
     const now = new Date();
-    const activeRecs = (data || []).filter(r =>
-      r.meetup && new Date(r.meetup.date) > now
-    );
+    const activeRecs = recsData
+      .map(rec => ({ ...rec, meetup: meetupMap[rec.meetup_id] || null }))
+      .filter(r => r.meetup && new Date(r.meetup.date) > now);
 
     return NextResponse.json({ recommendations: activeRecs });
   } catch (error) {
@@ -164,7 +190,7 @@ async function generateUserEventRecs(supabase, userId) {
     supabase.from('meetups')
       .select(`
         id, title, description, date, location, is_virtual,
-        host_id, profiles!meetups_host_id_fkey(name, career),
+        created_by,
         meetup_attendees(user_id)
       `)
       .gt('date', new Date().toISOString())
@@ -320,7 +346,7 @@ function scoreEvents(profile, events, connectionIds, pastAttendance) {
     }
 
     // 6. Host is a connection (weight: 0.10)
-    if (connectionIds.includes(event.host_id)) {
+    if (connectionIds.includes(event.created_by)) {
       score += 0.10;
       reasons.push({
         reason: `Hosted by ${event.profiles?.name || 'a connection'}`,

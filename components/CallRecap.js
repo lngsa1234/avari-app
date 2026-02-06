@@ -11,6 +11,7 @@ import {
   createConnectionFromRecommendation,
   fetchSuggestedMemberProfiles
 } from '@/lib/connectionRecommendationHelpers';
+import { updateRecapSummaryByChannel } from '@/lib/callRecapHelpers';
 
 /**
  * CallRecap - Enhanced post-call summary with transcription and metrics
@@ -198,12 +199,51 @@ export default function CallRecap({
         setAiSummary(data.summary);
         setTopicsDiscussed(data.topicsDiscussed || []);
         setKeyTakeaways(data.keyTakeaways || []);
+
+        // Save the AI summary to the database
+        if (channelName && data.summary) {
+          // Build a complete summary string that includes all structured data
+          const fullSummary = buildFullSummary(data);
+          await updateRecapSummaryByChannel(channelName, fullSummary);
+        }
       }
     } catch (err) {
       console.error('Error generating AI summary:', err);
     } finally {
       setGeneratingSummary(false);
     }
+  };
+
+  // Build a full summary string that includes all structured data for storage
+  const buildFullSummary = (data) => {
+    let summary = data.summary || '';
+
+    if (data.keyTakeaways && data.keyTakeaways.length > 0) {
+      summary += '\n\nKey Takeaways:\n';
+      data.keyTakeaways.forEach(t => {
+        const text = typeof t === 'string' ? t : (t.text || t);
+        const emoji = typeof t === 'object' && t.emoji ? t.emoji + ' ' : '• ';
+        summary += `${emoji}${text}\n`;
+      });
+    }
+
+    if (data.actionItems && data.actionItems.length > 0) {
+      summary += '\nAction Items:\n';
+      data.actionItems.forEach(a => {
+        const text = typeof a === 'string' ? a : (a.text || a);
+        summary += `• ${text}\n`;
+      });
+    }
+
+    if (data.topicsDiscussed && data.topicsDiscussed.length > 0) {
+      summary += '\nTopics Discussed:\n';
+      data.topicsDiscussed.forEach(t => {
+        const topic = typeof t === 'string' ? t : (t.topic || t);
+        summary += `• ${topic}\n`;
+      });
+    }
+
+    return summary.trim();
   };
 
   // Public function for manual regeneration

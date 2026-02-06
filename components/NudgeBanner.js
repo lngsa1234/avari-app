@@ -35,15 +35,20 @@ export default function NudgeBanner({ className = '' }) {
         .in('status', ['pending', 'delivered'])
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (error) {
-        // Table may not exist yet - silently fail
+        // Table may not exist yet - silently fail (don't log expected errors)
         setLoading(false);
         return;
       }
 
-      if (data) setNudge(data);
+      if (!data) {
+        setLoading(false);
+        return;
+      }
+
+      setNudge(data);
 
       // Mark as delivered
       if (data.status === 'pending') {
@@ -213,7 +218,7 @@ export function NudgeBannerCompact({ className = '' }) {
         .in('status', ['pending', 'delivered'])
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (data) setNudge(data);
     } catch (e) {

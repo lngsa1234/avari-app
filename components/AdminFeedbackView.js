@@ -63,11 +63,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
       // Use Supabase client directly with user's auth context
       let query = supabase
         .from('user_feedback')
-        .select(`
-          *,
-          user:profiles!user_feedback_user_id_fkey(id, name, email, profile_picture),
-          reviewer:profiles!user_feedback_reviewed_by_fkey(id, name, email)
-        `, { count: 'exact' })
+        .select('*', { count: 'exact' })
         .order('created_at', { ascending: false })
         .range(page * limit, (page + 1) * limit - 1);
 
@@ -88,7 +84,30 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
           setTotal(0);
         }
       } else {
-        setFeedback(data || []);
+        // Fetch profiles separately for user and reviewer
+        const feedbackData = data || [];
+        const userIds = [...new Set([
+          ...feedbackData.map(f => f.user_id).filter(Boolean),
+          ...feedbackData.map(f => f.reviewed_by).filter(Boolean)
+        ])];
+
+        let profileMap = {};
+        if (userIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, name, email, profile_picture')
+            .in('id', userIds);
+          (profiles || []).forEach(p => { profileMap[p.id] = p; });
+        }
+
+        // Merge profiles into feedback
+        const feedbackWithProfiles = feedbackData.map(f => ({
+          ...f,
+          user: profileMap[f.user_id] || null,
+          reviewer: profileMap[f.reviewed_by] || null
+        }));
+
+        setFeedback(feedbackWithProfiles);
         setTotal(count || 0);
       }
     } catch (error) {

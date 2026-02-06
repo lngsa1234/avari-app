@@ -31,31 +31,43 @@ export default function AIInsightsPage() {
           .eq('id', user.id)
           .single();
 
-        // Fetch connections with profile details
+        // Fetch connections (without profile join - profiles fetched separately if needed)
         const { data: connectionsAsUser } = await supabase
           .from('connections')
-          .select('id, created_at, connected_user_id, connected_user:profiles!connections_connected_user_id_fkey(id, name, profile_picture, career)')
+          .select('id, created_at, connected_user_id')
           .eq('user_id', user.id)
           .eq('status', 'accepted');
 
         const { data: connectionsAsConnected } = await supabase
           .from('connections')
-          .select('id, created_at, user_id, requester:profiles!connections_user_id_fkey(id, name, profile_picture, career)')
+          .select('id, created_at, user_id')
           .eq('connected_user_id', user.id)
           .eq('status', 'accepted');
+
+        // Fetch profile details for connected users
+        const connectedUserIds = [
+          ...(connectionsAsUser || []).map(c => c.connected_user_id),
+          ...(connectionsAsConnected || []).map(c => c.user_id)
+        ].filter(Boolean);
+
+        const { data: connectedProfiles } = connectedUserIds.length > 0
+          ? await supabase.from('profiles').select('id, name, profile_picture, career').in('id', connectedUserIds)
+          : { data: [] };
+
+        const profileMap = Object.fromEntries((connectedProfiles || []).map(p => [p.id, p]));
 
         // Combine connections from both directions
         const connections = [
           ...(connectionsAsUser || []).map(c => ({
             id: c.id,
             created_at: c.created_at,
-            profile: c.connected_user,
+            profile: profileMap[c.connected_user_id] || null,
             other_user_id: c.connected_user_id,
           })),
           ...(connectionsAsConnected || []).map(c => ({
             id: c.id,
             created_at: c.created_at,
-            profile: c.requester,
+            profile: profileMap[c.user_id] || null,
             other_user_id: c.user_id,
           })),
         ];
