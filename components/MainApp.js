@@ -2043,16 +2043,16 @@ function MainApp({ currentUser, onSignOut }) {
           {/* Achievement Cards Grid */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)',
-            gap: '12px',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: isMobile ? '8px' : '12px',
           }}>
             {/* Meetups Card */}
             <button
               onClick={() => setCurrentView('meetups')}
               style={{
                 background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: '16px',
-                padding: '16px',
+                borderRadius: isMobile ? '12px' : '16px',
+                padding: isMobile ? '12px' : '16px',
                 border: '1px solid rgba(184, 160, 137, 0.15)',
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -2068,20 +2068,20 @@ function MainApp({ currentUser, onSignOut }) {
               }}
             >
               <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
+                width: isMobile ? '28px' : '36px',
+                height: isMobile ? '28px' : '36px',
+                borderRadius: isMobile ? '8px' : '10px',
                 background: 'linear-gradient(135deg, #C9A96E, #9C8068)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: '12px',
+                marginBottom: isMobile ? '8px' : '12px',
               }}>
-                <Calendar style={{ width: '18px', height: '18px', color: 'white' }} />
+                <Calendar style={{ width: isMobile ? '14px' : '18px', height: isMobile ? '14px' : '18px', color: 'white' }} />
               </div>
               <p style={{
                 fontFamily: '"Playfair Display", serif',
-                fontSize: '28px',
+                fontSize: isMobile ? '20px' : '28px',
                 fontWeight: '700',
                 color: weeklyProgress.attended > 0 ? '#3D2B1A' : '#B8A089',
                 margin: 0,
@@ -2089,7 +2089,7 @@ function MainApp({ currentUser, onSignOut }) {
               }}>
                 +{weeklyProgress.attended}
               </p>
-              <p style={{ fontSize: '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Meetups</p>
+              <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Meetups</p>
             </button>
 
             {/* Connections Card */}
@@ -2097,8 +2097,8 @@ function MainApp({ currentUser, onSignOut }) {
               onClick={() => setCurrentView('discover')}
               style={{
                 background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: '16px',
-                padding: '16px',
+                borderRadius: isMobile ? '12px' : '16px',
+                padding: isMobile ? '12px' : '16px',
                 border: '1px solid rgba(184, 160, 137, 0.15)',
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -2114,20 +2114,20 @@ function MainApp({ currentUser, onSignOut }) {
               }}
             >
               <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
+                width: isMobile ? '28px' : '36px',
+                height: isMobile ? '28px' : '36px',
+                borderRadius: isMobile ? '8px' : '10px',
                 background: 'linear-gradient(135deg, #8B9E7E, #6B8E5E)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: '12px',
+                marginBottom: isMobile ? '8px' : '12px',
               }}>
-                <Users style={{ width: '18px', height: '18px', color: 'white' }} />
+                <Users style={{ width: isMobile ? '14px' : '18px', height: isMobile ? '14px' : '18px', color: 'white' }} />
               </div>
               <p style={{
                 fontFamily: '"Playfair Display", serif',
-                fontSize: '28px',
+                fontSize: isMobile ? '20px' : '28px',
                 fontWeight: '700',
                 color: connections.length > 0 ? '#3D2B1A' : '#B8A089',
                 margin: 0,
@@ -2135,7 +2135,7 @@ function MainApp({ currentUser, onSignOut }) {
               }}>
                 +{connections.length}
               </p>
-              <p style={{ fontSize: '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Connections</p>
+              <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Connections</p>
             </button>
 
             {/* Follow-ups Card */}
@@ -2143,8 +2143,8 @@ function MainApp({ currentUser, onSignOut }) {
               onClick={() => setCurrentView('messages')}
               style={{
                 background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: '16px',
-                padding: '16px',
+                borderRadius: isMobile ? '12px' : '16px',
+                padding: isMobile ? '12px' : '16px',
                 border: '1px solid rgba(184, 160, 137, 0.15)',
                 cursor: 'pointer',
                 textAlign: 'left',
@@ -2160,20 +2160,20 @@ function MainApp({ currentUser, onSignOut }) {
               }}
             >
               <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '10px',
+                width: isMobile ? '28px' : '36px',
+                height: isMobile ? '28px' : '36px',
+                borderRadius: isMobile ? '8px' : '10px',
                 background: 'linear-gradient(135deg, #7986CB, #5C6BC0)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                marginBottom: '12px',
+                marginBottom: isMobile ? '8px' : '12px',
               }}>
-                <MessageCircle style={{ width: '18px', height: '18px', color: 'white' }} />
+                <MessageCircle style={{ width: isMobile ? '14px' : '18px', height: isMobile ? '14px' : '18px', color: 'white' }} />
               </div>
               <p style={{
                 fontFamily: '"Playfair Display", serif',
-                fontSize: '28px',
+                fontSize: isMobile ? '20px' : '28px',
                 fontWeight: '700',
                 color: coffeeChatsCount > 0 ? '#3D2B1A' : '#B8A089',
                 margin: 0,
@@ -2181,7 +2181,7 @@ function MainApp({ currentUser, onSignOut }) {
               }}>
                 +{coffeeChatsCount}
               </p>
-              <p style={{ fontSize: '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Follow-ups</p>
+              <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Follow-ups</p>
             </button>
           </div>
         </div>
