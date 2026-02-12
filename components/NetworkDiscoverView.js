@@ -3,6 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { parseLocalDate } from '../lib/dateUtils';
 import {
   Search,
   Calendar,
@@ -414,8 +415,8 @@ export default function NetworkDiscoverView({
 
   // Get upcoming meetups (for Trending This Week - shows all events)
   const upcomingMeetups = filteredMeetups
-    .filter(m => new Date(m.date) >= new Date())
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+    .filter(m => parseLocalDate(m.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
+    .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
 
   // Featured meetups for "Trending This Week" section (all upcoming events)
   const featuredMeetups = upcomingMeetups.slice(0, 4);
@@ -465,7 +466,7 @@ export default function NetworkDiscoverView({
 
     return {
       ...content,
-      date: meetup ? new Date(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Thu, Feb 6',
+      date: meetup ? parseLocalDate(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Thu, Feb 6',
       time: formatTime(meetup?.time),
       location: meetup?.location || 'Virtual',
       spots: meetup ? Math.max(1, (meetup.participant_limit || 8) - (meetup.signups?.length || 0)) : 2,
@@ -1263,7 +1264,7 @@ export default function NetworkDiscoverView({
                     </p>
                     <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px', fontSize: isMobile ? '10px' : '11px', color: colors.textLight, flexWrap: 'wrap' }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Calendar size={isMobile ? 10 : 11} /> {new Date(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        <Calendar size={isMobile ? 10 : 11} /> {parseLocalDate(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Clock size={isMobile ? 10 : 11} /> {meetup.time}

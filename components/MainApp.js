@@ -27,6 +27,7 @@ import CoffeeChatsView from './CoffeeChatsView'
 import ScheduleMeetupView from './ScheduleMeetupView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import NudgeBanner from './NudgeBanner'
+import { parseLocalDate } from '@/lib/dateUtils'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -855,7 +856,8 @@ function MainApp({ currentUser, onSignOut }) {
       // STEP 3: Filter to ONLY PAST meetups (date + time check)
       const now = new Date()
       const meetupsData = allMeetupsData.filter(meetup => {
-        const meetupDateTime = new Date(`${meetup.date}T${meetup.time}`)
+        const meetupDateTime = parseLocalDate(meetup.date)
+        if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); meetupDateTime.setHours(h, m, 0, 0) }
         const isPast = meetupDateTime < now
         
         console.log(`📅 Meetup: ${meetup.date} ${meetup.time} - Is Past? ${isPast}`)
@@ -1083,18 +1085,8 @@ function MainApp({ currentUser, onSignOut }) {
         try {
           if (!signup.meetups) return false
           
-          // Parse date - same logic as HomeView filter
-          let dateStr = signup.meetups.date
-          
-          // Remove day of week if present
-          dateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
-          
-          // Add current year if not present
-          if (!dateStr.includes('2024') && !dateStr.includes('2025')) {
-            dateStr = `${dateStr}, ${new Date().getFullYear()}`
-          }
-          
-          const meetupDate = new Date(dateStr)
+          // Parse date using local timezone utility
+          const meetupDate = parseLocalDate(signup.meetups.date)
           
           // Check if valid date
           if (isNaN(meetupDate.getTime())) {
@@ -1697,7 +1689,7 @@ function MainApp({ currentUser, onSignOut }) {
         const meetup = meetups.find(m => m.id === signupId)
         if (!meetup) return false
         try {
-          const meetupDate = new Date(meetup.date)
+          const meetupDate = parseLocalDate(meetup.date)
           return meetupDate >= startOfWeek && meetupDate <= now
         } catch {
           return false

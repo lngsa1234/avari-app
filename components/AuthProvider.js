@@ -50,12 +50,14 @@ export function AuthProvider({ children }) {
             ? userEmail.split('@')[0].split('.')[0] 
             : 'User'
           
+          const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
           const { data: newProfile, error: createError } = await supabase
             .from('profiles')
             .insert({
               id: userId,
               email: userEmail || user?.email,
               name: userName || defaultName, // ← Add name field!
+              timezone: detectedTz,
             })
             .select()
             .single()
@@ -77,6 +79,12 @@ export function AuthProvider({ children }) {
         }
       } else if (data) {
         console.log('✅ Profile loaded:', data.name || data.email)
+        // Auto-detect timezone if not yet set
+        if (!data.timezone) {
+          const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          await supabase.from('profiles').update({ timezone: detectedTz }).eq('id', userId);
+          data.timezone = detectedTz;
+        }
         setProfile(data)
         setStatus('ready')
       }

@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, Send, CheckCircle, XCircle, Eye, Trash2 } from 'lucide-react';
+import { parseLocalDate } from '../lib/dateUtils';
 import {
   submitMeetupProposal,
   getMyProposals,
@@ -160,7 +161,7 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
 
   const formatDate = (dateStr) => {
     try {
-      const date = new Date(dateStr);
+      const date = parseLocalDate(dateStr);
       return date.toLocaleDateString('en-US', {
         weekday: 'long',
         month: 'short',

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { parseLocalDate } from '@/lib/dateUtils';
 import {
   Calendar,
   MapPin,
@@ -107,7 +108,7 @@ export default function EventRecommendations({
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const activeRecs = recsWithMeetups
-        .filter(r => r.meetup && new Date(r.meetup.date) >= today)
+        .filter(r => r.meetup && parseLocalDate(r.meetup.date) >= today)
         .slice(0, maxItems);
 
       setRecommendations(activeRecs);
@@ -192,7 +193,7 @@ export default function EventRecommendations({
 
   function formatDate(dateStr) {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    const date = parseLocalDate(dateStr);
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
@@ -440,7 +441,7 @@ export function EventRecommendationCard({ recommendation, onRSVP, onDismiss }) {
 
   function formatDate(dateStr) {
     if (!dateStr) return '';
-    const date = new Date(dateStr);
+    const date = parseLocalDate(dateStr);
     return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',

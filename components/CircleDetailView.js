@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Check, UserPlus, Plus } from 'lucide-react';
+import { parseLocalDate } from '../lib/dateUtils';
 import {
   getOrCreateCircleMeetups,
   getUserRSVPStatus,
@@ -491,7 +492,7 @@ export default function CircleDetailView({
                 const isNext = index === 0;
                 const isRSVPd = userRSVPs[meetup.id];
                 const isLoading = rsvpLoading[meetup.id];
-                const meetupDate = new Date(meetup.date + 'T00:00:00');
+                const meetupDate = parseLocalDate(meetup.date);
                 const dayName = meetupDate.toLocaleDateString('en-US', { weekday: 'short' });
                 const fullDate = meetupDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                 const timeDisplay = meetup.time ?

@@ -147,10 +147,8 @@ const RemoteVideo = memo(function RemoteVideo({
       onClick={onClick}
       style={onClick ? { cursor: 'pointer' } : undefined}
     >
-      {/* Hidden audio element */}
-      {providerType === 'livekit' && (
-        <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
-      )}
+      {/* Hidden audio element - needed for all providers */}
+      <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
 
       {/* Video layer */}
       <div

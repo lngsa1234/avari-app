@@ -20,6 +20,7 @@ import {
   deleteGroupMessage
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
+import { parseLocalDate } from '../lib/dateUtils';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
   const [activeTab, setActiveTab] = useState('all');
@@ -736,7 +737,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                           <>
                             <span style={styles.activityIcon}>📅</span>
                             <span style={styles.activityText}>
-                              Next: {new Date(group.nextMeetup.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {group.nextMeetup.time}
+                              Next: {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {group.nextMeetup.time}
                             </span>
                           </>
                         ) : group.lastMessage ? (

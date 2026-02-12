@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { logAgentExecution, callAI, parseJSONFromAI, calculateInterestOverlap } from '@/lib/agentHelpers';
+import { parseLocalDate } from '@/lib/dateUtils';
 
 /**
  * Generate event recommendations for a user
@@ -101,7 +102,7 @@ export async function GET(request) {
     const now = new Date();
     const activeRecs = recsData
       .map(rec => ({ ...rec, meetup: meetupMap[rec.meetup_id] || null }))
-      .filter(r => r.meetup && new Date(r.meetup.date) > now);
+      .filter(r => r.meetup && parseLocalDate(r.meetup.date) > now);
 
     return NextResponse.json({ recommendations: activeRecs });
   } catch (error) {
@@ -339,7 +340,7 @@ function scoreEvents(profile, events, connectionIds, pastAttendance) {
     }
 
     // 5. Timing - events soon get slight boost (weight: up to 0.05)
-    const daysUntil = (new Date(event.date) - new Date()) / (1000 * 60 * 60 * 24);
+    const daysUntil = (parseLocalDate(event.date) - new Date()) / (1000 * 60 * 60 * 24);
     if (daysUntil <= 7 && daysUntil >= 1) {
       score += 0.05;
       reasons.push({ reason: 'Happening soon', weight: 0.05 });
@@ -388,7 +389,7 @@ USER PROFILE:
 
 CANDIDATE EVENTS (pre-scored):
 ${scoredEvents.map((e, i) => `
-${i + 1}. "${e.title}" (${new Date(e.date).toLocaleDateString()})
+${i + 1}. "${e.title}" (${parseLocalDate(e.date).toLocaleDateString()})
    Score: ${e.score.toFixed(2)} | ${e.attendeeCount} attending
    Reasons: ${e.reasons.map(r => r.reason).join('; ')}
 `).join('')}

@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles } from 'lucide-react';
 import PostMeetingSummary from './PostMeetingSummary';
+import { parseLocalDate } from '../lib/dateUtils';
 
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate }) {
   const [activeView, setActiveView] = useState('upcoming');
@@ -291,7 +292,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
         // Filter to past meetups
         const pastMeetups = (meetupsData || []).filter(meetup => {
-          const meetupDate = new Date(`${meetup.date}T${meetup.time || '00:00'}`);
+          const meetupDate = parseLocalDate(meetup.date);
+          if (meetup.time) {
+            const [hours, minutes] = meetup.time.split(':').map(Number);
+            meetupDate.setHours(hours, minutes, 0, 0);
+          }
           return meetupDate < gracePeriod;
         });
 
@@ -309,7 +314,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               : `🎉 ${meetup.topic || 'Event'}`,
             emoji: isCircle ? '🔒' : '🎉',
             date: formatDate(meetup.date),
-            rawDate: new Date(`${meetup.date}T${meetup.time || '00:00'}`),
+            rawDate: (() => { const d = parseLocalDate(meetup.date); if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); d.setHours(h, m, 0, 0); } return d; })(),
             topic: meetup.topic || meetup.description || (isCircle ? 'Circle meetup' : 'Public event'),
             notes: meetup.description,
             location: meetup.location,
@@ -502,7 +507,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const formatDate = (dateStr) => {
     if (!dateStr) return 'TBD';
     try {
-      const date = new Date(dateStr);
+      const date = parseLocalDate(dateStr);
       const now = new Date();
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -582,8 +587,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
   const allUpcoming = [...coffeeChats, ...groupEvents].sort((a, b) => {
     // Sort by date - use scheduled_date for coffee chats, original date for group events
-    const dateA = a.scheduled_date ? new Date(a.scheduled_date) : new Date(a.originalDate || a.date);
-    const dateB = b.scheduled_date ? new Date(b.scheduled_date) : new Date(b.originalDate || b.date);
+    const dateA = a.scheduled_date ? new Date(a.scheduled_date) : parseLocalDate(a.originalDate || a.date);
+    const dateB = b.scheduled_date ? new Date(b.scheduled_date) : parseLocalDate(b.originalDate || b.date);
     return dateA - dateB;
   });
 

@@ -214,7 +214,8 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
           state: profile.state?.trim() || null,
           country: profile.country?.trim() || null,
           profile_picture: profile.profile_picture,
-          onboarding_completed: true
+          onboarding_completed: true,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
         })
         .eq('id', session.user.id);
 

@@ -3,6 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { parseLocalDate } from '../lib/dateUtils';
 import {
   Search,
   Calendar,
@@ -110,7 +111,7 @@ export default function AllEventsView({
   // Filter meetups based on search, vibe, and date
   const filteredMeetups = meetups.filter((meetup) => {
     // Filter by date (upcoming vs past)
-    const meetupDate = new Date(meetup.date);
+    const meetupDate = parseLocalDate(meetup.date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -134,8 +135,8 @@ export default function AllEventsView({
 
   // Sort: upcoming events by date ascending, past events by date descending
   const sortedMeetups = [...filteredMeetups].sort((a, b) => {
-    const dateA = new Date(a.date);
-    const dateB = new Date(b.date);
+    const dateA = parseLocalDate(a.date);
+    const dateB = parseLocalDate(b.date);
     return activeView === 'upcoming' ? dateA - dateB : dateB - dateA;
   });
 
@@ -362,7 +363,7 @@ export default function AllEventsView({
               `linear-gradient(135deg, #F5EDE8 0%, #EBE0D8 100%)`,
               `linear-gradient(135deg, #EDE6DF 0%, #E0D8D0 100%)`,
             ];
-            const isPast = new Date(meetup.date) < new Date();
+            const isPast = parseLocalDate(meetup.date) < new Date();
 
             return (
               <div
@@ -429,7 +430,7 @@ export default function AllEventsView({
                   }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <Calendar size={11} />
-                      {new Date(meetup.date).toLocaleDateString('en-US', {
+                      {parseLocalDate(meetup.date).toLocaleDateString('en-US', {
                         weekday: 'short',
                         month: 'short',
                         day: 'numeric',
