@@ -187,18 +187,18 @@ export default function CallHistoryView({ currentUser, supabase }) {
 
   const getCallTypeLabel = (callType) => {
     switch (callType) {
-      case '1on1': return '1:1 Call';
-      case 'meetup': return 'Group Meetup';
-      case 'group': return 'Group Call';
+      case '1on1': return 'Coffee Chat';
+      case 'meetup': return 'Event';
+      case 'group': return 'Circle Session';
       default: return 'Video Call';
     }
   };
 
   const getCallTypeColor = (callType) => {
     switch (callType) {
-      case '1on1': return 'bg-blue-100 text-blue-700';
+      case '1on1': return 'bg-amber-100 text-amber-700';
       case 'meetup': return 'bg-purple-100 text-purple-700';
-      case 'group': return 'bg-green-100 text-green-700';
+      case 'group': return 'bg-emerald-100 text-emerald-700';
       default: return 'bg-gray-100 text-gray-700';
     }
   };

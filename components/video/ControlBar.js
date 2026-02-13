@@ -408,17 +408,10 @@ export default function ControlBar({
     });
   }
 
-  if (features.backgroundBlur && isBlurSupported) {
-    moreMenuItems.push({
-      icon: <BlurIcon />,
-      label: 'Background Blur',
-      active: isBlurEnabled,
-      onClick: onToggleBlur,
-    });
-  }
+  // Background blur is shown as a direct button next to video, not in More menu
 
   return (
-    <div className="flex flex-col items-center gap-2 py-3 px-4">
+    <div className="flex flex-col items-center gap-2 py-3 px-4 relative z-50">
       {/* Status indicators row */}
       <div className="flex items-center gap-4">
         {isRecording && (

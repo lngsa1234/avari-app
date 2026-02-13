@@ -74,38 +74,39 @@ export function useCallRoom(callType, roomId) {
           // Group Meetup - uses agora_rooms table (but LiveKit provider)
           const { data, error: roomError } = await supabase
             .from('agora_rooms')
-            .select(`
-              *,
-              meetups (
-                id,
-                topic,
-                date,
-                time,
-                location,
-                host_id
-              )
-            `)
+            .select('*')
             .eq('channel_name', roomId)
             .single();
 
           if (roomError && roomError.code !== 'PGRST116') throw roomError;
           roomData = data;
 
-          if (data?.meetups) {
-            related = data.meetups;
-            // Fetch signups for participants
-            const { data: signups } = await supabase
-              .from('meetup_signups')
-              .select('user_id')
-              .eq('meetup_id', data.meetups.id);
+          // Fetch meetup details separately (more reliable than join)
+          const meetupId = data?.meetup_id;
+          if (meetupId) {
+            const { data: meetupData } = await supabase
+              .from('meetups')
+              .select('id, topic, date, time, location, host_id')
+              .eq('id', meetupId)
+              .single();
 
-            if (signups && signups.length > 0) {
-              const userIds = signups.map(s => s.user_id).filter(Boolean);
-              const { data: profiles } = await supabase
-                .from('profiles')
-                .select('id, name, email, profile_picture, career')
-                .in('id', userIds);
-              participantsList = profiles || [];
+            if (meetupData) {
+              related = meetupData;
+
+              // Fetch signups for participants
+              const { data: signups } = await supabase
+                .from('meetup_signups')
+                .select('user_id')
+                .eq('meetup_id', meetupData.id);
+
+              if (signups && signups.length > 0) {
+                const userIds = signups.map(s => s.user_id).filter(Boolean);
+                const { data: profiles } = await supabase
+                  .from('profiles')
+                  .select('id, name, email, profile_picture, career')
+                  .in('id', userIds);
+                participantsList = profiles || [];
+              }
             }
           }
           break;
@@ -132,7 +133,21 @@ export function useCallRoom(callType, roomId) {
             console.log('[useCallRoom] Group data:', groupData, 'Error:', groupError);
 
             if (groupData) {
-              related = groupData;
+              // Fetch the latest meetup for this circle to get the topic
+              const { data: meetupData } = await supabase
+                .from('meetups')
+                .select('id, topic, date, time')
+                .eq('circle_id', groupId)
+                .order('date', { ascending: false })
+                .limit(1)
+                .single();
+
+              related = {
+                ...groupData,
+                meetupTopic: meetupData?.topic || null,
+                meetupDate: meetupData?.date || null,
+                meetupTime: meetupData?.time || null,
+              };
               roomData = { channel_name: roomId, group_id: groupId };
 
               // Fetch group members

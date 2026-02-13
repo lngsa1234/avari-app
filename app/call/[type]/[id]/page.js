@@ -707,6 +707,9 @@ export default function UnifiedCallPage() {
     await room.connect(liveKitUrl, token);
     await room.localParticipant.enableCameraAndMicrophone();
 
+    // Required: start audio playback to handle browser autoplay policy
+    await room.startAudio();
+
     const camTrack = room.localParticipant.getTrackPublication('camera');
     const micTrack = room.localParticipant.getTrackPublication('microphone');
 
@@ -1599,14 +1602,14 @@ export default function UnifiedCallPage() {
     } else if (callType === 'meetup' && relatedData) {
       return `${relatedData.date} at ${relatedData.time}`;
     } else if (callType === 'circle' && relatedData) {
-      return relatedData.name;
+      return relatedData.meetupTopic || relatedData.name || (isJoined ? 'Connected' : 'Connecting...');
     }
     return isJoined ? 'Connected' : 'Connecting...';
   };
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden"
+      className="h-screen flex flex-col"
       style={{
         background: 'linear-gradient(165deg, #1E1410 0%, #2D1E14 40%, #1A120E 100%)',
       }}
@@ -1625,11 +1628,19 @@ export default function UnifiedCallPage() {
 
       {/* Header */}
       <VideoHeader
-        title={config.ui.title}
-        brandName={config.ui.brandName}
+        title={
+          callType === 'circle' && relatedData?.meetupTopic ? relatedData.meetupTopic
+          : callType === 'meetup' && relatedData?.topic ? relatedData.topic
+          : config.ui.title
+        }
+        brandName={
+          callType === 'meetup' && relatedData?.topic ? relatedData.topic
+          : callType === 'circle' && relatedData?.name ? relatedData.name
+          : config.ui.brandName
+        }
         subtitle={getSubtitle()}
         participantCount={participantCount}
-        providerBadge={config.provider === 'livekit' ? 'LiveKit' : undefined}
+        providerBadge={config.provider}
         isConnecting={isConnecting}
         isTranscribing={isTranscribing && callType === 'coffee'}
         isRecording={isRecording}
@@ -1642,7 +1653,7 @@ export default function UnifiedCallPage() {
       />
 
       {/* Video Area */}
-      <div className={`flex-1 p-2 sm:p-3 relative overflow-hidden transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`} style={{ minHeight: 0 }}>
+      <div className={`flex-1 p-2 sm:p-3 relative transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`} style={{ minHeight: 0 }}>
         {gridView ? (
           <VideoGrid
             localVideoRef={localVideoRef}
@@ -1657,6 +1668,10 @@ export default function UnifiedCallPage() {
             remoteScreenTrack={remoteScreenTrack}
             screenSharerName={screenSharerName}
             onStopScreenShare={handleStopScreenShare}
+            isBlurEnabled={isBlurEnabled}
+            isBlurSupported={isBlurSupported}
+            isBlurLoading={blurLoading}
+            onToggleBlur={handleToggleBlur}
           />
         ) : (
           <VideoSpeakerView
@@ -1674,6 +1689,10 @@ export default function UnifiedCallPage() {
             remoteScreenTrack={remoteScreenTrack}
             screenSharerName={screenSharerName}
             onStopScreenShare={handleStopScreenShare}
+            isBlurEnabled={isBlurEnabled}
+            isBlurSupported={isBlurSupported}
+            isBlurLoading={blurLoading}
+            onToggleBlur={handleToggleBlur}
           />
         )}
 
@@ -1687,7 +1706,7 @@ export default function UnifiedCallPage() {
       </div>
 
       {/* Controls */}
-      <div className={`transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`}>
+      <div className={`flex-shrink-0 overflow-visible relative z-50 transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`}>
         <ControlBar
           isMuted={isMuted}
           isVideoOff={isVideoOff}

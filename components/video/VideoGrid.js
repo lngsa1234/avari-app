@@ -28,6 +28,12 @@ export default function VideoGrid({
   screenSharerName = '',
   onStopScreenShare,
 
+  // Blur
+  isBlurEnabled = false,
+  isBlurSupported = false,
+  isBlurLoading = false,
+  onToggleBlur,
+
   // UI
   showSidebar = false,
 }) {
@@ -78,6 +84,10 @@ export default function VideoGrid({
               userName={userName}
               size="thumbnail"
               accentColor={accentColor}
+              isBlurEnabled={isBlurEnabled}
+              isBlurSupported={isBlurSupported}
+              isBlurLoading={isBlurLoading}
+              onToggleBlur={onToggleBlur}
             />
           </div>
 
@@ -113,6 +123,10 @@ export default function VideoGrid({
         userName={userName}
         size="grid"
         accentColor={accentColor}
+        isBlurEnabled={isBlurEnabled}
+        isBlurSupported={isBlurSupported}
+        isBlurLoading={isBlurLoading}
+        onToggleBlur={onToggleBlur}
       />
 
       {/* Remote Videos */}

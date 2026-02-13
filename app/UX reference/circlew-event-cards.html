@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CircleW — Upcoming Events</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --mocha-900: #3B2314;
+    --mocha-800: #5C3A24;
+    --mocha-700: #6B4632;
+    --mocha-600: #8B6347;
+    --mocha-500: #A67B5B;
+    --mocha-400: #C4A07C;
+    --mocha-300: #D4B896;
+    --mocha-200: #E8D5BE;
+    --mocha-100: #F3EAE0;
+    --mocha-50: #FAF6F1;
+    --cream: #FFFCF8;
+    --sage: #A67B5B;
+    --sage-light: #F0E4D8;
+    --sage-dark: #6B4632;
+    --text-primary: #2C1810;
+    --text-secondary: #6B5B50;
+    --text-muted: #9B8A7E;
+    --accent-live: #D45B3E;
+    --accent-live-bg: #FEF0EC;
+    --shadow-sm: 0 1px 3px rgba(59,35,20,0.06);
+    --shadow-md: 0 4px 12px rgba(59,35,20,0.08);
+    --shadow-lg: 0 8px 24px rgba(59,35,20,0.1);
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--mocha-50);
+    font-family: 'DM Sans', sans-serif;
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  /* Header */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 28px;
+    padding: 0 4px;
+  }
+
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--mocha-900);
+    letter-spacing: -0.3px;
+  }
+
+  .view-all {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--mocha-600);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s;
+  }
+  .view-all:hover { color: var(--mocha-900); }
+  .view-all svg { transition: transform 0.2s; }
+  .view-all:hover svg { transform: translateX(2px); }
+
+  /* Event Cards */
+  .events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .event-card {
+    background: var(--cream);
+    border-radius: var(--radius);
+    padding: 0;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.25s, transform 0.25s;
+    overflow: hidden;
+    border: 1px solid rgba(59,35,20,0.05);
+  }
+  .event-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .card-inner {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  /* Date Column */
+  .date-block {
+    min-width: 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 0;
+    background: var(--mocha-100);
+    border-right: 1px solid rgba(59,35,20,0.06);
+    position: relative;
+  }
+
+  .date-month {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--mocha-600);
+    margin-bottom: 2px;
+  }
+
+  .date-day {
+    font-family: 'Playfair Display', serif;
+    font-size: 30px;
+    font-weight: 600;
+    color: var(--mocha-900);
+    line-height: 1;
+  }
+
+  .date-weekday {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-weight: 500;
+  }
+
+  /* Content Area */
+  .card-content {
+    flex: 1;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  /* Top Row: Tags + Time */
+  .card-top-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 3px 8px;
+    border-radius: 5px;
+  }
+  .badge-circle {
+    background: var(--sage-light);
+    color: var(--sage-dark);
+  }
+  .badge-event {
+    background: var(--mocha-200);
+    color: var(--mocha-800);
+  }
+  .badge-live {
+    background: var(--accent-live-bg);
+    color: var(--accent-live);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .badge-live::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-live);
+    animation: pulse-live 1.5s infinite;
+  }
+  @keyframes pulse-live {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  
+  /* Title */
+  .event-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+    letter-spacing: -0.2px;
+  }
+
+  /* Meta Details */
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+  }
+
+  .meta-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .meta-item svg {
+    flex-shrink: 0;
+    color: var(--mocha-400);
+  }
+  .meta-label {
+    font-weight: 500;
+  }
+  .time-value {
+    font-weight: 600;
+    color: var(--mocha-800);
+  }
+
+  .circle-name {
+    color: var(--mocha-800);
+    font-weight: 600;
+  }
+
+  /* Circle name inline next to badge */
+  .circle-name-inline {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mocha-700);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .top-separator {
+    width: 1px;
+    height: 14px;
+    background: var(--mocha-300);
+    flex-shrink: 0;
+  }
+
+  .divider-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--mocha-300);
+    flex-shrink: 0;
+  }
+
+  /* Attendees Row */
+  .attendees-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .avatar-stack {
+    display: flex;
+    align-items: center;
+  }
+
+  .avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    border: 2px solid var(--cream);
+    margin-left: -7px;
+  }
+  .avatar:first-child { margin-left: 0; }
+
+  .avatar-a { background: var(--mocha-600); }
+  .avatar-l { background: var(--mocha-500); }
+  .avatar-s { background: var(--mocha-400); }
+  .avatar-m { background: #7B8EA0; }
+  .avatar-plus {
+    background: var(--mocha-200);
+    color: var(--mocha-700);
+    font-size: 9px;
+  }
+
+  .attendees-text {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .attendees-count {
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  /* Action Column */
+  .card-action {
+    display: flex;
+    align-items: center;
+    padding: 18px 20px 18px 0;
+    flex-shrink: 0;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: var(--mocha-900);
+    color: white;
+  }
+  .btn-primary:hover {
+    background: var(--mocha-800);
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--mocha-800);
+    border: 1.5px solid var(--mocha-300);
+  }
+  .btn-secondary:hover {
+    background: var(--mocha-100);
+    border-color: var(--mocha-500);
+  }
+
+  .btn-live {
+    background: var(--accent-live);
+    color: white;
+  }
+  .btn-live:hover {
+    background: #C0503A;
+    box-shadow: 0 4px 14px rgba(212,91,62,0.3);
+  }
+
+  .btn svg {
+    flex-shrink: 0;
+  }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    .card-inner {
+      flex-direction: column;
+    }
+    .date-block {
+      flex-direction: row;
+      min-width: auto;
+      padding: 12px 20px;
+      gap: 8px;
+      border-right: none;
+      border-bottom: 1px solid rgba(59,35,20,0.06);
+      justify-content: flex-start;
+    }
+    .date-month { margin-bottom: 0; font-size: 12px; }
+    .date-day { font-size: 20px; }
+    .date-weekday { margin-top: 0; }
+    .card-action {
+      padding: 0 20px 18px 20px;
+    }
+    .btn { width: 100%; justify-content: center; }
+    .meta-row { gap: 10px; }
+  }
+
+  /* Stagger animation */
+  .event-card {
+    opacity: 0;
+    animation: fadeSlideUp 0.4s ease forwards;
+  }
+  .event-card:nth-child(1) { animation-delay: 0s; }
+  .event-card:nth-child(2) { animation-delay: 0.08s; }
+  .event-card:nth-child(3) { animation-delay: 0.16s; }
+  .event-card:nth-child(4) { animation-delay: 0.24s; }
+
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="section-header">
+    <h2 class="section-title">Upcoming Events</h2>
+    <a href="#" class="view-all">
+      View all
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4l4 4-4 4"/></svg>
+    </a>
+  </div>
+
+  <div class="events-list">
+
+    <!-- Card 1: Live Event -->
+    <div class="event-card">
+      <div class="card-inner">
+        <div class="date-block">
+          <span class="date-month">Feb</span>
+          <span class="date-day">12</span>
+          <span class="date-weekday">Wed</span>
+        </div>
+        <div class="card-content">
+          <div class="card-top-row">
+            <span class="badge badge-event">Event</span>
+            <span class="badge badge-live">Live</span>
+          </div>
+          <div class="event-title">Feb 12 Meeting</div>
+          <div class="meta-row">
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="time-value">5:20 PM EST</span>
+            </div>
+            <div class="divider-dot"></div>
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Virtual · Zoom</span>
+            </div>
+          </div>
+          <div class="attendees-row">
+            <div class="avatar-stack">
+              <div class="avatar avatar-a">A</div>
+            </div>
+            <span class="attendees-text"><span class="attendees-count">1</span> going</span>
+          </div>
+        </div>
+        <div class="card-action">
+          <button class="btn btn-live">
+            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15.6 11.7a.5.5 0 010 .6l-6 4A.5.5 0 019 16V8a.5.5 0 01.8-.4l6 4z"/></svg>
+            Join Now
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 2: Circle Meetup -->
+    <div class="event-card">
+      <div class="card-inner">
+        <div class="date-block">
+          <span class="date-month">Feb</span>
+          <span class="date-day">12</span>
+          <span class="date-weekday">Wed</span>
+        </div>
+        <div class="card-content">
+          <div class="card-top-row">
+            <span class="badge badge-circle">Circle</span>
+            <span class="top-separator"></span>
+            <span class="circle-name-inline">Video Test</span>
+          </div>
+          <div class="event-title">Test Time Zone</div>
+          <div class="meta-row">
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="time-value">5:44 PM EST</span>
+            </div>
+            <div class="divider-dot"></div>
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Virtual · Video Call</span>
+            </div>
+          </div>
+          <div class="attendees-row">
+            <div class="avatar-stack">
+              <div class="avatar avatar-l">L</div>
+            </div>
+            <span class="attendees-text"><span class="attendees-count">1</span> going · 5 spots left</span>
+          </div>
+        </div>
+        <div class="card-action">
+          <button class="btn btn-primary">
+            Reserve spot
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 8h8M9 4l4 4-4 4"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 3: PM to Founder Circle -->
+    <div class="event-card">
+      <div class="card-inner">
+        <div class="date-block">
+          <span class="date-month">Feb</span>
+          <span class="date-day">13</span>
+          <span class="date-weekday">Thu</span>
+        </div>
+        <div class="card-content">
+          <div class="card-top-row">
+            <span class="badge badge-circle">Circle</span>
+            <span class="top-separator"></span>
+            <span class="circle-name-inline">PM to Founder Transition Circle</span>
+          </div>
+          <div class="event-title">PM to Founder Transition Circle Meetup</div>
+          <div class="meta-row">
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="time-value">7:00 PM EST</span>
+            </div>
+            <div class="divider-dot"></div>
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Birmingham, MI</span>
+            </div>
+          </div>
+          <div class="attendees-row">
+            <div class="avatar-stack">
+              <div class="avatar avatar-l">L</div>
+              <div class="avatar avatar-s">S</div>
+              <div class="avatar avatar-m">M</div>
+              <div class="avatar avatar-plus">+2</div>
+            </div>
+            <span class="attendees-text"><span class="attendees-count">5</span> going · 3 spots left</span>
+          </div>
+        </div>
+        <div class="card-action">
+          <button class="btn btn-secondary">
+            Reserve spot
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 8h8M9 4l4 4-4 4"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: Future Event -->
+    <div class="event-card">
+      <div class="card-inner">
+        <div class="date-block">
+          <span class="date-month">Feb</span>
+          <span class="date-day">15</span>
+          <span class="date-weekday">Sat</span>
+        </div>
+        <div class="card-content">
+          <div class="card-top-row">
+            <span class="badge badge-circle">Circle</span>
+            <span class="top-separator"></span>
+            <span class="circle-name-inline">Women in Tech Michigan</span>
+          </div>
+          <div class="event-title">Women in Tech Brunch & Connect</div>
+          <div class="meta-row">
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+              <span class="time-value">10:00 AM EST</span>
+            </div>
+            <div class="divider-dot"></div>
+            <div class="meta-item">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              <span>Great Lakes Coffee, Detroit</span>
+            </div>
+          </div>
+          <div class="attendees-row">
+            <div class="avatar-stack">
+              <div class="avatar avatar-a">A</div>
+              <div class="avatar avatar-l">L</div>
+            </div>
+            <span class="attendees-text"><span class="attendees-count">2</span> going · 8 spots left</span>
+          </div>
+        </div>
+        <div class="card-action">
+          <button class="btn btn-primary">
+            Reserve spot
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 8h8M9 4l4 4-4 4"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

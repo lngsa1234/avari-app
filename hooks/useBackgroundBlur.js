@@ -202,11 +202,36 @@ export function useBackgroundBlur(provider = 'webrtc') {
 
   /**
    * Initialize LiveKit background blur
+   * Uses a freeze-frame overlay to prevent black flash during processor swap.
    */
   const initLiveKitBlur = useCallback(async (videoTrack) => {
     try {
       setIsLoading(true);
       setError(null);
+
+      // Capture a freeze-frame before applying the processor so the
+      // user sees the last good frame instead of a black flash.
+      const attachedEl = videoTrack.attachedElements?.[0];
+      let freezeCanvas = null;
+      if (attachedEl && attachedEl.videoWidth) {
+        freezeCanvas = document.createElement('canvas');
+        freezeCanvas.width = attachedEl.videoWidth;
+        freezeCanvas.height = attachedEl.videoHeight;
+        freezeCanvas.getContext('2d').drawImage(attachedEl, 0, 0);
+        // Overlay the frozen frame on top of the video element
+        Object.assign(freezeCanvas.style, {
+          position: 'absolute',
+          inset: '0',
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          zIndex: '999',
+          borderRadius: 'inherit',
+          transform: 'scaleX(-1)',
+          pointerEvents: 'none',
+        });
+        attachedEl.parentElement?.appendChild(freezeCanvas);
+      }
 
       // Dynamically import LiveKit processor
       const { BackgroundBlur } = await import('@livekit/track-processors');
@@ -214,8 +239,13 @@ export function useBackgroundBlur(provider = 'webrtc') {
       // Create blur processor
       const blurProcessor = BackgroundBlur(10); // blur radius
 
-      // Apply to video track
+      // Apply to video track (this causes a brief track restart)
       await videoTrack.setProcessor(blurProcessor);
+
+      // Remove freeze-frame after a short delay to let the new track render
+      if (freezeCanvas) {
+        setTimeout(() => freezeCanvas.remove(), 200);
+      }
 
       processorRef.current = blurProcessor;
       console.log('[BackgroundBlur] LiveKit blur enabled');
@@ -223,6 +253,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
       return true;
     } catch (err) {
       console.error('[BackgroundBlur] LiveKit init error:', err);
+      // Clean up freeze-frame on error
       setError(err.message);
       return false;
     } finally {
@@ -284,7 +315,23 @@ export function useBackgroundBlur(provider = 'webrtc') {
           console.log('[BackgroundBlur] Agora processor disabled (kept for re-enable)');
           // Don't clear processorRef so we can re-enable
         } else if (provider === 'livekit' && videoTrack) {
+          // Freeze-frame to prevent black flash when removing processor
+          const attachedEl = videoTrack.attachedElements?.[0];
+          let freezeCanvas = null;
+          if (attachedEl && attachedEl.videoWidth) {
+            freezeCanvas = document.createElement('canvas');
+            freezeCanvas.width = attachedEl.videoWidth;
+            freezeCanvas.height = attachedEl.videoHeight;
+            freezeCanvas.getContext('2d').drawImage(attachedEl, 0, 0);
+            Object.assign(freezeCanvas.style, {
+              position: 'absolute', inset: '0', width: '100%', height: '100%',
+              objectFit: 'cover', zIndex: '999', borderRadius: 'inherit',
+              transform: 'scaleX(-1)', pointerEvents: 'none',
+            });
+            attachedEl.parentElement?.appendChild(freezeCanvas);
+          }
           await videoTrack.stopProcessor();
+          if (freezeCanvas) setTimeout(() => freezeCanvas.remove(), 200);
           processorRef.current = null;
         } else {
           processorRef.current = null;

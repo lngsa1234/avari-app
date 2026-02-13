@@ -19,6 +19,13 @@ import VideoAvatar from './VideoAvatar';
  * @param {string} props.accentColor - Accent color for avatar
  * @param {Function} props.onClick - Optional click handler
  */
+const BlurIcon = ({ enabled }) => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill={enabled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+  </svg>
+);
+
 const LocalVideo = forwardRef(function LocalVideo({
   track,
   providerType,
@@ -28,6 +35,10 @@ const LocalVideo = forwardRef(function LocalVideo({
   size = 'grid',
   accentColor = 'rose',
   onClick,
+  isBlurEnabled = false,
+  isBlurSupported = false,
+  isBlurLoading = false,
+  onToggleBlur,
 }, ref) {
   const videoRef = useRef(null);
   const attachedTrackRef = useRef(null);
@@ -127,6 +138,23 @@ const LocalVideo = forwardRef(function LocalVideo({
             subtitle={size !== 'thumbnail' ? 'Camera off' : undefined}
           />
         </div>
+      )}
+
+      {/* Blur toggle - top right of local video */}
+      {!isVideoOff && isBlurSupported && onToggleBlur && size !== 'thumbnail' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleBlur(); }}
+          disabled={isBlurLoading}
+          className={`absolute bottom-2 right-2 z-50 p-2.5 rounded-xl transition-all duration-200 backdrop-blur-sm
+            ${isBlurEnabled
+              ? 'bg-white/25 text-white hover:bg-white/35'
+              : 'bg-black/40 text-white/70 hover:bg-black/60 hover:text-white'}
+            ${isBlurLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:scale-110 active:scale-95'}
+          `}
+          title={isBlurEnabled ? 'Disable blur' : 'Enable background blur'}
+        >
+          {isBlurLoading ? <span className="block w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <BlurIcon enabled={isBlurEnabled} />}
+        </button>
       )}
 
       {/* Name label - positioned outside overflow-hidden area */}

@@ -112,6 +112,11 @@ body {
   50% { opacity: 0.4; }
 }
 
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
 /* Custom scrollbar for sidebar panels */
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;

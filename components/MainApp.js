@@ -335,7 +335,7 @@ function MainApp({ currentUser, onSignOut }) {
         // Get public meetups OR meetups from user's circles
         const result = await supabase
           .from('meetups')
-          .select('*, connection_groups(id, name)')
+          .select('*, connection_groups(id, name), host:profiles!created_by(id, name)')
           .or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
           .order('date', { ascending: true })
           .order('time', { ascending: true })
@@ -346,7 +346,7 @@ function MainApp({ currentUser, onSignOut }) {
         // No circle memberships, just get public meetups
         const result = await supabase
           .from('meetups')
-          .select('*, connection_groups(id, name)')
+          .select('*, connection_groups(id, name), host:profiles!created_by(id, name)')
           .is('circle_id', null)
           .order('date', { ascending: true })
           .order('time', { ascending: true })
@@ -1720,34 +1720,36 @@ function MainApp({ currentUser, onSignOut }) {
 
       const month = parsedDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
       const day = parsedDate.getDate()
+      const weekday = parsedDate.toLocaleDateString('en-US', { weekday: 'short' })
 
       return (
         <div style={{
-          width: '52px',
-          height: '56px',
-          backgroundColor: '#FAF5EF',
-          borderRadius: '12px',
+          minWidth: '72px',
+          padding: '18px 8px',
+          backgroundColor: 'rgba(189, 173, 162, 0.65)',
+          borderRadius: '8px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          border: '1px solid #E8DDD0',
         }}>
           <span style={{
-            fontSize: '10px',
+            fontFamily: '"Lora", serif',
+            fontSize: '14px',
             textTransform: 'uppercase',
-            letterSpacing: '1px',
-            color: '#9C8068',
-            fontWeight: '600',
-            lineHeight: 1,
+            letterSpacing: '0.15px',
+            color: '#605045',
+            fontWeight: '500',
+            lineHeight: '33px',
           }}>{month}</span>
           <span style={{
-            fontFamily: '"Playfair Display", serif',
-            fontSize: '22px',
-            fontWeight: '700',
-            color: '#3D2B1A',
-            lineHeight: 1.1,
+            fontFamily: '"Lora", serif',
+            fontSize: '24px',
+            fontWeight: '500',
+            color: '#605045',
+            lineHeight: '33px',
+            letterSpacing: '0.15px',
           }}>{day}</span>
         </div>
       )
@@ -1793,9 +1795,11 @@ function MainApp({ currentUser, onSignOut }) {
 
     const homeStyles = {
       container: {
-        fontFamily: '"DM Sans", sans-serif',
+        fontFamily: '"Lora", serif',
         position: 'relative',
         padding: isMobile ? '16px 0' : '24px 0',
+        background: 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)',
+        minHeight: '100%',
       },
       titleSection: {
         display: 'flex',
@@ -1809,32 +1813,34 @@ function MainApp({ currentUser, onSignOut }) {
         gap: '16px',
       },
       pageTitle: {
-        fontFamily: '"Playfair Display", serif',
-        fontSize: isMobile ? '28px' : '34px',
-        fontWeight: '600',
-        color: '#2A1D10',
-        letterSpacing: '-0.5px',
+        fontFamily: '"Lora", serif',
+        fontSize: isMobile ? '28px' : '32px',
+        fontWeight: '500',
+        color: '#584233',
+        letterSpacing: '0.15px',
         margin: 0,
-        lineHeight: 1.2,
+        lineHeight: 1.28,
       },
       tagline: {
+        fontFamily: '"Lora", serif',
         fontSize: '15px',
-        color: '#9C8068',
-        fontWeight: '400',
+        fontWeight: '500',
         margin: 0,
         marginTop: '6px',
+        background: 'linear-gradient(89.8deg, #7E654D 27.14%, #B9A594 72.64%, #ECDDD2 100%)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        backgroundClip: 'text',
       },
-      // Single column layout
       contentGrid: {
         display: 'flex',
         flexDirection: 'column',
         gap: isMobile ? '16px' : '20px',
       },
-      // AI Insights Banner
       aiBanner: {
-        background: 'linear-gradient(135deg, #5E4530 0%, #7A5C42 50%, #C9A96E 100%)',
-        borderRadius: isMobile ? '16px' : '24px',
-        padding: isMobile ? '18px 20px' : '24px 28px',
+        background: 'linear-gradient(93.28deg, #7A624B 9.73%, #BC9972 95.71%)',
+        borderRadius: '15px',
+        padding: isMobile ? '16px 20px' : '20px 24px',
         marginBottom: isMobile ? '20px' : '28px',
         display: 'flex',
         alignItems: 'center',
@@ -1842,14 +1848,17 @@ function MainApp({ currentUser, onSignOut }) {
         cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
+        opacity: 0.83,
+        boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
         transition: 'transform 0.3s ease, box-shadow 0.3s ease',
       },
       card: {
-        backgroundColor: 'white',
-        borderRadius: isMobile ? '16px' : '24px',
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
+        borderRadius: '19px',
         padding: isMobile ? '16px' : '24px',
-        border: '1px solid rgba(184, 160, 137, 0.1)',
+        border: 'none',
         marginBottom: isMobile ? '16px' : '20px',
+        backdropFilter: 'blur(2px)',
       },
       cardHeader: {
         display: 'flex',
@@ -1860,15 +1869,17 @@ function MainApp({ currentUser, onSignOut }) {
         gap: '10px',
       },
       cardTitle: {
-        fontFamily: '"Playfair Display", serif',
-        fontSize: '20px',
-        fontWeight: '600',
-        color: '#3D2B1A',
+        fontFamily: '"Lora", serif',
+        fontSize: '24px',
+        fontWeight: '500',
+        color: '#3F1906',
         margin: 0,
+        letterSpacing: '0.15px',
       },
       seeAllBtn: {
-        fontSize: '13px',
-        color: '#9C8068',
+        fontFamily: '"Lora", serif',
+        fontSize: '15px',
+        color: 'rgba(107, 86, 71, 0.77)',
         fontWeight: '500',
         background: 'transparent',
         border: 'none',
@@ -1876,9 +1887,9 @@ function MainApp({ currentUser, onSignOut }) {
         display: 'flex',
         alignItems: 'center',
         gap: '4px',
+        letterSpacing: '0.15px',
         transition: 'color 0.2s ease',
       },
-      // Quick action items
       quickAction: {
         display: 'flex',
         alignItems: 'center',
@@ -1889,7 +1900,6 @@ function MainApp({ currentUser, onSignOut }) {
         transition: 'all 0.2s ease',
         border: '1px solid transparent',
       },
-      // Suggestion item
       suggestion: {
         display: 'flex',
         alignItems: 'center',
@@ -1965,308 +1975,117 @@ function MainApp({ currentUser, onSignOut }) {
             </div>
             <div>
               <h3 style={{
-                fontFamily: '"DM Sans", sans-serif',
+                fontFamily: '"Lora", serif',
                 fontSize: '15px',
                 fontWeight: '600',
-                color: 'white',
-                marginBottom: '3px',
+                color: '#F7F7F7',
                 margin: 0,
-              }}>Your Weekly AI Insights are ready</h3>
+                letterSpacing: '0.15px',
+                lineHeight: '22px',
+              }}>Your AI Insights — Ready</h3>
               <p style={{
+                fontFamily: '"Lora", serif',
                 fontSize: '13px',
                 color: 'rgba(255,255,255,0.7)',
                 fontWeight: '400',
                 margin: 0,
-              }}>Personalized recap of your connections and community trends</p>
+                letterSpacing: '0.15px',
+              }}>Quick recap + next steps</p>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', zIndex: 1 }}>
-            <span style={{
-              background: 'rgba(255,255,255,0.2)',
-              color: 'white',
-              fontSize: '11px',
-              fontWeight: '600',
-              padding: '4px 10px',
-              borderRadius: '100px',
-              letterSpacing: '0.5px',
-              textTransform: 'uppercase',
-            }}>New</span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-          </div>
-        </div>
-
-        {/* Weekly Momentum - Achievement Cards */}
-        <div style={{ marginBottom: '28px' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 style={{
-              fontFamily: '"Playfair Display", serif',
-              fontSize: '20px',
-              fontWeight: '600',
-              color: '#3D2B1A',
-              margin: 0,
-            }}>Your Weekly Momentum</h2>
-            <button
-              onClick={() => window.location.href = '/ai-insights'}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                fontSize: '13px',
-                color: '#8B6F5C',
-                fontWeight: '600',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '4px 0',
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#5E4530'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#8B6F5C'}
-            >
-              <Sparkles style={{ width: '14px', height: '14px' }} />
-              AI Insights
-              <ChevronRight style={{ width: '14px', height: '14px' }} />
-            </button>
-          </div>
-
-          {/* Achievement Cards Grid */}
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: isMobile ? '8px' : '12px',
+            background: 'rgba(255, 251, 251, 0.72)',
+            borderRadius: '11px',
+            padding: '8px 16px',
+            position: 'relative',
+            zIndex: 1,
+            boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
           }}>
-            {/* Meetups Card */}
-            <button
-              onClick={() => setCurrentView('meetups')}
-              style={{
-                background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: isMobile ? '12px' : '16px',
-                padding: isMobile ? '12px' : '16px',
-                border: '1px solid rgba(184, 160, 137, 0.15)',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 111, 92, 0.15)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = 'none'
-              }}
-            >
-              <div style={{
-                width: isMobile ? '28px' : '36px',
-                height: isMobile ? '28px' : '36px',
-                borderRadius: isMobile ? '8px' : '10px',
-                background: 'linear-gradient(135deg, #C9A96E, #9C8068)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: isMobile ? '8px' : '12px',
-              }}>
-                <Calendar style={{ width: isMobile ? '14px' : '18px', height: isMobile ? '14px' : '18px', color: 'white' }} />
-              </div>
-              <p style={{
-                fontFamily: '"Playfair Display", serif',
-                fontSize: isMobile ? '20px' : '28px',
-                fontWeight: '700',
-                color: weeklyProgress.attended > 0 ? '#3D2B1A' : '#B8A089',
-                margin: 0,
-                lineHeight: 1,
-              }}>
-                +{weeklyProgress.attended}
-              </p>
-              <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Meetups</p>
-            </button>
-
-            {/* Connections Card */}
-            <button
-              onClick={() => setCurrentView('discover')}
-              style={{
-                background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: isMobile ? '12px' : '16px',
-                padding: isMobile ? '12px' : '16px',
-                border: '1px solid rgba(184, 160, 137, 0.15)',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 111, 92, 0.15)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = 'none'
-              }}
-            >
-              <div style={{
-                width: isMobile ? '28px' : '36px',
-                height: isMobile ? '28px' : '36px',
-                borderRadius: isMobile ? '8px' : '10px',
-                background: 'linear-gradient(135deg, #8B9E7E, #6B8E5E)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: isMobile ? '8px' : '12px',
-              }}>
-                <Users style={{ width: isMobile ? '14px' : '18px', height: isMobile ? '14px' : '18px', color: 'white' }} />
-              </div>
-              <p style={{
-                fontFamily: '"Playfair Display", serif',
-                fontSize: isMobile ? '20px' : '28px',
-                fontWeight: '700',
-                color: connections.length > 0 ? '#3D2B1A' : '#B8A089',
-                margin: 0,
-                lineHeight: 1,
-              }}>
-                +{connections.length}
-              </p>
-              <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Connections</p>
-            </button>
-
-            {/* Follow-ups Card */}
-            <button
-              onClick={() => setCurrentView('messages')}
-              style={{
-                background: 'linear-gradient(135deg, #FAF5EF 0%, #F5EDE6 100%)',
-                borderRadius: isMobile ? '12px' : '16px',
-                padding: isMobile ? '12px' : '16px',
-                border: '1px solid rgba(184, 160, 137, 0.15)',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = '0 4px 12px rgba(139, 111, 92, 0.15)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = 'none'
-              }}
-            >
-              <div style={{
-                width: isMobile ? '28px' : '36px',
-                height: isMobile ? '28px' : '36px',
-                borderRadius: isMobile ? '8px' : '10px',
-                background: 'linear-gradient(135deg, #7986CB, #5C6BC0)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: isMobile ? '8px' : '12px',
-              }}>
-                <MessageCircle style={{ width: isMobile ? '14px' : '18px', height: isMobile ? '14px' : '18px', color: 'white' }} />
-              </div>
-              <p style={{
-                fontFamily: '"Playfair Display", serif',
-                fontSize: isMobile ? '20px' : '28px',
-                fontWeight: '700',
-                color: coffeeChatsCount > 0 ? '#3D2B1A' : '#B8A089',
-                margin: 0,
-                lineHeight: 1,
-              }}>
-                +{coffeeChatsCount}
-              </p>
-              <p style={{ fontSize: isMobile ? '11px' : '13px', color: '#7A5C42', margin: '4px 0 0 0', fontWeight: '500' }}>Follow-ups</p>
-            </button>
+            <span style={{
+              fontFamily: '"Lora", serif',
+              fontStyle: 'italic',
+              fontWeight: '700',
+              fontSize: '14px',
+              color: '#6E564A',
+              letterSpacing: '0.15px',
+            }}>View &gt;</span>
           </div>
         </div>
+
+        {/* Starting Soon label */}
+        {nextMeeting && (
+          <h2 style={{
+            fontFamily: '"Lora", serif',
+            fontSize: '24px',
+            fontWeight: '500',
+            color: '#3F1906',
+            letterSpacing: '0.15px',
+            lineHeight: '22px',
+            margin: '0 0 16px 0',
+          }}>Starting Soon</h2>
+        )}
 
         {/* Hero "Next Step" Card - Only shows if meeting within 60 min */}
         {nextMeeting && (
           <div style={{
-            ...homeStyles.card,
-            background: 'linear-gradient(135deg, rgba(139, 111, 92, 0.1) 0%, rgba(212, 165, 116, 0.1) 100%)',
-            border: '1px solid rgba(139, 111, 92, 0.15)',
+            borderRadius: '23px',
+            padding: isMobile ? '20px' : '24px',
+            marginBottom: isMobile ? '16px' : '20px',
+            background: 'rgba(215, 197, 184, 0.2)',
+            boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
+            position: 'relative',
+            overflow: 'hidden',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-              <svg width="32" height="32" viewBox="0 0 100 100" style={{ marginRight: '12px', color: '#5C4033' }}>
-                <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" strokeWidth="5" strokeDasharray="220 60"/>
-                <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="currentColor">W</text>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px', marginBottom: '20px' }}>
+              <svg width="35" height="35" viewBox="0 0 24 24" fill="#584233" style={{ flexShrink: 0, marginTop: '2px' }}>
+                <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM12 13l2.12 1.27-.56-2.41 1.88-1.63-2.47-.21L12 7.82l-1.03 2.2-2.47.21 1.88 1.63-.56 2.41z"/>
               </svg>
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                  <span style={{
-                    fontSize: '10px',
-                    fontWeight: '600',
-                    color: nextMeeting.circle_id ? '#8B6F5C' : '#8B9E7E',
-                    background: nextMeeting.circle_id ? 'rgba(139, 111, 92, 0.15)' : 'rgba(139, 158, 126, 0.15)',
-                    padding: '2px 8px',
-                    borderRadius: '100px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                  }}>
-                    {nextMeeting.circle_id ? 'Circle' : 'Public'}
-                  </span>
-                  <h3 style={{ fontFamily: '"Playfair Display", serif', fontSize: '16px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>{nextMeeting.title || nextMeeting.topic || 'Meetup'}</h3>
-                </div>
-                <div style={{ fontSize: '13px', color: '#8B7355', margin: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span>Starts in {nextMeeting.minutesUntil}m</span>
-                  {(() => {
-                    const meetupSignups = signups[nextMeeting.id] || []
-                    if (meetupSignups.length === 0) return null
-                    const colors = ['#9C8068', '#C9A96E', '#8B9E7E', '#7986CB']
-                    return (
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        {meetupSignups.slice(0, 4).map((signup, idx) => (
-                          <div
-                            key={signup.user_id || idx}
-                            style={{
-                              width: '24px',
-                              height: '24px',
-                              borderRadius: '50%',
-                              border: '2px solid white',
-                              marginLeft: idx === 0 ? 0 : '-8px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '10px',
-                              fontWeight: '600',
-                              color: 'white',
-                              background: colors[idx % 4],
-                            }}
-                          >
-                            {signup.profiles?.name?.[0] || '?'}
-                          </div>
-                        ))}
-                        {meetupSignups.length > 4 && (
-                          <span style={{ fontSize: '12px', color: '#9C8068', marginLeft: '6px' }}>
-                            +{meetupSignups.length - 4}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </div>
+                <h3 style={{
+                  fontFamily: '"Lora", serif',
+                  fontSize: '24px',
+                  fontWeight: '500',
+                  color: '#3F1906',
+                  margin: 0,
+                  letterSpacing: '0.15px',
+                  lineHeight: '22px',
+                  marginBottom: '8px',
+                }}>
+                  {nextMeeting.title || nextMeeting.topic || 'Meetup'} starts in {nextMeeting.minutesUntil}m
+                </h3>
+                <p style={{
+                  fontFamily: '"Lora", serif',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  color: '#584233',
+                  margin: 0,
+                  letterSpacing: '0.15px',
+                }}>
+                  Time to connect with your group
+                </p>
               </div>
             </div>
-
-            <p style={{ fontSize: '14px', color: '#6B5344', marginBottom: '16px' }}>
-              {formatDate(nextMeeting.date)} at {formatTime(nextMeeting.time)}
-            </p>
 
             <button
               onClick={() => handleJoinVideoCall(nextMeeting)}
               style={{
-                width: '100%',
-                padding: '14px',
-                backgroundColor: '#5E4530',
+                padding: '12px 28px',
+                background: 'linear-gradient(88.65deg, rgba(134, 112, 96, 0.63) 56.79%, rgba(197, 172, 150, 0.63) 98.85%)',
                 border: 'none',
-                borderRadius: '12px',
-                color: 'white',
-                fontSize: '15px',
-                fontWeight: '600',
+                borderRadius: '18px',
+                color: '#F5EDE9',
+                fontFamily: '"Lora", serif',
+                fontStyle: 'italic',
+                fontSize: '20px',
+                fontWeight: '700',
                 cursor: 'pointer',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                justifyContent: 'center',
                 gap: '8px',
+                letterSpacing: '0.15px',
+                boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
+                transition: 'all 0.2s ease',
               }}
             >
               <Video style={{ width: '20px', height: '20px' }} />
@@ -2280,19 +2099,17 @@ function MainApp({ currentUser, onSignOut }) {
           {/* Connection Requests Section */}
             {connectionRequests.length > 0 && (
               <div style={homeStyles.card}>
-                <div style={homeStyles.cardHeader}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{ width: '32px', height: '32px', backgroundColor: '#F0D4D6', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '12px' }}>
-                      <Heart style={{ width: '16px', height: '16px', color: '#C4868B' }} />
-                    </div>
-                    <div>
-                      <h3 style={{ ...homeStyles.cardTitle, fontSize: '16px' }}>
-                        {connectionRequests.length} {connectionRequests.length === 1 ? 'person wants' : 'people want'} to connect
-                      </h3>
-                      <p style={{ fontSize: '13px', color: '#9C8068', margin: 0 }}>Accept to start a conversation</p>
-                    </div>
-                  </div>
-                </div>
+                <h3 style={{
+                  fontFamily: '"Lora", serif',
+                  fontSize: '20px',
+                  fontWeight: '500',
+                  color: '#3F1906',
+                  margin: '0 0 16px 0',
+                  letterSpacing: '0.15px',
+                  opacity: 0.73,
+                }}>
+                  Requests waiting for you
+                </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {connectionRequests.slice(0, 3).map(request => {
@@ -2322,13 +2139,20 @@ function MainApp({ currentUser, onSignOut }) {
                               style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', marginRight: '12px' }}
                             />
                           ) : (
-                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #C4868B, #9C8068)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: '600', marginRight: '12px' }}>
-                              {user.name?.[0] || '?'}
+                            <div style={{
+                              width: '64px', height: '64px', borderRadius: '50%',
+                              background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
+                              boxShadow: '0px 1px 4px #9E7868',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontFamily: '"Lora", serif', fontSize: '24px', fontWeight: '700', color: '#523C2E',
+                              marginRight: '12px', flexShrink: 0,
+                            }}>
+                              {(user.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
                             </div>
                           )}
                           <div>
-                            <h4 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1A', margin: 0 }}>{user.name}</h4>
-                            <p style={{ fontSize: '13px', color: '#7A5C42', margin: 0 }}>{user.career || 'Professional'}</p>
+                            <h4 style={{ fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
+                            <p style={{ fontFamily: '"Lora", serif', fontSize: '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.career || 'Professional'}</p>
                             {user.city && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
                             )}
@@ -2336,25 +2160,28 @@ function MainApp({ currentUser, onSignOut }) {
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontSize: '12px', color: '#B8A089' }}>{timeAgo}</span>
+                          <span style={{ fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '700', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
                           <button
                             onClick={() => handleShowInterest(request.id, user.name)}
                             style={{
-                              padding: '10px 20px',
-                              backgroundColor: '#5E4530',
+                              padding: '9px 20px',
+                              background: 'rgba(103, 77, 59, 0.9)',
                               border: 'none',
-                              borderRadius: '100px',
-                              color: 'white',
-                              fontSize: '13px',
-                              fontWeight: '600',
+                              borderRadius: '18px',
+                              color: '#F5EDE9',
+                              fontFamily: '"Lora", serif',
+                              fontStyle: 'italic',
+                              fontSize: '15px',
+                              fontWeight: '700',
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
                               gap: '6px',
+                              letterSpacing: '0.15px',
                             }}
                           >
                             <Heart style={{ width: '14px', height: '14px' }} />
-                            Accept
+                            Review
                           </button>
                         </div>
                       </div>
@@ -2381,10 +2208,7 @@ function MainApp({ currentUser, onSignOut }) {
                   onClick={() => setCurrentView('meetupProposals')}
                   style={homeStyles.seeAllBtn}
                 >
-                  View all
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
+                  View all &gt;
                 </button>
               </div>
 
@@ -2400,113 +2224,264 @@ function MainApp({ currentUser, onSignOut }) {
                   <p style={{ color: '#B8A089', fontSize: '13px', marginTop: '4px' }}>Check back soon for new events!</p>
                 </div>
               ) : (
-                <div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
                     const isSignedUp = userSignups.includes(meetup.id)
                     const meetupSignups = signups[meetup.id] || []
 
                     return (
+                      <React.Fragment key={meetup.id}>
+                        {idx > 0 && (
+                          <div style={{ height: '1px', background: 'linear-gradient(to right, transparent, #E8DDD0, transparent)', margin: '0 8px' }} />
+                        )}
                       <div
-                        key={meetup.id}
                         style={{
                           display: 'flex',
-                          alignItems: 'center',
                           gap: isMobile ? '12px' : '16px',
-                          padding: isMobile ? '14px 0' : '16px',
-                          borderRadius: '12px',
+                          padding: isMobile ? '12px 4px' : '14px 8px',
                           transition: 'all 0.25s ease',
                           cursor: 'pointer',
                           position: 'relative',
-                          borderTop: idx > 0 ? '1px solid #F3ECE2' : 'none',
+                          borderRadius: '12px',
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
                         <EventDateBadge date={meetup.date} />
 
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {/* Top row: Badge + Circle name */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '600',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.8px',
+                              padding: '3px 8px',
+                              borderRadius: '5px',
+                              flexShrink: 0,
+                              ...(meetup.circle_id
+                                ? { background: '#F0E4D8', color: '#6B4632' }
+                                : { background: '#E8D5BE', color: '#5C3A24' }
+                              ),
+                            }}>
+                              {meetup.circle_id ? 'Circle' : 'Event'}
+                            </span>
+                            {isSignedUp && (
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.8px',
+                                padding: '3px 8px',
+                                borderRadius: '5px',
+                                background: '#FEF0EC',
+                                color: '#D45B3E',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                flexShrink: 0,
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
+                                Live
+                              </span>
+                            )}
+                            {meetup.connection_groups?.name && (
+                              <>
+                                <span style={{ width: '1px', height: '14px', background: '#D4B896', flexShrink: 0 }} />
+                                <span style={{
+                                  fontSize: '13px',
+                                  fontWeight: '600',
+                                  color: '#6B4632',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  {meetup.connection_groups.name}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Title */}
                           <h4 style={{
-                            fontSize: '14px',
+                            fontFamily: '"Lora", serif',
+                            fontSize: isMobile ? '18px' : '20px',
                             fontWeight: '600',
-                            color: '#3D2B1A',
+                            color: '#523C2E',
                             margin: 0,
-                            marginBottom: '4px',
-                            lineHeight: 1.3,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: isMobile ? 'normal' : 'nowrap',
+                            lineHeight: '20px',
+                            letterSpacing: '0.15px',
                           }}>
                             {meetup.topic || 'Community Event'}
                           </h4>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#B8A089' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Clock style={{ width: '12px', height: '12px' }} />
-                              {formatTime(meetup.time)}
-                            </span>
+
+                          {/* Meta row: Time + Location */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                              <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                              <span style={{ fontWeight: '600' }}>{formatTime(meetup.time)}</span>
+                            </div>
+                            {meetup.location && (
+                              <>
+                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                                  <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                  <span>{meetup.location}</span>
+                                </div>
+                              </>
+                            )}
+                            {!meetup.location && (
+                              <>
+                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                                  <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                  <span>Virtual · Video Call</span>
+                                </div>
+                              </>
+                            )}
                           </div>
-                          <AttendeeAvatars meetupId={meetup.id} />
+
+                          {/* Attendees row */}
+                          {(() => {
+                            const meetupSignupsList = signups[meetup.id] || []
+                            const attendeeCount = meetupSignupsList.length
+                            const limit = meetup.participant_limit
+                            const spotsLeft = limit ? Math.max(0, limit - attendeeCount) : null
+                            const colors = ['#8B6347', '#A67B5B', '#C4A07C', '#7B8EA0']
+
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {attendeeCount > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    {meetupSignupsList.slice(0, 3).map((signup, i) => (
+                                      <div
+                                        key={signup.user_id || i}
+                                        style={{
+                                          width: '34px',
+                                          height: '34px',
+                                          borderRadius: '50%',
+                                          border: '2px solid #FFFCF8',
+                                          marginLeft: i === 0 ? 0 : '-8px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontFamily: '"Lora", serif',
+                                          fontSize: '10px',
+                                          fontWeight: '700',
+                                          color: '#523C2E',
+                                          background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
+                                          boxShadow: '0px 1px 4px #9E7868',
+                                          letterSpacing: '0.15px',
+                                        }}
+                                      >
+                                        {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                      </div>
+                                    ))}
+                                    {attendeeCount > 3 && (
+                                      <div style={{
+                                        width: '34px',
+                                        height: '34px',
+                                        borderRadius: '50%',
+                                        border: '2px solid #FFFCF8',
+                                        marginLeft: '-8px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontFamily: '"Lora", serif',
+                                        fontSize: '10px',
+                                        fontWeight: '700',
+                                        color: '#764D31',
+                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 99.99%, rgba(241, 225, 213, 0.2) 100%)',
+                                        boxShadow: '0px 1px 4px #9E7868',
+                                      }}>
+                                        +{attendeeCount - 3}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <span style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
+                                  {attendeeCount} attendees
+                                  {spotsLeft !== null && spotsLeft > 0 && (
+                                    <span> · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left</span>
+                                  )}
+                                </span>
+                              </div>
+                            )
+                          })()}
                         </div>
 
-                        <div style={{ flexShrink: 0 }}>
+                        {/* Action button */}
+                        <div style={{ flexShrink: 0, alignSelf: 'center' }}>
                           {isSignedUp ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
                               style={{
-                                background: 'linear-gradient(135deg, #5E4530, #7A5C42)',
-                                color: 'white',
+                                background: 'rgba(88, 66, 51, 0.9)',
+                                color: '#F5EDE9',
                                 border: 'none',
-                                padding: '9px 18px',
-                                borderRadius: '100px',
-                                fontSize: '12px',
-                                fontWeight: '600',
+                                padding: '10px 20px',
+                                borderRadius: '18px',
+                                fontFamily: '"Lora", serif',
+                                fontStyle: 'italic',
+                                fontSize: '16px',
+                                fontWeight: '700',
                                 cursor: 'pointer',
-                                display: 'flex',
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '6px',
                                 whiteSpace: 'nowrap',
+                                letterSpacing: '0.15px',
                                 transition: 'all 0.2s ease',
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.transform = 'translateY(-1px)'
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(94, 69, 48, 0.3)'
+                                e.currentTarget.style.background = 'rgba(88, 66, 51, 1)'
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(88, 66, 51, 0.3)'
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.transform = 'translateY(0)'
+                                e.currentTarget.style.background = 'rgba(88, 66, 51, 0.9)'
                                 e.currentTarget.style.boxShadow = 'none'
                               }}
                             >
-                              <Video style={{ width: '14px', height: '14px' }} />
+                              <Video style={{ width: '18px', height: '18px', color: 'rgba(255, 246, 238, 0.85)' }} />
                               Join
                             </button>
                           ) : (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleSignUp(meetup.id) }}
                               style={{
-                                background: '#5E4530',
-                                color: '#FAF5EF',
+                                background: 'rgba(88, 66, 51, 0.9)',
+                                color: '#F5EDE9',
                                 border: 'none',
-                                padding: '9px 18px',
-                                borderRadius: '100px',
-                                fontSize: '12px',
-                                fontWeight: '600',
+                                padding: '10px 20px',
+                                borderRadius: '18px',
+                                fontFamily: '"Lora", serif',
+                                fontStyle: 'italic',
+                                fontSize: '16px',
+                                fontWeight: '700',
                                 cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
                                 whiteSpace: 'nowrap',
-                                transition: 'all 0.25s ease',
+                                letterSpacing: '0.15px',
+                                transition: 'all 0.2s ease',
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.background = '#3D2B1A'
-                                e.currentTarget.style.transform = 'translateY(-1px)'
+                                e.currentTarget.style.background = 'rgba(88, 66, 51, 1)'
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(88, 66, 51, 0.3)'
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.background = '#5E4530'
-                                e.currentTarget.style.transform = 'translateY(0)'
+                                e.currentTarget.style.background = 'rgba(88, 66, 51, 0.9)'
+                                e.currentTarget.style.boxShadow = 'none'
                               }}
                             >
-                              Reserve spot →
+                              Reserve spot &gt;
                             </button>
                           )}
                         </div>
                       </div>
+                      </React.Fragment>
                     )
                   })}
                 </div>
@@ -2514,116 +2489,17 @@ function MainApp({ currentUser, onSignOut }) {
             </div>
 
 
-            {/* Meetup Recaps */}
-            {pendingRecaps.length > 0 && (
-              <div style={homeStyles.card}>
-                <div style={homeStyles.cardHeader}>
-                  <h3 style={homeStyles.cardTitle}>Meetup Recaps</h3>
-                  <button
-                    onClick={() => window.location.href = '/recaps'}
-                    style={homeStyles.seeAllBtn}
-                  >
-                    View all →
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {pendingRecaps.slice(0, 3).map(recap => {
-                    const durationMins = recap.duration_seconds ? Math.floor(recap.duration_seconds / 60) : 0;
-                    const callDate = new Date(recap.started_at || recap.created_at);
-                    const isToday = new Date().toDateString() === callDate.toDateString();
-                    const isYesterday = new Date(Date.now() - 86400000).toDateString() === callDate.toDateString();
-                    const dateLabel = isToday ? 'Today' : isYesterday ? 'Yesterday' : callDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                    const callTypeLabel = recap.call_type === '1on1' ? '1:1 Chat' : (recap.call_type === 'meetup' || recap.call_type === 'group') ? 'Circle Meetup' : 'Group Call';
-
-                    return (
-                      <div
-                        key={recap.id}
-                        onClick={() => window.location.href = '/recaps'}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '14px',
-                          padding: '14px 16px',
-                          backgroundColor: '#FAF5EF',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(184, 160, 137, 0.08)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.backgroundColor = '#F5EDE5';
-                          e.currentTarget.style.transform = 'translateX(2px)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = '#FAF5EF';
-                          e.currentTarget.style.transform = 'translateX(0)';
-                        }}
-                      >
-                        {/* Date badge */}
-                        <div style={{
-                          backgroundColor: '#E8DDD4',
-                          borderRadius: '10px',
-                          padding: '8px 10px',
-                          textAlign: 'center',
-                          minWidth: '50px',
-                        }}>
-                          <p style={{ fontSize: '11px', fontWeight: '600', color: '#8B6F5C', margin: 0, textTransform: 'uppercase' }}>
-                            {dateLabel.split(' ')[0]}
-                          </p>
-                          {!isToday && !isYesterday && (
-                            <p style={{ fontSize: '16px', fontWeight: '700', color: '#3D2B1A', margin: 0, fontFamily: '"Playfair Display", serif' }}>
-                              {callDate.getDate()}
-                            </p>
-                          )}
-                        </div>
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: '14px', fontWeight: '600', color: '#3D2B1A', margin: 0, marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {recap.meetup_title || callTypeLabel}
-                          </p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#9C8068', flexWrap: 'wrap' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Clock style={{ width: '12px', height: '12px' }} />
-                              {durationMins}m
-                            </span>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Users style={{ width: '12px', height: '12px' }} />
-                              {recap.participant_count || 0}
-                            </span>
-                            {recap.takeaways_count > 0 && (
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8B6F5C' }}>
-                                <FileText style={{ width: '12px', height: '12px' }} />
-                                {recap.takeaways_count} takeaways
-                              </span>
-                            )}
-                            {recap.action_items_count > 0 && (
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8B9E7E' }}>
-                                <CheckCircle style={{ width: '12px', height: '12px' }} />
-                                {recap.action_items_count} follow-ups
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <ChevronRight style={{ width: '16px', height: '16px', color: '#B8A089', flexShrink: 0 }} />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
           {/* Smart Quick Actions - 3 personalized cards based on user progress */}
             <div style={{ marginBottom: '16px' }}>
               <h3 style={{
-                fontFamily: '"Playfair Display", serif',
-                fontSize: '18px',
-                fontWeight: '600',
-                color: '#3D2B1A',
+                fontFamily: '"Lora", serif',
+                fontSize: '24px',
+                fontWeight: '500',
+                color: '#3F1906',
                 margin: '0 0 4px 0',
-              }}>What's Next?</h3>
-              <p style={{ fontSize: '13px', color: '#9C8068', margin: 0 }}>Personalized for your journey</p>
+                letterSpacing: '0.15px',
+              }}>Suggested for you</h3>
+              <p style={{ fontFamily: '"Lora", serif', fontSize: '16px', color: '#584233', margin: 0, opacity: 0.74, letterSpacing: '0.15px' }}>Swipe for next actions</p>
             </div>
             {(() => {
               // Determine best actions based on user's networking progress
@@ -2716,90 +2592,84 @@ function MainApp({ currentUser, onSignOut }) {
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)',
-                  gap: '12px',
+                  gap: '16px',
                 }}>
-                  {topActions.map((action) => (
+                  {topActions.map((action, actionIdx) => {
+                    const cardGradients = [
+                      'linear-gradient(204.68deg, #E4D5C7 17.23%, rgba(232, 218, 205, 0.55) 84.26%)',
+                      'linear-gradient(225.11deg, #F2DDBF 5.71%, rgba(245, 228, 212, 0.52) 84.44%)',
+                      'linear-gradient(224.84deg, rgba(211, 195, 184, 0.3825) -1.29%, rgba(191, 144, 112, 0.3825) 54.17%)',
+                    ]
+                    return (
                     <div
                       key={action.id}
                       onClick={action.onClick}
                       style={{
-                        background: action.gradient,
-                        borderRadius: '16px',
-                        padding: isMobile ? '14px 16px' : '16px',
+                        background: cardGradients[actionIdx % 3],
+                        borderRadius: '21px',
+                        padding: isMobile ? '16px 20px' : '20px',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
-                        border: '1px solid rgba(139, 111, 92, 0.08)',
+                        border: 'none',
+                        boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
                         position: 'relative',
-                        minHeight: isMobile ? 'auto' : '120px',
+                        minHeight: isMobile ? 'auto' : '140px',
                         display: 'flex',
                         flexDirection: isMobile ? 'row' : 'column',
-                        alignItems: isMobile ? 'center' : 'stretch',
-                        gap: isMobile ? '14px' : '0',
-                        justifyContent: isMobile ? 'flex-start' : 'space-between',
+                        alignItems: isMobile ? 'center' : 'center',
+                        gap: isMobile ? '14px' : '12px',
+                        justifyContent: isMobile ? 'flex-start' : 'center',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)'
-                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 111, 92, 0.15)'
+                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 111, 92, 0.25)'
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.transform = 'translateY(0)'
-                        e.currentTarget.style.boxShadow = 'none'
+                        e.currentTarget.style.boxShadow = '0px 4px 4px rgba(0, 0, 0, 0.25)'
                       }}
                     >
-                      {action.badge && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '10px',
-                          right: '10px',
-                          backgroundColor: '#C4868B',
-                          color: 'white',
-                          fontSize: '11px',
-                          fontWeight: '600',
-                          padding: '2px 8px',
-                          borderRadius: '10px',
-                          minWidth: '20px',
-                          textAlign: 'center',
-                        }}>
-                          {action.badge}
-                        </div>
-                      )}
-                      <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '12px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.7)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: isMobile ? '0' : '12px',
-                        flexShrink: 0,
+                      <h4 style={{
+                        fontFamily: '"Lora", serif',
+                        fontSize: '20px',
+                        fontWeight: '600',
+                        color: '#4F3B2E',
+                        margin: 0,
+                        letterSpacing: '0.15px',
+                        lineHeight: '22px',
+                        textAlign: isMobile ? 'left' : 'center',
                       }}>
-                        {action.icon}
-                      </div>
-                      <div style={{ flex: isMobile ? 1 : 'none' }}>
-                        <h4 style={{
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          color: '#3D2B1A',
-                          margin: 0,
-                          marginBottom: '4px',
-                        }}>
-                          {action.title}
-                        </h4>
-                        <p style={{
-                          fontSize: '11px',
-                          color: '#7A5C42',
-                          margin: 0,
-                          lineHeight: 1.3,
-                        }}>
-                          {action.description}
-                        </p>
-                      </div>
-                      {isMobile && (
-                        <ChevronRight style={{ width: '18px', height: '18px', color: '#D4C4B0', flexShrink: 0 }} />
-                      )}
+                        {action.title}
+                      </h4>
+                      <p style={{
+                        fontFamily: '"Lora", serif',
+                        fontSize: '16px',
+                        color: '#584233',
+                        margin: 0,
+                        opacity: 0.89,
+                        letterSpacing: '0.15px',
+                        lineHeight: '22px',
+                        textAlign: isMobile ? 'left' : 'center',
+                      }}>
+                        {action.description}
+                      </p>
+                      <button style={{
+                        background: '#987651',
+                        color: '#F5EDE9',
+                        border: 'none',
+                        borderRadius: '18px',
+                        padding: '8px 20px',
+                        fontFamily: '"Lora", serif',
+                        fontStyle: 'italic',
+                        fontWeight: '700',
+                        fontSize: '16px',
+                        cursor: 'pointer',
+                        letterSpacing: '0.15px',
+                      }}>
+                        Start
+                      </button>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )
             })()}
