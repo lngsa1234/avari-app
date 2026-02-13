@@ -146,8 +146,12 @@ export default function UnifiedCallPage() {
     isBlurEnabled,
     isBlurSupported,
     isLoading: blurLoading,
-    toggleBlur: toggleBlurHook
+    toggleBlur: toggleBlurHook,
+    blurResult: blurResultRef,
   } = useBackgroundBlur(config?.provider || 'webrtc');
+
+  // Store the original MediaStream for restoring after blur disable
+  const originalStreamRef = useRef(null);
 
   // Device selection hook
   const {
@@ -978,7 +982,62 @@ export default function UnifiedCallPage() {
   };
 
   const handleToggleBlur = async () => {
-    if (localVideoTrack) {
+    if (!localVideoTrack) return;
+
+    if (config?.provider === 'webrtc' && localVideoTrack instanceof MediaStream) {
+      if (!isBlurEnabled) {
+        // ENABLE blur
+        await toggleBlurHook(localVideoTrack);
+
+        const result = blurResultRef?.current;
+        if (result) {
+          // Overlay the canvas on top of the video element (no srcObject change)
+          const videoEl = localVideoRef.current;
+          if (videoEl) {
+            const container = videoEl.parentElement;
+            const overlayCanvas = result.canvas;
+            // Preserve opacity/transition set by the hook (hidden until first blur result)
+            const currentOpacity = overlayCanvas.style.opacity;
+            const currentTransition = overlayCanvas.style.transition;
+            overlayCanvas.style.cssText = `
+              position: absolute; top: 0; left: 0;
+              width: 100%; height: 100%;
+              object-fit: cover;
+              z-index: 10; pointer-events: none;
+              border-radius: inherit;
+              opacity: ${currentOpacity || '0'};
+              transition: ${currentTransition || 'opacity 0.15s ease-in'};
+            `;
+            container.style.position = 'relative';
+            container.appendChild(overlayCanvas);
+            originalStreamRef.current = overlayCanvas; // store canvas ref for removal
+          }
+
+          // Send blurred track to remote peer
+          if (peerConnectionRef.current && result.blurredTrack) {
+            const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+            if (sender) await sender.replaceTrack(result.blurredTrack);
+          }
+        }
+      } else {
+        // DISABLE blur — remove canvas overlay, restore peer connection track
+        const overlayCanvas = originalStreamRef.current;
+        if (overlayCanvas && overlayCanvas.parentElement) {
+          overlayCanvas.parentElement.removeChild(overlayCanvas);
+        }
+
+        await toggleBlurHook(localVideoTrack);
+
+        // Restore original track in peer connection
+        if (peerConnectionRef.current && localVideoTrack instanceof MediaStream) {
+          const origTrack = localVideoTrack.getVideoTracks()[0];
+          const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
+          if (sender && origTrack) await sender.replaceTrack(origTrack);
+        }
+        originalStreamRef.current = null;
+      }
+    } else {
+      // LiveKit / Agora — existing behavior
       await toggleBlurHook(localVideoTrack);
     }
   };
@@ -1629,7 +1688,8 @@ export default function UnifiedCallPage() {
       {/* Header */}
       <VideoHeader
         title={
-          callType === 'circle' && relatedData?.meetupTopic ? relatedData.meetupTopic
+          callType === 'coffee' && relatedData?.partner_name ? `Coffee Chat with ${relatedData.partner_name}`
+          : callType === 'circle' && relatedData?.meetupTopic ? relatedData.meetupTopic
           : callType === 'meetup' && relatedData?.topic ? relatedData.topic
           : config.ui.title
         }
@@ -1638,6 +1698,7 @@ export default function UnifiedCallPage() {
           : callType === 'circle' && relatedData?.name ? relatedData.name
           : config.ui.brandName
         }
+        callType={callType}
         subtitle={getSubtitle()}
         participantCount={participantCount}
         providerBadge={config.provider}

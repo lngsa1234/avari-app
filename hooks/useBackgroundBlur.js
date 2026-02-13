@@ -22,6 +22,9 @@ export function useBackgroundBlur(provider = 'webrtc') {
   const animationFrameRef = useRef(null);
   const videoTrackRef = useRef(null); // Store video track reference for cleanup
   const extensionRef = useRef(null); // Store Agora extension to reuse
+  const originalTrackRef = useRef(null); // Store original WebRTC track for restore
+  const blurActiveRef = useRef(false); // Ref to avoid stale closure in animation loop
+  const blurResultRef = useRef(null); // Store WebRTC blur result for caller
 
   // Check if blur is supported
   useEffect(() => {
@@ -32,91 +35,143 @@ export function useBackgroundBlur(provider = 'webrtc') {
   }, []);
 
   /**
-   * Initialize MediaPipe for WebRTC blur
+   * Initialize MediaPipe selfie segmentation blur for WebRTC.
+   * Does NOT modify the original MediaStream. Instead returns a canvas stream
+   * that the caller can use for display and peer connection.
+   * Returns { blurredStream, blurredTrack } or false on failure.
    */
-  const initMediaPipeBlur = useCallback(async (videoTrack) => {
+  const initWebRTCBlur = useCallback(async (mediaStream) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Dynamically import MediaPipe
-      const { SelfieSegmentation } = await import('@mediapipe/selfie_segmentation');
+      const origTrack = mediaStream.getVideoTracks()[0];
+      if (!origTrack) throw new Error('No video track found');
+      originalTrackRef.current = origTrack;
 
-      const selfieSegmentation = new SelfieSegmentation({
-        locateFile: (file) => {
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
+      // Get exact dimensions from the track settings
+      const settings = origTrack.getSettings();
+      const w = settings.width || 1280;
+      const h = settings.height || 720;
+      console.log('[BackgroundBlur] Using dimensions from track:', w, 'x', h);
+
+      // Output canvas — same resolution as camera
+      // Hidden until first segmentation result to avoid showing un-blurred passthrough
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.opacity = '0';
+      canvas.style.transition = 'opacity 0.15s ease-in';
+      const ctx = canvas.getContext('2d');
+
+      // Offscreen canvases
+      const blurCanvas = document.createElement('canvas');
+      blurCanvas.width = w;
+      blurCanvas.height = h;
+      const blurCtx = blurCanvas.getContext('2d');
+
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = w;
+      maskCanvas.height = h;
+      const maskCtx = maskCanvas.getContext('2d');
+
+      // Hidden video element feeding from the original camera track
+      const video = document.createElement('video');
+      video.width = w;
+      video.height = h;
+      video.srcObject = new MediaStream([origTrack]);
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = true;
+      await video.play().catch(() => {});
+
+      canvasRef.current = { canvas, ctx, video, blurCanvas, blurCtx, maskCanvas, maskCtx };
+      blurActiveRef.current = true;
+
+      // Start passthrough immediately so canvas has content from frame 0
+      ctx.drawImage(video, 0, 0, w, h);
+
+      // Capture canvas as a stream NOW (before segmentation loads)
+      const blurredStream = canvas.captureStream(30); // 30fps for peer connection
+      const blurredTrack = blurredStream.getVideoTracks()[0];
+
+      // Load MediaPipe
+      const { SelfieSegmentation } = await import('@mediapipe/selfie_segmentation');
+      const seg = new SelfieSegmentation({
+        locateFile: (file) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
+      });
+      seg.setOptions({ modelSelection: 1, selfieMode: true });
+
+      let hasSegResult = false;
+
+      // Compositing happens in onResults — uses results.image for perfect sync
+      seg.onResults((results) => {
+        const src = results.image;
+        const mask = results.segmentationMask;
+
+        // Blurred background
+        blurCtx.filter = 'blur(14px)';
+        blurCtx.drawImage(src, 0, 0, w, h);
+        blurCtx.filter = 'none';
+
+        // Sharp person via mask
+        maskCtx.clearRect(0, 0, w, h);
+        maskCtx.drawImage(src, 0, 0, w, h);
+        maskCtx.globalCompositeOperation = 'destination-in';
+        maskCtx.drawImage(mask, 0, 0, w, h);
+        maskCtx.globalCompositeOperation = 'source-over';
+
+        // Final composite on output canvas
+        ctx.clearRect(0, 0, w, h);
+        ctx.drawImage(blurCanvas, 0, 0, w, h);
+        ctx.drawImage(maskCanvas, 0, 0, w, h);
+        if (!hasSegResult) {
+          // First result — reveal the canvas overlay now that it has blurred content
+          canvas.style.opacity = '1';
+          hasSegResult = true;
         }
       });
 
-      selfieSegmentation.setOptions({
-        modelSelection: 1, // 0 = general, 1 = landscape (better for video calls)
-        selfieMode: true,
-      });
+      segmenterRef.current = seg;
 
-      // Create canvas for processing
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvasRef.current = { canvas, ctx };
+      // Unified render loop — always produces frames, sends to segmenter when free
+      let sending = false;
+      const tick = () => {
+        if (!blurActiveRef.current) return;
 
-      // Set up video element to capture frames
-      const video = document.createElement('video');
-      video.srcObject = new MediaStream([videoTrack]);
-      video.autoplay = true;
-      video.playsInline = true;
+        if (video.readyState >= 2) {
+          // If no segmentation result yet, draw passthrough
+          if (!hasSegResult) {
+            ctx.drawImage(video, 0, 0, w, h);
+          }
+          // onResults already drew the composited frame when hasSegResult is true
 
-      await new Promise((resolve) => {
-        video.onloadedmetadata = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          resolve();
-        };
-      });
+          // Request a new frame on the captured stream
+          // Send to segmenter (non-blocking)
+          if (!sending) {
+            sending = true;
+            seg.send({ image: video }).then(() => { sending = false; }).catch(() => { sending = false; });
+          }
+        }
 
-      // Process frames
-      selfieSegmentation.onResults((results) => {
-        if (!canvasRef.current) return;
-        const { canvas, ctx } = canvasRef.current;
-
-        // Draw blurred background
-        ctx.save();
-        ctx.filter = 'blur(10px)';
-        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
-
-        // Draw person (foreground) using mask
-        ctx.save();
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.drawImage(results.segmentationMask, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
-
-        // Draw original person on top
-        ctx.save();
-        ctx.globalCompositeOperation = 'destination-over';
-        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
-      });
-
-      // Animation loop
-      const processFrame = async () => {
-        if (!isBlurEnabled) return;
-        await selfieSegmentation.send({ image: video });
-        animationFrameRef.current = requestAnimationFrame(processFrame);
+        animationFrameRef.current = requestAnimationFrame(tick);
       };
+      animationFrameRef.current = requestAnimationFrame(tick);
 
-      segmenterRef.current = selfieSegmentation;
+      processorRef.current = { video, blurredTrack, blurredStream, canvas };
+      console.log('[BackgroundBlur] WebRTC blur enabled');
 
-      // Return the canvas stream
-      const blurredStream = canvas.captureStream(30);
-      return blurredStream.getVideoTracks()[0];
-
+      // Return canvas (for overlay), stream/track (for peer connection)
+      return { canvas, blurredStream, blurredTrack };
     } catch (err) {
-      console.error('[BackgroundBlur] MediaPipe init error:', err);
+      console.error('[BackgroundBlur] WebRTC blur init error:', err);
       setError(err.message);
-      return null;
+      return false;
     } finally {
       setIsLoading(false);
     }
-  }, [isBlurEnabled]);
+  }, []);
 
   /**
    * Initialize Agora virtual background
@@ -280,10 +335,15 @@ export function useBackgroundBlur(provider = 'webrtc') {
         success = await initLiveKitBlur(videoTrack);
         break;
       case 'webrtc':
-      default:
-        const blurredTrack = await initMediaPipeBlur(videoTrack);
-        success = !!blurredTrack;
+      default: {
+        const result = await initWebRTCBlur(videoTrack);
+        // For WebRTC, result is { blurredStream, blurredTrack } or false
+        success = !!result;
+        if (result) {
+          blurResultRef.current = result;
+        }
         break;
+      }
     }
 
     if (success) {
@@ -291,13 +351,15 @@ export function useBackgroundBlur(provider = 'webrtc') {
     }
 
     return success;
-  }, [provider, isBlurSupported, initAgoraBlur, initLiveKitBlur, initMediaPipeBlur]);
+  }, [provider, isBlurSupported, initAgoraBlur, initLiveKitBlur, initWebRTCBlur]);
 
   /**
    * Disable background blur
    */
   const disableBlur = useCallback(async (videoTrack) => {
     try {
+      blurActiveRef.current = false;
+
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
@@ -333,9 +395,26 @@ export function useBackgroundBlur(provider = 'webrtc') {
           await videoTrack.stopProcessor();
           if (freezeCanvas) setTimeout(() => freezeCanvas.remove(), 200);
           processorRef.current = null;
+        } else if (provider === 'webrtc') {
+          // Stop the blurred track and clean up
+          const blurredTrack = processorRef.current?.blurredTrack;
+          if (blurredTrack) {
+            blurredTrack.stop();
+          }
+          if (processorRef.current?.video) {
+            processorRef.current.video.srcObject = null;
+          }
+          // originalTrackRef is still valid — caller uses it to restore
+          processorRef.current = null;
+          blurResultRef.current = null;
+          console.log('[BackgroundBlur] WebRTC blur disabled');
         } else {
           processorRef.current = null;
         }
+      }
+
+      if (canvasRef.current) {
+        canvasRef.current = null;
       }
 
       setIsBlurEnabled(false);
@@ -378,6 +457,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
     enableBlur,
     disableBlur,
     toggleBlur,
+    blurResult: blurResultRef,
   };
 }
 

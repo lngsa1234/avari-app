@@ -38,33 +38,35 @@ export function useCallRoom(callType, roomId) {
 
       switch (callType) {
         case 'coffee': {
-          // 1:1 Coffee Chat - uses video_rooms table
-          const { data, error: roomError } = await supabase
-            .from('video_rooms')
-            .select(`
-              *,
-              coffee_chats (
-                id,
-                requester_id,
-                recipient_id
-              )
-            `)
-            .eq('room_id', roomId)
+          // 1:1 Coffee Chat - query coffee_chats directly (no video_rooms table needed)
+          const { data: chatData, error: chatError } = await supabase
+            .from('coffee_chats')
+            .select('id, requester_id, recipient_id, status, scheduled_time, notes, room_url')
+            .eq('id', roomId)
             .single();
 
-          if (roomError && roomError.code !== 'PGRST116') throw roomError;
-          roomData = data;
+          if (chatError && chatError.code !== 'PGRST116') throw chatError;
 
-          if (data?.coffee_chats) {
-            related = data.coffee_chats;
+          if (chatData) {
+            roomData = { room_id: roomId, channel_name: roomId };
+            related = chatData;
+
             // Fetch participant profiles
-            const userIds = [data.coffee_chats.requester_id, data.coffee_chats.recipient_id].filter(Boolean);
+            const userIds = [chatData.requester_id, chatData.recipient_id].filter(Boolean);
             if (userIds.length > 0) {
               const { data: profiles } = await supabase
                 .from('profiles')
                 .select('id, name, email, profile_picture, career')
                 .in('id', userIds);
               participantsList = profiles || [];
+
+              // Set partner_name for the WebRTC call UI
+              const { data: authData } = await supabase.auth.getUser();
+              const currentUserId = authData?.user?.id;
+              const partner = participantsList.find(p => p.id !== currentUserId);
+              if (partner) {
+                related.partner_name = partner.name || partner.email?.split('@')[0] || 'Partner';
+              }
             }
           }
           break;
@@ -194,13 +196,17 @@ export function useCallRoom(callType, roomId) {
     if (!config || !roomId) return;
 
     try {
+      if (callType === 'coffee') {
+        // Coffee chats don't use video_rooms — no-op or update coffee_chats status
+        return;
+      }
       const { error } = await supabase
         .from(config.roomTable)
         .update({
           started_at: new Date().toISOString(),
           is_active: true
         })
-        .eq(callType === 'coffee' ? 'room_id' : 'channel_name', roomId);
+        .eq('channel_name', roomId);
 
       if (error) console.error('[useCallRoom] Error starting room:', error);
     } catch (err) {
@@ -213,13 +219,17 @@ export function useCallRoom(callType, roomId) {
     if (!config || !roomId) return;
 
     try {
+      if (callType === 'coffee') {
+        // Coffee chats don't use video_rooms — no-op
+        return;
+      }
       const { error } = await supabase
         .from(config.roomTable)
         .update({
           ended_at: new Date().toISOString(),
           is_active: false
         })
-        .eq(callType === 'coffee' ? 'room_id' : 'channel_name', roomId);
+        .eq('channel_name', roomId);
 
       if (error) console.error('[useCallRoom] Error ending room:', error);
     } catch (err) {

@@ -206,6 +206,7 @@ export default function VideoHeader({
   title,
   subtitle,
   brandName,
+  callType,
   participantCount = 0,
   providerBadge,
   isConnecting = false,
@@ -253,9 +254,9 @@ export default function VideoHeader({
     >
       {/* Left: Logo + Room info + Metadata pills */}
       <div className="flex items-center gap-3.5">
-        {/* CircleW Logo */}
+        {/* CircleW Logo - W in a circle */}
         <div
-          className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
           style={{
             background: 'linear-gradient(135deg, #D4A574 0%, #8B5E3C 100%)',
             boxShadow: '0 2px 8px rgba(212,165,116,0.25)',
@@ -267,16 +268,25 @@ export default function VideoHeader({
         {/* Room details */}
         <div className="flex flex-col gap-0.5">
           <div className="flex items-center gap-2">
-            <span className="text-amber-600 flex">
-              <LockIcon />
-            </span>
+            {/* Event type badge */}
             <span
-              className="text-sm font-semibold"
-              style={{ color: '#F5EDE4', letterSpacing: '-0.01em' }}
+              className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md"
+              style={{
+                letterSpacing: '0.6px',
+                background: callType === 'coffee' ? 'rgba(212,165,116,0.2)' : callType === 'circle' ? 'rgba(212,165,116,0.2)' : 'rgba(212,165,116,0.2)',
+                color: '#D4A574',
+              }}
             >
-              {brandName || title || 'Video Call'}
+              {callType === 'coffee' ? '1:1' : callType === 'circle' ? 'Circle' : 'Event'}
             </span>
           </div>
+          {/* Topic / title */}
+          <span
+            className="text-sm font-semibold"
+            style={{ color: '#F5EDE4', letterSpacing: '-0.01em' }}
+          >
+            {title || brandName || 'Video Call'}
+          </span>
           {subtitle && (
             <span
               className="text-xs"
@@ -295,26 +305,6 @@ export default function VideoHeader({
 
         {/* Metadata pills */}
         <div className="hidden sm:flex items-center gap-2">
-          {/* Meeting ID */}
-          {truncatedMeetingId && (
-            <Tooltip text={copied ? 'Copied!' : 'Copy Meeting ID'}>
-              <button
-                onClick={handleCopyMeetingId}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors hover:bg-white/5"
-                style={{
-                  background: 'rgba(245,237,228,0.06)',
-                  border: '1px solid rgba(245,237,228,0.06)',
-                  color: 'rgba(245,237,228,0.5)',
-                }}
-              >
-                <span className="font-mono tracking-wide">
-                  {truncatedMeetingId}
-                </span>
-                {copied ? <CheckIcon /> : <CopyIcon />}
-              </button>
-            </Tooltip>
-          )}
-
           {/* Duration */}
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium tabular-nums"

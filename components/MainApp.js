@@ -1614,8 +1614,15 @@ function MainApp({ currentUser, onSignOut }) {
     try {
       const meetupId = typeof meetup === 'object' ? meetup.id : meetup;
       const circleId = typeof meetup === 'object' ? meetup.circle_id : null;
+      const isCoffeeChat = typeof meetup === 'object' && meetup._isCoffeeChat;
 
-      console.log('📹 Creating/joining video call for meetup:', meetupId, 'circleId:', circleId);
+      console.log('📹 Creating/joining video call for meetup:', meetupId, 'circleId:', circleId, 'isCoffeeChat:', isCoffeeChat);
+
+      // If this is a 1:1 coffee chat, route to WebRTC peer-to-peer call
+      if (isCoffeeChat) {
+        window.location.href = `/call/coffee/${meetupId}`;
+        return;
+      }
 
       // If this is a circle meetup, route to circle call (Agora)
       if (circleId) {
@@ -1819,13 +1826,30 @@ function MainApp({ currentUser, onSignOut }) {
 
       const month = parsedDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
       const day = parsedDate.getDate()
-      const weekday = parsedDate.toLocaleDateString('en-US', { weekday: 'short' })
+
+      // Determine relative day label
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const eventDay = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate())
+      const diffDays = Math.round((eventDay - today) / (1000 * 60 * 60 * 24))
+
+      let dayLabel
+      let isHighlight = false
+      if (diffDays === 0) {
+        dayLabel = 'Today'
+        isHighlight = true
+      } else if (diffDays === 1) {
+        dayLabel = 'Tomorrow'
+        isHighlight = true
+      } else {
+        dayLabel = parsedDate.toLocaleDateString('en-US', { weekday: 'long' })
+      }
 
       return (
         <div style={{
           minWidth: isMobile ? 'auto' : '72px',
           padding: isMobile ? '0' : '18px 8px',
-          backgroundColor: isMobile ? 'transparent' : 'rgba(189, 173, 162, 0.65)',
+          backgroundColor: isMobile ? 'transparent' : isHighlight ? 'rgba(168, 132, 98, 0.75)' : 'rgba(189, 173, 162, 0.65)',
           borderRadius: isMobile ? '0' : '8px',
           display: 'flex',
           flexDirection: isMobile ? 'row' : 'column',
@@ -1834,30 +1858,49 @@ function MainApp({ currentUser, onSignOut }) {
           gap: isMobile ? '6px' : '0px',
           flexShrink: 0,
         }}>
-          <span style={{
-            fontFamily: '"Lora", serif',
-            fontSize: isMobile ? '12px' : '14px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.15px',
-            color: '#605045',
-            fontWeight: '500',
-            lineHeight: isMobile ? '24px' : '33px',
-          }}>{month}</span>
-          <span style={{
-            fontFamily: '"Lora", serif',
-            fontSize: isMobile ? '20px' : '24px',
-            fontWeight: '500',
-            color: '#605045',
-            lineHeight: isMobile ? '24px' : '33px',
-            letterSpacing: '0.15px',
-          }}>{day}</span>
-          <span style={{
-            fontFamily: '"Lora", serif',
-            fontSize: '11px',
-            fontWeight: '500',
-            color: '#9B8A7E',
-            marginTop: isMobile ? 0 : '2px',
-          }}>{weekday}</span>
+          {isMobile ? (
+            <>
+              <span style={{
+                fontFamily: '"Lora", serif',
+                fontSize: '13px',
+                fontWeight: '600',
+                color: isHighlight ? '#5C3A24' : '#605045',
+                lineHeight: '24px',
+              }}>{dayLabel}</span>
+              <span style={{
+                fontFamily: '"Lora", serif',
+                fontSize: '12px',
+                color: '#9B8A7E',
+                lineHeight: '24px',
+              }}>{month} {day}</span>
+            </>
+          ) : (
+            <>
+              <span style={{
+                fontFamily: '"Lora", serif',
+                fontSize: '11px',
+                fontWeight: '600',
+                color: isHighlight ? '#FFF' : '#605045',
+                letterSpacing: '0.5px',
+                textTransform: 'uppercase',
+              }}>{dayLabel}</span>
+              <span style={{
+                fontFamily: '"Lora", serif',
+                fontSize: '24px',
+                fontWeight: '500',
+                color: isHighlight ? '#FFF' : '#605045',
+                lineHeight: '33px',
+                letterSpacing: '0.15px',
+              }}>{day}</span>
+              <span style={{
+                fontFamily: '"Lora", serif',
+                fontSize: '12px',
+                fontWeight: '500',
+                color: isHighlight ? 'rgba(255,255,255,0.8)' : '#9B8A7E',
+                marginTop: '2px',
+              }}>{month}</span>
+            </>
+          )}
         </div>
       )
     }
@@ -2315,7 +2358,7 @@ function MainApp({ currentUser, onSignOut }) {
             {/* Upcoming Events Section with Date Badges */}
             <div style={homeStyles.card}>
               <div style={homeStyles.cardHeader}>
-                <h3 style={homeStyles.cardTitle}>Upcoming Events</h3>
+                <h3 style={homeStyles.cardTitle}>Upcoming Meetups</h3>
                 <button
                   onClick={() => setCurrentView('meetupProposals')}
                   style={homeStyles.seeAllBtn}
