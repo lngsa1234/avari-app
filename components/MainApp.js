@@ -1751,6 +1751,13 @@ function MainApp({ currentUser, onSignOut }) {
             lineHeight: isMobile ? '24px' : '33px',
             letterSpacing: '0.15px',
           }}>{day}</span>
+          <span style={{
+            fontFamily: '"Lora", serif',
+            fontSize: '11px',
+            fontWeight: '500',
+            color: '#9B8A7E',
+            marginTop: '2px',
+          }}>{weekday}</span>
         </div>
       )
     }
@@ -2054,7 +2061,7 @@ function MainApp({ currentUser, onSignOut }) {
                 </h3>
                 <p style={{
                   fontFamily: '"Lora", serif',
-                  fontSize: '15px',
+                  fontSize: isMobile ? '13px' : '15px',
                   fontWeight: '500',
                   color: '#584233',
                   margin: 0,
@@ -2234,6 +2241,29 @@ function MainApp({ currentUser, onSignOut }) {
                     const isSignedUp = userSignups.includes(meetup.id)
                     const meetupSignups = signups[meetup.id] || []
 
+                    // Determine if event is currently live (started but not ended)
+                    let isLive = false
+                    try {
+                      let meetupDate
+                      const dateStr = meetup.date
+                      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                        const [year, month, day] = dateStr.split('-').map(Number)
+                        meetupDate = new Date(year, month - 1, day)
+                      } else {
+                        const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
+                        meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
+                      }
+                      if (meetup.time) {
+                        const [hours, minutes] = meetup.time.split(':').map(Number)
+                        meetupDate.setHours(hours, minutes, 0, 0)
+                      }
+                      const now = new Date()
+                      const durationMs = (meetup.duration || 60) * 60 * 1000
+                      isLive = now >= meetupDate && now <= new Date(meetupDate.getTime() + durationMs)
+                    } catch (e) {
+                      isLive = false
+                    }
+
                     return (
                       <React.Fragment key={meetup.id}>
                         {idx > 0 && (
@@ -2273,7 +2303,7 @@ function MainApp({ currentUser, onSignOut }) {
                             }}>
                               {meetup.circle_id ? 'Circle' : 'Event'}
                             </span>
-                            {isSignedUp && (
+                            {isLive && (
                               <span style={{
                                 fontSize: '10px',
                                 fontWeight: '600',
@@ -2501,7 +2531,8 @@ function MainApp({ currentUser, onSignOut }) {
                   gradient: 'linear-gradient(135deg, #F5EDE4 0%, #E8DDD0 100%)',
                   iconBg: '#E8E0D8',
                   onClick: () => window.location.href = '/recaps',
-                  badge: pendingRecaps.length > 0 ? pendingRecaps.length : null
+                  badge: pendingRecaps.length > 0 ? pendingRecaps.length : null,
+                  thumbnail: '/thumbnails/review-recaps.svg'
                 },
                 {
                   id: 'circles',
@@ -2512,7 +2543,8 @@ function MainApp({ currentUser, onSignOut }) {
                   gradient: 'linear-gradient(135deg, #FAF3E6 0%, #E8D5A8 100%)',
                   iconBg: '#E8D5A8',
                   onClick: () => setCurrentView('circles'),
-                  badge: null
+                  badge: null,
+                  thumbnail: '/thumbnails/discover-circles.svg'
                 },
                 {
                   id: 'messages',
@@ -2567,7 +2599,8 @@ function MainApp({ currentUser, onSignOut }) {
                   gradient: 'linear-gradient(135deg, #F5F0FA 0%, #E8DEF5 100%)',
                   iconBg: '#E8DEF5',
                   onClick: () => setCurrentView('connections'),
-                  badge: potentialConnections.length > 3 ? potentialConnections.length : null
+                  badge: potentialConnections.length > 3 ? potentialConnections.length : null,
+                  thumbnail: '/thumbnails/coffee-chat.svg'
                 }
               ]
 
@@ -2595,18 +2628,15 @@ function MainApp({ currentUser, onSignOut }) {
                       style={{
                         background: cardGradients[actionIdx % 3],
                         borderRadius: '21px',
-                        padding: isMobile ? '16px 20px' : '20px',
+                        padding: 0,
                         cursor: 'pointer',
                         transition: isMobile ? 'none' : 'all 0.2s ease',
                         border: 'none',
                         boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
                         position: 'relative',
-                        minHeight: isMobile ? 'auto' : '140px',
+                        overflow: 'hidden',
                         display: 'flex',
-                        flexDirection: isMobile ? 'row' : 'column',
-                        alignItems: isMobile ? 'center' : 'center',
-                        gap: isMobile ? '14px' : '12px',
-                        justifyContent: isMobile ? 'flex-start' : 'center',
+                        flexDirection: 'column',
                       }}
                       onMouseEnter={isMobile ? undefined : (e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)'
@@ -2617,45 +2647,68 @@ function MainApp({ currentUser, onSignOut }) {
                         e.currentTarget.style.boxShadow = '0px 4px 4px rgba(0, 0, 0, 0.25)'
                       }}
                     >
-                      <h4 style={{
-                        fontFamily: '"Lora", serif',
-                        fontSize: isMobile ? '16px' : '20px',
-                        fontWeight: '600',
-                        color: '#4F3B2E',
-                        margin: 0,
-                        letterSpacing: '0.15px',
-                        lineHeight: '22px',
-                        textAlign: isMobile ? 'left' : 'center',
+                      {action.thumbnail && (
+                        <div style={{
+                          width: '100%',
+                          height: isMobile ? '140px' : '180px',
+                          overflow: 'hidden',
+                          borderRadius: '21px 21px 0 0',
+                        }}>
+                          <img
+                            src={action.thumbnail}
+                            alt={action.title}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              objectPosition: 'top',
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div style={{
+                        padding: isMobile ? '14px 16px' : '16px 20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
                       }}>
-                        {action.title}
-                      </h4>
-                      <p style={{
-                        fontFamily: '"Lora", serif',
-                        fontSize: isMobile ? '13px' : '16px',
-                        color: '#584233',
-                        margin: 0,
-                        opacity: 0.89,
-                        letterSpacing: '0.15px',
-                        lineHeight: '22px',
-                        textAlign: isMobile ? 'left' : 'center',
-                      }}>
-                        {action.description}
-                      </p>
-                      <button style={{
-                        background: '#987651',
-                        color: '#F5EDE9',
-                        border: 'none',
-                        borderRadius: '18px',
-                        padding: isMobile ? '7px 16px' : '8px 20px',
-                        fontFamily: '"Lora", serif',
-                        fontStyle: 'italic',
-                        fontWeight: '700',
-                        fontSize: isMobile ? '14px' : '16px',
-                        cursor: 'pointer',
-                        letterSpacing: '0.15px',
-                      }}>
-                        Start
-                      </button>
+                        <h4 style={{
+                          fontFamily: '"Lora", serif',
+                          fontSize: isMobile ? '16px' : '18px',
+                          fontWeight: '600',
+                          color: '#4F3B2E',
+                          margin: 0,
+                          letterSpacing: '0.15px',
+                          lineHeight: '22px',
+                        }}>
+                          {action.title}
+                        </h4>
+                        <p style={{
+                          fontFamily: '"Lora", serif',
+                          fontSize: isMobile ? '13px' : '14px',
+                          color: '#584233',
+                          margin: 0,
+                          opacity: 0.89,
+                          letterSpacing: '0.15px',
+                          lineHeight: '20px',
+                        }}>
+                          {action.description}
+                        </p>
+                        <span style={{
+                          fontFamily: '"DM Sans", sans-serif',
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: '#6B4632',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          marginTop: '4px',
+                          cursor: 'pointer',
+                        }}>
+                          Start
+                          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 16 16"><path d="M5 8h8M9 4l4 4-4 4"/></svg>
+                        </span>
+                      </div>
                     </div>
                   )})}
                 </div>
@@ -2665,7 +2718,7 @@ function MainApp({ currentUser, onSignOut }) {
             {/* Suggested Connections */}
             {potentialConnections.length > 0 && (
               <div style={homeStyles.card}>
-                <h3 style={{ ...homeStyles.cardTitle, fontSize: '17px', marginBottom: '16px' }}>Suggested for You</h3>
+                <h3 style={{ ...homeStyles.cardTitle, fontSize: isMobile ? '15px' : '17px', marginBottom: '16px' }}>Suggested for You</h3>
                 {potentialConnections.slice(0, 3).map((person, idx) => (
                   <div
                     key={person.id}
@@ -2920,15 +2973,15 @@ function MainApp({ currentUser, onSignOut }) {
             <img
               src={currentUser.profile_picture}
               alt="Profile"
-              className="w-20 h-20 rounded-full object-cover border-4 border-rose-200"
+              className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-4 border-rose-200"
             />
           ) : (
-            <div className="w-20 h-20 bg-rose-200 rounded-full flex items-center justify-center text-3xl text-rose-600 font-bold">
+            <div className="w-16 h-16 md:w-20 md:h-20 bg-rose-200 rounded-full flex items-center justify-center text-2xl md:text-3xl text-rose-600 font-bold">
               {(currentUser.name || currentUser.email?.split('@')[0] || 'User').charAt(0)}
             </div>
           )}
           <div className="ml-4">
-            <h3 className="text-2xl font-bold text-gray-800">{currentUser.name || currentUser.email?.split('@')[0] || 'User'}</h3>
+            <h3 className="text-xl md:text-2xl font-bold text-gray-800">{currentUser.name || currentUser.email?.split('@')[0] || 'User'}</h3>
             <p className="text-gray-600">{currentUser.career} • Age {currentUser.age}</p>
             <p className="text-sm text-gray-500">{currentUser.city}, {currentUser.state}</p>
             {currentUser.role === 'admin' && (
@@ -3004,7 +3057,7 @@ function MainApp({ currentUser, onSignOut }) {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <button
           onClick={() => setCurrentView('meetupProposals')}
           className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
@@ -3153,16 +3206,19 @@ function MainApp({ currentUser, onSignOut }) {
 
       {/* Header */}
       <header
-        className="sticky top-0 z-50 backdrop-blur-md"
+        className="sticky top-0 z-50"
         style={{
-          backgroundColor: 'rgba(253, 248, 243, 0.9)',
-          borderBottom: '1px solid rgba(139, 111, 92, 0.1)'
+          backgroundColor: 'rgba(250, 245, 239, 0.85)',
+          backdropFilter: 'blur(20px) saturate(1.2)',
+          WebkitBackdropFilter: 'blur(20px) saturate(1.2)',
+          borderBottom: '1px solid rgba(184, 160, 137, 0.12)'
         }}
       >
-        <div className="max-w-5xl mx-auto px-4 py-5 md:px-6">
+        {/* Line 1: Logo + Search + Profile */}
+        <div className="max-w-4xl mx-auto px-4 pt-4 pb-2 md:px-6">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#5C4033]" style={{ fontFamily: '"Playfair Display", serif' }}>
+            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#3D2B1A]" style={{ fontFamily: '"Playfair Display", serif', letterSpacing: '-0.3px' }}>
               <svg width="36" height="36" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-10 md:h-10">
                 <circle
                   cx="50"
@@ -3187,14 +3243,91 @@ function MainApp({ currentUser, onSignOut }) {
               CircleW
             </h1>
 
-            {/* Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
+            {/* Right side: Search + Profile */}
+            <div className="flex items-center gap-3">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B8A089]" />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  className="pl-10 pr-4 py-2 w-36 md:w-[200px] text-[13px] rounded-full border border-[#E8DDD0] bg-white text-[#5E4530] placeholder-[#B8A089] focus:outline-none md:focus:w-[260px] focus:border-[#B8A089] transition-all duration-300"
+                  style={{ boxShadow: 'none' }}
+                  onFocus={(e) => { e.target.style.boxShadow = '0 0 0 3px rgba(122,92,66,0.08)'; }}
+                  onBlur={(e) => { e.target.style.boxShadow = 'none'; }}
+                />
+              </div>
+
+              {/* Profile Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                  className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-[#8B6F5C] focus:outline-none focus:ring-2 focus:ring-[#8B6F5C]"
+                  style={{
+                    backgroundColor: currentUser.profile_picture ? 'transparent' : '#E6D5C3'
+                  }}
+                >
+                  {currentUser.profile_picture ? (
+                    <img
+                      src={currentUser.profile_picture}
+                      alt="Profile"
+                      className="w-full h-full rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-[#5C4033]">
+                      {(currentUser.name || currentUser.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </button>
+
+                {/* Dropdown Menu */}
+                {showProfileDropdown && (
+                  <>
+                    {/* Backdrop to close dropdown */}
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowProfileDropdown(false)}
+                    />
+                    <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-[#FDF8F3] rounded-lg border border-[#E6D5C3] py-1 z-50" style={{ boxShadow: '0 4px 12px rgba(139, 111, 92, 0.12)' }}>
+                      <button
+                        onClick={() => {
+                          setShowProfileDropdown(false)
+                          setCurrentView('profile')
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-[#6B5344] hover:bg-[#8B6F5C]/10 flex items-center"
+                      >
+                        <User className="w-4 h-4 mr-2" />
+                        View Profile
+                      </button>
+                      <hr className="my-1 border-[#E6D5C3]" />
+                      <button
+                        onClick={() => {
+                          setShowProfileDropdown(false)
+                          handleSignOut()
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Sign Out
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Line 2: Navigation Bar */}
+        <div className="overflow-x-auto">
+          <div className="max-w-4xl mx-auto px-4 md:px-6">
+            <div className="flex items-center gap-1 py-1.5">
               <button
                 onClick={() => setCurrentView('home')}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'home'
-                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                    ? 'bg-[#5E4530] text-[#FAF5EF]'
+                    : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
                 <Calendar className="w-4 h-4" />
@@ -3202,10 +3335,10 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={() => setCurrentView('discover')}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'discover'
-                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                    ? 'bg-[#5E4530] text-[#FAF5EF]'
+                    : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
                 <Compass className="w-4 h-4" />
@@ -3213,10 +3346,10 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={() => setCurrentView('meetups')}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'meetups'
-                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                    ? 'bg-[#5E4530] text-[#FAF5EF]'
+                    : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
                 <Calendar className="w-4 h-4" />
@@ -3224,145 +3357,15 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={() => setCurrentView('connectionGroups')}
-                className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'connectionGroups'
-                    ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                    : 'text-[#6B5344] hover:bg-[#8B6F5C]/10'
+                    ? 'bg-[#5E4530] text-[#FAF5EF]'
+                    : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
                 <Users className="w-4 h-4" />
                 <span>Circles</span>
               </button>
-            </nav>
-
-            {/* Search */}
-            <div className="hidden md:flex items-center">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8B6F5C]" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="pl-9 pr-4 py-2 w-48 text-sm rounded-full border border-[rgba(139,111,92,0.2)] bg-white/50 text-[#5C4033] placeholder-[#8B6F5C]/60 focus:outline-none focus:border-[#8B6F5C] focus:ring-1 focus:ring-[#8B6F5C]/20"
-                />
-              </div>
-            </div>
-
-            {/* Profile Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-[#8B6F5C] focus:outline-none focus:ring-2 focus:ring-[#8B6F5C]"
-                style={{
-                  backgroundColor: currentUser.profile_picture ? 'transparent' : '#E6D5C3'
-                }}
-              >
-                {currentUser.profile_picture ? (
-                  <img
-                    src={currentUser.profile_picture}
-                    alt="Profile"
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  <span className="text-[#5C4033]">
-                    {(currentUser.name || currentUser.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
-                  </span>
-                )}
-              </button>
-
-              {/* Dropdown Menu */}
-              {showProfileDropdown && (
-                <>
-                  {/* Backdrop to close dropdown */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowProfileDropdown(false)}
-                  />
-                  <div className="absolute right-0 mt-2 w-48 bg-[#FDF8F3] rounded-lg border border-[#E6D5C3] py-1 z-50" style={{ boxShadow: '0 4px 12px rgba(139, 111, 92, 0.12)' }}>
-                    <button
-                      onClick={() => {
-                        setShowProfileDropdown(false)
-                        setCurrentView('profile')
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-[#6B5344] hover:bg-[#8B6F5C]/10 flex items-center"
-                    >
-                      <User className="w-4 h-4 mr-2" />
-                      View Profile
-                    </button>
-                    <hr className="my-1 border-[#E6D5C3]" />
-                    <button
-                      onClick={() => {
-                        setShowProfileDropdown(false)
-                        handleSignOut()
-                      }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Sign Out
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile Navigation Bar */}
-        <div className="md:hidden border-t border-[rgba(139,111,92,0.1)] overflow-x-auto">
-          <div className="flex px-2 py-1">
-            <button
-              onClick={() => setCurrentView('home')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
-                currentView === 'home'
-                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                  : 'text-[#6B5344]'
-              }`}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Home</span>
-            </button>
-            <button
-              onClick={() => setCurrentView('discover')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
-                currentView === 'discover'
-                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                  : 'text-[#6B5344]'
-              }`}
-            >
-              <Compass className="w-4 h-4" />
-              <span>Discover</span>
-            </button>
-            <button
-              onClick={() => setCurrentView('meetups')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
-                currentView === 'meetups'
-                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                  : 'text-[#6B5344]'
-              }`}
-            >
-              <Calendar className="w-4 h-4" />
-              <span>Meetups</span>
-            </button>
-            <button
-              onClick={() => setCurrentView('connectionGroups')}
-              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-colors ${
-                currentView === 'connectionGroups'
-                  ? 'bg-[#8B6F5C] text-[#FDF8F3]'
-                  : 'text-[#6B5344]'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Circles</span>
-            </button>
-            {/* Mobile Search */}
-            <div className="flex items-center ml-2">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8B6F5C]" />
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  className="pl-8 pr-3 py-1.5 w-32 text-sm rounded-full border border-[rgba(139,111,92,0.2)] bg-white/50 text-[#5C4033] placeholder-[#8B6F5C]/60 focus:outline-none focus:border-[#8B6F5C]"
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -3410,7 +3413,7 @@ function MainApp({ currentUser, onSignOut }) {
       {/* Chat Modal */}
       {showChatModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full h-[600px] flex flex-col border border-[#E6D5C3]" style={{ boxShadow: '0 4px 16px rgba(107, 79, 63, 0.15)' }}>
+          <div className="bg-white rounded-lg max-w-2xl w-full h-[90vh] md:h-[600px] flex flex-col border border-[#E6D5C3]" style={{ boxShadow: '0 4px 16px rgba(107, 79, 63, 0.15)' }}>
             <div className="flex justify-between items-center p-4 border-b">
               <h3 className="text-xl font-bold text-gray-800">Jessica Lee</h3>
               <button onClick={() => setShowChatModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -3595,7 +3598,7 @@ function MainApp({ currentUser, onSignOut }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
                   <input
@@ -3692,7 +3695,7 @@ function MainApp({ currentUser, onSignOut }) {
               </div>
 
               {/* DATE & TIME */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
                   <DatePicker
@@ -3731,7 +3734,7 @@ function MainApp({ currentUser, onSignOut }) {
               </div>
 
               {/* DURATION & PARTICIPANT LIMIT */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Duration *</label>
                   <select
