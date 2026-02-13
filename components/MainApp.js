@@ -2273,11 +2273,11 @@ function MainApp({ currentUser, onSignOut }) {
                       <div
                         key={meetup.id}
                         style={{
-                          background: '#FFFCF8',
+                          background: '#FAF6F1',
                           borderRadius: '16px',
                           overflow: 'hidden',
-                          boxShadow: '0 1px 3px rgba(59,35,20,0.06)',
-                          border: '1px solid rgba(59,35,20,0.05)',
+                          boxShadow: '0 2px 8px rgba(59,35,20,0.08)',
+                          border: '1px solid rgba(59,35,20,0.06)',
                           cursor: 'pointer',
                         }}
                       >
