@@ -1927,11 +1927,11 @@ function MainApp({ currentUser, onSignOut }) {
         <div
           onClick={() => window.location.href = '/ai-insights'}
           style={homeStyles.aiBanner}
-          onMouseEnter={(e) => {
+          onMouseEnter={isMobile ? undefined : (e) => {
             e.currentTarget.style.transform = 'translateY(-2px)'
             e.currentTarget.style.boxShadow = '0 16px 48px rgba(61,43,26,0.12)'
           }}
-          onMouseLeave={(e) => {
+          onMouseLeave={isMobile ? undefined : (e) => {
             e.currentTarget.style.transform = 'translateY(0)'
             e.currentTarget.style.boxShadow = 'none'
           }}
@@ -2121,12 +2121,14 @@ function MainApp({ currentUser, onSignOut }) {
                         key={request.id}
                         style={{
                           display: 'flex',
-                          alignItems: 'center',
+                          flexDirection: isMobile ? 'column' : 'row',
+                          alignItems: isMobile ? 'stretch' : 'center',
                           justifyContent: 'space-between',
-                          padding: '16px',
+                          padding: isMobile ? '12px' : '16px',
                           backgroundColor: '#FAF5EF',
                           borderRadius: '12px',
                           border: '1px solid rgba(184, 160, 137, 0.1)',
+                          gap: isMobile ? '10px' : '0',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -2134,42 +2136,47 @@ function MainApp({ currentUser, onSignOut }) {
                             <img
                               src={user.profile_picture}
                               alt={user.name}
-                              style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', marginRight: '12px' }}
+                              style={{ width: isMobile ? '40px' : '48px', height: isMobile ? '40px' : '48px', borderRadius: '50%', objectFit: 'cover', marginRight: '10px' }}
                             />
                           ) : (
                             <div style={{
-                              width: isMobile ? '48px' : '64px', height: isMobile ? '48px' : '64px', borderRadius: '50%',
+                              width: isMobile ? '40px' : '64px', height: isMobile ? '40px' : '64px', borderRadius: '50%',
                               background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
                               boxShadow: '0px 1px 4px #9E7868',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontFamily: '"Lora", serif', fontSize: isMobile ? '18px' : '24px', fontWeight: '700', color: '#523C2E',
-                              marginRight: '12px', flexShrink: 0,
+                              fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '24px', fontWeight: '700', color: '#523C2E',
+                              marginRight: '10px', flexShrink: 0,
                             }}>
                               {(user.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
                             </div>
                           )}
-                          <div>
-                            <h4 style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
-                            <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.career || 'Professional'}</p>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <h4 style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
+                            <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>{user.career || 'Professional'}</p>
                             {user.city && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
                             )}
                           </div>
+                          {!isMobile && (
+                            <span style={{ fontFamily: '"Lora", serif', fontSize: '14px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px', marginLeft: '8px', flexShrink: 0 }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
+                          )}
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '16px', fontWeight: '700', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-end', gap: '12px' }}>
+                          {isMobile && (
+                            <span style={{ fontFamily: '"Lora", serif', fontSize: '12px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
+                          )}
                           <button
                             onClick={() => handleShowInterest(request.id, user.name)}
                             style={{
-                              padding: '9px 20px',
+                              padding: isMobile ? '7px 16px' : '9px 20px',
                               background: 'rgba(103, 77, 59, 0.9)',
                               border: 'none',
                               borderRadius: '18px',
                               color: '#F5EDE9',
                               fontFamily: '"Lora", serif',
                               fontStyle: 'italic',
-                              fontSize: '15px',
+                              fontSize: isMobile ? '13px' : '15px',
                               fontWeight: '700',
                               cursor: 'pointer',
                               display: 'flex',
@@ -2178,7 +2185,7 @@ function MainApp({ currentUser, onSignOut }) {
                               letterSpacing: '0.15px',
                             }}
                           >
-                            <Heart style={{ width: '14px', height: '14px' }} />
+                            <Heart style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
                             Review
                           </button>
                         </div>
@@ -2235,19 +2242,20 @@ function MainApp({ currentUser, onSignOut }) {
                       <div
                         style={{
                           display: 'flex',
-                          gap: isMobile ? '12px' : '16px',
-                          padding: isMobile ? '12px 4px' : '14px 8px',
-                          transition: 'all 0.25s ease',
+                          gap: isMobile ? '10px' : '16px',
+                          padding: isMobile ? '10px 4px' : '14px 8px',
+                          transition: isMobile ? 'none' : 'background-color 0.2s ease',
                           cursor: 'pointer',
                           position: 'relative',
                           borderRadius: '12px',
+                          alignItems: 'center',
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        onMouseEnter={isMobile ? undefined : (e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
+                        onMouseLeave={isMobile ? undefined : (e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
                         <EventDateBadge date={meetup.date} />
 
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: isMobile ? '4px' : '8px' }}>
                           {/* Top row: Badge + Circle name */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             <span style={{
@@ -2410,7 +2418,7 @@ function MainApp({ currentUser, onSignOut }) {
                         </div>
 
                         {/* Action button */}
-                        <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+                        <div style={{ flexShrink: 0 }}>
                           {isSignedUp ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
@@ -2430,18 +2438,9 @@ function MainApp({ currentUser, onSignOut }) {
                                 gap: '6px',
                                 whiteSpace: 'nowrap',
                                 letterSpacing: '0.15px',
-                                transition: 'all 0.2s ease',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(88, 66, 51, 1)'
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(88, 66, 51, 0.3)'
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(88, 66, 51, 0.9)'
-                                e.currentTarget.style.boxShadow = 'none'
                               }}
                             >
-                              <Video style={{ width: '18px', height: '18px', color: 'rgba(255, 246, 238, 0.85)' }} />
+                              <Video style={{ width: isMobile ? '15px' : '18px', height: isMobile ? '15px' : '18px', color: 'rgba(255, 246, 238, 0.85)' }} />
                               Join
                             </button>
                           ) : (
@@ -2463,15 +2462,6 @@ function MainApp({ currentUser, onSignOut }) {
                                 gap: '6px',
                                 whiteSpace: 'nowrap',
                                 letterSpacing: '0.15px',
-                                transition: 'all 0.2s ease',
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.background = 'rgba(88, 66, 51, 1)'
-                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(88, 66, 51, 0.3)'
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'rgba(88, 66, 51, 0.9)'
-                                e.currentTarget.style.boxShadow = 'none'
                               }}
                             >
                               Reserve spot &gt;
@@ -2607,7 +2597,7 @@ function MainApp({ currentUser, onSignOut }) {
                         borderRadius: '21px',
                         padding: isMobile ? '16px 20px' : '20px',
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
+                        transition: isMobile ? 'none' : 'all 0.2s ease',
                         border: 'none',
                         boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
                         position: 'relative',
@@ -2618,18 +2608,18 @@ function MainApp({ currentUser, onSignOut }) {
                         gap: isMobile ? '14px' : '12px',
                         justifyContent: isMobile ? 'flex-start' : 'center',
                       }}
-                      onMouseEnter={(e) => {
+                      onMouseEnter={isMobile ? undefined : (e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)'
                         e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 111, 92, 0.25)'
                       }}
-                      onMouseLeave={(e) => {
+                      onMouseLeave={isMobile ? undefined : (e) => {
                         e.currentTarget.style.transform = 'translateY(0)'
                         e.currentTarget.style.boxShadow = '0px 4px 4px rgba(0, 0, 0, 0.25)'
                       }}
                     >
                       <h4 style={{
                         fontFamily: '"Lora", serif',
-                        fontSize: '20px',
+                        fontSize: isMobile ? '16px' : '20px',
                         fontWeight: '600',
                         color: '#4F3B2E',
                         margin: 0,
@@ -2641,7 +2631,7 @@ function MainApp({ currentUser, onSignOut }) {
                       </h4>
                       <p style={{
                         fontFamily: '"Lora", serif',
-                        fontSize: '16px',
+                        fontSize: isMobile ? '13px' : '16px',
                         color: '#584233',
                         margin: 0,
                         opacity: 0.89,
@@ -2748,12 +2738,12 @@ function MainApp({ currentUser, onSignOut }) {
                         transition: 'all 0.2s ease',
                         flexShrink: 0,
                       }}
-                      onMouseEnter={(e) => {
+                      onMouseEnter={isMobile ? undefined : (e) => {
                         e.currentTarget.style.background = '#5E4530'
                         e.currentTarget.style.borderColor = '#5E4530'
                         e.currentTarget.style.color = 'white'
                       }}
-                      onMouseLeave={(e) => {
+                      onMouseLeave={isMobile ? undefined : (e) => {
                         e.currentTarget.style.background = 'transparent'
                         e.currentTarget.style.borderColor = '#D4C4B0'
                         e.currentTarget.style.color = '#9C8068'
