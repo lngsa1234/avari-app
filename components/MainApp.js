@@ -2273,11 +2273,9 @@ function MainApp({ currentUser, onSignOut }) {
                       <div
                         key={meetup.id}
                         style={{
-                          background: '#FAF6F1',
+                          background: 'transparent',
                           borderRadius: '16px',
                           overflow: 'hidden',
-                          boxShadow: '0 2px 8px rgba(59,35,20,0.08)',
-                          border: '1px solid rgba(59,35,20,0.06)',
                           cursor: 'pointer',
                         }}
                       >
@@ -2285,8 +2283,6 @@ function MainApp({ currentUser, onSignOut }) {
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: '8px',
                           padding: '10px 16px',
-                          background: '#F3EAE0',
-                          borderBottom: '1px solid rgba(59,35,20,0.06)',
                         }}>
                           <EventDateBadge date={meetup.date} />
                         </div>
