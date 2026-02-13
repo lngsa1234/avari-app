@@ -87,6 +87,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [showOnboarding, setShowOnboarding] = useState(false) // Onboarding for new users
   const [groupsCount, setGroupsCount] = useState(0) // Number of groups user is in
   const [coffeeChatsCount, setCoffeeChatsCount] = useState(0) // Number of 1:1 coffee chats completed
+  const [upcomingCoffeeChats, setUpcomingCoffeeChats] = useState([]) // Accepted coffee chats for home view
   const [nextStepPrompt, setNextStepPrompt] = useState(null) // { type, data } for post-action prompts
   const [showProfileDropdown, setShowProfileDropdown] = useState(false) // Profile dropdown in header
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
@@ -226,6 +227,7 @@ function MainApp({ currentUser, onSignOut }) {
     loadUnreadMessageCount()
     loadGroupsCount()
     loadCoffeeChatsCount()
+    loadUpcomingCoffeeChats()
     loadPendingRecaps()
 
     // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
@@ -635,6 +637,62 @@ function MainApp({ currentUser, onSignOut }) {
       setCoffeeChatsCount(0)
     }
   }, [currentUser.id, supabase])
+
+  // Load upcoming accepted coffee chats for home view
+  const loadUpcomingCoffeeChats = useCallback(async () => {
+    try {
+      // Query coffee_chats directly for pending/accepted/scheduled chats involving current user
+      const { data: chats, error } = await supabase
+        .from('coffee_chats')
+        .select('*')
+        .in('status', ['pending', 'accepted', 'scheduled'])
+        .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+        .order('scheduled_time', { ascending: true })
+
+      console.log('☕ Coffee chats query result:', { chats, error })
+
+      if (error) {
+        console.error('☕ Coffee chats query error:', error)
+        setUpcomingCoffeeChats([])
+        return
+      }
+
+      if (!chats || chats.length === 0) {
+        console.log('☕ No accepted coffee chats found')
+        setUpcomingCoffeeChats([])
+        return
+      }
+
+      // Fetch profiles for the other person in each chat
+      const otherIds = [...new Set(chats.map(c =>
+        c.requester_id === currentUser.id ? c.recipient_id : c.requester_id
+      ).filter(Boolean))]
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', otherIds)
+
+      const profileMap = {}
+      ;(profiles || []).forEach(p => { profileMap[p.id] = p })
+
+      const now = new Date()
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const upcoming = chats.filter(chat => {
+        if (!chat.scheduled_time) return true // Show even without scheduled time
+        return new Date(chat.scheduled_time) > sevenDaysAgo
+      }).map(chat => {
+        const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
+        return { ...chat, _otherPerson: profileMap[otherId] || null }
+      })
+
+      console.log('☕ Upcoming coffee chats:', upcoming.length, upcoming)
+      setUpcomingCoffeeChats(upcoming)
+    } catch (err) {
+      console.error('☕ Error loading upcoming coffee chats:', err)
+      setUpcomingCoffeeChats([])
+    }
+  }, [supabase, currentUser.id])
 
   // Load pending recaps for the checklist
   const loadPendingRecaps = useCallback(async () => {
@@ -1645,7 +1703,7 @@ function MainApp({ currentUser, onSignOut }) {
       const now = new Date()
       const GRACE_PERIOD_HOURS = 4
 
-      return meetups.filter(meetup => {
+      const filteredMeetups = meetups.filter(meetup => {
         try {
           let meetupDate
           const dateStr = meetup.date
@@ -1671,7 +1729,45 @@ function MainApp({ currentUser, onSignOut }) {
           return true
         }
       })
-    }, [meetups])
+
+      // Normalize accepted coffee chats into meetup-like objects and merge
+      const normalizedChats = upcomingCoffeeChats.map(chat => {
+        const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : new Date()
+        const otherPerson = chat._otherPerson
+        const dateStr = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, '0')}-${String(scheduledDate.getDate()).padStart(2, '0')}`
+        const timeStr = `${String(scheduledDate.getHours()).padStart(2, '0')}:${String(scheduledDate.getMinutes()).padStart(2, '0')}`
+        return {
+          id: chat.id,
+          date: dateStr,
+          time: timeStr,
+          topic: `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
+          location: null,
+          duration: 30,
+          participant_limit: 2,
+          circle_id: null,
+          connection_groups: null,
+          created_by: chat.requester_id,
+          _isCoffeeChat: true,
+          _coffeeChatData: chat,
+          _scheduledDate: scheduledDate,
+        }
+      })
+
+      return [...filteredMeetups, ...normalizedChats].sort((a, b) => {
+        const getDate = (item) => {
+          if (item._scheduledDate) return item._scheduledDate
+          try {
+            const d = new Date(item.date)
+            if (item.time) {
+              const [h, m] = item.time.split(':').map(Number)
+              d.setHours(h, m, 0, 0)
+            }
+            return d
+          } catch { return new Date() }
+        }
+        return getDate(a) - getDate(b)
+      })
+    }, [meetups, upcomingCoffeeChats, currentUser.id])
 
     // Get time-based greeting
     const { greeting, emoji } = getTimeBasedGreeting()
@@ -2242,7 +2338,7 @@ function MainApp({ currentUser, onSignOut }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '12px' : '4px' }}>
                   {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
-                    const isSignedUp = userSignups.includes(meetup.id)
+                    const isSignedUp = meetup._isCoffeeChat || userSignups.includes(meetup.id)
                     const meetupSignups = signups[meetup.id] || []
 
                     // Determine if event is currently live (started but not ended)
@@ -2295,10 +2391,19 @@ function MainApp({ currentUser, onSignOut }) {
                             <span style={{
                               fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
                               letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
-                              ...(meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
+                              ...(meetup._isCoffeeChat ? { background: '#F0E4D8', color: '#6B4632' } : meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
                             }}>
-                              {meetup.circle_id ? 'Circle' : 'Event'}
+                              {meetup._isCoffeeChat ? '1:1' : meetup.circle_id ? 'Circle' : 'Event'}
                             </span>
+                            {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' && (
+                              <span style={{
+                                fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                                letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
+                                background: '#FFF3E0', color: '#B8860B',
+                              }}>
+                                Pending
+                              </span>
+                            )}
                             {isLive && (
                               <span style={{
                                 fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
@@ -2448,10 +2553,19 @@ function MainApp({ currentUser, onSignOut }) {
                             <span style={{
                               fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
                               letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
-                              ...(meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
+                              ...(meetup._isCoffeeChat ? { background: '#F0E4D8', color: '#6B4632' } : meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
                             }}>
-                              {meetup.circle_id ? 'Circle' : 'Event'}
+                              {meetup._isCoffeeChat ? '1:1' : meetup.circle_id ? 'Circle' : 'Event'}
                             </span>
+                            {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' && (
+                              <span style={{
+                                fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                                letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
+                                background: '#FFF3E0', color: '#B8860B',
+                              }}>
+                                Pending
+                              </span>
+                            )}
                             {isLive && (
                               <span style={{
                                 fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
@@ -3366,7 +3480,6 @@ function MainApp({ currentUser, onSignOut }) {
               </svg>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ letterSpacing: '0.5px', transform: 'scaleY(0.92)', transformOrigin: 'bottom', display: 'inline-block' }}>CircleW</span>
-                <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '400', color: '#9C8068', letterSpacing: '0.3px', lineHeight: '1' }}>Where connections brew</span>
               </div>
             </h1>
 
