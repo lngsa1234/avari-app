@@ -1628,8 +1628,11 @@ function MainApp({ currentUser, onSignOut }) {
   }
 
   const HomeView = () => {
-    // Responsive hook for mobile layout
-    const [isMobile, setIsMobile] = useState(false)
+    // Responsive hook for mobile layout — SSR-safe initializer avoids flash
+    const [isMobile, setIsMobile] = useState(() => {
+      if (typeof window !== 'undefined') return window.innerWidth < 860
+      return false
+    })
     useEffect(() => {
       const checkMobile = () => setIsMobile(window.innerWidth < 860)
       checkMobile()
@@ -2236,7 +2239,7 @@ function MainApp({ currentUser, onSignOut }) {
                   <p style={{ color: '#B8A089', fontSize: '13px', marginTop: '4px' }}>Check back soon for new events!</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '10px' : '4px' }}>
                   {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
                     const isSignedUp = userSignups.includes(meetup.id)
                     const meetupSignups = signups[meetup.id] || []
@@ -2273,7 +2276,7 @@ function MainApp({ currentUser, onSignOut }) {
                         style={{
                           display: 'flex',
                           gap: isMobile ? '10px' : '16px',
-                          padding: isMobile ? '10px 4px' : '14px 8px',
+                          padding: isMobile ? '12px 10px' : '14px 8px',
                           transition: isMobile ? 'none' : 'background-color 0.2s ease',
                           cursor: 'pointer',
                           position: 'relative',
@@ -2285,7 +2288,7 @@ function MainApp({ currentUser, onSignOut }) {
                       >
                         <EventDateBadge date={meetup.date} />
 
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: isMobile ? '4px' : '8px' }}>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: isMobile ? '6px' : '8px' }}>
                           {/* Top row: Badge + Circle name */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             <span style={{
@@ -2353,7 +2356,7 @@ function MainApp({ currentUser, onSignOut }) {
                           </h4>
 
                           {/* Meta row: Time + Location */}
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '10px' : '14px', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '15px', color: '#523C2E' }}>
                               <svg width={isMobile ? '15' : '18'} height={isMobile ? '15' : '18'} fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                               <span style={{ fontWeight: '600' }}>{formatTime(meetup.time)}</span>
@@ -2394,8 +2397,8 @@ function MainApp({ currentUser, onSignOut }) {
                                       <div
                                         key={signup.user_id || i}
                                         style={{
-                                          width: '34px',
-                                          height: '34px',
+                                          width: isMobile ? '28px' : '34px',
+                                          height: isMobile ? '28px' : '34px',
                                           borderRadius: '50%',
                                           border: '2px solid #FFFCF8',
                                           marginLeft: i === 0 ? 0 : '-8px',
@@ -2403,7 +2406,7 @@ function MainApp({ currentUser, onSignOut }) {
                                           alignItems: 'center',
                                           justifyContent: 'center',
                                           fontFamily: '"Lora", serif',
-                                          fontSize: '10px',
+                                          fontSize: isMobile ? '9px' : '10px',
                                           fontWeight: '700',
                                           color: '#523C2E',
                                           background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
@@ -2416,8 +2419,8 @@ function MainApp({ currentUser, onSignOut }) {
                                     ))}
                                     {attendeeCount > 3 && (
                                       <div style={{
-                                        width: '34px',
-                                        height: '34px',
+                                        width: isMobile ? '28px' : '34px',
+                                        height: isMobile ? '28px' : '34px',
                                         borderRadius: '50%',
                                         border: '2px solid #FFFCF8',
                                         marginLeft: '-8px',
@@ -2425,7 +2428,7 @@ function MainApp({ currentUser, onSignOut }) {
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         fontFamily: '"Lora", serif',
-                                        fontSize: '10px',
+                                        fontSize: isMobile ? '9px' : '10px',
                                         fontWeight: '700',
                                         color: '#764D31',
                                         background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 99.99%, rgba(241, 225, 213, 0.2) 100%)',
@@ -2610,9 +2613,18 @@ function MainApp({ currentUser, onSignOut }) {
                 .slice(0, 3)
 
               return (
-                <div style={{
+                <div style={isMobile ? {
+                  display: 'flex',
+                  overflowX: 'auto',
+                  scrollSnapType: 'x mandatory',
+                  WebkitOverflowScrolling: 'touch',
+                  scrollbarWidth: 'none',
+                  msOverflowStyle: 'none',
+                  gap: '12px',
+                  paddingBottom: '4px',
+                } : {
                   display: 'grid',
-                  gridTemplateColumns: isMobile ? 'repeat(1, 1fr)' : 'repeat(3, 1fr)',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
                   gap: '16px',
                 }}>
                   {topActions.map((action, actionIdx) => {
@@ -2637,6 +2649,7 @@ function MainApp({ currentUser, onSignOut }) {
                         overflow: 'hidden',
                         display: 'flex',
                         flexDirection: 'column',
+                        ...(isMobile ? { minWidth: '260px', scrollSnapAlign: 'start', flex: '0 0 auto' } : {}),
                       }}
                       onMouseEnter={isMobile ? undefined : (e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)'
@@ -3219,7 +3232,7 @@ function MainApp({ currentUser, onSignOut }) {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#3D2B1A]" style={{ fontFamily: '"Playfair Display", serif', letterSpacing: '-0.3px' }}>
-              <svg width="36" height="36" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-10 md:h-10">
+              <svg width="44" height="44" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-12 md:h-12">
                 <circle
                   cx="50"
                   cy="50"
@@ -3240,7 +3253,10 @@ function MainApp({ currentUser, onSignOut }) {
                   strokeLinejoin="round"
                 />
               </svg>
-              CircleW
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ letterSpacing: '0.5px', transform: 'scaleY(0.92)', transformOrigin: 'bottom', display: 'inline-block' }}>CircleW</span>
+                <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '400', color: '#9C8068', letterSpacing: '0.3px', lineHeight: '1' }}>Where connections brew</span>
+              </div>
             </h1>
 
             {/* Right side: Search + Profile */}
@@ -3319,51 +3335,51 @@ function MainApp({ currentUser, onSignOut }) {
         </div>
 
         {/* Line 2: Navigation Bar */}
-        <div className="overflow-x-auto">
-          <div className="max-w-4xl mx-auto px-4 md:px-6">
+        <div>
+          <div className="max-w-4xl mx-auto px-2 md:px-6">
             <div className="flex items-center gap-1 py-1.5">
               <button
                 onClick={() => setCurrentView('home')}
-                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'home'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="w-4 h-4 flex-shrink-0" />
                 <span>Home</span>
               </button>
               <button
                 onClick={() => setCurrentView('discover')}
-                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'discover'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
-                <Compass className="w-4 h-4" />
+                <Compass className="w-4 h-4 flex-shrink-0" />
                 <span>Discover</span>
               </button>
               <button
                 onClick={() => setCurrentView('meetups')}
-                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'meetups'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
-                <Calendar className="w-4 h-4" />
+                <Calendar className="w-4 h-4 flex-shrink-0" />
                 <span>Meetups</span>
               </button>
               <button
                 onClick={() => setCurrentView('connectionGroups')}
-                className={`flex items-center gap-[7px] px-4 py-2 text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'connectionGroups'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
                 }`}
               >
-                <Users className="w-4 h-4" />
+                <Users className="w-4 h-4 flex-shrink-0" />
                 <span>Circles</span>
               </button>
             </div>
