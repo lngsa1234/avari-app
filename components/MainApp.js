@@ -2276,6 +2276,8 @@ function MainApp({ currentUser, onSignOut }) {
                           background: 'transparent',
                           borderRadius: '16px',
                           overflow: 'hidden',
+                          boxShadow: '0 0 8px rgba(255, 255, 255, 0.6)',
+                          border: '1px solid rgba(255, 255, 255, 0.45)',
                           cursor: 'pointer',
                         }}
                       >
