@@ -1727,6 +1727,10 @@ function MainApp({ currentUser, onSignOut }) {
 
       return (
         <div style={{
+          minWidth: isMobile ? 'auto' : '72px',
+          padding: isMobile ? '0' : '18px 8px',
+          backgroundColor: isMobile ? 'transparent' : 'rgba(189, 173, 162, 0.65)',
+          borderRadius: isMobile ? '0' : '8px',
           display: 'flex',
           flexDirection: isMobile ? 'row' : 'column',
           alignItems: 'center',
@@ -1735,17 +1739,28 @@ function MainApp({ currentUser, onSignOut }) {
           flexShrink: 0,
         }}>
           <span style={{
-            fontSize: '11px', fontWeight: '600', textTransform: 'uppercase',
-            letterSpacing: '1.2px', color: '#8B6347', marginBottom: isMobile ? 0 : '2px',
+            fontFamily: '"Lora", serif',
+            fontSize: isMobile ? '12px' : '14px',
+            textTransform: 'uppercase',
+            letterSpacing: '0.15px',
+            color: '#605045',
+            fontWeight: '500',
+            lineHeight: isMobile ? '24px' : '33px',
           }}>{month}</span>
           <span style={{
-            fontFamily: '"Playfair Display", serif',
-            fontSize: isMobile ? '20px' : '30px', fontWeight: '600',
-            color: '#3B2314', lineHeight: '1',
+            fontFamily: '"Lora", serif',
+            fontSize: isMobile ? '20px' : '24px',
+            fontWeight: '500',
+            color: '#605045',
+            lineHeight: isMobile ? '24px' : '33px',
+            letterSpacing: '0.15px',
           }}>{day}</span>
           <span style={{
-            fontSize: '11px', fontWeight: '500', color: '#9B8A7E',
-            marginTop: isMobile ? 0 : '3px',
+            fontFamily: '"Lora", serif',
+            fontSize: '11px',
+            fontWeight: '500',
+            color: '#9B8A7E',
+            marginTop: isMobile ? 0 : '2px',
           }}>{weekday}</span>
         </div>
       )
@@ -2225,7 +2240,7 @@ function MainApp({ currentUser, onSignOut }) {
                   <p style={{ color: '#B8A089', fontSize: '13px', marginTop: '4px' }}>Check back soon for new events!</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '12px' : '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '12px' : '4px' }}>
                   {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
                     const isSignedUp = userSignups.includes(meetup.id)
                     const meetupSignups = signups[meetup.id] || []
@@ -2253,7 +2268,8 @@ function MainApp({ currentUser, onSignOut }) {
                       isLive = false
                     }
 
-                    return (
+                    // --- MOBILE: stacked card layout ---
+                    if (isMobile) return (
                       <div
                         key={meetup.id}
                         style={{
@@ -2263,174 +2279,314 @@ function MainApp({ currentUser, onSignOut }) {
                           boxShadow: '0 1px 3px rgba(59,35,20,0.06)',
                           border: '1px solid rgba(59,35,20,0.05)',
                           cursor: 'pointer',
-                          transition: isMobile ? 'none' : 'box-shadow 0.25s, transform 0.25s',
                         }}
-                        onMouseEnter={isMobile ? undefined : (e) => { e.currentTarget.style.boxShadow = '0 4px 12px rgba(59,35,20,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-                        onMouseLeave={isMobile ? undefined : (e) => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(59,35,20,0.06)'; e.currentTarget.style.transform = 'translateY(0)' }}
                       >
+                        {/* Date bar (horizontal) */}
                         <div style={{
-                          display: 'flex',
-                          flexDirection: isMobile ? 'column' : 'row',
-                          alignItems: isMobile ? 'stretch' : 'stretch',
+                          display: 'flex', alignItems: 'center', gap: '8px',
+                          padding: '10px 16px',
+                          background: '#F3EAE0',
+                          borderBottom: '1px solid rgba(59,35,20,0.06)',
                         }}>
-                          {/* Date block */}
-                          <div style={isMobile ? {
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            padding: '10px 16px',
-                            background: '#F3EAE0',
-                            borderBottom: '1px solid rgba(59,35,20,0.06)',
-                          } : {
-                            minWidth: '72px', display: 'flex', flexDirection: 'column',
-                            alignItems: 'center', justifyContent: 'center',
-                            padding: '20px 0', background: '#F3EAE0',
-                            borderRight: '1px solid rgba(59,35,20,0.06)',
-                          }}>
-                            <EventDateBadge date={meetup.date} />
-                          </div>
+                          <EventDateBadge date={meetup.date} />
+                        </div>
 
-                          {/* Content */}
-                          <div style={{ flex: 1, padding: isMobile ? '14px 16px' : '18px 20px', display: 'flex', flexDirection: 'column', gap: '10px', minWidth: 0 }}>
-                            {/* Top row: Badge + Circle name */}
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {/* Content */}
+                        <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
+                              ...(meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
+                            }}>
+                              {meetup.circle_id ? 'Circle' : 'Event'}
+                            </span>
+                            {isLive && (
                               <span style={{
                                 fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
-                                letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
-                                ...(meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
+                                letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px',
+                                background: '#FEF0EC', color: '#D45B3E',
+                                display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
                               }}>
-                                {meetup.circle_id ? 'Circle' : 'Event'}
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
+                                Live
                               </span>
-                              {isLive && (
-                                <span style={{
-                                  fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
-                                  letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px',
-                                  background: '#FEF0EC', color: '#D45B3E',
-                                  display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
-                                }}>
-                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
-                                  Live
+                            )}
+                            {meetup.connection_groups?.name && (
+                              <>
+                                <span style={{ width: '1px', height: '14px', background: '#D4B896', flexShrink: 0 }} />
+                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#6B4632', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {meetup.connection_groups.name}
                                 </span>
-                              )}
-                              {meetup.connection_groups?.name && (
-                                <>
-                                  <span style={{ width: '1px', height: '14px', background: '#D4B896', flexShrink: 0 }} />
-                                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#6B4632', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {meetup.connection_groups.name}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-
-                            {/* Title */}
-                            <h4 style={{
-                              fontFamily: '"Playfair Display", serif',
-                              fontSize: isMobile ? '17px' : '18px', fontWeight: '600',
-                              color: '#2C1810', margin: 0, lineHeight: '1.3', letterSpacing: '-0.2px',
-                            }}>
-                              {meetup.topic || 'Community Event'}
-                            </h4>
-
-                            {/* Meta row: Time + Location */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '10px' : '14px', alignItems: 'center' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50' }}>
-                                <svg width="14" height="14" fill="none" stroke="#C4A07C" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                                <span style={{ fontWeight: '600', color: '#5C3A24' }}>{formatTime(meetup.time)}</span>
-                              </div>
-                              <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50' }}>
-                                <svg width="14" height="14" fill="none" stroke="#C4A07C" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                <span>{meetup.location || 'Virtual · Video Call'}</span>
-                              </div>
-                            </div>
-
-                            {/* Attendees row */}
-                            {(() => {
-                              const meetupSignupsList = signups[meetup.id] || []
-                              const attendeeCount = meetupSignupsList.length
-                              const limit = meetup.participant_limit
-                              const spotsLeft = limit ? Math.max(0, limit - attendeeCount) : null
-                              return (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                  {attendeeCount > 0 && (
-                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                      {meetupSignupsList.slice(0, 3).map((signup, i) => (
-                                        <div key={signup.user_id || i} style={{
-                                          width: '26px', height: '26px', borderRadius: '50%',
-                                          border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-7px',
-                                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                          fontSize: '10px', fontWeight: '600', color: 'white',
-                                          background: ['#8B6347', '#A67B5B', '#C4A07C', '#7B8EA0'][i % 4],
-                                        }}>
-                                          {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                        </div>
-                                      ))}
-                                      {attendeeCount > 3 && (
-                                        <div style={{
-                                          width: '26px', height: '26px', borderRadius: '50%',
-                                          border: '2px solid #FFFCF8', marginLeft: '-7px',
-                                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                          fontSize: '9px', fontWeight: '600', color: '#6B4632', background: '#E8D5BE',
-                                        }}>
-                                          +{attendeeCount - 3}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  <span style={{ fontSize: '12px', color: '#9B8A7E' }}>
-                                    <span style={{ fontWeight: '600', color: '#6B5B50' }}>{attendeeCount}</span> going
-                                    {spotsLeft !== null && spotsLeft > 0 && (
-                                      <span> · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left</span>
-                                    )}
-                                  </span>
-                                </div>
-                              )
-                            })()}
-                          </div>
-
-                          {/* Action button */}
-                          <div style={isMobile ? {
-                            padding: '0 16px 14px 16px',
-                          } : {
-                            display: 'flex', alignItems: 'center', padding: '18px 20px 18px 0', flexShrink: 0,
-                          }}>
-                            {isSignedUp ? (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
-                                style={{
-                                  background: isLive ? '#D45B3E' : '#3B2314',
-                                  color: 'white', border: 'none',
-                                  padding: '10px 20px', borderRadius: '10px',
-                                  fontFamily: '"DM Sans", sans-serif',
-                                  fontSize: '13px', fontWeight: '600',
-                                  cursor: 'pointer', display: 'inline-flex',
-                                  alignItems: 'center', gap: '6px', whiteSpace: 'nowrap',
-                                  width: isMobile ? '100%' : 'auto',
-                                  justifyContent: isMobile ? 'center' : 'flex-start',
-                                }}
-                              >
-                                <Video style={{ width: '15px', height: '15px' }} />
-                                {isLive ? 'Join Now' : 'Join'}
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleSignUp(meetup.id) }}
-                                style={{
-                                  background: '#3B2314', color: 'white',
-                                  border: 'none', padding: '10px 20px',
-                                  borderRadius: '10px', fontFamily: '"DM Sans", sans-serif',
-                                  fontSize: '13px', fontWeight: '600',
-                                  cursor: 'pointer', display: 'inline-flex',
-                                  alignItems: 'center', gap: '6px', whiteSpace: 'nowrap',
-                                  width: isMobile ? '100%' : 'auto',
-                                  justifyContent: isMobile ? 'center' : 'flex-start',
-                                }}
-                              >
-                                Reserve spot
-                                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 8h8M9 4l4 4-4 4"/></svg>
-                              </button>
+                              </>
                             )}
                           </div>
+
+                          <h4 style={{
+                            fontFamily: '"Lora", serif', fontSize: '17px', fontWeight: '600',
+                            color: '#523C2E', margin: 0, lineHeight: '22px', letterSpacing: '0.15px',
+                          }}>
+                            {meetup.topic || 'Community Event'}
+                          </h4>
+
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '13px', color: '#523C2E' }}>
+                              <svg width="15" height="15" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                              <span style={{ fontWeight: '600' }}>{formatTime(meetup.time)}</span>
+                            </div>
+                            <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '13px', color: '#523C2E' }}>
+                              <svg width="15" height="15" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                              <span>{meetup.location || 'Virtual · Video Call'}</span>
+                            </div>
+                          </div>
+
+                          {(() => {
+                            const meetupSignupsList = signups[meetup.id] || []
+                            const attendeeCount = meetupSignupsList.length
+                            const limit = meetup.participant_limit
+                            const spotsLeft = limit ? Math.max(0, limit - attendeeCount) : null
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {attendeeCount > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    {meetupSignupsList.slice(0, 3).map((signup, i) => (
+                                      <div key={signup.user_id || i} style={{
+                                        width: '26px', height: '26px', borderRadius: '50%',
+                                        border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-7px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                        color: '#523C2E',
+                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
+                                        boxShadow: '0px 1px 4px #9E7868',
+                                      }}>
+                                        {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                      </div>
+                                    ))}
+                                    {attendeeCount > 3 && (
+                                      <div style={{
+                                        width: '26px', height: '26px', borderRadius: '50%',
+                                        border: '2px solid #FFFCF8', marginLeft: '-7px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontFamily: '"Lora", serif', fontSize: '9px', fontWeight: '700',
+                                        color: '#764D31',
+                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 99.99%, rgba(241, 225, 213, 0.2) 100%)',
+                                        boxShadow: '0px 1px 4px #9E7868',
+                                      }}>
+                                        +{attendeeCount - 3}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <span style={{ fontFamily: '"Lora", serif', fontSize: '13px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
+                                  {attendeeCount} attendees
+                                  {spotsLeft !== null && spotsLeft > 0 && (
+                                    <span> · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left</span>
+                                  )}
+                                </span>
+                              </div>
+                            )
+                          })()}
+                        </div>
+
+                        {/* Full-width button */}
+                        <div style={{ padding: '0 16px 14px 16px' }}>
+                          {isSignedUp ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
+                              style={{
+                                background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                                padding: '10px 20px', borderRadius: '18px',
+                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '14px', fontWeight: '700',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px', width: '100%',
+                              }}
+                            >
+                              <Video style={{ width: '15px', height: '15px', color: 'rgba(255, 246, 238, 0.85)' }} />
+                              Join
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSignUp(meetup.id) }}
+                              style={{
+                                background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                                padding: '10px 20px', borderRadius: '18px',
+                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '14px', fontWeight: '700',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px', width: '100%',
+                              }}
+                            >
+                              Reserve spot &gt;
+                            </button>
+                          )}
                         </div>
                       </div>
+                    )
+
+                    // --- DESKTOP: original flat row layout ---
+                    return (
+                      <React.Fragment key={meetup.id}>
+                        {idx > 0 && (
+                          <div style={{ height: '1px', background: 'linear-gradient(to right, transparent, #E8DDD0, transparent)', margin: '0 8px' }} />
+                        )}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '16px',
+                          padding: '14px 8px',
+                          transition: 'background-color 0.2s ease',
+                          cursor: 'pointer',
+                          position: 'relative',
+                          borderRadius: '12px',
+                          alignItems: 'center',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <EventDateBadge date={meetup.date} />
+
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
+                              ...(meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
+                            }}>
+                              {meetup.circle_id ? 'Circle' : 'Event'}
+                            </span>
+                            {isLive && (
+                              <span style={{
+                                fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                                letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px',
+                                background: '#FEF0EC', color: '#D45B3E',
+                                display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
+                              }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
+                                Live
+                              </span>
+                            )}
+                            {meetup.connection_groups?.name && (
+                              <>
+                                <span style={{ width: '1px', height: '14px', background: '#D4B896', flexShrink: 0 }} />
+                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#6B4632', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {meetup.connection_groups.name}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          <h4 style={{
+                            fontFamily: '"Lora", serif', fontSize: '20px', fontWeight: '600',
+                            color: '#523C2E', margin: 0, lineHeight: '20px', letterSpacing: '0.15px',
+                          }}>
+                            {meetup.topic || 'Community Event'}
+                          </h4>
+
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                              <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                              <span style={{ fontWeight: '600' }}>{formatTime(meetup.time)}</span>
+                            </div>
+                            {meetup.location && (
+                              <>
+                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                                  <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                  <span>{meetup.location}</span>
+                                </div>
+                              </>
+                            )}
+                            {!meetup.location && (
+                              <>
+                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                                  <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                  <span>Virtual · Video Call</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+
+                          {(() => {
+                            const meetupSignupsList = signups[meetup.id] || []
+                            const attendeeCount = meetupSignupsList.length
+                            const limit = meetup.participant_limit
+                            const spotsLeft = limit ? Math.max(0, limit - attendeeCount) : null
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                {attendeeCount > 0 && (
+                                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    {meetupSignupsList.slice(0, 3).map((signup, i) => (
+                                      <div key={signup.user_id || i} style={{
+                                        width: '34px', height: '34px', borderRadius: '50%',
+                                        border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                        color: '#523C2E',
+                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
+                                        boxShadow: '0px 1px 4px #9E7868', letterSpacing: '0.15px',
+                                      }}>
+                                        {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                      </div>
+                                    ))}
+                                    {attendeeCount > 3 && (
+                                      <div style={{
+                                        width: '34px', height: '34px', borderRadius: '50%',
+                                        border: '2px solid #FFFCF8', marginLeft: '-8px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                        color: '#764D31',
+                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 99.99%, rgba(241, 225, 213, 0.2) 100%)',
+                                        boxShadow: '0px 1px 4px #9E7868',
+                                      }}>
+                                        +{attendeeCount - 3}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <span style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
+                                  {attendeeCount} attendees
+                                  {spotsLeft !== null && spotsLeft > 0 && (
+                                    <span> · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left</span>
+                                  )}
+                                </span>
+                              </div>
+                            )
+                          })()}
+                        </div>
+
+                        <div style={{ flexShrink: 0 }}>
+                          {isSignedUp ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
+                              style={{
+                                background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                                padding: '10px 20px', borderRadius: '18px',
+                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '16px', fontWeight: '700',
+                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                                gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
+                              }}
+                            >
+                              <Video style={{ width: '18px', height: '18px', color: 'rgba(255, 246, 238, 0.85)' }} />
+                              Join
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSignUp(meetup.id) }}
+                              style={{
+                                background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                                padding: '10px 20px', borderRadius: '18px',
+                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '16px', fontWeight: '700',
+                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                                gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
+                              }}
+                            >
+                              Reserve spot &gt;
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      </React.Fragment>
                     )
                   })}
                 </div>
