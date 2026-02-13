@@ -1724,8 +1724,8 @@ function MainApp({ currentUser, onSignOut }) {
 
       return (
         <div style={{
-          minWidth: '72px',
-          padding: '18px 8px',
+          minWidth: isMobile ? '60px' : '72px',
+          padding: isMobile ? '14px 6px' : '18px 8px',
           backgroundColor: 'rgba(189, 173, 162, 0.65)',
           borderRadius: '8px',
           display: 'flex',
@@ -1736,19 +1736,19 @@ function MainApp({ currentUser, onSignOut }) {
         }}>
           <span style={{
             fontFamily: '"Lora", serif',
-            fontSize: '14px',
+            fontSize: isMobile ? '12px' : '14px',
             textTransform: 'uppercase',
             letterSpacing: '0.15px',
             color: '#605045',
             fontWeight: '500',
-            lineHeight: '33px',
+            lineHeight: isMobile ? '24px' : '33px',
           }}>{month}</span>
           <span style={{
             fontFamily: '"Lora", serif',
-            fontSize: '24px',
+            fontSize: isMobile ? '20px' : '24px',
             fontWeight: '500',
             color: '#605045',
-            lineHeight: '33px',
+            lineHeight: isMobile ? '24px' : '33px',
             letterSpacing: '0.15px',
           }}>{day}</span>
         </div>
@@ -1798,8 +1798,6 @@ function MainApp({ currentUser, onSignOut }) {
         fontFamily: '"Lora", serif',
         position: 'relative',
         padding: isMobile ? '16px 0' : '24px 0',
-        background: 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)',
-        minHeight: '100%',
       },
       titleSection: {
         display: 'flex',
@@ -1814,7 +1812,7 @@ function MainApp({ currentUser, onSignOut }) {
       },
       pageTitle: {
         fontFamily: '"Lora", serif',
-        fontSize: isMobile ? '28px' : '32px',
+        fontSize: isMobile ? '24px' : '32px',
         fontWeight: '500',
         color: '#584233',
         letterSpacing: '0.15px',
@@ -1823,7 +1821,7 @@ function MainApp({ currentUser, onSignOut }) {
       },
       tagline: {
         fontFamily: '"Lora", serif',
-        fontSize: '15px',
+        fontSize: isMobile ? '14px' : '15px',
         fontWeight: '500',
         margin: 0,
         marginTop: '6px',
@@ -1870,7 +1868,7 @@ function MainApp({ currentUser, onSignOut }) {
       },
       cardTitle: {
         fontFamily: '"Lora", serif',
-        fontSize: '24px',
+        fontSize: isMobile ? '20px' : '24px',
         fontWeight: '500',
         color: '#3F1906',
         margin: 0,
@@ -1878,7 +1876,7 @@ function MainApp({ currentUser, onSignOut }) {
       },
       seeAllBtn: {
         fontFamily: '"Lora", serif',
-        fontSize: '15px',
+        fontSize: isMobile ? '13px' : '15px',
         color: 'rgba(107, 86, 71, 0.77)',
         fontWeight: '500',
         background: 'transparent',
@@ -2017,7 +2015,7 @@ function MainApp({ currentUser, onSignOut }) {
         {nextMeeting && (
           <h2 style={{
             fontFamily: '"Lora", serif',
-            fontSize: '24px',
+            fontSize: isMobile ? '20px' : '24px',
             fontWeight: '500',
             color: '#3F1906',
             letterSpacing: '0.15px',
@@ -2044,12 +2042,12 @@ function MainApp({ currentUser, onSignOut }) {
               <div style={{ flex: 1 }}>
                 <h3 style={{
                   fontFamily: '"Lora", serif',
-                  fontSize: '24px',
+                  fontSize: isMobile ? '18px' : '24px',
                   fontWeight: '500',
                   color: '#3F1906',
                   margin: 0,
                   letterSpacing: '0.15px',
-                  lineHeight: '22px',
+                  lineHeight: isMobile ? '24px' : '22px',
                   marginBottom: '8px',
                 }}>
                   {nextMeeting.title || nextMeeting.topic || 'Meetup'} starts in {nextMeeting.minutesUntil}m
@@ -2077,7 +2075,7 @@ function MainApp({ currentUser, onSignOut }) {
                 color: '#F5EDE9',
                 fontFamily: '"Lora", serif',
                 fontStyle: 'italic',
-                fontSize: '20px',
+                fontSize: isMobile ? '16px' : '20px',
                 fontWeight: '700',
                 cursor: 'pointer',
                 display: 'inline-flex',
@@ -2101,7 +2099,7 @@ function MainApp({ currentUser, onSignOut }) {
               <div style={homeStyles.card}>
                 <h3 style={{
                   fontFamily: '"Lora", serif',
-                  fontSize: '20px',
+                  fontSize: isMobile ? '18px' : '20px',
                   fontWeight: '500',
                   color: '#3F1906',
                   margin: '0 0 16px 0',
@@ -2140,19 +2138,19 @@ function MainApp({ currentUser, onSignOut }) {
                             />
                           ) : (
                             <div style={{
-                              width: '64px', height: '64px', borderRadius: '50%',
+                              width: isMobile ? '48px' : '64px', height: isMobile ? '48px' : '64px', borderRadius: '50%',
                               background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
                               boxShadow: '0px 1px 4px #9E7868',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontFamily: '"Lora", serif', fontSize: '24px', fontWeight: '700', color: '#523C2E',
+                              fontFamily: '"Lora", serif', fontSize: isMobile ? '18px' : '24px', fontWeight: '700', color: '#523C2E',
                               marginRight: '12px', flexShrink: 0,
                             }}>
                               {(user.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
                             </div>
                           )}
                           <div>
-                            <h4 style={{ fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
-                            <p style={{ fontFamily: '"Lora", serif', fontSize: '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.career || 'Professional'}</p>
+                            <h4 style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
+                            <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.career || 'Professional'}</p>
                             {user.city && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
                             )}
@@ -2160,7 +2158,7 @@ function MainApp({ currentUser, onSignOut }) {
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '700', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
+                          <span style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '16px', fontWeight: '700', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
                           <button
                             onClick={() => handleShowInterest(request.id, user.name)}
                             style={{
@@ -2306,11 +2304,11 @@ function MainApp({ currentUser, onSignOut }) {
                           {/* Title */}
                           <h4 style={{
                             fontFamily: '"Lora", serif',
-                            fontSize: isMobile ? '18px' : '20px',
+                            fontSize: isMobile ? '16px' : '20px',
                             fontWeight: '600',
                             color: '#523C2E',
                             margin: 0,
-                            lineHeight: '20px',
+                            lineHeight: isMobile ? '22px' : '20px',
                             letterSpacing: '0.15px',
                           }}>
                             {meetup.topic || 'Community Event'}
@@ -2318,15 +2316,15 @@ function MainApp({ currentUser, onSignOut }) {
 
                           {/* Meta row: Time + Location */}
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
-                              <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '15px', color: '#523C2E' }}>
+                              <svg width={isMobile ? '15' : '18'} height={isMobile ? '15' : '18'} fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                               <span style={{ fontWeight: '600' }}>{formatTime(meetup.time)}</span>
                             </div>
                             {meetup.location && (
                               <>
                                 <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
-                                  <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '15px', color: '#523C2E' }}>
+                                  <svg width={isMobile ? '15' : '18'} height={isMobile ? '15' : '18'} fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
                                   <span>{meetup.location}</span>
                                 </div>
                               </>
@@ -2334,8 +2332,8 @@ function MainApp({ currentUser, onSignOut }) {
                             {!meetup.location && (
                               <>
                                 <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
-                                  <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '15px', color: '#523C2E' }}>
+                                  <svg width={isMobile ? '15' : '18'} height={isMobile ? '15' : '18'} fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
                                   <span>Virtual · Video Call</span>
                                 </div>
                               </>
@@ -2400,7 +2398,7 @@ function MainApp({ currentUser, onSignOut }) {
                                     )}
                                   </div>
                                 )}
-                                <span style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
+                                <span style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
                                   {attendeeCount} attendees
                                   {spotsLeft !== null && spotsLeft > 0 && (
                                     <span> · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left</span>
@@ -2420,11 +2418,11 @@ function MainApp({ currentUser, onSignOut }) {
                                 background: 'rgba(88, 66, 51, 0.9)',
                                 color: '#F5EDE9',
                                 border: 'none',
-                                padding: '10px 20px',
+                                padding: isMobile ? '8px 16px' : '10px 20px',
                                 borderRadius: '18px',
                                 fontFamily: '"Lora", serif',
                                 fontStyle: 'italic',
-                                fontSize: '16px',
+                                fontSize: isMobile ? '14px' : '16px',
                                 fontWeight: '700',
                                 cursor: 'pointer',
                                 display: 'inline-flex',
@@ -2453,11 +2451,11 @@ function MainApp({ currentUser, onSignOut }) {
                                 background: 'rgba(88, 66, 51, 0.9)',
                                 color: '#F5EDE9',
                                 border: 'none',
-                                padding: '10px 20px',
+                                padding: isMobile ? '8px 16px' : '10px 20px',
                                 borderRadius: '18px',
                                 fontFamily: '"Lora", serif',
                                 fontStyle: 'italic',
-                                fontSize: '16px',
+                                fontSize: isMobile ? '14px' : '16px',
                                 fontWeight: '700',
                                 cursor: 'pointer',
                                 display: 'inline-flex',
@@ -2493,13 +2491,13 @@ function MainApp({ currentUser, onSignOut }) {
             <div style={{ marginBottom: '16px' }}>
               <h3 style={{
                 fontFamily: '"Lora", serif',
-                fontSize: '24px',
+                fontSize: isMobile ? '20px' : '24px',
                 fontWeight: '500',
                 color: '#3F1906',
                 margin: '0 0 4px 0',
                 letterSpacing: '0.15px',
               }}>Suggested for you</h3>
-              <p style={{ fontFamily: '"Lora", serif', fontSize: '16px', color: '#584233', margin: 0, opacity: 0.74, letterSpacing: '0.15px' }}>Swipe for next actions</p>
+              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', color: '#584233', margin: 0, opacity: 0.74, letterSpacing: '0.15px' }}>Swipe for next actions</p>
             </div>
             {(() => {
               // Determine best actions based on user's networking progress
@@ -2658,11 +2656,11 @@ function MainApp({ currentUser, onSignOut }) {
                         color: '#F5EDE9',
                         border: 'none',
                         borderRadius: '18px',
-                        padding: '8px 20px',
+                        padding: isMobile ? '7px 16px' : '8px 20px',
                         fontFamily: '"Lora", serif',
                         fontStyle: 'italic',
                         fontWeight: '700',
-                        fontSize: '16px',
+                        fontSize: isMobile ? '14px' : '16px',
                         cursor: 'pointer',
                         letterSpacing: '0.15px',
                       }}>
@@ -3381,7 +3379,12 @@ function MainApp({ currentUser, onSignOut }) {
       </header>
 
       {/* Main Content */}
-      <div className="max-w-4xl mx-auto p-4 md:p-6">
+      <div
+        className={`max-w-4xl mx-auto p-4 md:p-6 ${currentView === 'home' ? 'md:rounded-3xl md:mt-2' : ''}`}
+        style={currentView === 'home' ? {
+          background: 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)',
+        } : undefined}
+      >
         {currentView === 'home' && <HomeView />}
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
