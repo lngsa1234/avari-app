@@ -2407,11 +2407,10 @@ function MainApp({ currentUser, onSignOut }) {
                       isLive = false
                     }
 
-                    // --- MOBILE: compact row layout ---
+                    // --- MOBILE: compact row layout (mirrors desktop: DateBadge | Content | Button) ---
                     if (isMobile) return (
                       <div
                         key={meetup.id}
-                        onClick={() => isSignedUp ? handleJoinVideoCall(meetup) : handleSignUp(meetup.id)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -2475,6 +2474,37 @@ function MainApp({ currentUser, onSignOut }) {
                               </div>
                             )
                           })()}
+                        </div>
+
+                        <div style={{ flexShrink: 0 }}>
+                          {isSignedUp ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
+                              style={{
+                                background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                                padding: '8px 14px', borderRadius: '14px',
+                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '13px', fontWeight: '700',
+                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                                gap: '5px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
+                              }}
+                            >
+                              <Video style={{ width: '14px', height: '14px', color: 'rgba(255, 246, 238, 0.85)' }} />
+                              Join
+                            </button>
+                          ) : (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleSignUp(meetup.id) }}
+                              style={{
+                                background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                                padding: '8px 14px', borderRadius: '14px',
+                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '13px', fontWeight: '700',
+                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                                gap: '5px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
+                              }}
+                            >
+                              Reserve &gt;
+                            </button>
+                          )}
                         </div>
                       </div>
                     )
