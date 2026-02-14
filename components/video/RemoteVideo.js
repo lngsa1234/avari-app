@@ -101,7 +101,10 @@ const RemoteVideo = memo(function RemoteVideo({
   }, [videoTrack, isVideoEnabled, providerType, participant.uid, participant._lastUpdate]);
 
   // Handle audio track attachment
+  // For WebRTC, audio plays from the <video> element (not muted), so skip separate <audio> attachment
   useEffect(() => {
+    if (providerType === 'webrtc') return;
+
     const audioElement = audioRef.current;
     const track = audioTrack;
 
@@ -205,6 +208,7 @@ const RemoteVideo = memo(function RemoteVideo({
     prevProps.participant.videoTrack === nextProps.participant.videoTrack &&
     prevProps.participant.audioTrack === nextProps.participant.audioTrack &&
     prevProps.participant.connectionQuality === nextProps.participant.connectionQuality &&
+    prevProps.participant._lastUpdate === nextProps.participant._lastUpdate &&
     prevProps.size === nextProps.size &&
     prevProps.providerType === nextProps.providerType
   );

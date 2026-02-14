@@ -399,7 +399,7 @@ export default function ControlBar({
     });
   }
 
-  if (features.topics) {
+  if (features.topics || features.icebreakers) {
     moreMenuItems.push({
       icon: <TopicsIcon />,
       label: 'Icebreaker Topics',

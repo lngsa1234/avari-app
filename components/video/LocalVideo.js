@@ -39,12 +39,50 @@ const LocalVideo = forwardRef(function LocalVideo({
   isBlurSupported = false,
   isBlurLoading = false,
   onToggleBlur,
+  blurCanvas = null, // Canvas element from useBackgroundBlur for overlay
 }, ref) {
   const videoRef = useRef(null);
+  const blurContainerRef = useRef(null);
   const attachedTrackRef = useRef(null);
 
   // Expose video ref via forwardRef
   useImperativeHandle(ref, () => videoRef.current, []);
+
+  // Manage blur canvas overlay — attaches/detaches automatically with component lifecycle
+  useEffect(() => {
+    const container = blurContainerRef.current;
+    if (!container || !blurCanvas || isVideoOff) {
+      // Remove canvas if it was in this container
+      if (blurCanvas && blurCanvas.parentElement === container) {
+        container?.removeChild(blurCanvas);
+      }
+      return;
+    }
+
+    // Move canvas to this container (remove from old parent if needed)
+    if (blurCanvas.parentElement && blurCanvas.parentElement !== container) {
+      blurCanvas.parentElement.removeChild(blurCanvas);
+    }
+
+    if (blurCanvas.parentElement !== container) {
+      blurCanvas.style.cssText = `
+        position: absolute; top: 0; left: 0;
+        width: 100%; height: 100%;
+        object-fit: cover;
+        z-index: 10; pointer-events: none;
+        border-radius: inherit;
+        transform: scaleX(-1);
+      `;
+      container.appendChild(blurCanvas);
+    }
+
+    return () => {
+      // Remove canvas when component unmounts
+      if (blurCanvas.parentElement === container) {
+        container.removeChild(blurCanvas);
+      }
+    };
+  }, [blurCanvas, isVideoOff]);
 
   // Attach/detach track
   useEffect(() => {
@@ -116,7 +154,7 @@ const LocalVideo = forwardRef(function LocalVideo({
           />
         ) : (
           // Other providers: use video element directly
-          <div className="absolute inset-0 overflow-hidden rounded-lg">
+          <div ref={blurContainerRef} className="absolute inset-0 overflow-hidden rounded-lg">
             <video
               ref={videoRef}
               autoPlay

@@ -56,12 +56,9 @@ export function useBackgroundBlur(provider = 'webrtc') {
       console.log('[BackgroundBlur] Using dimensions from track:', w, 'x', h);
 
       // Output canvas — same resolution as camera
-      // Hidden until first segmentation result to avoid showing un-blurred passthrough
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
-      canvas.style.opacity = '0';
-      canvas.style.transition = 'opacity 0.15s ease-in';
       const ctx = canvas.getContext('2d');
 
       // Offscreen canvases
@@ -91,9 +88,15 @@ export function useBackgroundBlur(provider = 'webrtc') {
       // Start passthrough immediately so canvas has content from frame 0
       ctx.drawImage(video, 0, 0, w, h);
 
-      // Capture canvas as a stream NOW (before segmentation loads)
-      const blurredStream = canvas.captureStream(30); // 30fps for peer connection
-      const blurredTrack = blurredStream.getVideoTracks()[0];
+      // Capture canvas as a stream for peer connection (may not work on Safari)
+      let blurredStream = null;
+      let blurredTrack = null;
+      try {
+        blurredStream = canvas.captureStream(30);
+        blurredTrack = blurredStream.getVideoTracks()[0];
+      } catch (e) {
+        console.warn('[BackgroundBlur] captureStream not supported, blur is local-only:', e.message);
+      }
 
       // Load MediaPipe
       const { SelfieSegmentation } = await import('@mediapipe/selfie_segmentation');
@@ -126,11 +129,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(blurCanvas, 0, 0, w, h);
         ctx.drawImage(maskCanvas, 0, 0, w, h);
-        if (!hasSegResult) {
-          // First result — reveal the canvas overlay now that it has blurred content
-          canvas.style.opacity = '1';
-          hasSegResult = true;
-        }
+        hasSegResult = true;
       });
 
       segmenterRef.current = seg;

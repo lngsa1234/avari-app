@@ -37,6 +37,7 @@ export default function VideoSpeakerView({
   isBlurSupported = false,
   isBlurLoading = false,
   onToggleBlur,
+  blurCanvas = null,
 
   // For 2-person PiP swap
   isLocalMain = false,
@@ -78,6 +79,7 @@ export default function VideoSpeakerView({
               isBlurSupported={isBlurSupported}
               isBlurLoading={isBlurLoading}
               onToggleBlur={onToggleBlur}
+              blurCanvas={blurCanvas}
             />
           </div>
 
@@ -116,6 +118,7 @@ export default function VideoSpeakerView({
           isBlurSupported={isBlurSupported}
           isBlurLoading={isBlurLoading}
           onToggleBlur={onToggleBlur}
+          blurCanvas={blurCanvas}
         />
       </div>
     );
@@ -140,6 +143,7 @@ export default function VideoSpeakerView({
             isBlurSupported={isBlurSupported}
             isBlurLoading={isBlurLoading}
             onToggleBlur={onToggleBlur}
+            blurCanvas={blurCanvas}
           />
         ) : (
           <RemoteVideo
@@ -170,6 +174,7 @@ export default function VideoSpeakerView({
               userName={userName}
               size="thumbnail"
               accentColor={accentColor}
+              blurCanvas={blurCanvas}
             />
           )}
         </div>
@@ -193,6 +198,7 @@ export default function VideoSpeakerView({
             userName={userName}
             size="thumbnail"
             accentColor={accentColor}
+            blurCanvas={blurCanvas}
           />
         </div>
 

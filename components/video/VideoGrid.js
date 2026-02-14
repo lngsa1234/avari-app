@@ -33,6 +33,7 @@ export default function VideoGrid({
   isBlurSupported = false,
   isBlurLoading = false,
   onToggleBlur,
+  blurCanvas = null,
 
   // UI
   showSidebar = false,
@@ -88,6 +89,7 @@ export default function VideoGrid({
               isBlurSupported={isBlurSupported}
               isBlurLoading={isBlurLoading}
               onToggleBlur={onToggleBlur}
+              blurCanvas={blurCanvas}
             />
           </div>
 
@@ -127,6 +129,7 @@ export default function VideoGrid({
         isBlurSupported={isBlurSupported}
         isBlurLoading={isBlurLoading}
         onToggleBlur={onToggleBlur}
+        blurCanvas={blurCanvas}
       />
 
       {/* Remote Videos */}

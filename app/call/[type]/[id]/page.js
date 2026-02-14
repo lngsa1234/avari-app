@@ -127,6 +127,7 @@ export default function UnifiedCallPage() {
   // Provider-specific refs
   const roomRef = useRef(null); // LiveKit room
   const peerConnectionRef = useRef(null); // WebRTC
+  const iceCandidateQueueRef = useRef([]); // Buffer ICE candidates until remote description is set
   const realtimeChannelRef = useRef(null); // Supabase channel
   const agoraClientRef = useRef(null); // Agora client (camera/audio)
   const agoraScreenClientRef = useRef(null); // Agora screen share client (separate to allow simultaneous camera+screen)
@@ -150,8 +151,8 @@ export default function UnifiedCallPage() {
     blurResult: blurResultRef,
   } = useBackgroundBlur(config?.provider || 'webrtc');
 
-  // Store the original MediaStream for restoring after blur disable
-  const originalStreamRef = useRef(null);
+  // Store blur canvas in state so React re-renders when it changes
+  const [blurCanvasEl, setBlurCanvasEl] = useState(null);
 
   // Device selection hook
   const {
@@ -432,12 +433,12 @@ export default function UnifiedCallPage() {
     };
   }, [roomId, user]);
 
-  // Load icebreakers for meetup calls
+  // Load icebreakers for calls with icebreakers feature enabled
   useEffect(() => {
-    if (callType === 'meetup' && roomId && config?.features.topics) {
+    if (roomId && config?.features.icebreakers) {
       loadIcebreakers();
     }
-  }, [callType, roomId, config?.features.topics]);
+  }, [callType, roomId, config?.features.icebreakers]);
 
   // Load icebreakers from API
   const loadIcebreakers = async () => {
@@ -460,7 +461,7 @@ export default function UnifiedCallPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meetupId: roomId,
-          title: relatedData?.topic || relatedData?.name || 'Networking Meetup',
+          title: relatedData?.topic || relatedData?.name || (callType === 'coffee' ? '1:1 Coffee Chat' : 'Networking Meetup'),
           description: relatedData?.description || '',
           attendees: roomParticipants?.map(p => ({
             career: p.career,
@@ -622,17 +623,32 @@ export default function UnifiedCallPage() {
       pc.addTrack(track, stream);
     });
 
+    // Collect remote tracks — ontrack fires once per track (audio + video)
+    const remoteTracks = { video: null, audio: null };
     pc.ontrack = (event) => {
-      if (event.streams[0]) {
-        setRemoteParticipants([{
-          id: 'remote',
-          name: relatedData?.partner_name || 'Partner',
-          videoTrack: event.streams[0].getVideoTracks()[0],
-          audioTrack: event.streams[0].getAudioTracks()[0],
-          hasVideo: event.streams[0].getVideoTracks().length > 0,
-          hasAudio: event.streams[0].getAudioTracks().length > 0,
-        }]);
+      console.log('[WebRTC] ontrack fired, track kind:', event.track.kind);
+      if (event.track.kind === 'video') {
+        remoteTracks.video = event.streams[0] || new MediaStream([event.track]);
+      } else if (event.track.kind === 'audio') {
+        remoteTracks.audio = event.streams[0] || new MediaStream([event.track]);
       }
+      setRemoteParticipants([{
+        id: 'remote',
+        name: relatedData?.partner_name || 'Partner',
+        videoTrack: remoteTracks.video,
+        audioTrack: remoteTracks.audio,
+        hasVideo: !!remoteTracks.video,
+        hasAudio: !!remoteTracks.audio,
+        _lastUpdate: Date.now(),
+      }]);
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log('[WebRTC] Connection state:', pc.connectionState);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('[WebRTC] ICE state:', pc.iceConnectionState);
     };
 
     pc.onicecandidate = (event) => {
@@ -645,18 +661,36 @@ export default function UnifiedCallPage() {
       }
     };
 
-    // Setup signaling channel
+    // Setup signaling channel with presence to determine polite/impolite peer
     const channel = supabase.channel(`meeting:${roomId}`, {
-      config: { broadcast: { self: false } }
+      config: { broadcast: { self: false }, presence: { key: user?.id || 'anon' } }
     });
+
+    let isPolite = false; // impolite by default; second joiner becomes polite
 
     channel
       .on('broadcast', { event: 'signal' }, ({ payload }) => {
-        handleWebRTCSignal(payload, pc);
+        handleWebRTCSignal(payload, pc, isPolite);
+      })
+      .on('presence', { event: 'join' }, ({ newPresences }) => {
+        // Someone else joined — they'll be polite, we create the offer
+        console.log('[WebRTC] Peer joined, creating offer');
+        createWebRTCOffer(pc);
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          setTimeout(() => createWebRTCOffer(pc), 1000);
+          // Track presence
+          await channel.track({ user_id: user?.id, joined_at: Date.now() });
+          // Check if someone else is already here
+          const presenceState = channel.presenceState();
+          const otherPeers = Object.keys(presenceState).filter(k => k !== (user?.id || 'anon'));
+          if (otherPeers.length > 0) {
+            // We're the second joiner — be polite and wait for their offer
+            isPolite = true;
+            console.log('[WebRTC] Peer already present, waiting as polite peer');
+          } else {
+            console.log('[WebRTC] First in room, waiting for peer to join');
+          }
         }
       });
 
@@ -913,12 +947,35 @@ export default function UnifiedCallPage() {
   };
 
   // WebRTC signaling handlers
-  const handleWebRTCSignal = async (signal, pc) => {
+  // Flush queued ICE candidates after remote description is set
+  const flushIceCandidates = async (pc) => {
+    const queued = iceCandidateQueueRef.current;
+    iceCandidateQueueRef.current = [];
+    for (const candidate of queued) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn('[WebRTC] Queued ICE candidate error:', e.message);
+      }
+    }
+    if (queued.length > 0) console.log('[WebRTC] Flushed', queued.length, 'queued ICE candidates');
+  };
+
+  const handleWebRTCSignal = async (signal, pc, isPolite = false) => {
     try {
       switch (signal.type) {
-        case 'offer':
-          if (pc.signalingState !== 'stable') return;
+        case 'offer': {
+          const offerCollision = pc.signalingState !== 'stable';
+          if (offerCollision && !isPolite) {
+            console.log('[WebRTC] Impolite peer ignoring colliding offer');
+            return;
+          }
+          if (offerCollision) {
+            console.log('[WebRTC] Polite peer rolling back to accept offer');
+            await pc.setLocalDescription({ type: 'rollback' });
+          }
           await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+          await flushIceCandidates(pc);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           realtimeChannelRef.current?.send({
@@ -927,15 +984,26 @@ export default function UnifiedCallPage() {
             payload: { type: 'answer', answer: pc.localDescription }
           });
           break;
+        }
 
         case 'answer':
           if (pc.signalingState === 'have-local-offer') {
             await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+            await flushIceCandidates(pc);
           }
           break;
 
         case 'ice-candidate':
-          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          // Queue if remote description not yet set
+          if (!pc.remoteDescription || !pc.remoteDescription.type) {
+            iceCandidateQueueRef.current.push(signal.candidate);
+          } else {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+            } catch (e) {
+              console.warn('[WebRTC] ICE candidate error:', e.message);
+            }
+          }
           break;
       }
     } catch (error) {
@@ -945,6 +1013,8 @@ export default function UnifiedCallPage() {
 
   const createWebRTCOffer = async (pc) => {
     if (!pc || pc.signalingState !== 'stable') return;
+    // Don't re-offer if connection is already established
+    if (pc.connectionState === 'connected' || pc.connectionState === 'connecting') return;
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -991,50 +1061,26 @@ export default function UnifiedCallPage() {
 
         const result = blurResultRef?.current;
         if (result) {
-          // Overlay the canvas on top of the video element (no srcObject change)
-          const videoEl = localVideoRef.current;
-          if (videoEl) {
-            const container = videoEl.parentElement;
-            const overlayCanvas = result.canvas;
-            // Preserve opacity/transition set by the hook (hidden until first blur result)
-            const currentOpacity = overlayCanvas.style.opacity;
-            const currentTransition = overlayCanvas.style.transition;
-            overlayCanvas.style.cssText = `
-              position: absolute; top: 0; left: 0;
-              width: 100%; height: 100%;
-              object-fit: cover;
-              z-index: 10; pointer-events: none;
-              border-radius: inherit;
-              opacity: ${currentOpacity || '0'};
-              transition: ${currentTransition || 'opacity 0.15s ease-in'};
-            `;
-            container.style.position = 'relative';
-            container.appendChild(overlayCanvas);
-            originalStreamRef.current = overlayCanvas; // store canvas ref for removal
-          }
+          // Store canvas in state so React passes it as a prop
+          setBlurCanvasEl(result.canvas);
 
-          // Send blurred track to remote peer
-          if (peerConnectionRef.current && result.blurredTrack) {
+          // Send blurred track to remote peer (skip on Safari — captureStream not reliable)
+          if (peerConnectionRef.current && result.blurredTrack && !isSafari) {
             const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
             if (sender) await sender.replaceTrack(result.blurredTrack);
           }
         }
       } else {
-        // DISABLE blur — remove canvas overlay, restore peer connection track
-        const overlayCanvas = originalStreamRef.current;
-        if (overlayCanvas && overlayCanvas.parentElement) {
-          overlayCanvas.parentElement.removeChild(overlayCanvas);
-        }
-
+        // DISABLE blur
+        setBlurCanvasEl(null);
         await toggleBlurHook(localVideoTrack);
 
-        // Restore original track in peer connection
-        if (peerConnectionRef.current && localVideoTrack instanceof MediaStream) {
+        // Restore original track in peer connection (skip on Safari — wasn't replaced)
+        if (peerConnectionRef.current && localVideoTrack instanceof MediaStream && !isSafari) {
           const origTrack = localVideoTrack.getVideoTracks()[0];
           const sender = peerConnectionRef.current.getSenders().find(s => s.track?.kind === 'video');
           if (sender && origTrack) await sender.replaceTrack(origTrack);
         }
-        originalStreamRef.current = null;
       }
     } else {
       // LiveKit / Agora — existing behavior
@@ -1733,6 +1779,7 @@ export default function UnifiedCallPage() {
             isBlurSupported={isBlurSupported}
             isBlurLoading={blurLoading}
             onToggleBlur={handleToggleBlur}
+            blurCanvas={blurCanvasEl}
           />
         ) : (
           <VideoSpeakerView
@@ -1754,6 +1801,7 @@ export default function UnifiedCallPage() {
             isBlurSupported={isBlurSupported}
             isBlurLoading={blurLoading}
             onToggleBlur={handleToggleBlur}
+            blurCanvas={blurCanvasEl}
           />
         )}
 
