@@ -1836,71 +1836,51 @@ function MainApp({ currentUser, onSignOut }) {
       let dayLabel
       let isHighlight = false
       if (diffDays === 0) {
-        dayLabel = 'Today'
+        dayLabel = 'TODAY'
         isHighlight = true
       } else if (diffDays === 1) {
-        dayLabel = 'Tomorrow'
+        dayLabel = 'TOMOR'
         isHighlight = true
       } else {
-        dayLabel = parsedDate.toLocaleDateString('en-US', { weekday: 'long' })
+        const weekday = parsedDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+        dayLabel = weekday
       }
 
       return (
         <div style={{
-          minWidth: isMobile ? 'auto' : '72px',
-          padding: isMobile ? '0' : '18px 8px',
-          backgroundColor: isMobile ? 'transparent' : isHighlight ? 'rgba(168, 132, 98, 0.75)' : 'rgba(189, 173, 162, 0.65)',
-          borderRadius: isMobile ? '0' : '8px',
+          minWidth: isMobile ? '56px' : '72px',
+          padding: isMobile ? '10px 6px' : '18px 8px',
+          backgroundColor: isHighlight ? 'rgba(168, 132, 98, 0.75)' : 'rgba(189, 173, 162, 0.65)',
+          borderRadius: '8px',
           display: 'flex',
-          flexDirection: isMobile ? 'row' : 'column',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: isMobile ? '6px' : '0px',
           flexShrink: 0,
         }}>
-          {isMobile ? (
-            <>
-              <span style={{
-                fontFamily: '"Lora", serif',
-                fontSize: '13px',
-                fontWeight: '600',
-                color: isHighlight ? '#5C3A24' : '#605045',
-                lineHeight: '24px',
-              }}>{dayLabel}</span>
-              <span style={{
-                fontFamily: '"Lora", serif',
-                fontSize: '12px',
-                color: '#9B8A7E',
-                lineHeight: '24px',
-              }}>{month} {day}</span>
-            </>
-          ) : (
-            <>
-              <span style={{
-                fontFamily: '"Lora", serif',
-                fontSize: '11px',
-                fontWeight: '600',
-                color: isHighlight ? '#FFF' : '#605045',
-                letterSpacing: '0.5px',
-                textTransform: 'uppercase',
-              }}>{dayLabel}</span>
-              <span style={{
-                fontFamily: '"Lora", serif',
-                fontSize: '24px',
-                fontWeight: '500',
-                color: isHighlight ? '#FFF' : '#605045',
-                lineHeight: '33px',
-                letterSpacing: '0.15px',
-              }}>{day}</span>
-              <span style={{
-                fontFamily: '"Lora", serif',
-                fontSize: '12px',
-                fontWeight: '500',
-                color: isHighlight ? 'rgba(255,255,255,0.8)' : '#9B8A7E',
-                marginTop: '2px',
-              }}>{month}</span>
-            </>
-          )}
+          <span style={{
+            fontFamily: '"Lora", serif',
+            fontSize: isMobile ? '9px' : '11px',
+            fontWeight: '600',
+            color: isHighlight ? '#FFF' : '#605045',
+            letterSpacing: '0.5px',
+            textTransform: 'uppercase',
+          }}>{dayLabel}</span>
+          <span style={{
+            fontFamily: '"Lora", serif',
+            fontSize: isMobile ? '20px' : '24px',
+            fontWeight: '500',
+            color: isHighlight ? '#FFF' : '#605045',
+            lineHeight: isMobile ? '26px' : '33px',
+            letterSpacing: '0.15px',
+          }}>{day}</span>
+          <span style={{
+            fontFamily: '"Lora", serif',
+            fontSize: isMobile ? '10px' : '12px',
+            fontWeight: '500',
+            color: isHighlight ? 'rgba(255,255,255,0.8)' : '#9B8A7E',
+            marginTop: '2px',
+          }}>{month}</span>
         </div>
       )
     }
