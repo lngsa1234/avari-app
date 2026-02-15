@@ -88,7 +88,7 @@ export function useCallRoom(callType, roomId) {
           if (meetupId) {
             const { data: meetupData } = await supabase
               .from('meetups')
-              .select('id, topic, date, time, location, host_id')
+              .select('id, topic, date, time, location, created_by')
               .eq('id', meetupId)
               .single();
 

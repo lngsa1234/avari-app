@@ -2541,7 +2541,7 @@ function MainApp({ currentUser, onSignOut }) {
                     return (
                       <React.Fragment key={meetup.id}>
                         {idx > 0 && (
-                          <div style={{ height: '1px', background: 'linear-gradient(to right, transparent, #E8DDD0, transparent)', margin: '0 8px' }} />
+                          <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.25)', margin: '0 8px' }} />
                         )}
                       <div
                         style={{

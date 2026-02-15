@@ -57,6 +57,7 @@ export default function TranscriptOverlay({
         style={{
           background: 'rgba(0, 0, 0, 0.7)',
           backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
         }}
       >
         {line1 && (

@@ -1284,6 +1284,7 @@ const styles = {
     boxShadow: '0 4px 24px rgba(139, 111, 92, 0.08)',
     border: '1px solid rgba(139, 111, 92, 0.08)',
     backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
     display: 'flex',
     flexDirection: 'column',
     animation: 'fadeInUp 0.6s ease-out forwards',
@@ -1927,6 +1928,7 @@ const styles = {
     padding: '24px',
     zIndex: 1000,
     backdropFilter: 'blur(4px)',
+    WebkitBackdropFilter: 'blur(4px)',
   },
   modal: {
     backgroundColor: '#FDF8F3',

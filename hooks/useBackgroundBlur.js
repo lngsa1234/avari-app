@@ -22,6 +22,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
   const animationFrameRef = useRef(null);
   const videoTrackRef = useRef(null); // Store video track reference for cleanup
   const extensionRef = useRef(null); // Store Agora extension to reuse
+  const agoraProcessorReadyRef = useRef(null); // Pre-initialized Agora processor
   const originalTrackRef = useRef(null); // Store original WebRTC track for restore
   const blurActiveRef = useRef(false); // Ref to avoid stale closure in animation loop
   const blurResultRef = useRef(null); // Store WebRTC blur result for caller
@@ -41,6 +42,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
    * Returns { blurredStream, blurredTrack } or false on failure.
    */
   const initWebRTCBlur = useCallback(async (mediaStream) => {
+    let domVideo = null; // Track DOM-attached video for cleanup on error
     try {
       setIsLoading(true);
       setError(null);
@@ -55,13 +57,15 @@ export function useBackgroundBlur(provider = 'webrtc') {
       const h = settings.height || 720;
       console.log('[BackgroundBlur] Using dimensions from track:', w, 'x', h);
 
-      // Output canvas — same resolution as camera
+      // Output canvas — must be in DOM for Safari captureStream compatibility
       const canvas = document.createElement('canvas');
       canvas.width = w;
       canvas.height = h;
+      canvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1';
+      document.body.appendChild(canvas);
       const ctx = canvas.getContext('2d');
 
-      // Offscreen canvases
+      // Offscreen canvases (compositing only, not captured)
       const blurCanvas = document.createElement('canvas');
       blurCanvas.width = w;
       blurCanvas.height = h;
@@ -73,14 +77,27 @@ export function useBackgroundBlur(provider = 'webrtc') {
       const maskCtx = maskCanvas.getContext('2d');
 
       // Hidden video element feeding from the original camera track
+      // Safari requires the element to be in the DOM for reliable playback
       const video = document.createElement('video');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('autoplay', '');
+      video.muted = true;
       video.width = w;
       video.height = h;
+      video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1';
+      document.body.appendChild(video);
+      domVideo = video;
       video.srcObject = new MediaStream([origTrack]);
-      video.autoplay = true;
-      video.playsInline = true;
-      video.muted = true;
-      await video.play().catch(() => {});
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Video load timeout')), 5000);
+        video.onloadeddata = () => { clearTimeout(timeout); resolve(); };
+        video.play().catch((e) => { clearTimeout(timeout); reject(e); });
+      });
+
+      // Detect if ctx.filter actually works (not just exists)
+      blurCtx.filter = 'blur(1px)';
+      const supportsCtxFilter = blurCtx.filter === 'blur(1px)';
+      blurCtx.filter = 'none';
 
       canvasRef.current = { canvas, ctx, video, blurCanvas, blurCtx, maskCanvas, maskCtx };
       blurActiveRef.current = true;
@@ -88,44 +105,62 @@ export function useBackgroundBlur(provider = 'webrtc') {
       // Start passthrough immediately so canvas has content from frame 0
       ctx.drawImage(video, 0, 0, w, h);
 
-      // Capture canvas as a stream for peer connection (may not work on Safari)
+      // Capture canvas stream for peer connection
+      // Must use captureStream(30) — Safari does not support requestFrame()
       let blurredStream = null;
       let blurredTrack = null;
       try {
         blurredStream = canvas.captureStream(30);
         blurredTrack = blurredStream.getVideoTracks()[0];
       } catch (e) {
-        console.warn('[BackgroundBlur] captureStream not supported, blur is local-only:', e.message);
+        console.warn('[BackgroundBlur] captureStream failed:', e.message);
       }
 
-      // Load MediaPipe
+      // Load MediaPipe — selfieMode:false avoids flipping results.image
       const { SelfieSegmentation } = await import('@mediapipe/selfie_segmentation');
       const seg = new SelfieSegmentation({
         locateFile: (file) =>
           `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
       });
-      seg.setOptions({ modelSelection: 1, selfieMode: true });
+      seg.setOptions({ modelSelection: 1, selfieMode: false });
 
       let hasSegResult = false;
 
-      // Compositing happens in onResults — uses results.image for perfect sync
       seg.onResults((results) => {
         const src = results.image;
         const mask = results.segmentationMask;
 
         // Blurred background
-        blurCtx.filter = 'blur(14px)';
-        blurCtx.drawImage(src, 0, 0, w, h);
-        blurCtx.filter = 'none';
+        if (supportsCtxFilter) {
+          blurCtx.filter = 'blur(20px)';
+          blurCtx.drawImage(src, 0, 0, w, h);
+          blurCtx.filter = 'none';
+        } else {
+          // Safari fallback: 3x scale-down/up for strong blur approximation
+          blurCtx.imageSmoothingEnabled = true;
+          blurCtx.imageSmoothingQuality = 'high';
+          const sw1 = Math.max(1, Math.round(w / 32));
+          const sh1 = Math.max(1, Math.round(h / 32));
+          blurCtx.drawImage(src, 0, 0, sw1, sh1);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw1, sh1, 0, 0, w, h);
+          const sw2 = Math.max(1, Math.round(w / 16));
+          const sh2 = Math.max(1, Math.round(h / 16));
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2, 0, 0, w, h);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2, 0, 0, w, h);
+        }
 
-        // Sharp person via mask
+        // Sharp person via mask — triple-apply to sharpen soft edges
         maskCtx.clearRect(0, 0, w, h);
         maskCtx.drawImage(src, 0, 0, w, h);
         maskCtx.globalCompositeOperation = 'destination-in';
         maskCtx.drawImage(mask, 0, 0, w, h);
+        maskCtx.drawImage(mask, 0, 0, w, h);
+        maskCtx.drawImage(mask, 0, 0, w, h);
         maskCtx.globalCompositeOperation = 'source-over';
 
-        // Final composite on output canvas
+        // Final composite
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(blurCanvas, 0, 0, w, h);
         ctx.drawImage(maskCanvas, 0, 0, w, h);
@@ -134,20 +169,15 @@ export function useBackgroundBlur(provider = 'webrtc') {
 
       segmenterRef.current = seg;
 
-      // Unified render loop — always produces frames, sends to segmenter when free
+      // Render loop — draws passthrough until segmenter produces results
       let sending = false;
       const tick = () => {
         if (!blurActiveRef.current) return;
 
         if (video.readyState >= 2) {
-          // If no segmentation result yet, draw passthrough
           if (!hasSegResult) {
             ctx.drawImage(video, 0, 0, w, h);
           }
-          // onResults already drew the composited frame when hasSegResult is true
-
-          // Request a new frame on the captured stream
-          // Send to segmenter (non-blocking)
           if (!sending) {
             sending = true;
             seg.send({ image: video }).then(() => { sending = false; }).catch(() => { sending = false; });
@@ -161,16 +191,55 @@ export function useBackgroundBlur(provider = 'webrtc') {
       processorRef.current = { video, blurredTrack, blurredStream, canvas };
       console.log('[BackgroundBlur] WebRTC blur enabled');
 
-      // Return canvas (for overlay), stream/track (for peer connection)
       return { canvas, blurredStream, blurredTrack };
     } catch (err) {
       console.error('[BackgroundBlur] WebRTC blur init error:', err);
       setError(err.message);
+      // Clean up DOM-attached video on failure
+      if (domVideo?.parentElement) {
+        domVideo.srcObject = null;
+        domVideo.parentElement.removeChild(domVideo);
+      }
+      blurActiveRef.current = false;
       return false;
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  /**
+   * Pre-load the Agora virtual background extension and processor.
+   * Call this during Agora call initialization so the heavy WASM download
+   * and compilation happen in the background, not when the user clicks blur.
+   */
+  const preloadAgoraBlur = useCallback(async () => {
+    if (provider !== 'agora') return;
+    if (agoraProcessorReadyRef.current) return; // Already preloaded
+
+    try {
+      console.log('[BackgroundBlur] Pre-loading Agora virtual background...');
+      const VirtualBackgroundExtension = (await import('agora-extension-virtual-background')).default;
+      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+
+      if (!extensionRef.current) {
+        extensionRef.current = new VirtualBackgroundExtension();
+        try {
+          AgoraRTC.registerExtensions([extensionRef.current]);
+          console.log('[BackgroundBlur] Extension registered (preload)');
+        } catch (e) {
+          console.log('[BackgroundBlur] Extension registration (preload):', e.message);
+        }
+      }
+
+      // Create and init processor ahead of time (downloads WASM model)
+      const processor = extensionRef.current.createProcessor();
+      await processor.init();
+      agoraProcessorReadyRef.current = processor;
+      console.log('[BackgroundBlur] Agora processor pre-loaded and ready');
+    } catch (err) {
+      console.warn('[BackgroundBlur] Pre-load failed (will retry on toggle):', err.message);
+    }
+  }, [provider]);
 
   /**
    * Initialize Agora virtual background
@@ -211,24 +280,29 @@ export function useBackgroundBlur(provider = 'webrtc') {
       processorRef.current = null;
       console.log('[BackgroundBlur] Cleanup complete');
 
-      // Dynamically import Agora extension
-      const VirtualBackgroundExtension = (await import('agora-extension-virtual-background')).default;
-      const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
+      // Use pre-loaded processor if available, otherwise load on demand
+      let processor = agoraProcessorReadyRef.current;
+      if (processor) {
+        console.log('[BackgroundBlur] Using pre-loaded processor');
+        agoraProcessorReadyRef.current = null; // Consume it
+      } else {
+        console.log('[BackgroundBlur] Processor not pre-loaded, loading now...');
+        const VirtualBackgroundExtension = (await import('agora-extension-virtual-background')).default;
+        const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
 
-      // Reuse existing extension or create new one
-      if (!extensionRef.current) {
-        extensionRef.current = new VirtualBackgroundExtension();
-        try {
-          AgoraRTC.registerExtensions([extensionRef.current]);
-          console.log('[BackgroundBlur] Extension registered');
-        } catch (e) {
-          console.log('[BackgroundBlur] Extension registration:', e.message);
+        if (!extensionRef.current) {
+          extensionRef.current = new VirtualBackgroundExtension();
+          try {
+            AgoraRTC.registerExtensions([extensionRef.current]);
+            console.log('[BackgroundBlur] Extension registered');
+          } catch (e) {
+            console.log('[BackgroundBlur] Extension registration:', e.message);
+          }
         }
-      }
 
-      // Create and initialize processor
-      const processor = extensionRef.current.createProcessor();
-      await processor.init();
+        processor = extensionRef.current.createProcessor();
+        await processor.init();
+      }
 
       // Configure blur
       processor.setOptions({
@@ -402,6 +476,9 @@ export function useBackgroundBlur(provider = 'webrtc') {
           }
           if (processorRef.current?.video) {
             processorRef.current.video.srcObject = null;
+            if (processorRef.current.video.parentElement) {
+              processorRef.current.video.parentElement.removeChild(processorRef.current.video);
+            }
           }
           // originalTrackRef is still valid — caller uses it to restore
           processorRef.current = null;
@@ -457,6 +534,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
     disableBlur,
     toggleBlur,
     blurResult: blurResultRef,
+    preloadAgoraBlur,
   };
 }
 

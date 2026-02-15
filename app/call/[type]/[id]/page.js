@@ -149,6 +149,7 @@ export default function UnifiedCallPage() {
     isLoading: blurLoading,
     toggleBlur: toggleBlurHook,
     blurResult: blurResultRef,
+    preloadAgoraBlur,
   } = useBackgroundBlur(config?.provider || 'webrtc');
 
   // Store blur canvas in state so React re-renders when it changes
@@ -808,6 +809,9 @@ export default function UnifiedCallPage() {
     if (localVideoRef.current) {
       videoTrack.play(localVideoRef.current);
     }
+
+    // Pre-load blur processor in background so it's instant when user clicks
+    preloadAgoraBlur();
   };
 
   // Helper to get participant name from roomParticipants by UID

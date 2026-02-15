@@ -874,6 +874,7 @@ const styles = {
     borderTop: '1px solid rgba(139, 111, 92, 0.1)',
     zIndex: 10,
     backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
   },
   nextButton: {
     width: '100%',

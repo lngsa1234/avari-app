@@ -117,6 +117,7 @@ export default function NudgeBanner({ className = '' }) {
       boxShadow: '0 4px 24px rgba(139, 111, 92, 0.08)',
       border: '1px solid rgba(139, 111, 92, 0.15)',
       backdropFilter: 'blur(10px)',
+      WebkitBackdropFilter: 'blur(10px)',
     },
     iconWrapper: {
       width: '36px',

@@ -1276,6 +1276,7 @@ const styles = {
     backgroundColor: 'rgba(253, 248, 243, 0.95)',
     borderTop: `1px solid ${colors.border}`,
     backdropFilter: 'blur(10px)',
+    WebkitBackdropFilter: 'blur(10px)',
     zIndex: 10,
   },
   primaryButton: {

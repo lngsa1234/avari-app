@@ -386,6 +386,7 @@ const styles = {
     borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
     backgroundColor: 'rgba(253, 248, 243, 0.9)',
     backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
     position: 'sticky',
     top: 0,
     zIndex: 100,

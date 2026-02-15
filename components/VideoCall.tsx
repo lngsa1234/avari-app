@@ -141,7 +141,9 @@ export default function VideoCall({
     isBlurEnabled,
     isBlurSupported,
     isLoading: blurLoading,
-    toggleBlur
+    enableBlur,
+    disableBlur,
+    blurResult,
   } = useBackgroundBlur('webrtc');
 
   // Transcript callback for speech recognition
@@ -398,9 +400,14 @@ export default function VideoCall({
   const handleRemoteOffer = async (offer: RTCSessionDescriptionInit) => {
     try {
       console.log('[CircleW] Handling remote offer');
-      
+
       if (!peerConnectionRef.current) {
         initializePeerConnection();
+      }
+
+      // Always ensure local stream is ready before creating answer
+      // Fixes race condition where handleAnswer's getLocalStream is still pending
+      if (!localStreamRef.current) {
         await getLocalStream();
       }
 
@@ -471,12 +478,35 @@ export default function VideoCall({
     }
   };
 
-  // Toggle background blur
+  // Toggle background blur — swap track inline everywhere (like Agora's pipe pattern)
   const handleToggleBlur = async () => {
-    if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        await toggleBlur(videoTrack);
+    if (!localStreamRef.current) return;
+    const sender = peerConnectionRef.current?.getSenders().find(s => s.track?.kind === 'video');
+
+    if (isBlurEnabled) {
+      // DISABLE — restore tracks BEFORE stopping blurred track
+      const origTrack = localStreamRef.current.getVideoTracks()[0];
+      if (sender && origTrack) {
+        await sender.replaceTrack(origTrack);
+      }
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+      // Now safe to tear down (stops blurredTrack, releases segmenter)
+      await disableBlur(localStreamRef.current);
+    } else {
+      // ENABLE — create pipeline, then swap in everywhere
+      const success = await enableBlur(localStreamRef.current);
+      if (!success) return;
+
+      const blurredTrack = blurResult.current?.blurredTrack;
+      const blurredStream = blurResult.current?.blurredStream;
+
+      if (sender && blurredTrack) {
+        await sender.replaceTrack(blurredTrack);
+      }
+      if (localVideoRef.current && blurredStream) {
+        localVideoRef.current.srcObject = blurredStream;
       }
     }
   };
