@@ -1723,7 +1723,7 @@ export default function UnifiedCallPage() {
         background: 'linear-gradient(165deg, #1E1410 0%, #2D1E14 40%, #1A120E 100%)',
       }}
     >
-      {/* Agora global styles */}
+      {/* Agora global styles — cover for camera feeds, contain for screen shares */}
       {config.provider === 'agora' && (
         <style jsx global>{`
           [class*="agora_video"] video,
@@ -1731,6 +1731,11 @@ export default function UnifiedCallPage() {
             width: 100% !important;
             height: 100% !important;
             object-fit: cover !important;
+          }
+          [data-screen-share] [class*="agora_video"] video,
+          [data-screen-share] div[id*="video"] video,
+          [data-screen-share] video {
+            object-fit: contain !important;
           }
         `}</style>
       )}

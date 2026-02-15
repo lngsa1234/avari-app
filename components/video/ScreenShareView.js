@@ -37,9 +37,9 @@ export default function ScreenShareView({
         videoRef.current.srcObject = new MediaStream([screenTrack.mediaStreamTrack]);
       }
     } else if (providerType === 'agora') {
-      // Agora: screenTrack has play method
+      // Agora: screenTrack has play method — use contain so full screen is visible
       if (screenTrack.play) {
-        screenTrack.play(videoRef.current);
+        screenTrack.play(videoRef.current, { fit: 'contain' });
       }
     }
 
@@ -57,7 +57,7 @@ export default function ScreenShareView({
   if (!screenTrack) return null;
 
   return (
-    <div className="relative w-full h-full bg-stone-900 rounded-xl overflow-hidden">
+    <div className="relative w-full h-full bg-stone-900 rounded-xl overflow-hidden" data-screen-share>
       {/* Screen share video */}
       <video
         ref={videoRef}
