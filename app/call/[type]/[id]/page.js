@@ -1110,6 +1110,9 @@ export default function UnifiedCallPage() {
   showChatRef.current = showChat;
   userIdRef.current = user?.id || null;
 
+  // Detect screen share support (iOS browsers don't support getDisplayMedia)
+  const isScreenShareSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
+
   // Handle video device change
   const handleVideoDeviceChange = async (deviceId) => {
     setIsVideoDeviceSwitching(true);
@@ -1877,6 +1880,7 @@ export default function UnifiedCallPage() {
           isBlurLoading={blurLoading}
           isScreenSharing={isScreenSharing}
           isOtherSharing={!!remoteScreenTrack && !isScreenSharing}
+          isScreenShareSupported={isScreenShareSupported}
           screenSharerName={screenSharerName}
           isRecording={isRecording}
           recordingTime={recordingTime}

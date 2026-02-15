@@ -324,6 +324,7 @@ export default function ControlBar({
   isBlurLoading,
   isScreenSharing,
   isOtherSharing = false,
+  isScreenShareSupported = true,
   screenSharerName = '',
   isRecording,
   recordingTime,
@@ -478,8 +479,13 @@ export default function ControlBar({
             icon={<ScreenShareIcon active={isScreenSharing} />}
             active={isScreenSharing}
             onClick={onToggleScreenShare}
-            disabled={isOtherSharing}
-            tooltip={isScreenSharing ? 'Stop sharing' : isOtherSharing ? `${screenSharerName || 'Someone'} is sharing` : 'Share screen'}
+            disabled={!isScreenShareSupported || isOtherSharing}
+            tooltip={
+              !isScreenShareSupported ? 'Screen sharing is not supported on this device'
+              : isScreenSharing ? 'Stop sharing'
+              : isOtherSharing ? `${screenSharerName || 'Someone'} is sharing`
+              : 'Share screen'
+            }
           />
         )}
 
