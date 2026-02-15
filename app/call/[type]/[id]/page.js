@@ -1245,6 +1245,12 @@ export default function UnifiedCallPage() {
           return;
         }
 
+        // Check if screen sharing is supported
+        if (!navigator.mediaDevices?.getDisplayMedia) {
+          showToast('Screen sharing is not supported on this device');
+          return;
+        }
+
         // Start sharing
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: { cursor: 'always' },
