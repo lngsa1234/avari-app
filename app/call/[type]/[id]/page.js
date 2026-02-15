@@ -123,6 +123,7 @@ export default function UnifiedCallPage() {
   const handleToggleMuteRef = useRef(null);
   const handleToggleVideoRef = useRef(null);
   const showChatRef = useRef(false);
+  const userIdRef = useRef(null);
   // Ref to store latest roomParticipants for use in event handler closures
   const roomParticipantsRef = useRef([]);
 
@@ -402,7 +403,7 @@ export default function UnifiedCallPage() {
 
   // Load messages
   useEffect(() => {
-    if (!roomId || !user) return;
+    if (!roomId) return;
 
     const loadMessages = async () => {
       const { data } = await supabase
@@ -415,7 +416,7 @@ export default function UnifiedCallPage() {
     };
     loadMessages();
 
-    // Subscribe to new messages
+    // Subscribe to new messages — use refs to always read latest values
     const channel = supabase
       .channel(`call-messages-${roomId}`)
       .on('postgres_changes', {
@@ -424,12 +425,13 @@ export default function UnifiedCallPage() {
         table: 'call_messages',
         filter: `channel_name=eq.${roomId}`
       }, (payload) => {
+        const isNew = payload.new;
         setMessages(prev => {
-          if (prev.some(m => m.id === payload.new.id)) return prev;
-          return [...prev, payload.new];
+          if (prev.some(m => m.id === isNew.id)) return prev;
+          return [...prev, isNew];
         });
-        // Increment unread if chat panel is closed
-        if (!showChatRef.current) {
+        // Increment unread if chat panel is closed and message is from someone else
+        if (!showChatRef.current && isNew.user_id !== userIdRef.current) {
           setUnreadCount(prev => prev + 1);
         }
       })
@@ -438,7 +440,7 @@ export default function UnifiedCallPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [roomId, user]);
+  }, [roomId]);
 
   // Load icebreakers for calls with icebreakers feature enabled
   useEffect(() => {
@@ -1102,6 +1104,7 @@ export default function UnifiedCallPage() {
   handleToggleMuteRef.current = handleToggleMute;
   handleToggleVideoRef.current = handleToggleVideo;
   showChatRef.current = showChat;
+  userIdRef.current = user?.id || null;
 
   // Handle video device change
   const handleVideoDeviceChange = async (deviceId) => {
