@@ -491,13 +491,15 @@ export default function ControlBar({
         )}
 
         {features.participants && (
-          <ControlBtn
-            icon={<PeopleIcon />}
-            active={showParticipants}
-            onClick={onToggleParticipants}
-            label={participantCount > 0 ? String(participantCount) : undefined}
-            tooltip="Participants (P)"
-          />
+          <span className="hidden sm:inline-flex">
+            <ControlBtn
+              icon={<PeopleIcon />}
+              active={showParticipants}
+              onClick={onToggleParticipants}
+              label={participantCount > 0 ? String(participantCount) : undefined}
+              tooltip="Participants (P)"
+            />
+          </span>
         )}
 
         {/* More menu */}
