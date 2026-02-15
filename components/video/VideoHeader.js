@@ -267,19 +267,6 @@ export default function VideoHeader({
 
         {/* Room details */}
         <div className="flex flex-col gap-0.5">
-          <div className="flex items-center gap-2">
-            {/* Event type badge */}
-            <span
-              className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md"
-              style={{
-                letterSpacing: '0.6px',
-                background: callType === 'coffee' ? 'rgba(212,165,116,0.2)' : callType === 'circle' ? 'rgba(212,165,116,0.2)' : 'rgba(212,165,116,0.2)',
-                color: '#D4A574',
-              }}
-            >
-              {callType === 'coffee' ? '1:1' : callType === 'circle' ? 'Circle' : 'Event'}
-            </span>
-          </div>
           {/* Topic / title */}
           <span
             className="text-sm font-semibold"
@@ -287,14 +274,27 @@ export default function VideoHeader({
           >
             {title || brandName || 'Video Call'}
           </span>
-          {subtitle && (
+          {/* Badge + circle/event name on one line */}
+          <div className="flex items-center gap-2">
             <span
-              className="text-xs"
-              style={{ color: 'rgba(245,237,228,0.45)' }}
+              className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-md"
+              style={{
+                letterSpacing: '0.6px',
+                background: 'rgba(212,165,116,0.2)',
+                color: '#D4A574',
+              }}
             >
-              {subtitle}
+              {callType === 'coffee' ? '1:1' : callType === 'circle' ? 'Circle' : 'Event'}
             </span>
-          )}
+            {subtitle && (
+              <span
+                className="text-xs font-medium"
+                style={{ color: 'rgba(245,237,228,0.5)' }}
+              >
+                {subtitle}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Separator */}

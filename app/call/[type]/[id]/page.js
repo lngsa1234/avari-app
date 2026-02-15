@@ -1721,7 +1721,7 @@ export default function UnifiedCallPage() {
     } else if (callType === 'meetup' && relatedData) {
       return `${relatedData.date} at ${relatedData.time}`;
     } else if (callType === 'circle' && relatedData) {
-      return relatedData.meetupTopic || relatedData.name || (isJoined ? 'Connected' : 'Connecting...');
+      return relatedData.name || (isJoined ? 'Connected' : 'Connecting...');
     }
     return isJoined ? 'Connected' : 'Connecting...';
   };
