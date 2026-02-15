@@ -223,6 +223,7 @@ const DropdownMenu = ({ items, onClose, anchorRef }) => {
         <MenuItem
           key={i}
           {...item}
+          className={item.mobileOnly ? 'sm:hidden' : ''}
           onClick={() => {
             item.onClick?.();
             if (!item.keepOpen) onClose();
@@ -233,7 +234,7 @@ const DropdownMenu = ({ items, onClose, anchorRef }) => {
   );
 };
 
-const MenuItem = ({ icon, label, onClick, active, danger, rightLabel }) => {
+const MenuItem = ({ icon, label, onClick, active, danger, rightLabel, className = '' }) => {
   return (
     <button
       onClick={onClick}
@@ -242,6 +243,7 @@ const MenuItem = ({ icon, label, onClick, active, danger, rightLabel }) => {
         rounded-lg font-medium text-sm transition-all duration-150
         ${danger ? 'text-red-400 hover:bg-red-500/10' : active ? 'text-amber-400' : 'text-stone-100'}
         hover:bg-stone-700/50
+        ${className}
       `}
     >
       <span className="opacity-80">{icon}</span>
@@ -408,7 +410,34 @@ export default function ControlBar({
     });
   }
 
-  // Background blur is shown as a direct button next to video, not in More menu
+  // Items collapsed into More menu on mobile (sm: breakpoint)
+  // We detect mobile via window width, but since this is SSR-safe we use a
+  // CSS approach: these items are always in the menu, but also shown as
+  // direct buttons on desktop (hidden on mobile via `hidden sm:inline-flex`).
+  const mobileCollapsedItems = [];
+
+  if (features.screenShare) {
+    mobileCollapsedItems.push({
+      icon: <ScreenShareIcon active={isScreenSharing} />,
+      label: isScreenSharing ? 'Stop Sharing' : 'Share Screen',
+      active: isScreenSharing,
+      onClick: onToggleScreenShare,
+      mobileOnly: true,
+    });
+  }
+
+  if (features.participants) {
+    mobileCollapsedItems.push({
+      icon: <PeopleIcon />,
+      label: `Participants${participantCount > 0 ? ` (${participantCount})` : ''}`,
+      active: showParticipants,
+      onClick: onToggleParticipants,
+      mobileOnly: true,
+    });
+  }
+
+  // Full menu: mobile-collapsed items + original more items
+  const moreMenuItemsFull = [...mobileCollapsedItems, ...moreMenuItems];
 
   return (
     <div className="flex flex-col items-center gap-2 py-3 px-4 relative z-50">
@@ -431,9 +460,9 @@ export default function ControlBar({
       </div>
 
       {/* Control bar */}
-      <div className="flex items-center gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
+      <div className="flex items-center gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30 max-w-full overflow-x-auto scrollbar-none">
         {/* Primary: Audio with device selector */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <ControlBtn
             icon={isAudioDeviceSwitching ? <span className="animate-spin">⏳</span> : <MicIcon muted={isMuted} />}
             active={!isMuted}
@@ -451,7 +480,7 @@ export default function ControlBar({
         </div>
 
         {/* Primary: Video with device selector */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <ControlBtn
             icon={isVideoDeviceSwitching ? <span className="animate-spin">⏳</span> : <CameraIcon off={isVideoOff} />}
             active={!isVideoOff}
@@ -470,16 +499,7 @@ export default function ControlBar({
 
         <Divider />
 
-        {/* Secondary: Collaboration */}
-        {features.screenShare && (
-          <ControlBtn
-            icon={<ScreenShareIcon active={isScreenSharing} />}
-            active={isScreenSharing}
-            onClick={onToggleScreenShare}
-            tooltip={isScreenSharing ? 'Stop sharing' : 'Share screen'}
-          />
-        )}
-
+        {/* Chat — always visible (primary action) */}
         {features.chat && (
           <ControlBtn
             icon={<ChatIcon />}
@@ -490,21 +510,35 @@ export default function ControlBar({
           />
         )}
 
-        {features.participants && (
-          <ControlBtn
-            icon={<PeopleIcon />}
-            active={showParticipants}
-            onClick={onToggleParticipants}
-            label={participantCount > 0 ? String(participantCount) : undefined}
-            tooltip="Participants (P)"
-          />
+        {/* Secondary items: visible on desktop, moved to More menu on mobile */}
+        {features.screenShare && (
+          <span className="hidden sm:inline-flex flex-shrink-0">
+            <ControlBtn
+              icon={<ScreenShareIcon active={isScreenSharing} />}
+              active={isScreenSharing}
+              onClick={onToggleScreenShare}
+              tooltip={isScreenSharing ? 'Stop sharing' : 'Share screen'}
+            />
+          </span>
         )}
 
-        {/* More menu */}
-        {moreMenuItems.length > 0 && (
+        {features.participants && (
+          <span className="hidden sm:inline-flex flex-shrink-0">
+            <ControlBtn
+              icon={<PeopleIcon />}
+              active={showParticipants}
+              onClick={onToggleParticipants}
+              label={participantCount > 0 ? String(participantCount) : undefined}
+              tooltip="Participants (P)"
+            />
+          </span>
+        )}
+
+        {/* More menu — includes mobile-collapsed items */}
+        {moreMenuItemsFull.length > 0 && (
           <>
             <Divider />
-            <div ref={moreRef} className="relative">
+            <div ref={moreRef} className="relative flex-shrink-0">
               <ControlBtn
                 icon={<MoreIcon />}
                 onClick={() => setShowMore(!showMore)}
@@ -512,7 +546,7 @@ export default function ControlBar({
               />
               {showMore && (
                 <DropdownMenu
-                  items={moreMenuItems}
+                  items={moreMenuItemsFull}
                   onClose={() => setShowMore(false)}
                   anchorRef={moreRef}
                 />
@@ -530,6 +564,7 @@ export default function ControlBar({
           danger
           onClick={onLeave}
           tooltip="Leave call (L)"
+          className="flex-shrink-0"
         />
       </div>
     </div>
