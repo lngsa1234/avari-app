@@ -30,10 +30,16 @@ export function useBackgroundBlur(provider = 'webrtc') {
   // Check if blur is supported
   useEffect(() => {
     // Background blur requires modern browser features
-    const isSupported = typeof OffscreenCanvas !== 'undefined' ||
-                        typeof HTMLCanvasElement !== 'undefined';
+    const hasCanvas = typeof OffscreenCanvas !== 'undefined' ||
+                      typeof HTMLCanvasElement !== 'undefined';
+
+    // Agora virtual background extension does not work on mobile browsers
+    // (WASM/ML model fails or performs too poorly on mobile devices)
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const isSupported = hasCanvas && !(provider === 'agora' && isMobile);
+
     setIsBlurSupported(isSupported);
-  }, []);
+  }, [provider]);
 
   /**
    * Initialize MediaPipe selfie segmentation blur for WebRTC.
