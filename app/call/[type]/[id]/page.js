@@ -82,6 +82,7 @@ export default function UnifiedCallPage() {
   const [activeTab, setActiveTab] = useState('messages');
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Transcription state
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -121,6 +122,7 @@ export default function UnifiedCallPage() {
   // Refs for keyboard shortcuts (to avoid stale closures)
   const handleToggleMuteRef = useRef(null);
   const handleToggleVideoRef = useRef(null);
+  const showChatRef = useRef(false);
   // Ref to store latest roomParticipants for use in event handler closures
   const roomParticipantsRef = useRef([]);
 
@@ -426,6 +428,10 @@ export default function UnifiedCallPage() {
           if (prev.some(m => m.id === payload.new.id)) return prev;
           return [...prev, payload.new];
         });
+        // Increment unread if chat panel is closed
+        if (!showChatRef.current) {
+          setUnreadCount(prev => prev + 1);
+        }
       })
       .subscribe();
 
@@ -1092,9 +1098,10 @@ export default function UnifiedCallPage() {
     }
   };
 
-  // Update refs for keyboard shortcuts
+  // Update refs for keyboard shortcuts and chat state
   handleToggleMuteRef.current = handleToggleMute;
   handleToggleVideoRef.current = handleToggleVideo;
+  showChatRef.current = showChat;
 
   // Handle video device change
   const handleVideoDeviceChange = async (deviceId) => {
@@ -1840,7 +1847,7 @@ export default function UnifiedCallPage() {
           showChat={showChat}
           showTopics={showTopics}
           showParticipants={showParticipants}
-          messagesCount={messages.length}
+          messagesCount={unreadCount}
           participantCount={remoteParticipants.length + 1}
           transcriptionLanguage={transcriptionLanguage}
           videoDevices={videoDevices}
@@ -1860,7 +1867,10 @@ export default function UnifiedCallPage() {
           onToggleTranscription={toggleTranscription}
           onToggleChat={() => {
             setShowChat(!showChat);
-            if (!showChat) setActiveTab('messages');
+            if (!showChat) {
+              setActiveTab('messages');
+              setUnreadCount(0);
+            }
           }}
           onToggleTopics={() => {
             setShowTopics(!showTopics);
