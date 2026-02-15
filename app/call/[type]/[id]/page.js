@@ -153,6 +153,7 @@ export default function UnifiedCallPage() {
     toggleBlur: toggleBlurHook,
     blurResult: blurResultRef,
     preloadAgoraBlur,
+    preloadLiveKitBlur,
   } = useBackgroundBlur(config?.provider || 'webrtc');
 
   // Store blur canvas in state so React re-renders when it changes
@@ -762,6 +763,9 @@ export default function UnifiedCallPage() {
 
     if (camTrack?.track) setLocalVideoTrack(camTrack.track);
     if (micTrack?.track) setLocalAudioTrack(micTrack.track);
+
+    // Pre-load blur processor in background so it's instant when user clicks
+    preloadLiveKitBlur();
   };
 
   // Agora initialization (circles)

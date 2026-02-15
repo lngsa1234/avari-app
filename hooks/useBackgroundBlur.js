@@ -26,6 +26,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
   const originalTrackRef = useRef(null); // Store original WebRTC track for restore
   const blurActiveRef = useRef(false); // Ref to avoid stale closure in animation loop
   const blurResultRef = useRef(null); // Store WebRTC blur result for caller
+  const livekitBlurReadyRef = useRef(null); // Pre-loaded LiveKit blur processor
 
   // Check if blur is supported
   useEffect(() => {
@@ -33,10 +34,10 @@ export function useBackgroundBlur(provider = 'webrtc') {
     const hasCanvas = typeof OffscreenCanvas !== 'undefined' ||
                       typeof HTMLCanvasElement !== 'undefined';
 
-    // Agora virtual background extension does not work on mobile browsers
+    // Agora and LiveKit virtual background extensions do not work on mobile browsers
     // (WASM/ML model fails or performs too poorly on mobile devices)
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    const isSupported = hasCanvas && !(provider === 'agora' && isMobile);
+    const isSupported = hasCanvas && !((provider === 'agora' || provider === 'livekit') && isMobile);
 
     setIsBlurSupported(isSupported);
   }, [provider]);
@@ -248,6 +249,25 @@ export function useBackgroundBlur(provider = 'webrtc') {
   }, [provider]);
 
   /**
+   * Pre-load the LiveKit blur processor.
+   * Call during LiveKit call initialization so the dynamic import
+   * and WASM download happen in the background.
+   */
+  const preloadLiveKitBlur = useCallback(async () => {
+    if (provider !== 'livekit') return;
+    if (livekitBlurReadyRef.current) return; // Already preloaded
+
+    try {
+      console.log('[BackgroundBlur] Pre-loading LiveKit blur processor...');
+      const { BackgroundBlur } = await import('@livekit/track-processors');
+      livekitBlurReadyRef.current = BackgroundBlur;
+      console.log('[BackgroundBlur] LiveKit blur processor pre-loaded');
+    } catch (err) {
+      console.warn('[BackgroundBlur] LiveKit pre-load failed (will retry on toggle):', err.message);
+    }
+  }, [provider]);
+
+  /**
    * Initialize Agora virtual background
    */
   const initAgoraBlur = useCallback(async (agoraClient, videoTrack) => {
@@ -367,11 +387,16 @@ export function useBackgroundBlur(provider = 'webrtc') {
         attachedEl.parentElement?.appendChild(freezeCanvas);
       }
 
-      // Dynamically import LiveKit processor
-      const { BackgroundBlur } = await import('@livekit/track-processors');
+      // Use pre-loaded processor factory if available, otherwise import dynamically
+      let BackgroundBlurFactory = livekitBlurReadyRef.current;
+      if (!BackgroundBlurFactory) {
+        console.log('[BackgroundBlur] LiveKit processor not pre-loaded, importing now...');
+        const mod = await import('@livekit/track-processors');
+        BackgroundBlurFactory = mod.BackgroundBlur;
+      }
 
       // Create blur processor
-      const blurProcessor = BackgroundBlur(10); // blur radius
+      const blurProcessor = BackgroundBlurFactory(10); // blur radius
 
       // Apply to video track (this causes a brief track restart)
       await videoTrack.setProcessor(blurProcessor);
@@ -541,6 +566,7 @@ export function useBackgroundBlur(provider = 'webrtc') {
     toggleBlur,
     blurResult: blurResultRef,
     preloadAgoraBlur,
+    preloadLiveKitBlur,
   };
 }
 
