@@ -111,36 +111,64 @@ export default function VideoGrid({
     );
   }
 
-  return (
-    <div
-      className={`w-full h-full grid gap-2 auto-rows-fr ${getGridClasses()}`}
-    >
-      {/* Local Video */}
-      <LocalVideo
-        ref={localVideoRef}
-        track={localVideoTrack}
-        providerType={providerType}
-        isVideoOff={isVideoOff}
-        isMuted={isMuted}
-        userName={userName}
-        size="grid"
-        accentColor={accentColor}
-        isBlurEnabled={isBlurEnabled}
-        isBlurSupported={isBlurSupported}
-        isBlurLoading={isBlurLoading}
-        onToggleBlur={onToggleBlur}
-        blurCanvas={blurCanvas}
-      />
+  // For odd participant counts in a 2-col grid, use flex layout for the last row
+  // so the last item is centered at the same size as others
+  const isOdd = participantCount % 2 !== 0 && participantCount >= 3;
+  const gridCols = getGridClasses();
+  const usesTwoCols = gridCols.includes('grid-cols-2');
+  const centerLast = isOdd && usesTwoCols;
 
-      {/* Remote Videos */}
-      {remoteParticipants.map((participant) => (
-        <RemoteVideo
-          key={participant.id || participant.uid}
-          participant={participant}
+  // Split participants: paired rows go in grid, last odd one is centered below
+  const pairedRemote = centerLast ? remoteParticipants.slice(0, -1) : remoteParticipants;
+  const lastParticipant = centerLast ? remoteParticipants[remoteParticipants.length - 1] : null;
+
+  return (
+    <div className="w-full h-full flex flex-col gap-2">
+      {/* Grid for paired participants */}
+      <div
+        className={`flex-1 grid gap-2 auto-rows-fr ${gridCols}`}
+        style={centerLast ? { minHeight: 0 } : undefined}
+      >
+        {/* Local Video */}
+        <LocalVideo
+          ref={localVideoRef}
+          track={localVideoTrack}
           providerType={providerType}
+          isVideoOff={isVideoOff}
+          isMuted={isMuted}
+          userName={userName}
           size="grid"
+          accentColor={accentColor}
+          isBlurEnabled={isBlurEnabled}
+          isBlurSupported={isBlurSupported}
+          isBlurLoading={isBlurLoading}
+          onToggleBlur={onToggleBlur}
+          blurCanvas={blurCanvas}
         />
-      ))}
+
+        {/* Paired Remote Videos */}
+        {pairedRemote.map((participant) => (
+          <RemoteVideo
+            key={participant.id || participant.uid}
+            participant={participant}
+            providerType={providerType}
+            size="grid"
+          />
+        ))}
+      </div>
+
+      {/* Centered last participant for odd count */}
+      {lastParticipant && (
+        <div className="flex-1 flex justify-center min-h-0">
+          <div className="h-full" style={{ aspectRatio: '16/9', maxWidth: '50%' }}>
+            <RemoteVideo
+              participant={lastParticipant}
+              providerType={providerType}
+              size="grid"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
