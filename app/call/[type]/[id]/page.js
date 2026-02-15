@@ -1203,6 +1203,15 @@ export default function UnifiedCallPage() {
     }
   };
 
+  // Toast notification state
+  const [toastMessage, setToastMessage] = useState(null);
+  const toastTimerRef = useRef(null);
+  const showToast = (message, duration = 3000) => {
+    setToastMessage(message);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMessage(null), duration);
+  };
+
   const handleToggleScreenShare = async () => {
     try {
       if (isScreenSharing) {
@@ -1230,6 +1239,12 @@ export default function UnifiedCallPage() {
         setIsScreenSharing(false);
         setLocalScreenTrack(null);
       } else {
+        // Block if someone else is already sharing
+        if (remoteScreenTrack) {
+          showToast(`${screenSharerName || 'Someone'} is already sharing their screen`);
+          return;
+        }
+
         // Start sharing
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: { cursor: 'always' },
@@ -1782,6 +1797,15 @@ export default function UnifiedCallPage() {
         connectionQuality={connectionQuality}
       />
 
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl text-sm font-medium text-white shadow-lg animate-slide-up"
+          style={{ background: 'rgba(45, 30, 20, 0.92)', backdropFilter: 'blur(12px)', border: '1px solid rgba(245,237,228,0.1)' }}
+        >
+          {toastMessage}
+        </div>
+      )}
+
       {/* Video Area */}
       <div className={`flex-1 p-2 sm:p-3 relative transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`} style={{ minHeight: 0 }}>
         {gridView ? (
@@ -1846,6 +1870,8 @@ export default function UnifiedCallPage() {
           isBlurSupported={isBlurSupported}
           isBlurLoading={blurLoading}
           isScreenSharing={isScreenSharing}
+          isOtherSharing={!!remoteScreenTrack && !isScreenSharing}
+          screenSharerName={screenSharerName}
           isRecording={isRecording}
           recordingTime={recordingTime}
           isTranscribing={isTranscribing}
