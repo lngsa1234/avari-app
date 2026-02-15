@@ -139,35 +139,33 @@ const LocalVideo = forwardRef(function LocalVideo({
 
   return (
     <div
-      className={`bg-stone-800 rounded-lg relative ${containerClass}`}
+      className={`bg-stone-800 rounded-lg relative overflow-hidden ${containerClass}`}
       onClick={onClick}
       style={onClick ? { cursor: 'pointer' } : undefined}
     >
-      {/* Video element - always rendered for ref stability */}
-      {!isVideoOff ? (
-        isAgora ? (
-          // Agora: use div container - Agora creates its own video element inside
-          <div
+      {/* Video element - Agora div is always mounted so the SDK player isn't destroyed on toggle */}
+      {isAgora ? (
+        <div
+          ref={videoRef}
+          className="absolute inset-0 overflow-hidden rounded-lg agora-video-player"
+          style={{ transform: 'scaleX(-1)', visibility: isVideoOff ? 'hidden' : 'visible' }}
+        />
+      ) : !isVideoOff ? (
+        <div ref={blurContainerRef} className="absolute inset-0 overflow-hidden rounded-lg">
+          <video
             ref={videoRef}
-            className="absolute inset-0 overflow-hidden rounded-lg agora-video-player"
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover"
             style={{ transform: 'scaleX(-1)' }}
           />
-        ) : (
-          // Other providers: use video element directly
-          <div ref={blurContainerRef} className="absolute inset-0 overflow-hidden rounded-lg">
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-full object-cover"
-              style={{ transform: 'scaleX(-1)' }}
-            />
-          </div>
-        )
-      ) : (
-        // Placeholder when video is off
-        <div className="absolute inset-0 bg-stone-700 flex items-center justify-center rounded-lg">
+        </div>
+      ) : null}
+
+      {/* Placeholder when video is off - rendered on top */}
+      {isVideoOff && (
+        <div className="absolute inset-0 bg-stone-700 flex items-center justify-center rounded-lg z-10">
           <VideoAvatar
             name={userName}
             size={size}
