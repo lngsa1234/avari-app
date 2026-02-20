@@ -214,7 +214,7 @@ export default function ScheduleMeetupView({
     // Format time to HH:MM format if needed
     const formattedTime = scheduledTime.includes(':') ? scheduledTime : `${scheduledTime}:00`;
 
-    const { error } = await supabase
+    const { data: meetupData, error } = await supabase
       .from('meetups')
       .insert({
         circle_id: selectedCircle.id,
@@ -226,11 +226,20 @@ export default function ScheduleMeetupView({
         location: 'Virtual',
         created_by: authUser.id,  // Use auth user ID directly
         participant_limit: 10,
-      });
+      })
+      .select('id')
+      .single();
 
     if (error) {
       console.error('Insert error details:', error);
       throw error;
+    }
+
+    // Auto-RSVP the creator
+    if (meetupData?.id) {
+      await supabase
+        .from('meetup_signups')
+        .insert({ meetup_id: meetupData.id, user_id: authUser.id });
     }
 
     alert(`Meetup scheduled for ${selectedCircle.name}!`);

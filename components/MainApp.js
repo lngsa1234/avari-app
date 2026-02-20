@@ -234,89 +234,20 @@ function MainApp({ currentUser, onSignOut }) {
     loadUpcomingCoffeeChats()
     loadPendingRecaps()
 
-    // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
-    // Re-enable after adding useCallback to all functions
-    /*
-    // Set up real-time subscription for meetups
-    const meetupsSubscription = supabase
-      .channel('meetups_changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', // Listen to INSERT, UPDATE, DELETE
-          schema: 'public', \n          table: 'meetups'
-        }, 
-        (payload) => {
-          console.log('Meetup changed:', payload)
-          // Reload meetups when any change occurs
-          loadMeetupsFromDatabase()
-        }
-      )
-      .subscribe()
+  }, []) // Empty array - run once on mount
 
-    // Set up real-time subscription for signups
-    const signupsSubscription = supabase
-      .channel('signups_changes')
-      .on('postgres_changes', 
-        { 
-          event: '*',
-          schema: 'public', 
-          table: 'meetup_signups'
-        }, 
-        (payload) => {
-          console.log('Signup changed:', payload)
-          // Reload signups and user signups
-          loadMeetupsFromDatabase()
-          loadUserSignups()
-          loadMeetupPeople() // Reload meetup people
-        }
-      )
-      .subscribe()
-
-    // Set up real-time subscription for interests
-    const interestsSubscription = supabase
-      .channel('interests_changes')
-      .on('postgres_changes', 
-        { 
-          event: '*',
-          schema: 'public', 
-          table: 'user_interests'
-        }, 
-        (payload) => {
-          console.log('Interest changed:', payload)
-          loadConnections() // Reload to check for new mutual matches
-          loadMyInterests()
-          loadConnectionRequests() // Reload incoming requests
-          loadMeetupPeople()
-        }
-      )
-      .subscribe()
-
-    // Set up real-time subscription for messages
-    const messagesSubscription = supabase
-      .channel('messages_changes')
-      .on('postgres_changes', 
-        { 
-          event: '*',
-          schema: 'public', 
-          table: 'messages',
-          filter: `receiver_id=eq.${currentUser.id}`
-        }, 
-        (payload) => {
-          console.log('Message changed:', payload)
-          loadUnreadMessageCount()
-        }
-      )
-      .subscribe()
-
-    // Cleanup subscriptions on unmount
-    return () => {
-      meetupsSubscription.unsubscribe()
-      signupsSubscription.unsubscribe()
-      interestsSubscription.unsubscribe()
-      messagesSubscription.unsubscribe()
+  // Reload meetups when navigating back to home view
+  useEffect(() => {
+    if (currentView === 'home' && hasLoadedRef.current) {
+      loadMeetupsFromDatabase()
+      loadSignupsForMeetups([])
+      loadUserSignups()
+      loadUpcomingCoffeeChats()
     }
-    */
-  }, []) // Empty array - functions are defined below and stable due to useCallback
+  }, [currentView])
+
+  // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
+  // Re-enable after adding useCallback to all functions
 
   const loadMeetupsFromDatabase = useCallback(async () => {
     try {
@@ -1351,8 +1282,15 @@ function MainApp({ currentUser, onSignOut }) {
       if (error) {
         alert('Error creating meetup: ' + error.message)
       } else {
+        // Auto-RSVP the creator
+        if (data && data[0]?.id) {
+          await supabase
+            .from('meetup_signups')
+            .insert({ meetup_id: data[0].id, user_id: currentUser.id })
+        }
         // Reload meetups from database to ensure consistency
         await loadMeetupsFromDatabase()
+        await loadUserSignups()
         setNewMeetup({ date: '', time: '', location: '', topic: '', duration: '60', participantLimit: '100', description: '' })
         setSelectedDate(null)
         setShowCreateMeetup(false)
@@ -2366,7 +2304,12 @@ function MainApp({ currentUser, onSignOut }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '12px' : '4px' }}>
                   {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
                     const isSignedUp = meetup._isCoffeeChat || userSignups.includes(meetup.id)
-                    const meetupSignups = signups[meetup.id] || []
+                    // Ensure host is always included in signups list
+                    const rawSignups = signups[meetup.id] || []
+                    const hostIncluded = meetup.host && !rawSignups.some(s => s.user_id === meetup.host.id)
+                    const meetupSignups = hostIncluded
+                      ? [{ user_id: meetup.host.id, profiles: meetup.host }, ...rawSignups]
+                      : rawSignups
 
                     // Determine if event is currently live (started but not ended)
                     let isLive = false
@@ -2468,7 +2411,7 @@ function MainApp({ currentUser, onSignOut }) {
                             </div>
 
                             {(() => {
-                              const meetupSignupsList = signups[meetup.id] || []
+                              const meetupSignupsList = meetupSignups
                               const attendeeCount = meetupSignupsList.length
                               if (attendeeCount === 0) return null
                               return (
@@ -2635,42 +2578,41 @@ function MainApp({ currentUser, onSignOut }) {
                           </div>
 
                           {(() => {
-                            const meetupSignupsList = signups[meetup.id] || []
+                            const meetupSignupsList = meetupSignups
                             const attendeeCount = meetupSignupsList.length
                             const limit = meetup.participant_limit
                             const spotsLeft = limit ? Math.max(0, limit - attendeeCount) : null
+                            if (attendeeCount === 0) return null
                             return (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                {attendeeCount > 0 && (
-                                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                                    {meetupSignupsList.slice(0, 3).map((signup, i) => (
-                                      <div key={signup.user_id || i} style={{
-                                        width: '34px', height: '34px', borderRadius: '50%',
-                                        border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
-                                        color: '#523C2E',
-                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
-                                        boxShadow: '0px 1px 4px #9E7868', letterSpacing: '0.15px',
-                                      }}>
-                                        {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                      </div>
-                                    ))}
-                                    {attendeeCount > 3 && (
-                                      <div style={{
-                                        width: '34px', height: '34px', borderRadius: '50%',
-                                        border: '2px solid #FFFCF8', marginLeft: '-8px',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
-                                        color: '#764D31',
-                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 99.99%, rgba(241, 225, 213, 0.2) 100%)',
-                                        boxShadow: '0px 1px 4px #9E7868',
-                                      }}>
-                                        +{attendeeCount - 3}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  {meetupSignupsList.slice(0, 3).map((signup, i) => (
+                                    <div key={signup.user_id || i} style={{
+                                      width: '34px', height: '34px', borderRadius: '50%',
+                                      border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                      color: '#523C2E',
+                                      background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
+                                      boxShadow: '0px 1px 4px #9E7868', letterSpacing: '0.15px',
+                                    }}>
+                                      {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                    </div>
+                                  ))}
+                                  {attendeeCount > 3 && (
+                                    <div style={{
+                                      width: '34px', height: '34px', borderRadius: '50%',
+                                      border: '2px solid #FFFCF8', marginLeft: '-8px',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                      color: '#764D31',
+                                      background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 99.99%, rgba(241, 225, 213, 0.2) 100%)',
+                                      boxShadow: '0px 1px 4px #9E7868',
+                                    }}>
+                                      +{attendeeCount - 3}
+                                    </div>
+                                  )}
+                                </div>
                                 <span style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
                                   {attendeeCount} attendees
                                   {spotsLeft !== null && spotsLeft > 0 && (
