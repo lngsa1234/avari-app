@@ -14,7 +14,10 @@ import {
   Users,
   User,
   Lock,
-  ThumbsUp
+  ThumbsUp,
+  X,
+  Check,
+  UserPlus
 } from 'lucide-react';
 
 // Custom hook for responsive design
@@ -62,6 +65,28 @@ const VIBE_CATEGORIES = [
   { id: 'grow', emoji: '🚀', label: 'Career Growth', description: 'Level up your skills' },
 ];
 
+// Topic chips for search bar
+const TOPIC_CHIPS = [
+  'Job Search',
+  'AI Founding Partner',
+  'Vibe Coding',
+  'Career Pivot',
+  'Fundraising Tips',
+  'Work-Life Balance',
+  'Networking',
+  'Leadership',
+  'PM Interviews',
+  'Automotive Tech',
+  'Mom Founders',
+];
+
+// Rotating placeholder hints
+const PLACEHOLDER_HINTS = [
+  'What brings you here today?',
+  'Find women in AI & tech...',
+  'Looking for a co-founder?',
+];
+
 export default function NetworkDiscoverView({
   currentUser,
   supabase,
@@ -81,8 +106,36 @@ export default function NetworkDiscoverView({
   const [requestTopic, setRequestTopic] = useState('');
   const [requestDescription, setRequestDescription] = useState('');
   const [requestVibe, setRequestVibe] = useState('grow');
+  const [sentRequests, setSentRequests] = useState(new Set()); // Track sent connection requests
   const [userRsvps, setUserRsvps] = useState(new Set()); // Track user's RSVPs
-  const [rsvpLoading, setRsvpLoading] = useState(false);
+  const [rsvpLoading, setRsvpLoading] = useState({});
+  const [meetupSignups, setMeetupSignups] = useState({});
+  const [searchText, setSearchText] = useState('');
+  const [selectedChips, setSelectedChips] = useState([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [placeholderIndex, setPlaceholderIndex] = useState(0);
+  const [placeholderVisible, setPlaceholderVisible] = useState(true);
+  const [expandedCircleId, setExpandedCircleId] = useState(null);
+  const [meetupImages, setMeetupImages] = useState(() => {
+    // Load cached images from localStorage on mount
+    // Bump CACHE_VERSION when bgQueries change to force fresh images
+    const CACHE_VERSION = 'v2';
+    if (typeof window !== 'undefined') {
+      try {
+        const storedVersion = localStorage.getItem('meetupImagesCacheVersion');
+        if (storedVersion !== CACHE_VERSION) {
+          localStorage.removeItem('meetupImages');
+          localStorage.setItem('meetupImagesCacheVersion', CACHE_VERSION);
+          return {};
+        }
+        const cached = localStorage.getItem('meetupImages');
+        return cached ? JSON.parse(cached) : {};
+      } catch { return {}; }
+    }
+    return {};
+  });
+
+  const [imageBrightness, setImageBrightness] = useState({});
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -90,14 +143,89 @@ export default function NetworkDiscoverView({
 
   const isNewUser = connections.length === 0;
 
+  // Rotating placeholder animation
+  useEffect(() => {
+    if (searchText || selectedChips.length > 0) return;
+    const interval = setInterval(() => {
+      setPlaceholderVisible(false);
+      setTimeout(() => {
+        setPlaceholderIndex((prev) => (prev + 1) % PLACEHOLDER_HINTS.length);
+        setPlaceholderVisible(true);
+      }, 400);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [searchText, selectedChips.length]);
+
+  const toggleChip = (chip) => {
+    setSelectedChips((prev) =>
+      prev.includes(chip) ? prev.filter((c) => c !== chip) : [...prev, chip]
+    );
+  };
+
+  const removeChip = (chip) => {
+    setSelectedChips((prev) => prev.filter((c) => c !== chip));
+  };
+
+  const clearAll = () => {
+    setSearchText('');
+    setSelectedChips([]);
+  };
+
+  const hasInput = searchText.length > 0 || selectedChips.length > 0;
+
   useEffect(() => {
     loadData();
   }, [selectedVibe]);
+
+  // Fetch Unsplash images for meetup topics (moved after featuredMeetups is computed)
 
   // Load user's RSVPs on mount
   useEffect(() => {
     loadUserRsvps();
   }, [currentUser.id]);
+
+  const loadMeetupSignups = async () => {
+    try {
+      const { data: signupsData, error: signupsError } = await supabase
+        .from('meetup_signups')
+        .select('*');
+
+      if (signupsError || !signupsData || signupsData.length === 0) return;
+
+      const userIds = [...new Set(signupsData.map(s => s.user_id))];
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, name, profile_picture')
+        .in('id', userIds);
+
+      const profilesMap = {};
+      if (profilesData) {
+        profilesData.forEach(p => { profilesMap[p.id] = p; });
+      }
+
+      console.log('🔍 Signups count:', signupsData.length);
+      console.log('🔍 User IDs:', userIds);
+      console.log('🔍 Profiles loaded:', profilesData);
+      console.log('🔍 Profiles map:', profilesMap);
+
+      const byMeetup = {};
+      signupsData.forEach(s => {
+        if (!byMeetup[s.meetup_id]) byMeetup[s.meetup_id] = [];
+        byMeetup[s.meetup_id].push({
+          ...s,
+          profile: profilesMap[s.user_id] || null,
+        });
+      });
+      console.log('🔍 Final meetupSignups:', byMeetup);
+      setMeetupSignups(byMeetup);
+    } catch (err) {
+      console.error('Error loading meetup signups:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadMeetupSignups();
+  }, [supabase]);
 
   const loadUserRsvps = async () => {
     try {
@@ -115,9 +243,9 @@ export default function NetworkDiscoverView({
   };
 
   const handleRsvp = async (meetupId) => {
-    if (!meetupId) return;
+    if (!meetupId || rsvpLoading[meetupId]) return;
 
-    setRsvpLoading(true);
+    setRsvpLoading(prev => ({ ...prev, [meetupId]: true }));
     try {
       const isRsvped = userRsvps.has(meetupId);
 
@@ -151,12 +279,12 @@ export default function NetworkDiscoverView({
       }
 
       // Reload data to update attendee counts
-      await loadData();
+      await loadMeetupSignups();
     } catch (err) {
       console.error('Error handling RSVP:', err);
       alert('Failed to update RSVP. Please try again.');
     } finally {
-      setRsvpLoading(false);
+      setRsvpLoading(prev => ({ ...prev, [meetupId]: false }));
     }
   };
 
@@ -179,7 +307,7 @@ export default function NetworkDiscoverView({
     try {
       const { data: groups, error } = await supabase
         .from('connection_groups')
-        .select('id, name, creator_id, is_active, vibe_category, created_at')
+        .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -284,9 +412,6 @@ export default function NetworkDiscoverView({
           supporters: supportedSet.has(r.id) ? [{ user_id: currentUser.id }] : []
         }));
 
-        if (selectedVibe) {
-          requests = requests.filter(r => r.vibe_category === selectedVibe || !r.vibe_category);
-        }
         setMeetupRequests(requests);
       } else {
         setMeetupRequests([]);
@@ -301,7 +426,7 @@ export default function NetworkDiscoverView({
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, name, career, city, state, hook')
+        .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
         .neq('id', currentUser.id)
         .not('name', 'is', null)
         .limit(10);
@@ -312,12 +437,101 @@ export default function NetworkDiscoverView({
         return;
       }
 
-      const connectedIds = connections.map(c => c.connected_user_id || c.id);
-      const suggestions = (data || []).filter(u => !connectedIds.includes(u.id));
-      setPeerSuggestions(suggestions.slice(0, 4));
+      // Filter out connected users (from connections prop + mutual matches)
+      const connectedIds = new Set(connections.map(c => c.connected_user_id || c.id));
+
+      const { data: mutualMatches } = await supabase
+        .rpc('get_mutual_matches', { for_user_id: currentUser.id });
+      const myMatchIds = new Set((mutualMatches || []).map(m => m.matched_user_id));
+
+      // Also filter out users the current user has already sent interest to
+      const { data: myInterests } = await supabase
+        .from('user_interests')
+        .select('interested_in_user_id')
+        .eq('user_id', currentUser.id);
+      const myInterestIds = new Set((myInterests || []).map(i => i.interested_in_user_id));
+
+      // Exclude connections, mutual matches, and already-requested users
+      const suggestions = (data || []).filter(u =>
+        !connectedIds.has(u.id) && !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
+      );
+      const suggestionIds = suggestions.map(s => s.id);
+
+      // Get mutual circles
+      let userCircleCount = {};
+      if (suggestionIds.length > 0) {
+        const { data: myCircles } = await supabase
+          .from('connection_group_members')
+          .select('group_id')
+          .eq('user_id', currentUser.id)
+          .eq('status', 'accepted');
+        const myCircleIds = (myCircles || []).map(c => c.group_id);
+
+        if (myCircleIds.length > 0) {
+          const { data: sharedMembers } = await supabase
+            .from('connection_group_members')
+            .select('user_id, group_id')
+            .in('group_id', myCircleIds)
+            .in('user_id', suggestionIds)
+            .eq('status', 'accepted');
+
+          (sharedMembers || []).forEach(m => {
+            if (!userCircleCount[m.user_id]) userCircleCount[m.user_id] = new Set();
+            userCircleCount[m.user_id].add(m.group_id);
+          });
+        }
+      }
+
+      // Get mutual connections (shared connections with current user)
+      let userMutualConnections = {};
+      if (suggestionIds.length > 0) {
+        for (const personId of suggestionIds) {
+          const { data: personMatches } = await supabase
+            .rpc('get_mutual_matches', { for_user_id: personId });
+          let count = 0;
+          (personMatches || []).forEach(m => {
+            if (myMatchIds.has(m.matched_user_id)) count++;
+          });
+          userMutualConnections[personId] = count;
+        }
+      }
+
+      const enriched = suggestions.slice(0, 4).map(person => ({
+        ...person,
+        mutualCircles: userCircleCount[person.id] ? userCircleCount[person.id].size : 0,
+        mutualConnections: userMutualConnections[person.id] || 0,
+      }));
+
+      setPeerSuggestions(enriched);
     } catch (error) {
       console.error('Error loading peer suggestions:', error);
       setPeerSuggestions([]);
+    }
+  };
+
+  const handleConnect = async (personId) => {
+    if (!currentUser?.id || sentRequests.has(personId)) return;
+    setSentRequests(prev => new Set(prev).add(personId));
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .insert({
+          user_id: currentUser.id,
+          interested_in_user_id: personId,
+        });
+      if (error) {
+        // If duplicate, keep the "Requested" state
+        if (!error.message?.includes('duplicate')) {
+          throw error;
+        }
+      }
+    } catch (error) {
+      console.error('Error sending connection request:', error);
+      setSentRequests(prev => {
+        const next = new Set(prev);
+        next.delete(personId);
+        return next;
+      });
     }
   };
 
@@ -418,11 +632,101 @@ export default function NetworkDiscoverView({
     .filter(m => parseLocalDate(m.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
     .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
 
-  // Featured meetups for "Trending This Week" section (all upcoming events)
-  const featuredMeetups = upcomingMeetups.slice(0, 4);
+  // Community Events - only meetups without a circle (public events)
+  const featuredMeetups = upcomingMeetups.filter(m => !m.circle_id).slice(0, 4);
 
-  // Recommended meetups (non-RSVP'd only for "Recommended for you" section)
-  const recommendedMeetups = upcomingMeetups.filter(m => !userRsvps.has(m.id)).slice(0, 4);
+  // Fetch Unsplash images for featured meetups
+  const featuredMeetupIds = featuredMeetups.map(m => m.id).join(',');
+  useEffect(() => {
+    const unsplashKey = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY;
+    if (!unsplashKey || featuredMeetups.length === 0) return;
+
+    let cancelled = false;
+
+    const fetchImages = async () => {
+      const newImages = {};
+
+      await Promise.all(
+        featuredMeetups.map(async (meetup, index) => {
+          if (meetupImages[meetup.id]) return; // Already cached
+          try {
+            // Authentic, candid community-focused backgrounds
+            const bgQueries = [
+              'diverse people laughing outdoors candid',
+              'community gathering golden hour unposed',
+              'women collaboration workshop warm lighting',
+              'supportive conversation soft sunlight',
+              'neighborhood block party real people',
+              'people sharing meal long table candid',
+              'group learning craft hands-on',
+              'outdoor fitness class park vibrant',
+            ];
+            const query = bgQueries[index % bgQueries.length];
+            const page = (index % 5) + 1;
+            const res = await fetch(
+              `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&page=${page}&orientation=portrait`,
+              { headers: { Authorization: `Client-ID ${unsplashKey}` } }
+            );
+            if (!res.ok) return;
+            const data = await res.json();
+            const imageUrl = data.results?.[0]?.urls?.small;
+            if (imageUrl) {
+              newImages[meetup.id] = imageUrl;
+            }
+          } catch (err) {
+            // Fall back to gradient
+          }
+        })
+      );
+
+      if (!cancelled && Object.keys(newImages).length > 0) {
+        setMeetupImages(prev => {
+          const updated = { ...prev, ...newImages };
+          try { localStorage.setItem('meetupImages', JSON.stringify(updated)); } catch {}
+          return updated;
+        });
+      }
+    };
+
+    fetchImages();
+    return () => { cancelled = true; };
+  }, [featuredMeetupIds]);
+
+  // Analyze image brightness for text color adaptation
+  useEffect(() => {
+    const analyzeImages = () => {
+      Object.entries(meetupImages).forEach(([meetupId, url]) => {
+        if (imageBrightness[meetupId] !== undefined) return;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            const size = 50;
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, size, size);
+            const data = ctx.getImageData(0, 0, size, size).data;
+            let totalBrightness = 0;
+            const pixelCount = data.length / 4;
+            for (let i = 0; i < data.length; i += 4) {
+              totalBrightness += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+            }
+            const avgBrightness = totalBrightness / pixelCount;
+            setImageBrightness(prev => ({ ...prev, [meetupId]: avgBrightness }));
+          } catch {
+            // CORS or other error — default to dark overlay
+          }
+        };
+        img.src = url;
+      });
+    };
+    if (Object.keys(meetupImages).length > 0) analyzeImages();
+  }, [meetupImages]);
+
+  // Recommended meetups (non-RSVP'd only for "Community Events" section)
+  const recommendedMeetups = upcomingMeetups.filter(m => !m.circle_id && !userRsvps.has(m.id)).slice(0, 4);
 
   // Format time for display
   const formatTime = (timeStr) => {
@@ -504,435 +808,200 @@ export default function NetworkDiscoverView({
 
   return (
     <div style={{ fontFamily: fonts.sans, paddingBottom: '100px' }}>
-      {/* Page Title */}
+      {/* Search Bar + Topic Chips */}
       <div style={{ marginBottom: isMobile ? '20px' : '24px' }}>
-        <h1 style={{
-          fontSize: isMobile ? '24px' : '28px',
-          fontWeight: '600',
-          color: colors.text,
-          margin: '0 0 6px',
-          fontFamily: fonts.serif
-        }}>
-          Discover
-        </h1>
-        <p style={{ fontSize: isMobile ? '14px' : '15px', color: colors.textLight, margin: 0 }}>
-          Find your people. Take the next step.
-        </p>
-      </div>
-
-      {/* Vibe Bar */}
-      <div style={{
-        backgroundColor: colors.warmWhite,
-        borderRadius: isMobile ? '16px' : '20px',
-        padding: isMobile ? '16px' : '20px',
-        marginBottom: isMobile ? '20px' : '24px',
-        boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
-      }}>
-        <p style={{
-          fontSize: isMobile ? '13px' : '14px',
-          fontWeight: '600',
-          color: colors.text,
-          marginBottom: isMobile ? '12px' : '16px',
-        }}>
-          What are you here for today?
-        </p>
-
+        {/* Search Bar */}
         <div style={{
           display: 'flex',
-          gap: isMobile ? '8px' : '10px',
-          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '6px',
+          padding: selectedChips.length > 0 ? '10px 14px' : '0 14px',
+          minHeight: '48px',
+          borderRadius: '999px',
+          backgroundColor: searchFocused ? '#FFFFFF' : '#FDF8F4',
+          border: searchFocused ? '2px solid #8B5E3C' : '1px solid #C49A6C40',
+          boxShadow: searchFocused
+            ? '0 0 0 3px #8B5E3C25, 0 2px 8px rgba(139, 94, 60, 0.15)'
+            : '0 2px 8px rgba(139, 94, 60, 0.1)',
+          transition: 'all 0.2s ease',
+          position: 'relative',
+          ...(selectedChips.length > 0 ? { borderRadius: '20px' } : {}),
         }}>
-          {VIBE_CATEGORIES.map((vibe) => {
-            const isActive = selectedVibe === vibe.id;
-            return (
+          {/* Magnifying glass */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            height: selectedChips.length > 0 ? '32px' : '48px',
+            flexShrink: 0,
+          }}>
+            <Search size={18} style={{ color: '#8B5E3C' }} />
+          </div>
+
+          {/* Selected chip pills inside bar */}
+          {selectedChips.map((chip) => (
+            <span
+              key={chip}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '999px',
+                backgroundColor: '#8B5E3C15',
+                border: '1px solid #8B5E3C40',
+                fontSize: '12.5px',
+                fontFamily: "'Montserrat', sans-serif",
+                fontWeight: '500',
+                color: '#6B4226',
+                whiteSpace: 'nowrap',
+                lineHeight: '1.4',
+              }}
+            >
+              {chip}
               <button
-                key={vibe.id}
-                onClick={() => setSelectedVibe(vibe.id)}
+                onClick={() => removeChip(chip)}
                 style={{
-                  flex: isMobile ? 'none' : 1,
+                  background: 'none',
+                  border: 'none',
+                  padding: '0',
+                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: isMobile ? 'flex-start' : 'center',
-                  gap: '8px',
-                  padding: isMobile ? '12px 14px' : '14px 12px',
-                  borderRadius: '12px',
-                  border: isActive ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
-                  backgroundColor: isActive ? `${colors.primaryLight}30` : 'white',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
+                  color: '#8B5E3C',
                 }}
               >
-                <span style={{ fontSize: isMobile ? '18px' : '20px' }}>{vibe.emoji}</span>
-                <span style={{
-                  fontSize: isMobile ? '13px' : '13px',
-                  fontWeight: isActive ? '600' : '500',
-                  color: isActive ? colors.primary : colors.text,
-                }}>
-                  {vibe.label}
-                </span>
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+
+          {/* Text input */}
+          <div style={{ flex: 1, position: 'relative', minWidth: '80px', height: selectedChips.length > 0 ? '32px' : '48px', display: 'flex', alignItems: 'center' }}>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              style={{
+                width: '100%',
+                height: '100%',
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontSize: '14px',
+                fontFamily: "'Montserrat', sans-serif",
+                color: '#4A3728',
+              }}
+            />
+            {/* Animated placeholder */}
+            {!hasInput && (
+              <span style={{
+                position: 'absolute',
+                left: 0,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '14px',
+                fontFamily: "'Montserrat', sans-serif",
+                color: '#A0714F',
+                pointerEvents: 'none',
+                opacity: placeholderVisible ? 1 : 0,
+                transition: 'opacity 0.4s ease',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: '100%',
+              }}>
+                {PLACEHOLDER_HINTS[placeholderIndex]}
+              </span>
+            )}
+          </div>
+
+          {/* Clear all button */}
+          {hasInput && (
+            <button
+              onClick={clearAll}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                border: 'none',
+                backgroundColor: '#8B5E3C20',
+                cursor: 'pointer',
+                flexShrink: 0,
+                alignSelf: 'center',
+                color: '#6B4226',
+              }}
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Topic Chips */}
+        <div style={{
+          display: 'flex',
+          flexWrap: 'nowrap',
+          gap: '8px',
+          marginTop: '12px',
+          overflowX: 'auto',
+          paddingBottom: '4px',
+          marginLeft: isMobile ? '-16px' : '-24px',
+          marginRight: isMobile ? '-16px' : '-24px',
+          paddingLeft: isMobile ? '16px' : '24px',
+          paddingRight: isMobile ? '16px' : '24px',
+          WebkitOverflowScrolling: 'touch',
+        }}>
+          {TOPIC_CHIPS.map((chip) => {
+            const isSelected = selectedChips.includes(chip);
+            return (
+              <button
+                key={chip}
+                onClick={() => toggleChip(chip)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 11px',
+                  borderRadius: '999px',
+                  border: isSelected ? '1.5px solid #8B5E3C' : '1px solid #C49A6C50',
+                  backgroundColor: isSelected ? '#8B5E3C12' : '#FDF8F4',
+                  cursor: 'pointer',
+                  fontSize: '12.5px',
+                  fontFamily: "'Montserrat', sans-serif",
+                  fontWeight: '500',
+                  color: isSelected ? '#6B4226' : '#6B4226CC',
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                {isSelected && <Check size={13} style={{ color: '#8B5E3C' }} />}
+                {chip}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Recommended for You - only shows events user hasn't RSVP'd to */}
+      {/* Community Events */}
       <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
-        <h2 style={{
-          fontSize: isMobile ? '16px' : '18px',
-          fontWeight: '600',
-          color: colors.text,
-          margin: '0 0 14px',
-          fontFamily: fonts.serif
-        }}>
-          Recommended for you
-        </h2>
-
-        <div style={{
-          backgroundColor: colors.warmWhite,
-          borderRadius: isMobile ? '16px' : '20px',
-          padding: isMobile ? '16px' : '20px',
-          boxShadow: '0 4px 20px rgba(139, 111, 92, 0.12)',
-          border: `1px solid ${colors.primary}30`,
-        }}>
-          {recommendedMeetups.length > 0 ? (
-            <>
-              {/* Spots Badge */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: isMobile ? '10px' : '12px' }}>
-                <span style={{
-                  padding: '4px 10px',
-                  backgroundColor: `${colors.primary}15`,
-                  color: colors.primary,
-                  fontSize: isMobile ? '10px' : '11px',
-                  fontWeight: '600',
-                  borderRadius: '8px',
-                }}>
-                  {recommendedContent.spots} spots left
-                </span>
-              </div>
-
-              {/* Title */}
-              <h3 style={{
-                fontSize: isMobile ? '18px' : '20px',
-                fontWeight: '600',
-                color: colors.text,
-                margin: '0 0 4px',
-                fontFamily: fonts.serif
-              }}>
-                {recommendedContent.title}
-              </h3>
-              <p style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, margin: '0 0 14px' }}>
-                {recommendedContent.subtitle}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
+            <div>
+              <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
+                Community Events
+              </h2>
+              <p style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, margin: '4px 0 0' }}>
+                Join conversations that matter to you
               </p>
-
-              {/* Group Size */}
-              <p style={{
-                fontSize: isMobile ? '12px' : '13px',
-                color: colors.textLight,
-                margin: '0 0 12px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}>
-                👥 {recommendedContent.groupSize}
-              </p>
-
-              {/* Date, Time, Location */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: isMobile ? '8px' : '12px',
-                fontSize: isMobile ? '12px' : '13px',
-                color: colors.textLight,
-                marginBottom: '16px',
-                flexWrap: 'wrap',
-              }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Calendar size={isMobile ? 12 : 14} /> {recommendedContent.date}
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={isMobile ? 12 : 14} /> {recommendedContent.time}
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <MapPin size={isMobile ? 12 : 14} /> {recommendedContent.location}
-                </span>
-              </div>
-
-              {/* Social Proof - Attendees */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                paddingTop: '14px',
-                borderTop: `1px solid ${colors.border}`,
-              }}>
-                <div style={{ display: 'flex', marginRight: '10px' }}>
-                  {recommendedContent.attendees.map((person, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        width: isMobile ? '24px' : '28px',
-                        height: isMobile ? '24px' : '28px',
-                        borderRadius: '50%',
-                        backgroundColor: colors.primaryLight,
-                        border: '2px solid white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: isMobile ? '12px' : '14px',
-                        marginLeft: idx > 0 ? '-8px' : 0,
-                      }}
-                    >
-                      {person.emoji}
-                    </div>
-                  ))}
-                  {recommendedContent.extraCount > 0 && (
-                    <div style={{
-                      width: isMobile ? '24px' : '28px',
-                      height: isMobile ? '24px' : '28px',
-                      borderRadius: '50%',
-                      backgroundColor: colors.primary,
-                      border: '2px solid white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: isMobile ? '9px' : '10px',
-                      fontWeight: '600',
-                      color: 'white',
-                      marginLeft: '-8px',
-                    }}>
-                      +{recommendedContent.extraCount}
-                    </div>
-                  )}
-                </div>
-                <span style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textLight }}>
-                  {recommendedContent.attendees.length + recommendedContent.extraCount > 0
-                    ? `${recommendedContent.attendees.length + recommendedContent.extraCount} going`
-                    : 'Be the first to join!'
-                  }
-                </span>
-              </div>
-
-              {/* Match Reason + CTA */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginTop: '16px',
-                flexWrap: isMobile ? 'wrap' : 'nowrap',
-                gap: isMobile ? '12px' : '0',
-              }}>
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  fontSize: isMobile ? '11px' : '12px',
-                  fontWeight: '500',
-                  color: colors.primary,
-                  backgroundColor: `${colors.primary}15`,
-                  padding: isMobile ? '5px 10px' : '6px 12px',
-                  borderRadius: '16px',
-                }}>
-                  🤎 {recommendedContent.matchReason}
-                </span>
-                <button
-                  onClick={() => handleRsvp(recommendedContent.meetupId)}
-                  disabled={rsvpLoading}
-                  style={{
-                    padding: isMobile ? '10px 20px' : '12px 24px',
-                    backgroundColor: colors.primary,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    fontSize: isMobile ? '13px' : '14px',
-                    fontWeight: '600',
-                    cursor: rsvpLoading ? 'wait' : 'pointer',
-                    boxShadow: `0 4px 12px ${colors.primary}40`,
-                    flex: isMobile ? 1 : 'none',
-                    opacity: rsvpLoading ? 0.7 : 1,
-                    transition: 'all 0.2s ease',
-                  }}>
-                  {rsvpLoading ? '...' : 'RSVP'}
-                </button>
-              </div>
-            </>
-          ) : (
-            /* Empty State - All caught up! */
-            <div style={{
-              textAlign: 'center',
-              padding: isMobile ? '24px 16px' : '32px 24px',
-            }}>
-              <div style={{
-                fontSize: '48px',
-                marginBottom: '12px',
-              }}>
-                🎉
-              </div>
-              <h3 style={{
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: '600',
-                color: colors.text,
-                margin: '0 0 8px',
-                fontFamily: fonts.serif,
-              }}>
-                You're all set!
-              </h3>
-              <p style={{
-                fontSize: isMobile ? '13px' : '14px',
-                color: colors.textLight,
-                margin: '0 0 16px',
-                lineHeight: '1.5',
-              }}>
-                You've RSVP'd to all available events. Check back later for new events!
-              </p>
+            </div>
+            {featuredMeetups.length > 0 && (
               <button
                 onClick={() => onNavigate?.('allEvents')}
-                style={{
-                  padding: isMobile ? '10px 20px' : '12px 24px',
-                  backgroundColor: 'transparent',
-                  color: colors.primary,
-                  border: `2px solid ${colors.primary}`,
-                  borderRadius: '12px',
-                  fontSize: isMobile ? '13px' : '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                }}>
-                View All Events
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Join an Intimate Circle */}
-      {(() => {
-        // Filter groups where current user is NOT a member and group is not full
-        const availableCircles = connectionGroups.filter(group => {
-          const isMember = group.members?.some(m => m.user_id === currentUser.id);
-          const memberCount = group.members?.length || 0;
-          return !isMember && memberCount < 10;
-        });
-
-        const circleEmojis = ['💫', '🌙', '✨', '🔮', '🌸', '💜', '🦋', '🌊'];
-        const circleGradients = [
-          'linear-gradient(135deg, #F5E6D3 0%, #E8D4BC 100%)',
-          'linear-gradient(135deg, #E5F0E5 0%, #C8DEC8 100%)',
-          'linear-gradient(135deg, #F0E6F5 0%, #DED0E8 100%)',
-          'linear-gradient(135deg, #E5E8F5 0%, #D0D8E8 100%)',
-        ];
-
-        // Show full-width prompt when no circles available
-        if (availableCircles.length === 0) {
-          return (
-            <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
-                <div>
-                  <h2 style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
-                    Join an Intimate Circle
-                  </h2>
-                  <p style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textLight, margin: '4px 0 0' }}>
-                    Small groups built on real connections
-                  </p>
-                </div>
-                <button
-                  onClick={() => onNavigate?.('allCircles')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    background: 'none',
-                    border: 'none',
-                    color: colors.primary,
-                    fontSize: isMobile ? '12px' : '13px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                  }}>
-                  See all <ChevronRight size={isMobile ? 12 : 14} />
-                </button>
-              </div>
-
-              <div
-                onClick={() => onNavigate?.('createCircle')}
-                style={{
-                  background: 'linear-gradient(135deg, #FDF8F3 0%, #F5EDE6 100%)',
-                  borderRadius: isMobile ? '16px' : '20px',
-                  padding: isMobile ? '24px 20px' : '32px',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  border: `1px solid ${colors.border}`,
-                }}
-              >
-                <div style={{
-                  width: isMobile ? '64px' : '80px',
-                  height: isMobile ? '64px' : '80px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #E8D5C4 0%, #D4C4B0 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 16px',
-                }}>
-                  <span style={{ fontSize: isMobile ? '32px' : '40px' }}>✨</span>
-                </div>
-
-                <h3 style={{
-                  fontSize: isMobile ? '18px' : '20px',
-                  fontWeight: '600',
-                  color: colors.text,
-                  margin: '0 0 8px',
-                  fontFamily: fonts.serif,
-                }}>
-                  Start Your Own Circle
-                </h3>
-
-                <p style={{
-                  fontSize: isMobile ? '13px' : '14px',
-                  color: colors.textLight,
-                  margin: '0 0 20px',
-                  maxWidth: '320px',
-                  marginLeft: 'auto',
-                  marginRight: 'auto',
-                  lineHeight: '1.5',
-                }}>
-                  Create an intimate group of up to 10 people for meaningful conversations and lasting connections.
-                </p>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNavigate?.('createCircle');
-                  }}
-                  style={{
-                    padding: isMobile ? '12px 24px' : '14px 32px',
-                    backgroundColor: colors.primary,
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    fontSize: isMobile ? '14px' : '15px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    boxShadow: `0 4px 12px ${colors.primary}40`,
-                  }}
-                >
-                  Create a Circle
-                </button>
-              </div>
-            </div>
-          );
-        }
-
-        return (
-          <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
-              <div>
-                <h2 style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
-                  Join an Intimate Circle
-                </h2>
-                <p style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textLight, margin: '4px 0 0' }}>
-                  Small groups built on real connections
-                </p>
-              </div>
-              <button
-                onClick={() => onNavigate?.('allCircles')}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -940,252 +1009,40 @@ export default function NetworkDiscoverView({
                   background: 'none',
                   border: 'none',
                   color: colors.primary,
-                  fontSize: isMobile ? '12px' : '13px',
+                  fontSize: isMobile ? '13px' : '15px',
                   fontWeight: '600',
                   cursor: 'pointer',
                 }}>
                 See all <ChevronRight size={isMobile ? 12 : 14} />
               </button>
-            </div>
+            )}
+          </div>
 
+          {featuredMeetups.length === 0 ? (
             <div style={{
-              display: 'flex',
-              gap: isMobile ? '12px' : '14px',
-              overflowX: 'auto',
-              paddingBottom: '8px',
-              marginLeft: isMobile ? '-16px' : '-24px',
-              marginRight: isMobile ? '-16px' : '-24px',
-              paddingLeft: isMobile ? '16px' : '24px',
-              paddingRight: isMobile ? '16px' : '24px',
-              WebkitOverflowScrolling: 'touch',
+              backgroundColor: colors.cream,
+              borderRadius: isMobile ? '14px' : '16px',
+              border: `1px solid ${colors.border}`,
+              padding: isMobile ? '28px 16px' : '32px 20px',
+              textAlign: 'center',
             }}>
-              {availableCircles.slice(0, 6).map((circle, index) => {
-                const memberCount = circle.members?.length || 0;
-                const spotsLeft = 10 - memberCount;
-
-                return (
-                  <div
-                    key={circle.id}
-                    onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
-                    style={{
-                      minWidth: isMobile ? '160px' : isTablet ? '180px' : '200px',
-                      backgroundColor: colors.warmWhite,
-                      borderRadius: isMobile ? '12px' : '16px',
-                      overflow: 'hidden',
-                      boxShadow: '0 2px 12px rgba(139, 111, 92, 0.1)',
-                      cursor: 'pointer',
-                      transition: 'transform 0.2s ease',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {/* Circle Header */}
-                    <div style={{
-                      height: isMobile ? '56px' : '70px',
-                      background: circleGradients[index % circleGradients.length],
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
-                    }}>
-                      <span style={{ fontSize: isMobile ? '22px' : '28px' }}>{circleEmojis[index % circleEmojis.length]}</span>
-                      <span style={{
-                        position: 'absolute',
-                        top: isMobile ? '6px' : '8px',
-                        right: isMobile ? '6px' : '8px',
-                        padding: isMobile ? '2px 6px' : '3px 8px',
-                        backgroundColor: spotsLeft <= 3 ? colors.primary : 'white',
-                        color: spotsLeft <= 3 ? 'white' : colors.text,
-                        borderRadius: '10px',
-                        fontSize: isMobile ? '9px' : '10px',
-                        fontWeight: '600',
-                      }}>
-                        {spotsLeft} spots
-                      </span>
-                    </div>
-
-                    {/* Circle Content */}
-                    <div style={{ padding: isMobile ? '10px 12px' : '12px 14px' }}>
-                      <h4 style={{
-                        fontSize: isMobile ? '13px' : '14px',
-                        fontWeight: '600',
-                        color: colors.text,
-                        margin: '0 0 6px',
-                        fontFamily: fonts.serif,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {circle.name}
-                      </h4>
-
-                      {/* Member Avatars */}
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        marginBottom: isMobile ? '8px' : '10px',
-                      }}>
-                        <div style={{ display: 'flex', marginRight: '6px' }}>
-                          {circle.members?.slice(0, 3).map((member, idx) => (
-                            <div key={member.id} style={{
-                              width: isMobile ? '20px' : '24px',
-                              height: isMobile ? '20px' : '24px',
-                              borderRadius: '50%',
-                              backgroundColor: colors.primary,
-                              border: '2px solid white',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: isMobile ? '9px' : '10px',
-                              fontWeight: '600',
-                              color: 'white',
-                              marginLeft: idx > 0 ? '-6px' : 0,
-                            }}>
-                              {member.user?.name?.charAt(0) || '?'}
-                            </div>
-                          ))}
-                          {memberCount > 3 && (
-                            <div style={{
-                              width: isMobile ? '20px' : '24px',
-                              height: isMobile ? '20px' : '24px',
-                              borderRadius: '50%',
-                              backgroundColor: colors.cream,
-                              border: '2px solid white',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: isMobile ? '8px' : '9px',
-                              fontWeight: '600',
-                              color: colors.text,
-                              marginLeft: '-6px',
-                            }}>
-                              +{memberCount - 3}
-                            </div>
-                          )}
-                        </div>
-                        <span style={{ fontSize: isMobile ? '10px' : '11px', color: colors.textLight }}>
-                          {memberCount} member{memberCount !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-
-                      {/* Vibe Tag */}
-                      {circle.vibe_category && (
-                        <span style={{
-                          display: 'inline-block',
-                          padding: isMobile ? '3px 8px' : '4px 10px',
-                          backgroundColor: `${colors.primary}15`,
-                          color: colors.primary,
-                          borderRadius: '12px',
-                          fontSize: isMobile ? '10px' : '11px',
-                          fontWeight: '500',
-                        }}>
-                          {circle.vibe_category === 'advice' ? '💡 Advice' :
-                           circle.vibe_category === 'peers' ? '🤝 Support' :
-                           circle.vibe_category === 'grow' ? '🚀 Growth' : circle.vibe_category}
-                        </span>
-                      )}
-
-                      {/* View Circle Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onNavigate?.('circleDetail', { circleId: circle.id });
-                        }}
-                        style={{
-                          width: '100%',
-                          marginTop: isMobile ? '8px' : '10px',
-                          padding: isMobile ? '6px 10px' : '8px 12px',
-                          backgroundColor: 'white',
-                          color: colors.primary,
-                          border: `1.5px solid ${colors.primary}`,
-                          borderRadius: isMobile ? '8px' : '10px',
-                          fontSize: isMobile ? '11px' : '12px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        View Circle
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Create Circle Card */}
-              <div
-                onClick={() => onNavigate?.('createCircle')}
-                style={{
-                  minWidth: isMobile ? '130px' : isTablet ? '150px' : '160px',
-                  backgroundColor: colors.cream,
-                  borderRadius: isMobile ? '12px' : '16px',
-                  border: `2px dashed ${colors.border}`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: isMobile ? '16px' : '20px',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{
-                  width: isMobile ? '40px' : '48px',
-                  height: isMobile ? '40px' : '48px',
-                  borderRadius: '50%',
-                  backgroundColor: `${colors.primary}15`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: isMobile ? '8px' : '12px',
-                }}>
-                  <span style={{ fontSize: isMobile ? '20px' : '24px' }}>✨</span>
-                </div>
-                <p style={{
-                  fontSize: isMobile ? '12px' : '13px',
-                  fontWeight: '600',
-                  color: colors.text,
-                  margin: '0 0 4px',
-                  textAlign: 'center',
-                }}>
-                  Start Your Own
-                </p>
-                <p style={{
-                  fontSize: isMobile ? '10px' : '11px',
-                  color: colors.textLight,
-                  margin: 0,
-                  textAlign: 'center',
-                }}>
-                  Create a circle
-                </p>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Trending This Week */}
-      {featuredMeetups.length > 0 && (
-        <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
-            <h2 style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
-              Trending This Week
-            </h2>
-            <button
-              onClick={() => onNavigate?.('allEvents')}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                background: 'none',
-                border: 'none',
-                color: colors.primary,
-                fontSize: isMobile ? '12px' : '13px',
-                fontWeight: '600',
-                cursor: 'pointer',
+              <p style={{
+                fontSize: isMobile ? '14px' : '15px',
+                color: colors.textLight,
+                margin: '0 0 4px',
+                lineHeight: '1.5',
               }}>
-              See all <ChevronRight size={isMobile ? 12 : 14} />
-            </button>
-          </div>
-
+                No upcoming events yet
+              </p>
+              <p style={{
+                fontSize: isMobile ? '12px' : '13px',
+                color: colors.textMuted,
+                margin: 0,
+              }}>
+                Have a topic in mind? Suggest it below and rally support!
+              </p>
+            </div>
+          ) : (
           <div style={{
             display: 'flex',
             gap: isMobile ? '12px' : '14px',
@@ -1198,413 +1055,979 @@ export default function NetworkDiscoverView({
             WebkitOverflowScrolling: 'touch',
           }}>
             {featuredMeetups.map((meetup, index) => {
-              const signupCount = meetup.signups?.length || 0;
-              const spotsLeft = Math.max(0, (meetup.max_attendees || 8) - signupCount);
-              const emojis = ['☕', '🎯', '🍷', '💼'];
-              const gradients = [
-                `linear-gradient(135deg, ${colors.primaryLight} 0%, ${colors.primary}30 100%)`,
-                `linear-gradient(135deg, ${colors.cream} 0%, #E8DFD8 100%)`,
-                `linear-gradient(135deg, #F5EDE8 0%, #EBE0D8 100%)`,
-                `linear-gradient(135deg, #EDE6DF 0%, #E0D8D0 100%)`,
-              ];
+              const signups = meetupSignups[meetup.id] || [];
+              const signupCount = signups.length;
+              const spotsLeft = Math.max(0, (meetup.participant_limit || meetup.max_attendees || 8) - signupCount);
+              const bgImage = meetupImages[meetup.id];
+              const brightness = imageBrightness[meetup.id];
+              const isLightImage = bgImage && brightness !== undefined && brightness > 140;
+              const textColor = isLightImage ? '#3E2C1E' : 'white';
+              const textColorMuted = isLightImage ? 'rgba(62,44,30,0.7)' : 'rgba(255,255,255,0.8)';
+              const textColorFaint = isLightImage ? 'rgba(62,44,30,0.4)' : 'rgba(255,255,255,0.4)';
+              const badgeBg = isLightImage ? 'rgba(62,44,30,0.12)' : 'rgba(255,255,255,0.2)';
+              const spotsBg = spotsLeft <= 2 ? 'rgba(212, 85, 58, 0.85)' : (isLightImage ? 'rgba(62,44,30,0.75)' : 'rgba(139, 94, 60, 0.85)');
+              const textShadow = isLightImage ? 'none' : '0 1px 4px rgba(0,0,0,0.4)';
+              const fallbackGradient = [
+                'linear-gradient(160deg, #6B4226 0%, #A0714F 50%, #C49A6C 100%)',
+                'linear-gradient(160deg, #5C6B42 0%, #7A9455 50%, #A0B87A 100%)',
+                'linear-gradient(160deg, #6B4266 0%, #945587 50%, #B87AA0 100%)',
+                'linear-gradient(160deg, #42536B 0%, #557A94 50%, #7AA0B8 100%)',
+                'linear-gradient(160deg, #6B5C42 0%, #947A55 50%, #B8A07A 100%)',
+                'linear-gradient(160deg, #4A426B 0%, #6B5594 50%, #947AB8 100%)',
+              ][index % 6];
 
               return (
                 <div
                   key={meetup.id}
                   style={{
-                    minWidth: isMobile ? '240px' : '280px',
-                    backgroundColor: colors.warmWhite,
+                    minWidth: isMobile ? '220px' : '250px',
+                    height: isMobile ? '260px' : '290px',
                     borderRadius: isMobile ? '14px' : '16px',
                     overflow: 'hidden',
-                    boxShadow: '0 2px 12px rgba(139, 111, 92, 0.1)',
+                    boxShadow: '0 3px 14px rgba(0, 0, 0, 0.18)',
                     flexShrink: 0,
-                  }}>
-                  <div style={{
-                    height: isMobile ? '75px' : '90px',
-                    background: gradients[index % 4],
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: isMobile ? '30px' : '36px',
                     position: 'relative',
                   }}>
-                    {emojis[index % 4]}
+                  {/* Gradient background (always present as base/fallback) */}
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: fallbackGradient,
+                  }} />
+                  {/* Unsplash image overlay (on top of gradient) */}
+                  {bgImage && (
+                    <img
+                      src={bgImage}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        filter: 'saturate(0.85) sepia(0.1) brightness(0.95)',
+                      }}
+                    />
+                  )}
+                  {/* Adaptive overlay for readability */}
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: bgImage
+                      ? isLightImage
+                        ? 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 35%, rgba(255,255,255,0.2) 60%, rgba(253,248,243,0.75) 100%)'
+                        : 'linear-gradient(180deg, rgba(107,66,38,0.1) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.2) 60%, rgba(30,20,12,0.75) 100%)'
+                      : 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.4) 100%)',
+                  }} />
+
+                  {/* Top row: date + spots */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    padding: isMobile ? '10px' : '12px',
+                    zIndex: 2,
+                  }}>
                     <span style={{
-                      position: 'absolute',
-                      top: isMobile ? '8px' : '10px',
-                      right: isMobile ? '8px' : '10px',
-                      padding: isMobile ? '3px 6px' : '4px 8px',
-                      backgroundColor: colors.primary,
-                      borderRadius: '6px',
-                      fontSize: isMobile ? '9px' : '10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: isMobile ? '3px 8px' : '4px 10px',
+                      backgroundColor: badgeBg,
+                      backdropFilter: 'blur(6px)',
+                      WebkitBackdropFilter: 'blur(6px)',
+                      borderRadius: '8px',
+                      fontSize: isMobile ? '11px' : '12px',
                       fontWeight: '600',
-                      color: 'white',
+                      color: textColor,
                     }}>
-                      {spotsLeft} spots left
+                      <Calendar size={isMobile ? 11 : 12} />
+                      {parseLocalDate(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </span>
+                    <span style={{
+                      padding: isMobile ? '3px 8px' : '4px 10px',
+                      backgroundColor: spotsBg,
+                      backdropFilter: 'blur(6px)',
+                      WebkitBackdropFilter: 'blur(6px)',
+                      borderRadius: '8px',
+                      fontSize: isMobile ? '10px' : '11px',
+                      fontWeight: '600',
+                      color: spotsLeft <= 2 ? 'white' : textColor,
+                    }}>
+                      {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
                     </span>
                   </div>
-                  <div style={{ padding: isMobile ? '12px 14px' : '14px 16px' }}>
+
+                  {/* Center: topic title */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: 0,
+                    right: 0,
+                    transform: 'translateY(-50%)',
+                    padding: isMobile ? '0 16px' : '0 20px',
+                    textAlign: 'center',
+                    zIndex: 2,
+                  }}>
                     <h4 style={{
-                      fontSize: isMobile ? '14px' : '15px',
-                      fontWeight: '600',
-                      color: colors.text,
-                      margin: '0 0 4px',
+                      fontSize: isMobile ? '20px' : '22px',
+                      fontWeight: '700',
+                      color: textColor,
+                      margin: 0,
                       fontFamily: fonts.serif,
+                      lineHeight: '1.35',
+                      textShadow: textShadow,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
                     }}>
                       {meetup.topic}
                     </h4>
-                    <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textLight, margin: '0 0 8px' }}>
-                      {meetup.host_name || 'Community Event'}
-                    </p>
-                    <p style={{ fontSize: isMobile ? '10px' : '11px', color: colors.primary, margin: '0 0 10px', fontWeight: '500' }}>
-                      👥 Small group ({meetup.max_attendees || 8})
-                    </p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px', fontSize: isMobile ? '10px' : '11px', color: colors.textLight, flexWrap: 'wrap' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Calendar size={isMobile ? 10 : 11} /> {parseLocalDate(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {/* Time + location under title */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: isMobile ? '8px' : '10px',
+                      marginTop: '8px',
+                      fontSize: isMobile ? '11px' : '12px',
+                      color: textColorMuted,
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                         <Clock size={isMobile ? 10 : 11} /> {meetup.time}
                       </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span style={{ color: textColorFaint }}>|</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                         <MapPin size={isMobile ? 10 : 11} /> {meetup.location || 'Virtual'}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: isMobile ? '10px' : '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', marginRight: '8px' }}>
-                          {['👩🏻', '👩🏾', '👩🏼'].slice(0, Math.min(3, signupCount || 1)).map((emoji, idx) => (
-                            <div key={idx} style={{
-                              width: isMobile ? '20px' : '22px',
-                              height: isMobile ? '20px' : '22px',
-                              borderRadius: '50%',
-                              backgroundColor: colors.cream,
-                              border: '2px solid white',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: isMobile ? '10px' : '11px',
-                              marginLeft: idx > 0 ? '-6px' : 0,
-                            }}>
-                              {emoji}
-                            </div>
-                          ))}
-                        </div>
-                        <span style={{ fontSize: isMobile ? '10px' : '11px', color: colors.textLight }}>
-                          {signupCount > 0 ? `${signupCount} going` : 'Be first!'}
-                        </span>
+                  </div>
+
+                  {/* Bottom: avatars + RSVP */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: isMobile ? '12px' : '14px',
+                    zIndex: 2,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', marginRight: '6px' }}>
+                        {signups.slice(0, 3).map((signup, idx) => (
+                          <div key={signup.user_id || idx} style={{
+                            width: isMobile ? '22px' : '24px',
+                            height: isMobile ? '22px' : '24px',
+                            borderRadius: '50%',
+                            backgroundColor: colors.primaryLight,
+                            border: isLightImage ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(255,255,255,0.6)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: isMobile ? '9px' : '10px',
+                            fontWeight: '600',
+                            color: 'white',
+                            marginLeft: idx > 0 ? '-6px' : 0,
+                            overflow: 'hidden',
+                          }}>
+                            {signup.profile?.profile_picture ? (
+                              <img
+                                src={signup.profile.profile_picture}
+                                alt={signup.profile.name || ''}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                              />
+                            ) : (
+                              signup.profile?.name?.[0] || '?'
+                            )}
+                          </div>
+                        ))}
+                        {signupCount > 3 && (
+                          <div style={{
+                            width: isMobile ? '22px' : '24px',
+                            height: isMobile ? '22px' : '24px',
+                            borderRadius: '50%',
+                            backgroundColor: isLightImage ? 'rgba(62,44,30,0.2)' : 'rgba(255,255,255,0.25)',
+                            border: isLightImage ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(255,255,255,0.6)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: isMobile ? '8px' : '9px',
+                            fontWeight: '600',
+                            color: textColor,
+                            marginLeft: '-6px',
+                          }}>
+                            +{signupCount - 3}
+                          </div>
+                        )}
                       </div>
+                      <span style={{ fontSize: isMobile ? '11px' : '12px', color: textColorMuted, fontWeight: '500' }}>
+                        {signupCount > 0 ? `${signupCount} going` : 'Be first!'}
+                      </span>
+                    </div>
+                    {userRsvps.has(meetup.id) ? (
                       <button
-                        onClick={() => onNavigate?.('home')}
+                        onClick={() => handleRsvp(meetup.id)}
+                        disabled={rsvpLoading[meetup.id]}
                         style={{
-                          padding: isMobile ? '5px 10px' : '6px 12px',
-                          backgroundColor: colors.primary,
-                          color: 'white',
+                          padding: isMobile ? '7px 14px' : '8px 18px',
+                          backgroundColor: isLightImage ? 'rgba(76,175,80,0.12)' : 'rgba(168,230,207,0.25)',
+                          color: isLightImage ? '#2E7D32' : '#A8E6CF',
+                          border: isLightImage ? '1.5px solid rgba(76,175,80,0.3)' : '1.5px solid rgba(168,230,207,0.5)',
+                          borderRadius: '8px',
+                          fontSize: isMobile ? '12px' : '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                        }}>
+                        {rsvpLoading[meetup.id] ? '...' : <><Check size={isMobile ? 12 : 13} /> Going</>}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleRsvp(meetup.id)}
+                        disabled={rsvpLoading[meetup.id]}
+                        style={{
+                          padding: isMobile ? '7px 16px' : '8px 20px',
+                          backgroundColor: isLightImage ? colors.primary : 'rgba(255,255,255,0.95)',
+                          color: isLightImage ? 'white' : colors.text,
                           border: 'none',
                           borderRadius: '8px',
-                          fontSize: isMobile ? '10px' : '11px',
-                          fontWeight: '600',
-                          cursor: 'pointer',
+                          fontSize: isMobile ? '12px' : '13px',
+                          fontWeight: '700',
+                          cursor: rsvpLoading[meetup.id] ? 'not-allowed' : 'pointer',
                         }}>
-                        RSVP
+                        {rsvpLoading[meetup.id] ? '...' : 'RSVP'}
                       </button>
-                    </div>
+                    )}
                   </div>
                 </div>
               );
             })}
 
-            {/* Request a Meetup prompt card - show when there are few events */}
-            {featuredMeetups.length <= 2 && (
+          </div>
+          )}
+        </div>
+
+      {/* Trending Requests */}
+      {meetupRequests.length > 0 && (
+        <div style={{
+          marginBottom: isMobile ? '24px' : '32px',
+          backgroundColor: '#EDE3D5',
+          marginLeft: isMobile ? '-16px' : '-24px',
+          marginRight: isMobile ? '-16px' : '-24px',
+          padding: isMobile ? '20px 16px' : '24px 24px',
+          borderRadius: isMobile ? '0' : '16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
+            <div>
+              <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '600', color: '#3D2E1F', margin: 0, fontFamily: fonts.serif }}>
+                Trending Requests
+              </h2>
+              <p style={{ fontSize: isMobile ? '13px' : '14px', color: '#7A6B5D', margin: '4px 0 0' }}>
+                Topics the community wants — support to make them happen
+              </p>
+            </div>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            gap: isMobile ? '10px' : '12px',
+            overflowX: 'auto',
+            paddingBottom: '8px',
+            marginLeft: isMobile ? '-16px' : '0',
+            marginRight: isMobile ? '-16px' : '0',
+            paddingLeft: isMobile ? '16px' : '0',
+            paddingRight: isMobile ? '16px' : '0',
+            WebkitOverflowScrolling: 'touch',
+          }}>
+            {meetupRequests.slice(0, 6).map((request) => {
+              const vibeInfo = VIBE_CATEGORIES.find(v => v.id === request.vibe_category);
+              const hasSupported = request.supporters?.some(s => s.user_id === currentUser?.id);
+              const isOwner = request.user_id === currentUser?.id;
+
+              return (
+                <div
+                  key={request.id}
+                  style={{
+                    minWidth: isMobile ? '240px' : '270px',
+                    maxWidth: isMobile ? '240px' : '270px',
+                    padding: isMobile ? '16px' : '20px',
+                    backgroundColor: '#FFFCF8',
+                    borderRadius: '16px',
+                    border: '1px solid #DDD2C2',
+                    flexShrink: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: isMobile ? '12px' : '14px',
+                    transition: 'box-shadow 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,111,71,0.12)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
+                >
+                  {/* Vote badge + Category tag */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: isMobile ? '5px 12px' : '6px 14px',
+                      borderRadius: '20px',
+                      backgroundColor: '#FDF8F2',
+                    }}>
+                      <span style={{
+                        fontSize: isMobile ? '16px' : '18px',
+                        fontWeight: '700',
+                        color: '#8B6F47',
+                        fontFamily: "'DM Serif Display', Georgia, serif",
+                        lineHeight: '1',
+                      }}>
+                        {request.supporter_count || 0}
+                      </span>
+                      <span style={{
+                        fontSize: isMobile ? '9px' : '10px',
+                        color: '#7A6B5D',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        fontFamily: "'Nunito Sans', sans-serif",
+                      }}>
+                        VOTES
+                      </span>
+                    </div>
+                    {vibeInfo && (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: isMobile ? '4px 10px' : '5px 12px',
+                        borderRadius: '20px',
+                        backgroundColor: '#F8F0E4',
+                        fontSize: isMobile ? '11px' : '12px',
+                        color: '#7A6B5D',
+                        fontWeight: '600',
+                        fontFamily: "'Nunito Sans', sans-serif",
+                      }}>
+                        {vibeInfo.emoji} {vibeInfo.label}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Topic title */}
+                  <p style={{
+                    fontSize: isMobile ? '16px' : '18px',
+                    fontWeight: '700',
+                    color: '#3D2E1F',
+                    margin: 0,
+                    fontFamily: "'DM Serif Display', Georgia, serif",
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    lineHeight: '1.3',
+                    flex: 1,
+                  }}>
+                    {request.topic}
+                  </p>
+
+                  {/* Support button + Host this */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    {hasSupported ? (
+                      <button
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: isMobile ? '7px 14px' : '8px 16px',
+                          backgroundColor: '#E8D9C6',
+                          color: '#8B6F47',
+                          border: 'none',
+                          borderRadius: '20px',
+                          fontSize: isMobile ? '12px' : '13px',
+                          fontWeight: '700',
+                          cursor: 'default',
+                          fontFamily: "'Nunito Sans', sans-serif",
+                        }}
+                      >
+                        👍 Supported
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleSupportRequest(request.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: isMobile ? '7px 14px' : '8px 16px',
+                          backgroundColor: '#8B6F47',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '20px',
+                          fontSize: isMobile ? '12px' : '13px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          fontFamily: "'Nunito Sans', sans-serif",
+                          transition: 'opacity 0.2s ease',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
+                      >
+                        👍 Support
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleHostRequest(request)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#8B6F47',
+                        fontSize: isMobile ? '11px' : '12px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontFamily: "'Nunito Sans', sans-serif",
+                        letterSpacing: '0.2px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      Host this
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Suggest a topic card */}
+            <button
+              onClick={() => setShowRequestModal(true)}
+              style={{
+                minWidth: isMobile ? '140px' : '160px',
+                maxWidth: isMobile ? '140px' : '160px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: isMobile ? '16px' : '20px',
+                backgroundColor: 'transparent',
+                color: '#8B6F47',
+                border: '1.5px dashed #DDD2C2',
+                borderRadius: '16px',
+                fontSize: isMobile ? '13px' : '14px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                fontFamily: "'Nunito Sans', sans-serif",
+                flexShrink: 0,
+                transition: 'border-color 0.2s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#8B6F47'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#DDD2C2'; }}
+            >
+              <Plus size={isMobile ? 18 : 20} />
+              Suggest a topic
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Intimate Circles */}
+      {(() => {
+        // Filter groups where current user is NOT a member and group is not full
+        const availableCircles = connectionGroups.filter(group => {
+          const isMember = group.members?.some(m => m.user_id === currentUser.id);
+          const memberCount = group.members?.length || 0;
+          return !isMember && memberCount < 10;
+        });
+
+        const circleGradients = [
+          'linear-gradient(160deg, #6B4226 0%, #A0714F 50%, #C49A6C 100%)',
+          'linear-gradient(160deg, #5C6B42 0%, #7A9455 50%, #A0B87A 100%)',
+          'linear-gradient(160deg, #6B4266 0%, #945587 50%, #B87AA0 100%)',
+          'linear-gradient(160deg, #42536B 0%, #557A94 50%, #7AA0B8 100%)',
+          'linear-gradient(160deg, #6B5C42 0%, #947A55 50%, #B8A07A 100%)',
+          'linear-gradient(160deg, #4A426B 0%, #6B5594 50%, #947AB8 100%)',
+        ];
+
+        const avatarColors = ['#8B5E3C', '#A0714F', '#6B4226', '#C49A6C'];
+
+        const expandedCircle = expandedCircleId
+          ? availableCircles.find(c => c.id === expandedCircleId)
+          : null;
+
+        // Show full-width prompt when no circles available
+        if (availableCircles.length === 0) {
+          return (
+            <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
+                <div>
+                  <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
+                    Intimate Circles
+                  </h2>
+                  <p style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, margin: '4px 0 0' }}>
+                    Small groups built on real connections
+                  </p>
+                </div>
+                <button
+                  onClick={() => onNavigate?.('allCircles')}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    background: 'none',
+                    border: 'none',
+                    color: colors.primary,
+                    fontSize: isMobile ? '13px' : '15px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                  }}>
+                  See all <ChevronRight size={isMobile ? 12 : 14} />
+                </button>
+              </div>
+
               <div
-                onClick={() => setShowRequestModal(true)}
+                onClick={() => onNavigate?.('createCircle')}
                 style={{
-                  minWidth: isMobile ? '240px' : '280px',
-                  backgroundColor: colors.cream,
-                  borderRadius: isMobile ? '14px' : '16px',
-                  overflow: 'hidden',
-                  boxShadow: '0 2px 12px rgba(139, 111, 92, 0.1)',
-                  flexShrink: 0,
+                  background: 'linear-gradient(135deg, #F5EDE4 0%, #EDE3D7 50%, #E8DDD0 100%)',
+                  borderRadius: '19px',
+                  padding: isMobile ? '28px 20px' : '32px',
+                  textAlign: 'center',
                   cursor: 'pointer',
+                  border: '1px solid #E0D5C7',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  backgroundColor: '#D8CFC6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '14px',
+                }}>
+                  <span style={{ fontSize: '22px' }}>✨</span>
+                </div>
+
+                <h3 style={{
+                  fontSize: isMobile ? '20px' : '24px',
+                  fontWeight: '600',
+                  color: '#3E2C1E',
+                  margin: '0 0 8px',
+                  fontFamily: fonts.serif,
+                }}>
+                  Start your own Circle
+                </h3>
+
+                <p style={{
+                  fontSize: isMobile ? '13px' : '14px',
+                  color: '#7A6855',
+                  margin: '0 0 18px',
+                  lineHeight: '1.6',
+                  maxWidth: '320px',
+                  fontStyle: 'italic',
+                }}>
+                  Start a trusted small group of 6-10 women to meet weekly and help each other move forward.
+                </p>
+
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  marginBottom: '20px',
+                  alignItems: 'flex-start',
+                }}>
+                  {['6-10 women per Circle', 'Weekly check-ins', 'Clear next steps'].map((item) => (
+                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        backgroundColor: '#8B6F5C',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        <Check size={12} style={{ color: 'white' }} />
+                      </div>
+                      <span style={{
+                        fontSize: isMobile ? '13px' : '14px',
+                        fontWeight: '500',
+                        color: '#3E2C1E',
+                      }}>
+                        {item}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigate?.('createCircle');
+                  }}
+                  style={{
+                    padding: isMobile ? '11px 28px' : '12px 32px',
+                    backgroundColor: '#8B6F5C',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '999px',
+                    fontSize: isMobile ? '14px' : '15px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Create a circle
+                </button>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
+              <div>
+                <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
+                  Intimate Circles
+                </h2>
+                <p style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, margin: '4px 0 0' }}>
+                  Small groups built on real connections
+                </p>
+              </div>
+              <button
+                onClick={() => onNavigate?.('allCircles')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'none',
+                  border: 'none',
+                  color: colors.primary,
+                  fontSize: isMobile ? '13px' : '15px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}>
+                See all <ChevronRight size={isMobile ? 12 : 14} />
+              </button>
+            </div>
+
+            {/* Netflix-style poster row */}
+            <div style={{
+              display: 'flex',
+              gap: isMobile ? '10px' : '12px',
+              overflowX: 'auto',
+              paddingBottom: '8px',
+              marginLeft: isMobile ? '-16px' : '-24px',
+              marginRight: isMobile ? '-16px' : '-24px',
+              paddingLeft: isMobile ? '16px' : '24px',
+              paddingRight: isMobile ? '16px' : '24px',
+              WebkitOverflowScrolling: 'touch',
+              alignItems: 'flex-start',
+            }}>
+              {availableCircles.slice(0, 6).map((circle, index) => {
+                const memberCount = circle.members?.length || 0;
+                const maxMembers = circle.max_members || 10;
+                const spotsLeft = maxMembers - memberCount;
+                const isInviteOnly = !!circle.is_private;
+                const isExpanded = expandedCircleId === circle.id;
+                const description = circle.description
+                  || (circle.vibe_category === 'advice' ? 'Mentorship & guidance'
+                  : circle.vibe_category === 'peers' ? 'Peer support & community'
+                  : circle.vibe_category === 'grow' ? 'Career growth & skills'
+                  : 'Connect & grow together');
+
+                const cardWidth = isMobile ? 200 : 230;
+                const collapsedHeight = isMobile ? 220 : 250;
+                return (
+                  <div
+                    key={circle.id}
+                    onClick={() => setExpandedCircleId(isExpanded ? null : circle.id)}
+                    style={{
+                      width: `${isExpanded ? cardWidth + 40 : cardWidth}px`,
+                      minWidth: `${isExpanded ? cardWidth + 40 : cardWidth}px`,
+                      borderRadius: '14px',
+                      overflow: 'hidden',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      position: 'relative',
+                      border: isExpanded ? `2.5px solid ${colors.primary}` : '2.5px solid transparent',
+                      transition: 'all 0.3s ease',
+                      boxShadow: isExpanded
+                        ? `0 8px 24px ${colors.primary}35`
+                        : '0 3px 12px rgba(0,0,0,0.18)',
+                    }}
+                  >
+                    {/* Gradient poster area */}
+                    <div style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: `${collapsedHeight}px`,
+                    }}>
+                      {/* Gradient background */}
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: circleGradients[index % circleGradients.length],
+                      }} />
+
+                      {/* Top-left: Open/Invite Only pill */}
+                      <span style={{
+                        position: 'absolute',
+                        top: '10px',
+                        left: '10px',
+                        padding: '3px 10px',
+                        borderRadius: '999px',
+                        fontSize: isMobile ? '10px' : '11px',
+                        fontWeight: '700',
+                        letterSpacing: '0.3px',
+                        backgroundColor: 'rgba(255,255,255,0.25)',
+                        backdropFilter: 'blur(4px)',
+                        WebkitBackdropFilter: 'blur(4px)',
+                        color: 'white',
+                        zIndex: 2,
+                      }}>
+                        {isInviteOnly ? 'Invite Only' : 'Open'}
+                      </span>
+
+                      {/* Top-right: member count */}
+                      <span style={{
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        padding: '3px 8px',
+                        borderRadius: '999px',
+                        fontSize: isMobile ? '11px' : '12px',
+                        fontWeight: '700',
+                        backgroundColor: 'rgba(0,0,0,0.3)',
+                        backdropFilter: 'blur(4px)',
+                        WebkitBackdropFilter: 'blur(4px)',
+                        color: 'white',
+                        zIndex: 2,
+                      }}>
+                        {memberCount}/{maxMembers}
+                      </span>
+
+                      {/* Bottom gradient scrim + circle name */}
+                      <div style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        padding: '36px 12px 12px',
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 100%)',
+                        zIndex: 2,
+                      }}>
+                        <h4 style={{
+                          fontSize: isMobile ? '15px' : '17px',
+                          fontWeight: '700',
+                          color: 'white',
+                          margin: 0,
+                          fontFamily: fonts.serif,
+                          lineHeight: '1.3',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}>
+                          {circle.name}
+                        </h4>
+                      </div>
+                    </div>
+
+                    {/* Expanded detail section */}
+                    {isExpanded && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          backgroundColor: colors.warmWhite,
+                          padding: isMobile ? '14px 12px 16px' : '16px 14px 18px',
+                          animation: 'slideDown 0.25s ease-out',
+                        }}
+                      >
+                        {/* Description */}
+                        <p style={{
+                          fontSize: isMobile ? '12px' : '13px',
+                          color: colors.textLight,
+                          margin: '0 0 12px',
+                          lineHeight: '1.5',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}>
+                          {description}
+                        </p>
+
+                        {/* Avatar stack + spots */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          marginBottom: '12px',
+                        }}>
+                          <div style={{ display: 'flex', marginRight: '8px' }}>
+                            {circle.members?.slice(0, 4).map((member, idx) => (
+                              <div key={member.id} style={{
+                                width: isMobile ? '24px' : '28px',
+                                height: isMobile ? '24px' : '28px',
+                                borderRadius: '50%',
+                                backgroundColor: avatarColors[idx % avatarColors.length],
+                                border: '2px solid white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: isMobile ? '10px' : '11px',
+                                fontWeight: '600',
+                                color: 'white',
+                                marginLeft: idx > 0 ? '-7px' : 0,
+                              }}>
+                                {member.user?.name?.charAt(0) || '?'}
+                              </div>
+                            ))}
+                            {memberCount > 4 && (
+                              <div style={{
+                                width: isMobile ? '24px' : '28px',
+                                height: isMobile ? '24px' : '28px',
+                                borderRadius: '50%',
+                                backgroundColor: colors.cream,
+                                border: '2px solid white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: isMobile ? '8px' : '9px',
+                                fontWeight: '600',
+                                color: colors.text,
+                                marginLeft: '-7px',
+                              }}>
+                                +{memberCount - 4}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{
+                            fontSize: isMobile ? '11px' : '12px',
+                            color: colors.textLight,
+                          }}>
+                            {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
+                          </span>
+                        </div>
+
+                        {/* CTA Buttons */}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigate?.('circleDetail', { circleId: circle.id });
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: isMobile ? '9px 10px' : '10px 12px',
+                              backgroundColor: 'transparent',
+                              color: colors.primary,
+                              border: `1.5px solid ${colors.primary}`,
+                              borderRadius: '10px',
+                              fontSize: isMobile ? '12px' : '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            View Details
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigate?.('circleDetail', { circleId: circle.id });
+                            }}
+                            style={{
+                              flex: 1,
+                              padding: isMobile ? '9px 10px' : '10px 12px',
+                              backgroundColor: isInviteOnly ? 'transparent' : colors.primary,
+                              color: isInviteOnly ? colors.primary : 'white',
+                              border: isInviteOnly ? `1.5px solid ${colors.primary}` : 'none',
+                              borderRadius: '10px',
+                              fontSize: isMobile ? '12px' : '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              boxShadow: isInviteOnly ? 'none' : `0 2px 8px ${colors.primary}30`,
+                            }}
+                          >
+                            {isInviteOnly ? 'Request' : 'Join'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Create Circle Card - poster style */}
+              <div
+                onClick={() => onNavigate?.('createCircle')}
+                style={{
+                  width: isMobile ? '200px' : '230px',
+                  minWidth: isMobile ? '200px' : '230px',
+                  height: isMobile ? '220px' : '250px',
+                  borderRadius: '14px',
+                  overflow: 'hidden',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  position: 'relative',
+                  background: 'linear-gradient(135deg, #F5EDE4 0%, #EDE3D7 50%, #E8DDD0 100%)',
+                  border: '1.5px dashed #C4A882',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  border: `2px dashed ${colors.border}`,
-                  transition: 'all 0.2s ease',
-                  padding: isMobile ? '16px' : '20px',
-                }}>
-                <p style={{
-                  fontSize: isMobile ? '13px' : '14px',
-                  color: colors.textLight,
-                  margin: '0 0 16px',
+                  padding: '20px 14px',
                   textAlign: 'center',
+                }}
+              >
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  backgroundColor: '#D8CFC6',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  marginBottom: '10px',
+                }}>
+                  <Plus size={20} style={{ color: '#6B4226' }} />
+                </div>
+                <h4 style={{
+                  fontSize: isMobile ? '14px' : '15px',
+                  fontWeight: '600',
+                  color: '#3E2C1E',
+                  margin: '0 0 6px',
+                  fontFamily: fonts.serif,
+                  lineHeight: '1.3',
+                }}>
+                  Start your own Circle
+                </h4>
+                <p style={{
+                  fontSize: isMobile ? '11px' : '12px',
+                  color: '#7A6855',
+                  margin: 0,
                   lineHeight: '1.4',
                 }}>
-                  Don't see what you're looking for?
-                </p>
-                <span style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: isMobile ? '10px 18px' : '12px 20px',
-                  backgroundColor: colors.primary,
-                  color: 'white',
-                  borderRadius: '10px',
-                  fontSize: isMobile ? '12px' : '13px',
-                  fontWeight: '600',
-                }}>
-                  <Plus size={isMobile ? 14 : 16} />
-                  Request a Meetup
-                </span>
-                <p style={{
-                  fontSize: isMobile ? '10px' : '11px',
-                  color: colors.textMuted,
-                  margin: '12px 0 0',
-                  textAlign: 'center',
-                }}>
-                  Popular requests get hosted!
+                  6-10 women, weekly
                 </p>
               </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Connect with People */}
-      <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px', gap: '12px' }}>
-          <div style={{ flex: 1 }}>
-            <h2 style={{ fontSize: isMobile ? '16px' : '18px', fontWeight: '600', color: colors.text, margin: '0 0 4px', fontFamily: fonts.serif }}>
-              Connect with people
-            </h2>
-            <p style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textLight, margin: 0 }}>
-              Find women you can start a conversation with
-            </p>
-          </div>
-          <button
-            onClick={() => onNavigate?.('allPeople')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              background: 'none',
-              border: 'none',
-              color: colors.primary,
-              fontSize: isMobile ? '12px' : '13px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              flexShrink: 0,
-            }}>
-            See all <ChevronRight size={isMobile ? 12 : 14} />
-          </button>
-        </div>
-
-        {/* People Cards */}
-        <div style={{
-          display: 'flex',
-          gap: isMobile ? '10px' : '12px',
-          overflowX: 'auto',
-          paddingBottom: '8px',
-          marginLeft: isMobile ? '-16px' : '0',
-          marginRight: isMobile ? '-16px' : '0',
-          paddingLeft: isMobile ? '16px' : '0',
-          paddingRight: isMobile ? '16px' : '0',
-          WebkitOverflowScrolling: 'touch',
-        }}>
-          {peerSuggestions.length === 0 ? (
-            <div style={{
-              minWidth: isMobile ? '220px' : '260px',
-              backgroundColor: colors.cream,
-              borderRadius: isMobile ? '14px' : '16px',
-              padding: isMobile ? '16px' : '20px',
-              textAlign: 'center',
-            }}>
-              <div style={{
-                width: isMobile ? '48px' : '56px',
-                height: isMobile ? '48px' : '56px',
-                borderRadius: '50%',
-                backgroundColor: `${colors.primary}20`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 12px',
-              }}>
-                <User size={isMobile ? 24 : 28} style={{ color: colors.primary }} />
-              </div>
-              <h4 style={{ fontSize: isMobile ? '14px' : '15px', fontWeight: '600', color: colors.text, margin: '0 0 4px' }}>
-                Meet people
-              </h4>
-              <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textLight, margin: '0 0 12px' }}>
-                Join meetups to grow your network
-              </p>
-              <button
-                onClick={() => onNavigate?.('allEvents')}
-                style={{
-                  padding: isMobile ? '7px 14px' : '8px 16px',
-                  backgroundColor: colors.primary,
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: isMobile ? '11px' : '12px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                }}
-              >
-                Find Meetups
-              </button>
             </div>
-          ) : (
-            peerSuggestions.map((person) => (
-              <div
-                key={person.id}
-                style={{
-                  minWidth: isMobile ? '220px' : '260px',
-                  backgroundColor: colors.text,
-                  borderRadius: isMobile ? '14px' : '16px',
-                  padding: isMobile ? '16px' : '20px',
-                  boxShadow: '0 4px 16px rgba(74, 55, 40, 0.15)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '12px' : '16px' }}>
-                  <div style={{
-                    width: isMobile ? '48px' : '56px',
-                    height: isMobile ? '48px' : '56px',
-                    borderRadius: '50%',
-                    backgroundColor: colors.primaryLight,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: isMobile ? '22px' : '28px',
-                    flexShrink: 0,
-                    color: 'white',
-                    fontWeight: '600',
-                  }}>
-                    {person.photo_url ? (
-                      <img
-                        src={person.photo_url}
-                        alt={person.name}
-                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      person.name?.[0] || '?'
-                    )}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{
-                      fontSize: isMobile ? '11px' : '12px',
-                      color: 'rgba(255,255,255,0.7)',
-                      margin: '0 0 4px',
-                    }}>
-                      Ask me about:
-                    </p>
-                    <h4 style={{
-                      fontSize: isMobile ? '14px' : '15px',
-                      fontWeight: '600',
-                      color: 'white',
-                      margin: '0 0 8px',
-                      lineHeight: '1.3',
-                      fontFamily: fonts.serif,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                    }}>
-                      {person.hook || person.career || 'Professional networking'}
-                    </h4>
-                    <p style={{
-                      fontSize: isMobile ? '11px' : '12px',
-                      color: 'rgba(255,255,255,0.6)',
-                      margin: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {person.name} | {person.career || 'Professional'}
-                    </p>
-                  </div>
-                </div>
-                {/* Tags at bottom */}
-                <div style={{
-                  display: 'flex',
-                  gap: '8px',
-                  marginTop: isMobile ? '12px' : '14px',
-                  paddingTop: isMobile ? '12px' : '14px',
-                  borderTop: '1px solid rgba(255,255,255,0.1)',
-                }}>
-                  {person.city && (
-                    <span style={{
-                      padding: isMobile ? '4px 8px' : '5px 10px',
-                      backgroundColor: 'rgba(255,255,255,0.12)',
-                      color: 'rgba(255,255,255,0.85)',
-                      fontSize: isMobile ? '10px' : '11px',
-                      fontWeight: '500',
-                      borderRadius: '6px',
-                    }}>
-                      Nearby
-                    </span>
-                  )}
-                  <span style={{
-                    padding: isMobile ? '4px 8px' : '5px 10px',
-                    backgroundColor: 'rgba(255,255,255,0.12)',
-                    color: 'rgba(255,255,255,0.85)',
-                    fontSize: isMobile ? '10px' : '11px',
-                    fontWeight: '500',
-                    borderRadius: '6px',
-                  }}>
-                    {person.career ? 'Similar' : 'Connect'}
-                  </span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+          </div>
+        );
+      })()}
 
-      {/* Empty state when no meetups */}
-      {featuredMeetups.length === 0 && (
-        <div style={{
-          backgroundColor: colors.warmWhite,
-          borderRadius: isMobile ? '16px' : '20px',
-          padding: isMobile ? '32px 16px' : '40px 20px',
-          textAlign: 'center',
-          marginBottom: isMobile ? '24px' : '32px',
-        }}>
-          <div style={{ fontSize: isMobile ? '40px' : '48px', marginBottom: isMobile ? '12px' : '16px' }}>🌱</div>
-          <h3 style={{
-            fontSize: isMobile ? '16px' : '18px',
-            fontWeight: '600',
-            color: colors.text,
-            margin: '0 0 8px',
-            fontFamily: fonts.serif,
-          }}>
-            No meetups scheduled yet
-          </h3>
-          <p style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, margin: '0 0 20px' }}>
-            Be the first to host a meetup and bring people together!
-          </p>
-          <button
-            onClick={() => onHostMeetup ? onHostMeetup() : onNavigate?.('meetupProposals')}
-            style={{
-              padding: isMobile ? '10px 20px' : '12px 24px',
-              backgroundColor: colors.primary,
-              color: 'white',
-              border: 'none',
-              borderRadius: '12px',
-              fontSize: isMobile ? '13px' : '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              boxShadow: `0 4px 12px ${colors.primary}40`,
-            }}
-          >
-            Host a Meetup
-          </button>
-        </div>
-      )}
 
       {/* Floating Action Button */}
       <div style={{
@@ -1660,7 +2083,7 @@ export default function NetworkDiscoverView({
             overflowY: 'auto',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isMobile ? '14px' : '16px' }}>
-              <h3 style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
+              <h3 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '600', color: colors.text, margin: 0, fontFamily: fonts.serif }}>
                 Request a Meetup
               </h3>
               <button
@@ -1801,6 +2224,11 @@ export default function NetworkDiscoverView({
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+
+        @keyframes slideDown {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
         /* Hide scrollbar for horizontal scroll areas */

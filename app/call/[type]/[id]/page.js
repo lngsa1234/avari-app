@@ -567,6 +567,14 @@ export default function UnifiedCallPage() {
       });
       testStream.getTracks().forEach(track => track.stop());
 
+      // Create AudioContext now while we still have user gesture context
+      // This prevents "AudioContext was not allowed to start" warnings
+      if (!window.__avariAudioContext) {
+        try {
+          window.__avariAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) { /* ignore */ }
+      }
+
       // Refresh device list now that we have permission
       await refreshDevices();
 
@@ -720,6 +728,7 @@ export default function UnifiedCallPage() {
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
       },
+      webAudioMix: window.__avariAudioContext ? { audioContext: window.__avariAudioContext } : false,
     });
 
     roomRef.current = room;
@@ -738,6 +747,17 @@ export default function UnifiedCallPage() {
       updateLiveKitParticipants(room);
     });
 
+    // Handle browser autoplay policy — resume audio on first user interaction
+    const resumeAudio = async () => {
+      try {
+        await room.startAudio();
+      } catch (e) { /* ignore */ }
+      document.removeEventListener('click', resumeAudio);
+      document.removeEventListener('touchstart', resumeAudio);
+    };
+    document.addEventListener('click', resumeAudio);
+    document.addEventListener('touchstart', resumeAudio);
+
     // Get token
     const tokenResponse = await fetch('/api/livekit-token', {
       method: 'POST',
@@ -754,9 +774,6 @@ export default function UnifiedCallPage() {
 
     await room.connect(liveKitUrl, token);
     await room.localParticipant.enableCameraAndMicrophone();
-
-    // Required: start audio playback to handle browser autoplay policy
-    await room.startAudio();
 
     const camTrack = room.localParticipant.getTrackPublication('camera');
     const micTrack = room.localParticipant.getTrackPublication('microphone');
@@ -1111,7 +1128,10 @@ export default function UnifiedCallPage() {
   userIdRef.current = user?.id || null;
 
   // Detect screen share support (iOS browsers don't support getDisplayMedia)
-  const isScreenShareSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
+  const [isScreenShareSupported, setIsScreenShareSupported] = useState(true);
+  useEffect(() => {
+    setIsScreenShareSupported(!!navigator.mediaDevices?.getDisplayMedia);
+  }, []);
 
   // Handle video device change
   const handleVideoDeviceChange = async (deviceId) => {

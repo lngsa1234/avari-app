@@ -101,9 +101,10 @@ const RemoteVideo = memo(function RemoteVideo({
   }, [videoTrack, isVideoEnabled, providerType, participant.uid, participant._lastUpdate]);
 
   // Handle audio track attachment
-  // For WebRTC, audio plays from the <video> element (not muted), so skip separate <audio> attachment
+  // WebRTC: audio plays from the <video> element (not muted), skip separate attachment
+  // LiveKit: room handles remote audio playback automatically, skip manual attachment
   useEffect(() => {
-    if (providerType === 'webrtc') return;
+    if (providerType === 'webrtc' || providerType === 'livekit') return;
 
     const audioElement = audioRef.current;
     const track = audioTrack;

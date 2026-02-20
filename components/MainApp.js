@@ -62,6 +62,7 @@ function MainApp({ currentUser, onSignOut }) {
   }, [onSignOut])
   
   const [currentView, setCurrentView] = useState('home')
+  const [previousView, setPreviousView] = useState('home')
   const [selectedCircleId, setSelectedCircleId] = useState(null)
   const [selectedChatId, setSelectedChatId] = useState(null)
   const [selectedChatType, setSelectedChatType] = useState(null) // 'user' or 'circle'
@@ -125,7 +126,10 @@ function MainApp({ currentUser, onSignOut }) {
         connectionName: data.scheduleConnectionName || null
       })
     }
-    setCurrentView(view)
+    setCurrentView(prev => {
+      setPreviousView(prev)
+      return view
+    })
   }, [])
 
   // DEBUGGING: Detect prop changes
@@ -337,7 +341,7 @@ function MainApp({ currentUser, onSignOut }) {
         // Get public meetups OR meetups from user's circles
         const result = await supabase
           .from('meetups')
-          .select('*, connection_groups(id, name), host:profiles!created_by(id, name)')
+          .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
           .or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
           .order('date', { ascending: true })
           .order('time', { ascending: true })
@@ -348,7 +352,7 @@ function MainApp({ currentUser, onSignOut }) {
         // No circle memberships, just get public meetups
         const result = await supabase
           .from('meetups')
-          .select('*, connection_groups(id, name), host:profiles!created_by(id, name)')
+          .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
           .is('circle_id', null)
           .order('date', { ascending: true })
           .order('time', { ascending: true })
@@ -3431,7 +3435,7 @@ function MainApp({ currentUser, onSignOut }) {
   )
 
   return (
-    <div className="min-h-screen bg-[#F4EEE6] pb-28">
+    <div className="min-h-screen pb-28" style={{ background: currentView === 'discover' ? 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)' : '#F4EEE6' }}>
       {/* Onboarding for new users */}
       {showOnboarding && (
         <Onboarding
@@ -3604,7 +3608,7 @@ function MainApp({ currentUser, onSignOut }) {
                 }`}
               >
                 <Calendar className="w-4 h-4 flex-shrink-0" />
-                <span>Meetups</span>
+                <span>Coffee</span>
               </button>
               <button
                 onClick={() => setCurrentView('connectionGroups')}
@@ -3633,7 +3637,16 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
         {currentView === 'connections' && <ConnectionsView />}
-        {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={() => setShowCreateMeetup(true)} />}
+        {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={(requestData) => {
+            if (requestData?.topic) {
+              setNewMeetup(prev => ({
+                ...prev,
+                topic: requestData.topic,
+                description: requestData.description || '',
+              }));
+            }
+            setShowCreateMeetup(true);
+          }} />}
         {currentView === 'messages' && <MessagesPageView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} initialChatId={selectedChatId} initialChatType={selectedChatType} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'meetupProposals' && <MeetupProposalsView currentUser={currentUser} supabase={supabase} isAdmin={currentUser.role === 'admin'} />}
@@ -3644,7 +3657,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'allPeople' && <AllPeopleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'allCircles' && <AllCirclesView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
         {currentView === 'createCircle' && <CreateCircleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
-        {currentView === 'circleDetail' && <CircleDetailView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} circleId={selectedCircleId} />}
+        {currentView === 'circleDetail' && <CircleDetailView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} circleId={selectedCircleId} previousView={previousView} />}
         {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
         {currentView === 'scheduleMeetup' && (
           <ScheduleMeetupView

@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Check, UserPlus, Plus } from 'lucide-react';
+import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Check, UserPlus, Plus, FileText } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 import {
   getOrCreateCircleMeetups,
@@ -76,6 +76,7 @@ export default function CircleDetailView({
   supabase,
   onNavigate,
   circleId,
+  previousView,
 }) {
   const [circle, setCircle] = useState(null);
   const [members, setMembers] = useState([]);
@@ -98,6 +99,9 @@ export default function CircleDetailView({
   const [userRSVPs, setUserRSVPs] = useState({});
   const [rsvpLoading, setRsvpLoading] = useState({});
   const [useFallbackDates, setUseFallbackDates] = useState(false);
+  const [pastMeetups, setPastMeetups] = useState([]);
+  const [showAllPast, setShowAllPast] = useState(false);
+  const [recapMap, setRecapMap] = useState({});
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -204,6 +208,60 @@ export default function CircleDetailView({
           const meetupIds = meetups.map(m => m.id);
           const rsvpStatus = await getUserRSVPStatus(meetupIds);
           setUserRSVPs(rsvpStatus);
+        }
+      }
+      // Load past meetups
+      const today = new Date().toISOString().split('T')[0];
+      const { data: pastData } = await supabase
+        .from('meetups')
+        .select('id, topic, date, time, location, duration, participant_limit')
+        .eq('circle_id', circleId)
+        .lt('date', today)
+        .order('date', { ascending: false })
+        .limit(10);
+
+      if (pastData && pastData.length > 0) {
+        // Get attendee counts for past meetups
+        const pastIds = pastData.map(m => m.id);
+        const { data: pastSignups } = await supabase
+          .from('meetup_signups')
+          .select('meetup_id')
+          .in('meetup_id', pastIds);
+
+        const countByMeetup = {};
+        (pastSignups || []).forEach(s => {
+          countByMeetup[s.meetup_id] = (countByMeetup[s.meetup_id] || 0) + 1;
+        });
+
+        const enrichedPast = pastData.map(m => ({
+          ...m,
+          attendeeCount: countByMeetup[m.id] || 0,
+        }));
+        setPastMeetups(enrichedPast);
+
+        // Fetch recaps for this circle to match with past sessions
+        const { data: recapData } = await supabase
+          .from('call_recaps')
+          .select('id, channel_name, created_at')
+          .like('channel_name', `%${circleId}%`)
+          .order('created_at', { ascending: false });
+
+        if (recapData && recapData.length > 0) {
+          // Match recaps to past meetups by date proximity (recap created same day or day after meetup)
+          const rMap = {};
+          enrichedPast.forEach(meetup => {
+            const meetupDate = new Date(meetup.date + 'T00:00:00');
+            const matchingRecap = recapData.find(r => {
+              const recapDate = new Date(r.created_at);
+              const diffMs = recapDate - meetupDate;
+              const diffDays = diffMs / (1000 * 60 * 60 * 24);
+              return diffDays >= 0 && diffDays < 2; // recap created same day or next day
+            });
+            if (matchingRecap) {
+              rMap[meetup.id] = matchingRecap.id;
+            }
+          });
+          setRecapMap(rMap);
         }
       }
     } catch (error) {
@@ -403,8 +461,8 @@ export default function CircleDetailView({
           <span style={{ fontSize: '48px', marginBottom: '16px' }}>😕</span>
           <h2 style={{ margin: '0 0 8px', color: colors.text }}>Circle not found</h2>
           <p style={{ color: colors.textLight, marginBottom: '24px' }}>This circle may have been removed or doesn't exist.</p>
-          <button style={styles.primaryButton} onClick={() => onNavigate?.('allCircles')}>
-            Browse Circles
+          <button style={styles.primaryButton} onClick={() => onNavigate?.(previousView || 'allCircles')}>
+            Go back
           </button>
         </div>
       </div>
@@ -419,7 +477,7 @@ export default function CircleDetailView({
       <div style={{ ...styles.header, background: gradient }}>
         <button
           style={styles.backButton}
-          onClick={() => onNavigate?.('allCircles')}
+          onClick={() => onNavigate?.(previousView || 'allCircles')}
         >
           <ChevronLeft size={24} color={colors.text} />
         </button>
@@ -456,137 +514,180 @@ export default function CircleDetailView({
           )}
         </div>
 
-        {/* Meeting Details */}
-        <div style={styles.detailsCard}>
-          <div style={styles.detailRow}>
-            <Calendar size={18} color={colors.primary} />
-            <span style={styles.detailText}>
-              {circle.meeting_day && circle.cadence
-                ? `${circle.cadence} on ${circle.meeting_day}s`
-                : circle.meeting_day
-                  ? `Every ${circle.meeting_day}`
-                  : circle.cadence || 'Schedule TBD'}
-            </span>
+        {/* Regular Schedule */}
+        <div style={styles.section}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+            <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>Regular Schedule</h3>
+            {isHost && (
+              <button
+                onClick={() => onNavigate?.('scheduleMeetup', {
+                  meetupType: 'circle',
+                  scheduleCircleId: circle.id,
+                  scheduleCircleName: circle.name,
+                })}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '7px 14px',
+                  backgroundColor: 'transparent',
+                  color: colors.primary,
+                  border: `1.5px solid ${colors.primary}`,
+                  borderRadius: '10px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontFamily: fonts.sans,
+                }}
+              >
+                <Edit3 size={13} />
+                Manage
+              </button>
+            )}
           </div>
-          <div style={styles.detailRow}>
-            <Clock size={18} color={colors.primary} />
-            <span style={styles.detailText}>
-              {circle.time_of_day || 'Time flexible'}
-            </span>
-          </div>
-          <div style={styles.detailRow}>
-            <MapPin size={18} color={colors.primary} />
-            <span style={styles.detailText}>
-              {circle.location || 'Virtual'}
-            </span>
-          </div>
-        </div>
 
-        {/* Upcoming Meetups */}
-        {(circleMeetups.length > 0 || (useFallbackDates && circle.meeting_day && circle.meeting_day !== 'Flexible')) && (
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Upcoming Meetups</h3>
-            <div style={styles.upcomingList}>
-              {/* Use actual meetups if available */}
-              {!useFallbackDates && circleMeetups.map((meetup, index) => {
-                const isNext = index === 0;
-                const isRSVPd = userRSVPs[meetup.id];
-                const isLoading = rsvpLoading[meetup.id];
-                const meetupDate = parseLocalDate(meetup.date);
-                const dayName = meetupDate.toLocaleDateString('en-US', { weekday: 'short' });
-                const fullDate = meetupDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                const timeDisplay = meetup.time ?
-                  new Date(`2000-01-01T${meetup.time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-                  : 'Time TBD';
+          {/* Schedule grid */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '12px',
+            marginBottom: (circleMeetups.length > 0 || (useFallbackDates && circle.meeting_day && circle.meeting_day !== 'Flexible')) ? '16px' : 0,
+          }}>
+            <div style={{
+              backgroundColor: colors.cream,
+              borderRadius: '12px',
+              padding: '14px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Calendar size={15} color={colors.primary} />
+                <span style={{ fontSize: '11px', color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Frequency</span>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: colors.text, fontFamily: fonts.serif }}>
+                {circle.meeting_day && circle.cadence
+                  ? `${circle.cadence}`
+                  : circle.cadence || 'TBD'}
+              </span>
+              {circle.meeting_day && (
+                <span style={{ display: 'block', fontSize: '13px', color: colors.textLight, marginTop: '2px' }}>
+                  on {circle.meeting_day}s
+                </span>
+              )}
+            </div>
 
-                return (
-                  <div
-                    key={meetup.id}
-                    style={{
-                      ...styles.upcomingItem,
-                      ...(isNext ? styles.upcomingItemNext : {}),
-                    }}
-                  >
-                    <div style={styles.upcomingDate}>
-                      <span style={styles.upcomingDay}>{dayName}</span>
-                      <span style={styles.upcomingFullDate}>{fullDate}</span>
-                    </div>
-                    <div style={styles.upcomingMeta}>
-                      <div style={styles.upcomingTime}>
-                        <Clock size={14} color={isNext ? colors.primary : colors.textMuted} />
-                        <span style={{
-                          ...styles.upcomingTimeText,
-                          color: isNext ? colors.primary : colors.textMuted,
-                        }}>
-                          {timeDisplay}
-                        </span>
-                      </div>
-                      {isMember && (
-                        <button
-                          style={{
-                            ...styles.rsvpButton,
-                            ...(isRSVPd ? styles.rsvpButtonActive : {}),
-                          }}
-                          onClick={() => handleRSVP(meetup.id)}
-                          disabled={isLoading}
-                        >
-                          {isLoading ? '...' : isRSVPd ? (
-                            <>
-                              <Check size={14} />
-                              <span>Going</span>
-                            </>
-                          ) : (
-                            <>
-                              <UserPlus size={14} />
-                              <span>RSVP</span>
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                    {isNext && (
-                      <span style={styles.nextBadge}>Next</span>
-                    )}
-                  </div>
-                );
-              })}
+            <div style={{
+              backgroundColor: colors.cream,
+              borderRadius: '12px',
+              padding: '14px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Clock size={15} color={colors.primary} />
+                <span style={{ fontSize: '11px', color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Time</span>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: colors.text, fontFamily: fonts.serif }}>
+                {circle.time_of_day || 'Flexible'}
+              </span>
+            </div>
 
-              {/* Fallback to calculated dates */}
-              {useFallbackDates && calculateUpcomingDates(circle.meeting_day, circle.cadence, 4).map((date, index) => {
-                const isNext = index === 0;
-                const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-                const fullDate = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            <div style={{
+              backgroundColor: colors.cream,
+              borderRadius: '12px',
+              padding: '14px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <MapPin size={15} color={colors.primary} />
+                <span style={{ fontSize: '11px', color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Location</span>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: colors.text, fontFamily: fonts.serif }}>
+                {circle.location || 'Virtual'}
+              </span>
+            </div>
 
-                return (
-                  <div
-                    key={index}
-                    style={{
-                      ...styles.upcomingItem,
-                      ...(isNext ? styles.upcomingItemNext : {}),
-                    }}
-                  >
-                    <div style={styles.upcomingDate}>
-                      <span style={styles.upcomingDay}>{dayName}</span>
-                      <span style={styles.upcomingFullDate}>{fullDate}</span>
-                    </div>
-                    <div style={styles.upcomingTime}>
-                      <Clock size={14} color={isNext ? colors.primary : colors.textMuted} />
-                      <span style={{
-                        ...styles.upcomingTimeText,
-                        color: isNext ? colors.primary : colors.textMuted,
-                      }}>
-                        {circle.time_of_day || 'Time TBD'}
-                      </span>
-                    </div>
-                    {isNext && (
-                      <span style={styles.nextBadge}>Next</span>
-                    )}
-                  </div>
-                );
-              })}
+            <div style={{
+              backgroundColor: colors.cream,
+              borderRadius: '12px',
+              padding: '14px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <Users size={15} color={colors.primary} />
+                <span style={{ fontSize: '11px', color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Group Size</span>
+              </div>
+              <span style={{ fontSize: '14px', fontWeight: '600', color: colors.text, fontFamily: fonts.serif }}>
+                {memberCount}/{maxMembers}
+              </span>
+              <span style={{ display: 'block', fontSize: '13px', color: spotsLeft <= 2 ? colors.warning : colors.textLight, marginTop: '2px' }}>
+                {spotsLeft > 0 ? `${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} open` : 'Full'}
+              </span>
             </div>
           </div>
-        )}
+
+          {/* Next meetup highlight */}
+          {(() => {
+            const nextMeetup = circleMeetups[0];
+            const nextFallbackDate = (!nextMeetup && useFallbackDates && circle.meeting_day && circle.meeting_day !== 'Flexible')
+              ? calculateUpcomingDates(circle.meeting_day, circle.cadence, 1)[0]
+              : null;
+
+            if (!nextMeetup && !nextFallbackDate) return null;
+
+            const displayDate = nextMeetup
+              ? parseLocalDate(nextMeetup.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+              : nextFallbackDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+            const displayTime = nextMeetup?.time
+              ? new Date(`2000-01-01T${nextMeetup.time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+              : circle.time_of_day || 'Time TBD';
+
+            return (
+              <div style={{
+                background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primaryDark} 100%)`,
+                borderRadius: '12px',
+                padding: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+              }}>
+                <div>
+                  <span style={{ fontSize: '10px', fontWeight: '700', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.8px' }}>
+                    Next Meetup
+                  </span>
+                  <p style={{ fontSize: '15px', fontWeight: '600', color: 'white', margin: '4px 0 2px', fontFamily: fonts.serif }}>
+                    {displayDate}
+                  </p>
+                  <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>
+                    {displayTime} · {circle.location || 'Virtual'}
+                  </span>
+                </div>
+                {isMember && nextMeetup && (
+                  <button
+                    onClick={() => handleRSVP(nextMeetup.id)}
+                    disabled={rsvpLoading[nextMeetup.id]}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: userRSVPs[nextMeetup.id] ? 'rgba(255,255,255,0.2)' : 'white',
+                      color: userRSVPs[nextMeetup.id] ? 'white' : colors.primary,
+                      border: userRSVPs[nextMeetup.id] ? '1.5px solid rgba(255,255,255,0.4)' : 'none',
+                      borderRadius: '10px',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {rsvpLoading[nextMeetup.id] ? '...' : userRSVPs[nextMeetup.id] ? (
+                      <><Check size={14} /> Going</>
+                    ) : (
+                      <><UserPlus size={14} /> RSVP</>
+                    )}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Host Section */}
         {host && (
@@ -670,6 +771,110 @@ export default function CircleDetailView({
             </div>
           </div>
         </div>
+
+        {/* Past Sessions */}
+        {pastMeetups.length > 0 && (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Past Sessions</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {(showAllPast ? pastMeetups : pastMeetups.slice(0, 3)).map((meetup) => {
+                const meetupDate = parseLocalDate(meetup.date);
+                const dateStr = meetupDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                const timeStr = meetup.time
+                  ? new Date(`2000-01-01T${meetup.time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                  : null;
+                const hasRecap = !!recapMap[meetup.id];
+
+                return (
+                  <div
+                    key={meetup.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      backgroundColor: colors.cream,
+                      borderRadius: '12px',
+                      cursor: hasRecap ? 'pointer' : 'default',
+                    }}
+                    onClick={hasRecap ? () => window.location.href = `/recaps/${recapMap[meetup.id]}` : undefined}
+                  >
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '10px',
+                      backgroundColor: 'rgba(139, 111, 92, 0.1)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <Calendar size={16} color={colors.textMuted} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: colors.text,
+                        margin: 0,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {meetup.topic || 'Circle Meetup'}
+                      </p>
+                      <p style={{
+                        fontSize: '12px',
+                        color: colors.textMuted,
+                        margin: '2px 0 0',
+                      }}>
+                        {dateStr}{timeStr ? ` · ${timeStr}` : ''} · {meetup.attendeeCount} attended
+                      </p>
+                    </div>
+                    {hasRecap && (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        padding: '5px 10px',
+                        backgroundColor: `${colors.primary}15`,
+                        borderRadius: '8px',
+                        flexShrink: 0,
+                      }}>
+                        <FileText size={13} color={colors.primary} />
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          color: colors.primary,
+                        }}>
+                          AI Recap
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {pastMeetups.length > 3 && (
+              <button
+                onClick={() => setShowAllPast(!showAllPast)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: colors.primary,
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  marginTop: '12px',
+                  padding: 0,
+                  fontFamily: fonts.sans,
+                }}
+              >
+                {showAllPast ? 'Show less' : `View all ${pastMeetups.length} sessions`}
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Status Banner for Pending */}
         {isPending && (

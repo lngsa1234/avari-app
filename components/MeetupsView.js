@@ -103,6 +103,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         const profile = profileMap.get(otherId);
         // Extract date and time from scheduled_time timestamp
         const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : null;
+        const isPending = chat.status === 'pending';
+        const isInviteReceived = isPending && chat.recipient_id === currentUser.id;
+        const isInviteSent = isPending && chat.requester_id === currentUser.id;
         return {
           ...chat,
           type: 'coffee',
@@ -112,6 +115,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           date: scheduledDate ? formatDate(scheduledDate.toISOString()) : 'TBD',
           time: scheduledDate ? formatTime(scheduledDate.toTimeString().slice(0, 5)) : 'TBD',
           duration: '30 min',
+          rawDate: scheduledDate,
+          isPending,
+          isInviteReceived,
+          isInviteSent,
           scheduled_date: chat.scheduled_time // Keep for sorting
         };
       });
@@ -187,6 +194,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           emoji: isCircleMeetup ? '🔒' : getEventEmoji(meetup.topic),
           host: isCircleMeetup ? circleName : 'CircleW Community',
           originalDate: meetup.date,
+          rawDate: parseLocalDate(meetup.date),
           date: formatDate(meetup.date),
           time: formatTime(meetup.time),
           duration: `${meetup.duration || 60} min`,
@@ -576,6 +584,38 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     }
   };
 
+  const handleAcceptChat = async (chat) => {
+    try {
+      const { error } = await supabase
+        .from('coffee_chats')
+        .update({ status: 'accepted' })
+        .eq('id', chat.id);
+
+      if (!error) {
+        setCoffeeChats(prev => prev.map(c =>
+          c.id === chat.id ? { ...c, status: 'accepted', isPending: false, isInviteReceived: false, isInviteSent: false } : c
+        ));
+      }
+    } catch (err) {
+      console.error('Error accepting chat:', err);
+    }
+  };
+
+  const handleDeclineChat = async (chat) => {
+    try {
+      const { error } = await supabase
+        .from('coffee_chats')
+        .update({ status: 'declined' })
+        .eq('id', chat.id);
+
+      if (!error) {
+        setCoffeeChats(prev => prev.filter(c => c.id !== chat.id));
+      }
+    } catch (err) {
+      console.error('Error declining chat:', err);
+    }
+  };
+
   const handleScheduleCoffeeChat = () => {
     // Navigate to unified schedule meetup page
     if (onNavigate) onNavigate('scheduleMeetup');
@@ -625,47 +665,6 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           Schedule Meetup
         </button>
       </section>
-
-      {/* Quick Stats */}
-      <div style={styles.statsRow}>
-        <div style={styles.statCard}>
-          <div style={styles.statInfo}>
-            <span style={styles.statNumber}>{coffeeChats.length}</span>
-            <span style={styles.statLabel}>☕ 1:1 Chats</span>
-          </div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statInfo}>
-            <span style={styles.statNumber}>{circleEvents.length}</span>
-            <span style={styles.statLabel}>🔒 Circle</span>
-          </div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statInfo}>
-            <span style={styles.statNumber}>{publicEvents.length}</span>
-            <span style={styles.statLabel}>🌐 Public</span>
-          </div>
-        </div>
-        {(pendingRequests.coffeeChats + pendingRequests.circleInvites) > 0 ? (
-          <div
-            style={{...styles.statCard, ...styles.pendingCard}}
-            onClick={() => onNavigate && onNavigate(pendingRequests.coffeeChats > 0 ? 'coffeeChats' : 'connectionGroups')}
-          >
-            <div style={styles.statInfo}>
-              <span style={styles.statNumber}>{pendingRequests.coffeeChats + pendingRequests.circleInvites}</span>
-              <span style={styles.statLabel}>🔔 Pending</span>
-            </div>
-            <span style={styles.pendingBadge}>Action needed</span>
-          </div>
-        ) : (
-          <div style={styles.statCard}>
-            <div style={styles.statInfo}>
-              <span style={styles.statNumber}>{allUpcoming.length}</span>
-              <span style={styles.statLabel}>📋 Total</span>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* View Toggle & Filters */}
       <div style={styles.controlsRow}>
@@ -722,9 +721,29 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             filteredItems.map((item, index) => (
               item.type === 'coffee' ? (
                 // Coffee Chat Card
-                <div key={item.id} style={{...styles.meetupCard, animationDelay: `${index * 0.1}s`}}>
+                <div key={item.id} style={{
+                  ...styles.meetupCard,
+                  ...(item.isPending ? styles.pendingCoffeeCard : {}),
+                  animationDelay: `${index * 0.1}s`
+                }}>
                   <div style={styles.cardLeft}>
-                    <div style={styles.coffeeIcon}>☕</div>
+                    <div style={{
+                      ...styles.dateBadge,
+                      ...(item.isPending ? styles.dateBadgePending : {})
+                    }}>
+                      <span style={styles.dateBadgeMonth}>
+                        {item.rawDate ? item.rawDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—'}
+                      </span>
+                      <span style={styles.dateBadgeDay}>
+                        {item.rawDate ? item.rawDate.getDate() : '—'}
+                      </span>
+                      <span style={styles.dateBadgeWeekday}>
+                        {item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }) : ''}
+                      </span>
+                      {item.time && item.time !== 'TBD' && (
+                        <span style={styles.dateBadgeTime}>{item.time}</span>
+                      )}
+                    </div>
                   </div>
 
                   <div style={styles.cardContent}>
@@ -751,6 +770,15 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       </div>
                     </div>
 
+                    {item.isPending && (
+                      <div style={styles.pendingNote}>
+                        {item.isInviteReceived
+                          ? `${item.with} invited you for coffee`
+                          : `You invited ${item.with} — awaiting response`
+                        }
+                      </div>
+                    )}
+
                     {item.topic && (
                       <div style={styles.topicRow}>
                         <span style={styles.topicLabel}>Topic:</span>
@@ -760,20 +788,31 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   </div>
 
                   <div style={styles.cardRight}>
-                    <div style={styles.dateBlock}>
-                      <span style={styles.dateDay}>{item.date}</span>
-                      <span style={styles.dateTime}>{item.time}</span>
-                      <span style={styles.dateDuration}>{item.duration}</span>
-                    </div>
                     <div style={styles.locationBlock}>
                       <span style={styles.locationIcon}>{item.location?.includes('Zoom') || item.location?.includes('Virtual') ? '💻' : '📍'}</span>
                       <span style={styles.locationText}>{item.location || 'Virtual'}</span>
                     </div>
                     <div style={styles.cardActions}>
-                      <button style={styles.actionBtnPrimary} onClick={() => handleJoinCall(item)}>
-                        <Video size={14} style={{ marginRight: 6 }} />
-                        Join
-                      </button>
+                      {item.isInviteReceived ? (
+                        <>
+                          <button style={styles.actionBtnAccept} onClick={() => handleAcceptChat(item)}>
+                            Accept
+                          </button>
+                          <button style={styles.actionBtnDecline} onClick={() => handleDeclineChat(item)}>
+                            Decline
+                          </button>
+                        </>
+                      ) : item.isPending ? (
+                        <button style={styles.actionBtnWaiting} disabled>
+                          <Clock size={14} style={{ marginRight: 6 }} />
+                          Awaiting
+                        </button>
+                      ) : (
+                        <button style={styles.actionBtnPrimary} onClick={() => handleJoinCall(item)}>
+                          <Video size={14} style={{ marginRight: 6 }} />
+                          Join
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -786,8 +825,19 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   animationDelay: `${index * 0.1}s`
                 }}>
                   <div style={styles.cardLeft}>
-                    <div style={item.isCircleMeetup ? styles.circleIcon : styles.publicIcon}>
-                      {item.isCircleMeetup ? '🔒' : '🌐'}
+                    <div style={styles.dateBadge}>
+                      <span style={styles.dateBadgeMonth}>
+                        {item.rawDate ? item.rawDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—'}
+                      </span>
+                      <span style={styles.dateBadgeDay}>
+                        {item.rawDate ? item.rawDate.getDate() : '—'}
+                      </span>
+                      <span style={styles.dateBadgeWeekday}>
+                        {item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }) : ''}
+                      </span>
+                      {item.time && item.time !== 'TBD' && (
+                        <span style={styles.dateBadgeTime}>{item.time}</span>
+                      )}
                     </div>
                   </div>
 
@@ -811,17 +861,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   </div>
 
                   <div style={styles.cardRight}>
-                    <div style={styles.dateBlock}>
-                      <span style={styles.dateDay}>{item.date}</span>
-                      <span style={styles.dateTime}>{item.time}</span>
-                      <span style={styles.dateDuration}>{item.duration}</span>
-                    </div>
                     <div style={styles.locationBlock}>
                       <span style={styles.locationIcon}>{item.location?.includes('Zoom') || item.location === 'Virtual' ? '💻' : '📍'}</span>
                       <span style={styles.locationText}>{item.location}</span>
-                    </div>
-                    <div style={styles.attendeesBlock}>
-                      <span style={styles.attendeeText}>{item.attendees}/{item.maxAttendees} attending</span>
                     </div>
                     <div style={styles.cardActions}>
                       {item.status === 'going' ? (
@@ -1143,6 +1185,68 @@ const styles = {
     fontSize: '11px',
     color: '#8B7355',
   },
+  pendingCoffeeCard: {
+    backgroundColor: 'rgba(253, 248, 242, 0.9)',
+    borderLeft: '3px solid #C4956A',
+    border: '1px solid rgba(196, 149, 106, 0.25)',
+    borderLeftWidth: '3px',
+    borderLeftColor: '#C4956A',
+  },
+  dateBadgePending: {
+    backgroundColor: '#FFF5EB',
+    borderColor: '#E8D5C0',
+  },
+  pendingNote: {
+    fontSize: '13px',
+    color: '#8B6F5C',
+    fontStyle: 'italic',
+    marginBottom: '8px',
+    padding: '6px 10px',
+    backgroundColor: 'rgba(196, 149, 106, 0.1)',
+    borderRadius: '8px',
+  },
+  actionBtnAccept: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px 20px',
+    backgroundColor: '#8B6F5C',
+    border: 'none',
+    borderRadius: '10px',
+    color: 'white',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+  },
+  actionBtnDecline: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px 20px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(139, 111, 92, 0.25)',
+    borderRadius: '10px',
+    color: '#8B7355',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+  },
+  actionBtnWaiting: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '10px 20px',
+    backgroundColor: 'rgba(196, 149, 106, 0.15)',
+    border: '1px dashed rgba(196, 149, 106, 0.4)',
+    borderRadius: '10px',
+    color: '#8B7355',
+    fontSize: '13px',
+    fontWeight: '600',
+    cursor: 'default',
+    fontFamily: '"DM Sans", sans-serif',
+  },
   pendingCard: {
     cursor: 'pointer',
     backgroundColor: 'rgba(196, 149, 106, 0.15)',
@@ -1295,6 +1399,45 @@ const styles = {
   cardLeft: {
     display: 'flex',
     alignItems: 'flex-start',
+  },
+  dateBadge: {
+    width: '52px',
+    borderRadius: '14px',
+    backgroundColor: '#FDF8F2',
+    border: '1px solid #EDE6DF',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '8px 4px',
+    flexShrink: 0,
+  },
+  dateBadgeMonth: {
+    fontSize: '10px',
+    fontWeight: '700',
+    color: '#8B6F5C',
+    letterSpacing: '0.5px',
+    lineHeight: '1',
+  },
+  dateBadgeDay: {
+    fontSize: '22px',
+    fontWeight: '700',
+    color: '#3D2E1F',
+    lineHeight: '1.2',
+    fontFamily: "'DM Serif Display', Georgia, serif",
+  },
+  dateBadgeWeekday: {
+    fontSize: '10px',
+    fontWeight: '600',
+    color: '#7A6855',
+    lineHeight: '1',
+  },
+  dateBadgeTime: {
+    fontSize: '9px',
+    fontWeight: '600',
+    color: '#8B6F5C',
+    lineHeight: '1',
+    marginTop: '3px',
   },
   coffeeIcon: {
     width: '52px',

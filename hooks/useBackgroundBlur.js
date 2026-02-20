@@ -249,19 +249,19 @@ export function useBackgroundBlur(provider = 'webrtc') {
   }, [provider]);
 
   /**
-   * Pre-load the LiveKit blur processor.
-   * Call during LiveKit call initialization so the dynamic import
-   * and WASM download happen in the background.
+   * Pre-load blur dependencies for LiveKit.
+   * Safari: preloads @livekit/track-processors (built-in, stable)
+   * Chrome/Firefox: preloads MediaPipe segmentation WASM (custom, strong blur)
    */
   const preloadLiveKitBlur = useCallback(async () => {
     if (provider !== 'livekit') return;
     if (livekitBlurReadyRef.current) return; // Already preloaded
 
     try {
-      console.log('[BackgroundBlur] Pre-loading LiveKit blur processor...');
-      const { BackgroundBlur } = await import('@livekit/track-processors');
-      livekitBlurReadyRef.current = BackgroundBlur;
-      console.log('[BackgroundBlur] LiveKit blur processor pre-loaded');
+      console.log('[BackgroundBlur] Pre-loading MediaPipe for LiveKit blur...');
+      await import('@mediapipe/selfie_segmentation');
+      livekitBlurReadyRef.current = true;
+      console.log('[BackgroundBlur] MediaPipe pre-loaded for LiveKit blur');
     } catch (err) {
       console.warn('[BackgroundBlur] LiveKit pre-load failed (will retry on toggle):', err.message);
     }
@@ -355,30 +355,255 @@ export function useBackgroundBlur(provider = 'webrtc') {
   }, []);
 
   /**
-   * Initialize LiveKit background blur
-   * Processor is pre-loaded during call init so activation is near-instant.
+   * Initialize LiveKit background blur using custom Canvas 2D + MediaPipe.
+   *
+   * Strategy: Do ALL heavy work (canvas setup, MediaPipe load, first segmentation
+   * result) BEFORE calling videoTrack.setProcessor(). This way the user sees their
+   * original video while loading, then an instant switch to correctly-blurred video
+   * with no intermediate states (no black screen, no fully-blurred flash).
    */
   const initLiveKitBlur = useCallback(async (videoTrack) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Use pre-loaded processor factory if available, otherwise import dynamically
-      let BackgroundBlurFactory = livekitBlurReadyRef.current;
-      if (!BackgroundBlurFactory) {
-        console.log('[BackgroundBlur] LiveKit processor not pre-loaded, importing now...');
-        const mod = await import('@livekit/track-processors');
-        BackgroundBlurFactory = mod.BackgroundBlur;
+      // Safari: captureStream() doesn't produce a usable track for LiveKit,
+      // so we must use the built-in @livekit/track-processors processor.
+      // To hide the black screen during init, we capture a frozen frame from
+      // the local video element and overlay it until blur is active.
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      if (isSafari) {
+        console.log('[BackgroundBlur] Safari: using built-in LiveKit blur');
+
+        // Find the local video element — it's a <video> with muted + autoplay
+        // inside the LocalVideo component, styled with scaleX(-1)
+        let localVideoEl = null;
+        const allVideos = document.querySelectorAll('video');
+        for (const v of allVideos) {
+          if (v.muted && v.videoWidth > 0 && v.style.transform?.includes('scaleX(-1)')) {
+            localVideoEl = v;
+            break;
+          }
+        }
+
+        let overlay = null;
+        if (localVideoEl) {
+          try {
+            // Capture current frame as a frozen image overlay
+            const fc = document.createElement('canvas');
+            fc.width = localVideoEl.videoWidth;
+            fc.height = localVideoEl.videoHeight;
+            fc.getContext('2d').drawImage(localVideoEl, 0, 0);
+            overlay = document.createElement('img');
+            overlay.src = fc.toDataURL('image/jpeg', 0.92);
+            Object.assign(overlay.style, {
+              position: 'absolute', top: '0', left: '0',
+              width: '100%', height: '100%',
+              objectFit: 'cover', zIndex: '9999',
+              borderRadius: 'inherit',
+              transform: 'scaleX(-1)', // Match the mirrored local video
+            });
+            const container = localVideoEl.parentElement;
+            if (container) container.appendChild(overlay);
+          } catch (e) {
+            console.warn('[BackgroundBlur] Could not create freeze overlay:', e);
+          }
+        }
+
+        try {
+          const { BackgroundBlur } = await import('@livekit/track-processors');
+          const blurProcessor = BackgroundBlur(64);
+          await videoTrack.setProcessor(blurProcessor);
+          processorRef.current = blurProcessor;
+          console.log('[BackgroundBlur] LiveKit built-in blur enabled (Safari)');
+        } finally {
+          // Remove overlay after delay to let the first blurred frame render
+          if (overlay) {
+            setTimeout(() => { overlay.remove(); }, 800);
+          }
+        }
+        return true;
       }
 
-      // Create blur processor with strong blur radius
-      const blurProcessor = BackgroundBlurFactory(20);
+      // Chrome/Firefox: custom Canvas 2D + MediaPipe for strong blur
+      const mediaTrack = videoTrack.mediaStreamTrack;
+      if (!mediaTrack) throw new Error('No media stream track found on LiveKit video track');
 
-      // Apply to video track — modifies the published track so remote peers see blur
-      await videoTrack.setProcessor(blurProcessor);
+      const settings = mediaTrack.getSettings();
+      const w = settings.width || 1280;
+      const h = settings.height || 720;
+      console.log('[BackgroundBlur] LiveKit custom blur, dimensions:', w, 'x', h);
 
-      processorRef.current = blurProcessor;
-      console.log('[BackgroundBlur] LiveKit blur enabled');
+      // --- Phase 1: Set up everything and wait for first blur frame ---
+
+      // Output canvas — must be in DOM for captureStream
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1';
+      document.body.appendChild(canvas);
+      const ctx = canvas.getContext('2d');
+
+      // Offscreen canvases for compositing
+      const blurCanvas = document.createElement('canvas');
+      blurCanvas.width = w;
+      blurCanvas.height = h;
+      const blurCtx = blurCanvas.getContext('2d');
+
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = w;
+      maskCanvas.height = h;
+      const maskCtx = maskCanvas.getContext('2d');
+
+      // Check if ctx.filter works (Chrome/Firefox yes, Safari no)
+      blurCtx.filter = 'blur(1px)';
+      const supportsCtxFilter = blurCtx.filter === 'blur(1px)';
+      blurCtx.filter = 'none';
+
+      // Helper: draw blurred background onto blurCanvas
+      const drawBlurred = (src) => {
+        if (supportsCtxFilter) {
+          blurCtx.filter = 'blur(20px)';
+          blurCtx.drawImage(src, 0, 0, w, h);
+          blurCtx.filter = 'none';
+        } else {
+          // Safari fallback: multi-pass scale-down/up for strong blur
+          blurCtx.imageSmoothingEnabled = true;
+          blurCtx.imageSmoothingQuality = 'high';
+          const sw1 = Math.max(1, Math.round(w / 32));
+          const sh1 = Math.max(1, Math.round(h / 32));
+          blurCtx.drawImage(src, 0, 0, sw1, sh1);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw1, sh1, 0, 0, w, h);
+          const sw2 = Math.max(1, Math.round(w / 16));
+          const sh2 = Math.max(1, Math.round(h / 16));
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2, 0, 0, w, h);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2);
+          blurCtx.drawImage(blurCanvas, 0, 0, sw2, sh2, 0, 0, w, h);
+        }
+      };
+
+      // Hidden video element feeding from the camera track
+      const video = document.createElement('video');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('autoplay', '');
+      video.muted = true;
+      video.width = w;
+      video.height = h;
+      video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1';
+      document.body.appendChild(video);
+      video.srcObject = new MediaStream([mediaTrack]);
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Video load timeout')), 5000);
+        video.onloadeddata = () => { clearTimeout(timeout); resolve(); };
+        video.play().catch((e) => { clearTimeout(timeout); reject(e); });
+      });
+
+      // Load MediaPipe
+      const { SelfieSegmentation } = await import('@mediapipe/selfie_segmentation');
+      const seg = new SelfieSegmentation({
+        locateFile: (file) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`,
+      });
+      seg.setOptions({ modelSelection: 1, selfieMode: false });
+
+      // Wait for the first segmentation result to be composited onto the canvas.
+      // The user sees their original (unblurred) video during this time.
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Segmentation timeout')), 10000);
+        seg.onResults((results) => {
+          clearTimeout(timeout);
+          const src = results.image;
+          const mask = results.segmentationMask;
+
+          drawBlurred(src);
+
+          maskCtx.clearRect(0, 0, w, h);
+          maskCtx.drawImage(src, 0, 0, w, h);
+          maskCtx.globalCompositeOperation = 'destination-in';
+          maskCtx.drawImage(mask, 0, 0, w, h);
+          maskCtx.drawImage(mask, 0, 0, w, h);
+          maskCtx.drawImage(mask, 0, 0, w, h);
+          maskCtx.globalCompositeOperation = 'source-over';
+
+          ctx.drawImage(blurCanvas, 0, 0, w, h);
+          ctx.drawImage(maskCanvas, 0, 0, w, h);
+          resolve();
+        });
+        seg.send({ image: video }).catch(reject);
+      });
+
+      console.log('[BackgroundBlur] First segmentation frame ready');
+
+      // Now set up the ongoing onResults handler for the render loop
+      let active = true;
+      seg.onResults((results) => {
+        if (!active) return;
+        const src = results.image;
+        const mask = results.segmentationMask;
+
+        drawBlurred(src);
+
+        maskCtx.clearRect(0, 0, w, h);
+        maskCtx.drawImage(src, 0, 0, w, h);
+        maskCtx.globalCompositeOperation = 'destination-in';
+        maskCtx.drawImage(mask, 0, 0, w, h);
+        maskCtx.drawImage(mask, 0, 0, w, h);
+        maskCtx.drawImage(mask, 0, 0, w, h);
+        maskCtx.globalCompositeOperation = 'source-over';
+
+        ctx.drawImage(blurCanvas, 0, 0, w, h);
+        ctx.drawImage(maskCanvas, 0, 0, w, h);
+      });
+
+      // Capture canvas stream — canvas already has a correctly blurred frame
+      const blurredStream = canvas.captureStream(30);
+      const processedTrack = blurredStream.getVideoTracks()[0];
+
+      // Start render loop
+      let sending = false;
+      let rafId = null;
+      const tick = () => {
+        if (!active) return;
+        if (video.readyState >= 2 && !sending) {
+          sending = true;
+          seg.send({ image: video }).then(() => { sending = false; }).catch(() => { sending = false; });
+        }
+        rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+
+      // Cleanup function
+      const cleanup = () => {
+        active = false;
+        if (rafId) cancelAnimationFrame(rafId);
+        try { seg.close(); } catch (e) { /* ignore */ }
+        if (processedTrack) processedTrack.stop();
+        video.srcObject = null;
+        if (video.parentElement) video.parentElement.removeChild(video);
+        if (canvas.parentElement) canvas.parentElement.removeChild(canvas);
+      };
+
+      // --- Phase 2: Create processor and apply (canvas is already blurred) ---
+      const customProcessor = {
+        name: 'avari-background-blur',
+        processedTrack,
+        _cleanup: cleanup,
+        init: async () => { /* already initialized above */ },
+        restart: async (opts) => {
+          cleanup();
+          // On restart, fall through to re-init via setProcessor
+        },
+        destroy: async () => {
+          cleanup();
+        },
+      };
+
+      // This switches from original → blurred instantly (first frame is ready)
+      await videoTrack.setProcessor(customProcessor);
+
+      processorRef.current = customProcessor;
+      console.log('[BackgroundBlur] LiveKit blur enabled (custom Canvas 2D pipeline)');
 
       return true;
     } catch (err) {
