@@ -132,12 +132,11 @@ export default function ScheduleMeetupView({
         return;
       }
 
-      // Only show circles where user is the creator (due to RLS policy)
-      const userCreatedCircles = (memberGroups || [])
+      const userCircles = (memberGroups || [])
         .map(mg => mg.connection_groups)
-        .filter(circle => circle && circle.creator_id === currentUser.id);
+        .filter(circle => circle != null);
 
-      setAvailableCircles(userCreatedCircles);
+      setAvailableCircles(userCircles);
     } catch (error) {
       console.error('Error loading circles:', error);
       setAvailableCircles([]);
