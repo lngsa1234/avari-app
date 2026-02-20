@@ -2615,9 +2615,6 @@ function MainApp({ currentUser, onSignOut }) {
                                 </div>
                                 <span style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
                                   {attendeeCount} attendees
-                                  {spotsLeft !== null && spotsLeft > 0 && (
-                                    <span> · {spotsLeft} {spotsLeft === 1 ? 'spot' : 'spots'} left</span>
-                                  )}
                                 </span>
                               </div>
                             )
