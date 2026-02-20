@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle } from 'lucide-react';
+import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin } from 'lucide-react';
 
 // Color palette - Mocha Brown theme
 const colors = {
@@ -48,6 +48,7 @@ export default function ScheduleMeetupView({
   const [scheduledTime, setScheduledTime] = useState('');
   const [topic, setTopic] = useState('');
   const [notes, setNotes] = useState('');
+  const [location, setLocation] = useState('Virtual');
 
   const [availableCircles, setAvailableCircles] = useState([]);
   const [availableConnections, setAvailableConnections] = useState([]);
@@ -154,8 +155,23 @@ export default function ScheduleMeetupView({
       return;
     }
 
+    if (meetupType === 'coffee' && !topic.trim()) {
+      alert('Please enter a topic for the coffee chat');
+      return;
+    }
+
     if (meetupType === 'circle' && !selectedCircle) {
       alert('Please select a circle');
+      return;
+    }
+
+    if (meetupType === 'circle' && !topic.trim()) {
+      alert('Please enter a topic for the meetup');
+      return;
+    }
+
+    if (!location.trim()) {
+      alert('Please enter a location');
       return;
     }
 
@@ -188,6 +204,7 @@ export default function ScheduleMeetupView({
         requester_id: currentUser.id,
         recipient_id: selectedConnection.id,
         scheduled_time: dateTime.toISOString(),
+        topic: topic.trim(),
         notes: notes || null,
         status: 'pending',
       });
@@ -220,10 +237,10 @@ export default function ScheduleMeetupView({
         circle_id: selectedCircle.id,
         date: scheduledDate,
         time: formattedTime,
-        topic: topic || `${selectedCircle.name} Meetup`,
+        topic: topic.trim(),
         description: notes || `Meetup for ${selectedCircle.name}`,
         duration: 60,
-        location: 'Virtual',
+        location: location,
         created_by: authUser.id,  // Use auth user ID directly
         participant_limit: 10,
       })
@@ -400,19 +417,32 @@ export default function ScheduleMeetupView({
             </div>
           </div>
 
-          {/* Topic (for circles) */}
-          {meetupType === 'circle' && (
-            <div style={styles.section}>
-              <label style={styles.label}>Topic (optional)</label>
+          {/* Location */}
+          <div style={styles.section}>
+            <label style={styles.label}>Location *</label>
+            <div style={styles.inputGroup}>
+              <MapPin size={18} style={styles.inputIcon} />
               <input
                 type="text"
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                placeholder="What will you discuss?"
-                style={styles.textInput}
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g., Blue Bottle Coffee, 123 Main St"
+                style={styles.input}
               />
             </div>
-          )}
+          </div>
+
+          {/* Topic */}
+          <div style={styles.section}>
+            <label style={styles.label}>Topic *</label>
+            <input
+              type="text"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              placeholder={meetupType === 'coffee' ? "What would you like to chat about?" : "What will you discuss?"}
+              style={styles.textInput}
+            />
+          </div>
 
           {/* Notes */}
           <div style={styles.section}>
