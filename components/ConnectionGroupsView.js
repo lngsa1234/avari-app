@@ -524,102 +524,261 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             <h2 style={styles.cardTitle} className="circles-card-title">
               My Groups
             </h2>
-            <button style={styles.addGroupBtn} onClick={handleCreateClick}>+ Join</button>
+            <button style={styles.addGroupBtn} onClick={() => onNavigate && onNavigate('discover')}>Discover Circles</button>
           </div>
 
           <div style={styles.circlesList}>
             {connectionGroups.length === 0 ? (
-              <div style={styles.emptyCard}>
-                <span style={styles.emptyIcon}>🎯</span>
+              <div
+                style={styles.emptyCardActionable}
+                onClick={handleCreateClick}
+              >
+                <span style={{ fontSize: '32px', marginBottom: '8px' }}>🌱</span>
                 <p style={styles.emptyText}>No groups yet</p>
-                <p style={styles.emptyHint}>Create a group with connections</p>
+                <p style={styles.emptyHint}>Schedule your first meetup or start a conversation</p>
                 <button style={styles.emptyStateButton} onClick={handleCreateClick}>
-                  Create Your First Group
+                  Get Started
                 </button>
               </div>
             ) : (
               connectionGroups.map((group, index) => {
                 const acceptedMembers = group.members?.filter(m => m.status === 'accepted') || [];
-                // Count members who were active in the last 10 minutes
-                const activeCount = acceptedMembers.filter(m =>
+                const activeMembers = acceptedMembers.filter(m =>
                   isUserActive(m.user?.last_active, 10)
-                ).length;
+                );
+                const activeNames = activeMembers
+                  .map(m => m.user?.name?.split(' ')[0])
+                  .filter(Boolean);
 
                 const themes = [
-                  { emoji: '💼', color: '#8B6F5C', desc: 'Professional network' },
-                  { emoji: '🚀', color: '#A67B5B', desc: 'Founders & dreamers' },
-                  { emoji: '💪', color: '#6B4423', desc: 'Support & growth' },
-                  { emoji: '🔄', color: '#D4A574', desc: 'Career transitions' },
-                  { emoji: '🏙️', color: '#C4956A', desc: 'Local connections' },
+                  { emoji: '💼', color: '#8B6F5C' },
+                  { emoji: '🚀', color: '#A67B5B' },
+                  { emoji: '💪', color: '#6B4423' },
+                  { emoji: '🔄', color: '#D4A574' },
+                  { emoji: '🏙️', color: '#C4956A' },
                 ];
                 const theme = themes[index % themes.length];
+
+                const hasUpcoming = !!group.nextMeetup;
+                const sessionCount = group.pastSessionCount || 0;
+
+                // Calculate "in X days" for next meetup
+                let daysUntilMeetup = null;
+                if (hasUpcoming) {
+                  const meetupDate = parseLocalDate(group.nextMeetup.date);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  meetupDate.setHours(0, 0, 0, 0);
+                  daysUntilMeetup = Math.round((meetupDate - today) / (1000 * 60 * 60 * 24));
+                }
+
+                const hasNoActivity = !hasUpcoming && !group.lastMessage;
 
                 return (
                   <div
                     key={group.id}
+                    className="circles-circle-card"
                     style={{
                       ...styles.circleCard,
-                      animationDelay: `${index * 0.12}s`
+                      animationDelay: `${index * 0.12}s`,
+                      ...(hasNoActivity ? { border: '1.5px dashed rgba(139, 111, 92, 0.25)' } : {}),
                     }}
-                    className="circles-circle-card"
                   >
-                    <div style={{
-                      ...styles.circleEmoji,
-                      background: `linear-gradient(135deg, ${theme.color}22, ${theme.color}44)`
-                    }} className="circles-circle-emoji">
-                      {theme.emoji}
-                    </div>
-                    <div style={styles.circleInfo}>
-                      <h3 style={styles.circleName}>{group.name}</h3>
-                      <div style={styles.circleMeta}>
-                        <span style={styles.memberCount}>
-                          👥 {acceptedMembers.length} members
-                        </span>
-                        {activeCount > 0 && (
-                          <span style={styles.activeCount}>
-                            <span style={styles.activeDot}></span>
-                            {activeCount} active
+                    {/* Main layout: horizontal on desktop, vertical on mobile */}
+                    <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+
+                      {/* Left: Icon */}
+                      <div style={{
+                        ...styles.circleEmoji,
+                        background: `linear-gradient(135deg, ${theme.color}22, ${theme.color}44)`,
+                        position: 'relative',
+                      }} className="circles-circle-emoji">
+                        {theme.emoji}
+                        {sessionCount > 0 && (
+                          <div className="sparkline-container" style={{
+                            position: 'absolute',
+                            bottom: '-4px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            display: 'flex',
+                            gap: '2px',
+                            alignItems: 'flex-end',
+                            padding: '2px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: 'rgba(255,255,255,0.6)',
+                          }}>
+                            {[0.35, 0.6, 1, 0.5, 0.75].map((h, i) => (
+                              <div key={i} className="sparkline-bar" style={{
+                                width: '3px',
+                                height: `${h * 10}px`,
+                                borderRadius: '1.5px',
+                                backgroundColor: `${theme.color}55`,
+                                transition: 'background-color 0.3s ease, height 0.3s ease',
+                                '--bar-warm': theme.color,
+                              }} />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Center: Name + Members + Context */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        {/* Name row */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <h3 style={styles.circleName}>{group.name}</h3>
+                          {sessionCount > 0 && (
+                            <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0 }}>
+                              {sessionCount} session{sessionCount !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Members row: avatars + count + online */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                          {acceptedMembers.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                              {acceptedMembers.slice(0, 4).map((member, idx) => (
+                                <div key={member.id} style={{
+                                  width: '20px',
+                                  height: '20px',
+                                  borderRadius: '50%',
+                                  background: member.user?.profile_picture
+                                    ? 'none'
+                                    : `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E', '#A67B5B'][idx % 4]}, #7A5C42)`,
+                                  border: '1.5px solid rgba(255,255,255,0.9)',
+                                  marginLeft: idx > 0 ? '-5px' : 0,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '8px',
+                                  fontWeight: '600',
+                                  color: 'white',
+                                  overflow: 'hidden',
+                                  flexShrink: 0,
+                                }}>
+                                  {member.user?.profile_picture ? (
+                                    <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    (member.user?.name?.[0] || '?').toUpperCase()
+                                  )}
+                                </div>
+                              ))}
+                              {acceptedMembers.length > 4 && (
+                                <div style={{
+                                  width: '20px',
+                                  height: '20px',
+                                  borderRadius: '50%',
+                                  backgroundColor: 'rgba(189, 173, 162, 0.5)',
+                                  border: '1.5px solid rgba(255,255,255,0.9)',
+                                  marginLeft: '-5px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '7px',
+                                  fontWeight: '600',
+                                  color: '#605045',
+                                }}>
+                                  +{acceptedMembers.length - 4}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <span style={{ fontSize: '11px', color: '#6B5344' }}>
+                            {acceptedMembers.length} member{acceptedMembers.length !== 1 ? 's' : ''}
                           </span>
+                          {activeNames.length > 0 && (
+                            <span style={styles.activeCount}>
+                              <span style={styles.activeDot}></span>
+                              {activeNames.length <= 2
+                                ? activeNames.join(' & ') + (activeNames.length === 1 ? ' is' : ' are') + ' online'
+                                : `${activeNames[0]} + ${activeNames.length - 1} online`
+                              }
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Context line: meetup / last topic / empty hint */}
+                        {hasUpcoming && (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            marginTop: '6px',
+                            fontSize: '11px',
+                            color: '#6B5344',
+                          }}>
+                            <span>📅</span>
+                            <span style={{ fontWeight: '600' }}>
+                              {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                              {group.nextMeetup.time && ` · ${group.nextMeetup.time}`}
+                            </span>
+                            {daysUntilMeetup !== null && (
+                              <span style={{
+                                fontSize: '10px',
+                                fontWeight: '600',
+                                color: daysUntilMeetup === 0 ? '#4CAF50' : theme.color,
+                                backgroundColor: daysUntilMeetup === 0 ? '#4CAF5015' : `${theme.color}12`,
+                                padding: '2px 6px',
+                                borderRadius: '6px',
+                              }}>
+                                {daysUntilMeetup === 0 ? 'Today' : daysUntilMeetup === 1 ? 'Tomorrow' : `in ${daysUntilMeetup} days`}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {group.lastTopic && !hasNoActivity && !hasUpcoming && (
+                          <div style={{
+                            marginTop: '4px',
+                            fontSize: '11px',
+                            color: '#8B7355',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            Last discussed: {group.lastTopic}
+                          </div>
+                        )}
+                        {hasNoActivity && (
+                          <div style={{ marginTop: '4px', fontSize: '11px', color: '#A89080', fontStyle: 'italic' }}>
+                            Schedule a meetup or start a conversation
+                          </div>
                         )}
                       </div>
-                      <div style={styles.circleActivityLine}>
-                        {group.nextMeetup ? (
-                          <>
-                            <span style={styles.activityIcon}>📅</span>
-                            <span style={styles.activityText}>
-                              Next: {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {group.nextMeetup.time}
-                            </span>
-                          </>
-                        ) : group.lastMessage ? (
-                          <>
-                            <span style={styles.activityIcon}>💬</span>
-                            <span style={styles.activityText}>
-                              {group.lastMessage.sender?.name?.split(' ')[0] || 'Someone'}: {group.lastMessage.message.length > 25 ? group.lastMessage.message.substring(0, 25) + '...' : group.lastMessage.message}
-                            </span>
-                            <span style={styles.activityTime}>{formatTimeAgo(group.lastMessage.created_at)}</span>
-                          </>
-                        ) : (
-                          <span style={styles.noActivityText}>No recent activity</span>
-                        )}
+
+                      {/* Right: Action buttons */}
+                      <div className="circle-card-actions" style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                        <button
+                          style={{
+                            ...styles.enterBtn,
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                          }}
+                          onClick={() => onNavigate?.('messages', { chatId: group.id, chatType: 'circle' })}
+                        >
+                          Message
+                        </button>
+                        <button
+                          style={{
+                            ...styles.enterBtn,
+                            padding: '8px 14px',
+                            fontSize: '12px',
+                            backgroundColor: hasUpcoming ? `${theme.color}12` : hasNoActivity ? '#8B6F5C' : `${theme.color}08`,
+                            color: hasNoActivity ? 'white' : '#6B5344',
+                            borderColor: hasNoActivity ? '#8B6F5C' : 'rgba(139, 111, 92, 0.3)',
+                          }}
+                          className="circles-enter-btn"
+                          onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}
+                        >
+                          {hasUpcoming ? 'View Agenda' : hasNoActivity ? 'Get Started' : 'Enter'}
+                        </button>
                       </div>
+
                     </div>
-                    <button
-                      style={styles.enterBtn}
-                      className="circles-enter-btn"
-                      onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}
-                    >
-                      Enter
-                    </button>
                   </div>
                 );
               })
             )}
           </div>
-
-          <button style={styles.exploreBtn} onClick={() => onNavigate && onNavigate('discover')}>
-            <span style={styles.exploreBtnIcon}>🔍</span>
-            Explore More Circles
-          </button>
         </section>
 
         {/* Connect with People */}
@@ -689,7 +848,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                           style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
                         />
                       ) : (
-                        person.name?.[0] || '?'
+                        (person.name?.[0] || '?').toUpperCase()
                       )}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -1070,6 +1229,22 @@ const keyframeStyles = `
     to { transform: rotate(360deg); }
   }
 
+  .sparkline-container .sparkline-bar {
+    transition: background-color 0.3s ease, transform 0.3s ease;
+  }
+
+  .circles-circle-card:hover .sparkline-container .sparkline-bar {
+    background-color: var(--bar-warm) !important;
+    transform: scaleY(1.15);
+    transform-origin: bottom;
+  }
+
+  .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(1) { transition-delay: 0s; }
+  .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(2) { transition-delay: 0.05s; }
+  .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(3) { transition-delay: 0.1s; }
+  .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(4) { transition-delay: 0.15s; }
+  .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(5) { transition-delay: 0.2s; }
+
   /* Responsive styles */
   @media (max-width: 640px) {
     .circles-container {
@@ -1126,13 +1301,17 @@ const keyframeStyles = `
     .circles-message-item {
       padding: 10px !important;
     }
-    .circles-circle-card {
-      flex-wrap: wrap !important;
-      gap: 10px !important;
+    .circles-circle-card .circle-card-layout {
+      flex-direction: column !important;
+      align-items: stretch !important;
     }
-    .circles-enter-btn {
-      width: 100% !important;
-      text-align: center !important;
+    .circles-circle-card .circle-card-actions {
+      margin-top: 10px !important;
+      padding-top: 10px !important;
+      border-top: 1px solid rgba(139, 111, 92, 0.08) !important;
+    }
+    .circles-circle-card .circle-card-actions button {
+      flex: 1 !important;
     }
     .circles-invite-alert {
       flex-direction: column !important;
@@ -1817,14 +1996,27 @@ const styles = {
   },
   circleCard: {
     display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '12px',
+    flexDirection: 'column',
+    padding: '14px',
     backgroundColor: 'rgba(139, 111, 92, 0.04)',
     borderRadius: '14px',
+    border: '1px solid rgba(139, 111, 92, 0.08)',
     transition: 'all 0.3s ease',
     animation: 'fadeInUp 0.5s ease-out forwards',
     opacity: 0,
+  },
+  emptyCardActionable: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '32px 24px',
+    border: '1.5px dashed rgba(139, 111, 92, 0.25)',
+    borderRadius: '14px',
+    backgroundColor: 'rgba(139, 111, 92, 0.02)',
+    cursor: 'pointer',
+    textAlign: 'center',
+    transition: 'all 0.3s ease',
   },
   circleEmoji: {
     width: '44px',
