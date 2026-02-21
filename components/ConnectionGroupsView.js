@@ -435,22 +435,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           <h1 style={styles.pageTitle} className="circles-page-title">Circles</h1>
           <p style={styles.tagline}>Your community, your connections</p>
         </div>
-        <div style={styles.quickStats} className="circles-quick-stats">
-          <div style={styles.statItem}>
-            <span style={styles.statNumber} className="circles-stat-number">{connections.length}</span>
-            <span style={styles.statLabel} className="circles-stat-label">Connections</span>
-          </div>
-          <div style={styles.statDivider}></div>
-          <div style={styles.statItem}>
-            <span style={styles.statNumber} className="circles-stat-number">{connectionGroups.length}</span>
-            <span style={styles.statLabel} className="circles-stat-label">Groups</span>
-          </div>
-          <div style={styles.statDivider}></div>
-          <div style={styles.statItem}>
-            <span style={styles.statNumber} className="circles-stat-number">{onlineCount}</span>
-            <span style={styles.statLabel} className="circles-stat-label">Online</span>
-          </div>
-        </div>
       </section>
 
       {/* Pending Invitations Alert */}
