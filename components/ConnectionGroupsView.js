@@ -24,7 +24,6 @@ import { parseLocalDate } from '../lib/dateUtils';
 import { MapPin, Users, UserPlus, Check, ChevronRight } from 'lucide-react';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
-  const [activeTab, setActiveTab] = useState('all');
   const [connectionGroups, setConnectionGroups] = useState([]);
   const [showChatModal, setShowChatModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -40,7 +39,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   // Use connections from props, add online status
   const [connections, setConnections] = useState([]);
-  const [recentMessages, setRecentMessages] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
 
   // Connect with People
@@ -124,7 +122,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     await Promise.all([
       loadConnectionGroups(),
       loadGroupInvites(),
-      loadRecentMessages(),
       loadPeerSuggestions()
     ]);
     setLoading(false);
@@ -229,157 +226,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         next.delete(personId);
         return next;
       });
-    }
-  };
-
-  const loadRecentMessages = async () => {
-    try {
-      // Load recent direct messages from 'messages' table
-      const { data: directMessages, error: dmError } = await supabase
-        .from('messages')
-        .select('id, content, created_at, sender_id, receiver_id, read')
-        .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (dmError) {
-        console.error('Error loading direct messages:', dmError);
-      }
-
-      // Get unique conversations (latest message per conversation)
-      const conversationMap = new Map();
-      const otherUserIds = new Set();
-
-      (directMessages || []).forEach(msg => {
-        const otherUserId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
-        otherUserIds.add(otherUserId);
-
-        if (!conversationMap.has(otherUserId)) {
-          conversationMap.set(otherUserId, {
-            id: msg.id,
-            oderId: otherUserId,
-            message: msg.content,
-            time: formatTimeAgo(msg.created_at),
-            unread: msg.receiver_id === currentUser.id && !msg.read,
-            isGroup: false
-          });
-        }
-      });
-
-      // Fetch profiles for other users
-      if (otherUserIds.size > 0) {
-        const userIdArray = Array.from(otherUserIds);
-        let profiles = [];
-
-        // Fetch profiles one by one to avoid .in() filter issues
-        for (const userId of userIdArray) {
-          try {
-            const { data: profile, error } = await supabase
-              .from('profiles')
-              .select('id, name, profile_picture')
-              .eq('id', userId)
-              .maybeSingle();
-
-            if (error) {
-              console.error('Error fetching profile for', userId, error);
-            } else if (profile) {
-              profiles.push(profile);
-            }
-          } catch (err) {
-            console.error('Exception fetching profile:', err);
-          }
-        }
-
-        const profileMap = new Map(profiles.map(p => [p.id, p]));
-
-        // Update conversations with profile info
-        conversationMap.forEach((conv, otherUserId) => {
-          const profile = profileMap.get(otherUserId);
-          conv.from = profile?.name || 'Unknown';
-          conv.avatar = profile?.profile_picture || null;
-        });
-      }
-
-      // Load recent group messages (simplified query)
-      const { data: groupMsgs, error: gmError } = await supabase
-        .from('connection_group_messages')
-        .select('id, group_id, user_id, message, created_at')
-        .eq('is_deleted', false)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (gmError) {
-        console.error('Error loading group messages:', gmError);
-      }
-
-      // Get unique group conversations
-      const groupMap = new Map();
-      const groupIds = new Set();
-      const userIdsFromGroups = new Set();
-
-      (groupMsgs || []).forEach(msg => {
-        groupIds.add(msg.group_id);
-        userIdsFromGroups.add(msg.user_id);
-      });
-
-      // Fetch group names
-      let groupNameMap = new Map();
-      if (groupIds.size > 0) {
-        for (const groupId of Array.from(groupIds)) {
-          try {
-            const { data: group, error } = await supabase
-              .from('connection_groups')
-              .select('id, name')
-              .eq('id', groupId)
-              .maybeSingle();
-            if (!error && group) groupNameMap.set(group.id, group.name);
-          } catch (err) {
-            console.error('Error fetching group:', err);
-          }
-        }
-      }
-
-      // Fetch user names for group messages
-      let userNameMap = new Map();
-      if (userIdsFromGroups.size > 0) {
-        for (const userId of Array.from(userIdsFromGroups)) {
-          try {
-            const { data: user, error } = await supabase
-              .from('profiles')
-              .select('id, name')
-              .eq('id', userId)
-              .maybeSingle();
-            if (!error && user) userNameMap.set(user.id, user.name);
-          } catch (err) {
-            console.error('Error fetching user:', err);
-          }
-        }
-      }
-
-      (groupMsgs || []).forEach(msg => {
-        if (!groupMap.has(msg.group_id)) {
-          groupMap.set(msg.group_id, {
-            id: `group-${msg.group_id}`,
-            from: groupNameMap.get(msg.group_id) || 'Unknown Group',
-            avatar: null,
-            message: `${userNameMap.get(msg.user_id) || 'Someone'}: ${msg.message}`,
-            time: formatTimeAgo(msg.created_at),
-            unread: false,
-            isGroup: true,
-            groupId: msg.group_id
-          });
-        }
-      });
-
-      // Combine and sort by recency
-      const allMessages = [
-        ...Array.from(conversationMap.values()),
-        ...Array.from(groupMap.values())
-      ].slice(0, 10);
-
-      setRecentMessages(allMessages);
-    } catch (error) {
-      console.error('Error loading recent messages:', error);
     }
   };
 
@@ -566,15 +412,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     }
   };
 
-  const handleMessageClick = (msg) => {
-    if (msg.isGroup && msg.groupId) {
-      const group = connectionGroups.find(g => g.id === msg.groupId);
-      if (group) handleOpenGroupChat(group);
-    } else if (onNavigate) {
-      onNavigate('messages');
-    }
-  };
-
   const onlineCount = connections.filter(c => c.status === 'online').length;
 
   if (loading) {
@@ -695,85 +532,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             </div>
           </div>
 
-        </section>
-
-        {/* Recent Conversations Section */}
-        <section style={styles.card} className="circles-card">
-          <div style={styles.cardHeader} className="circles-card-header">
-            <h2 style={styles.cardTitle} className="circles-card-title">
-              Recent Conversations
-            </h2>
-            <div style={styles.tabGroup}>
-              {['all', 'direct', 'groups'].map(tab => (
-                <button
-                  key={tab}
-                  style={{
-                    ...styles.tab,
-                    ...(activeTab === tab ? styles.tabActive : {})
-                  }}
-                  onClick={() => setActiveTab(tab)}
-                >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={styles.messageList}>
-            {recentMessages.length === 0 ? (
-              <div style={styles.emptyCard}>
-                <span style={styles.emptyIcon}>💬</span>
-                <p style={styles.emptyText}>No conversations yet</p>
-                <p style={styles.emptyHint}>Start chatting with connections</p>
-              </div>
-            ) : (
-              recentMessages
-                .filter(msg => {
-                  if (activeTab === 'all') return true;
-                  if (activeTab === 'direct') return !msg.isGroup;
-                  return msg.isGroup;
-                })
-                .map((msg, index) => (
-                <div
-                  key={msg.id}
-                  style={{
-                    ...styles.messageItem,
-                    ...(msg.unread ? styles.messageUnread : {}),
-                    animationDelay: `${index * 0.08}s`
-                  }}
-                  className="circles-message-item"
-                  onClick={() => handleMessageClick(msg)}
-                >
-                  <div style={styles.messageAvatar}>
-                    {msg.avatar ? (
-                      <img src={msg.avatar} alt={msg.from} style={styles.msgAvatarImg} />
-                    ) : (
-                      <span style={styles.msgAvatarEmoji}>{msg.isGroup ? '👥' : '👤'}</span>
-                    )}
-                    {msg.isGroup && <span style={styles.groupIndicator}>●●●</span>}
-                  </div>
-                  <div style={styles.messageContent}>
-                    <div style={styles.messageHeader}>
-                      <span style={styles.messageSender}>{msg.from}</span>
-                      <span style={styles.messageTime}>{msg.time}</span>
-                    </div>
-                    <p style={styles.messagePreview}>{msg.message}</p>
-                  </div>
-                  {msg.unread && <span style={styles.unreadDot}></span>}
-                </div>
-              ))
-            )}
-          </div>
-
-          <div style={styles.composeBar}>
-            <input
-              type="text"
-              placeholder="Start a new conversation..."
-              style={styles.composeInput}
-              onFocus={() => onNavigate && onNavigate('messages')}
-            />
-            <button style={styles.composeBtn}>✦</button>
-          </div>
         </section>
 
         {/* My Groups Section */}
