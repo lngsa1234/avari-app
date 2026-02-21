@@ -24,6 +24,7 @@ import CreateCircleView from './CreateCircleView'
 import CircleDetailView from './CircleDetailView'
 import MessagesPageView from './MessagesPageView'
 import CoffeeChatsView from './CoffeeChatsView'
+import UserProfileView from './UserProfileView'
 import ScheduleMeetupView from './ScheduleMeetupView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import NudgeBanner from './NudgeBanner'
@@ -66,6 +67,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [selectedCircleId, setSelectedCircleId] = useState(null)
   const [selectedChatId, setSelectedChatId] = useState(null)
   const [selectedChatType, setSelectedChatType] = useState(null) // 'user' or 'circle'
+  const [selectedUserId, setSelectedUserId] = useState(null)
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -93,6 +95,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false) // Profile dropdown in header
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
+  const [meetupsInitialView, setMeetupsInitialView] = useState(null) // 'past' when coming from review recaps
 
   // Schedule meetup context (for pre-filling)
   const [scheduleMeetupContext, setScheduleMeetupContext] = useState({
@@ -110,10 +113,19 @@ function MainApp({ currentUser, onSignOut }) {
       console.log('🔵 Setting circleId:', data.circleId)
       setSelectedCircleId(data.circleId)
     }
+    if (data.userId) {
+      setSelectedUserId(data.userId)
+    }
     if (data.chatId) {
       console.log('💬 Setting chatId:', data.chatId, 'type:', data.chatType)
       setSelectedChatId(data.chatId)
       setSelectedChatType(data.chatType || 'user')
+    }
+    // Handle meetups initial view (e.g., 'past' for review recaps)
+    if (view === 'meetups' && data.initialView) {
+      setMeetupsInitialView(data.initialView)
+    } else if (view === 'meetups') {
+      setMeetupsInitialView(null)
     }
     // Handle schedule meetup context
     if (view === 'scheduleMeetup') {
@@ -1313,14 +1325,19 @@ function MainApp({ currentUser, onSignOut }) {
     }
 
     try {
+      const updateData = {
+        date: editingMeetup.date,
+        time: editingMeetup.time,
+        location: editingMeetup.location || null,
+        updated_at: new Date().toISOString()
+      };
+      // If rescheduling a completed meetup, reset status to scheduled
+      if (editingMeetup.status === 'completed') {
+        updateData.status = 'scheduled';
+      }
       const { error } = await supabase
         .from('meetups')
-        .update({
-          date: editingMeetup.date,
-          time: editingMeetup.time,
-          location: editingMeetup.location || null,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', editingMeetup.id)
 
       if (error) {
@@ -2282,7 +2299,7 @@ function MainApp({ currentUser, onSignOut }) {
               <div style={homeStyles.cardHeader}>
                 <h3 style={homeStyles.cardTitle}>Upcoming Meetups</h3>
                 <button
-                  onClick={() => setCurrentView('meetupProposals')}
+                  onClick={() => setCurrentView('meetups')}
                   style={homeStyles.seeAllBtn}
                 >
                   View all &gt;
@@ -2683,7 +2700,7 @@ function MainApp({ currentUser, onSignOut }) {
                   icon: <FileText style={{ width: '20px', height: '20px', color: '#8B6F5C' }} />,
                   gradient: 'linear-gradient(135deg, #F5EDE4 0%, #E8DDD0 100%)',
                   iconBg: '#E8E0D8',
-                  onClick: () => window.location.href = '/recaps',
+                  onClick: () => handleNavigate('meetups', { initialView: 'past' }),
                   badge: pendingRecaps.length > 0 ? pendingRecaps.length : null,
                   thumbnail: '/thumbnails/review-recaps.svg'
                 },
@@ -2695,7 +2712,7 @@ function MainApp({ currentUser, onSignOut }) {
                   icon: <Search style={{ width: '20px', height: '20px', color: '#7A5C42' }} />,
                   gradient: 'linear-gradient(135deg, #FAF3E6 0%, #E8D5A8 100%)',
                   iconBg: '#E8D5A8',
-                  onClick: () => setCurrentView('circles'),
+                  onClick: () => setCurrentView('discover'),
                   badge: null,
                   thumbnail: '/thumbnails/discover-circles.svg'
                 },
@@ -3306,12 +3323,14 @@ function MainApp({ currentUser, onSignOut }) {
                     <p className="text-sm text-gray-600 ml-7 mt-1">{signupCount} {signupCount === 1 ? 'signup' : 'signups'}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleEditMeetup(meetup)}
-                      className="text-[#6B4F3F] hover:text-[#5A4235] text-sm font-medium"
-                    >
-                      Edit
-                    </button>
+                    {meetup.status !== 'completed' && (
+                      <button
+                        onClick={() => handleEditMeetup(meetup)}
+                        className="text-[#6B4F3F] hover:text-[#5A4235] text-sm font-medium"
+                      >
+                        Edit
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDeleteMeetup(meetup.id)}
                       className="text-red-500 hover:text-red-700 text-sm font-medium"
@@ -3567,13 +3586,13 @@ function MainApp({ currentUser, onSignOut }) {
 
       {/* Main Content */}
       <div
-        className={`max-w-4xl mx-auto p-4 md:p-6 ${currentView === 'home' ? 'md:rounded-3xl md:mt-2' : ''}`}
-        style={currentView === 'home' ? {
+        className={`max-w-4xl mx-auto p-4 md:p-6 ${['home', 'allCircles'].includes(currentView) ? 'md:rounded-3xl md:mt-2' : ''}`}
+        style={['home', 'allCircles'].includes(currentView) ? {
           background: 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)',
         } : undefined}
       >
         {currentView === 'home' && <HomeView />}
-        {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} />}
+        {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} initialView={meetupsInitialView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={(requestData) => {
@@ -3586,7 +3605,7 @@ function MainApp({ currentUser, onSignOut }) {
             }
             setShowCreateMeetup(true);
           }} />}
-        {currentView === 'messages' && <MessagesPageView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} initialChatId={selectedChatId} initialChatType={selectedChatType} />}
+        {currentView === 'messages' && <MessagesPageView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} initialChatId={selectedChatId} initialChatType={selectedChatType} previousView={previousView} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'meetupProposals' && <MeetupProposalsView currentUser={currentUser} supabase={supabase} isAdmin={currentUser.role === 'admin'} />}
         {currentView === 'profile' && <ProfileView />}
@@ -3598,6 +3617,9 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'createCircle' && <CreateCircleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'circleDetail' && <CircleDetailView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} circleId={selectedCircleId} previousView={previousView} />}
         {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
+        {currentView === 'userProfile' && <UserProfileView currentUser={currentUser} supabase={supabase} userId={selectedUserId} onNavigate={handleNavigate} previousView={previousView} onConnectionRemoved={(userId) => {
+          setConnections(prev => prev.filter(c => (c.connected_user?.id || c.id) !== userId));
+        }} />}
         {currentView === 'scheduleMeetup' && (
           <ScheduleMeetupView
             currentUser={currentUser}

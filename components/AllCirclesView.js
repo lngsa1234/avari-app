@@ -16,26 +16,26 @@ import {
   Heart,
 } from 'lucide-react';
 
-// Color palette - Mocha Brown theme
+// Color palette - matching Home page warm browns
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#6B5344',
-  primaryLight: '#A89080',
-  cream: '#FDF8F3',
-  warmWhite: '#FFFAF5',
-  text: '#4A3728',
-  textLight: '#7A6855',
-  textMuted: '#A89080',
-  border: '#EDE6DF',
+  primary: '#584233',
+  primaryDark: '#3F1906',
+  primaryLight: '#9C8068',
+  cream: '#FAF5EF',
+  warmWhite: '#F5EDE9',
+  text: '#3F1906',
+  textLight: '#6B5647',
+  textMuted: '#B8A089',
+  border: 'rgba(139, 111, 92, 0.1)',
   success: '#4DB6AC',
   warning: '#FFB74D',
   danger: '#E57373',
 };
 
-// Font families
+// Font families - matching Home page
 const fonts = {
-  serif: "'Playfair Display', Georgia, serif",
-  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  serif: "'Lora', serif",
+  sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 };
 
 // Category filters
@@ -251,51 +251,64 @@ export default function AllCirclesView({
   }
 
   return (
-    <div style={{ fontFamily: fonts.sans, paddingBottom: '100px' }}>
-      {/* Header */}
-      <div style={{
+    <div style={{ fontFamily: fonts.serif, paddingBottom: '100px', position: 'relative', padding: isMobile ? '16px 0' : '24px 0' }}>
+      {/* Title Section */}
+      <section style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        marginBottom: '8px',
+        justifyContent: 'space-between',
+        alignItems: isMobile ? 'flex-start' : 'flex-end',
+        flexDirection: isMobile ? 'column' : 'row',
+        marginBottom: isMobile ? '20px' : '24px',
+        paddingBottom: '20px',
+        borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
+        flexWrap: 'wrap',
+        gap: '16px',
       }}>
-        <button
-          onClick={() => onNavigate?.('discover')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '40px',
-            height: '40px',
-            borderRadius: '12px',
-            border: `1px solid ${colors.border}`,
-            backgroundColor: 'white',
-            cursor: 'pointer',
-          }}
-        >
-          <ChevronLeft size={20} style={{ color: colors.text }} />
-        </button>
-        <div>
-          <h1 style={{
-            fontSize: isMobile ? '22px' : '24px',
-            fontWeight: '600',
-            color: colors.text,
-            margin: 0,
-            fontFamily: fonts.serif,
-          }}>
-            Intimate Circles
-          </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            onClick={() => onNavigate?.('discover')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              border: 'none',
+              backgroundColor: 'rgba(168, 132, 98, 0.15)',
+              cursor: 'pointer',
+            }}
+          >
+            <ChevronLeft size={20} style={{ color: colors.text }} />
+          </button>
+          <div>
+            <h1 style={{
+              fontFamily: fonts.serif,
+              fontSize: isMobile ? '24px' : '32px',
+              fontWeight: '500',
+              color: '#584233',
+              letterSpacing: '0.15px',
+              margin: 0,
+              lineHeight: 1.28,
+            }}>
+              Intimate Circles
+            </h1>
+            <p style={{
+              fontFamily: fonts.serif,
+              fontSize: isMobile ? '14px' : '15px',
+              fontWeight: '500',
+              margin: 0,
+              marginTop: '6px',
+              background: 'linear-gradient(89.8deg, #7E654D 27.14%, #B9A594 72.64%, #ECDDD2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+            }}>
+              Small groups that meet regularly & grow together
+            </p>
+          </div>
         </div>
-      </div>
-
-      <p style={{
-        fontSize: isMobile ? '13px' : '14px',
-        color: colors.textLight,
-        margin: '0 0 20px',
-        paddingLeft: '52px',
-      }}>
-        Small groups that meet regularly & grow together
-      </p>
+      </section>
 
       {/* Search Bar */}
       <div style={{
@@ -303,13 +316,13 @@ export default function AllCirclesView({
         marginBottom: '16px',
       }}>
         <Search
-          size={18}
+          size={16}
           style={{
             position: 'absolute',
-            left: '14px',
+            left: '16px',
             top: '50%',
             transform: 'translateY(-50%)',
-            color: colors.textMuted,
+            color: '#B8A089',
           }}
         />
         <input
@@ -319,11 +332,12 @@ export default function AllCirclesView({
           placeholder="Search circles by name..."
           style={{
             width: '100%',
-            padding: '14px 40px 14px 44px',
-            borderRadius: '16px',
-            border: `2px solid ${colors.border}`,
+            padding: '12px 40px 12px 44px',
+            borderRadius: '50px',
+            border: '1px solid rgba(232, 221, 208, 0.8)',
             backgroundColor: 'white',
-            fontSize: '14px',
+            fontSize: '13px',
+            fontFamily: fonts.sans,
             outline: 'none',
             boxSizing: 'border-box',
             color: colors.text,
@@ -364,16 +378,17 @@ export default function AllCirclesView({
               key={category}
               onClick={() => setSelectedCategory(category)}
               style={{
-                padding: '10px 16px',
-                borderRadius: '20px',
-                border: isActive ? 'none' : `2px solid ${colors.border}`,
-                backgroundColor: isActive ? colors.primary : 'white',
-                color: isActive ? 'white' : colors.text,
+                padding: '8px 16px',
+                borderRadius: '50px',
+                border: 'none',
+                backgroundColor: isActive ? '#5E4530' : 'rgba(168, 132, 98, 0.12)',
+                color: isActive ? '#FAF5EF' : '#9C8068',
                 fontSize: '13px',
                 fontWeight: '500',
+                fontFamily: fonts.sans,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
-                transition: 'all 0.2s ease',
+                transition: 'all 0.25s ease',
               }}
             >
               {category}
@@ -382,32 +397,47 @@ export default function AllCirclesView({
         })}
       </div>
 
-      {/* What's an Intimate Circle */}
+      {/* What's an Intimate Circle - styled like AI Insights banner */}
       <div style={{
-        background: 'linear-gradient(to right, #FFF8F0, #FDF5ED)',
-        borderRadius: '16px',
-        padding: '14px 16px',
+        background: 'linear-gradient(93.28deg, #7A624B 9.73%, #BC9972 95.71%)',
+        borderRadius: '15px',
+        padding: isMobile ? '14px 16px' : '16px 20px',
         marginBottom: '20px',
-        border: `1px solid ${colors.border}`,
         display: 'flex',
         alignItems: 'flex-start',
         gap: '12px',
+        position: 'relative',
+        overflow: 'hidden',
+        opacity: 0.83,
+        boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
       }}>
-        <span style={{ fontSize: '24px' }}>💫</span>
-        <div>
+        {/* Decorative circle */}
+        <div style={{
+          position: 'absolute',
+          top: '-50%',
+          right: '-20%',
+          width: '200px',
+          height: '200px',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
+          borderRadius: '50%',
+        }} />
+        <span style={{ fontSize: '24px', position: 'relative', zIndex: 1 }}>💫</span>
+        <div style={{ position: 'relative', zIndex: 1 }}>
           <h3 style={{
             fontSize: '13px',
             fontWeight: '600',
-            color: colors.text,
+            color: 'rgba(255,255,255,0.95)',
             margin: '0 0 4px',
+            fontFamily: fonts.serif,
           }}>
             What's an Intimate Circle?
           </h3>
           <p style={{
             fontSize: '12px',
-            color: colors.textLight,
+            color: 'rgba(255,255,255,0.75)',
             margin: 0,
             lineHeight: '1.4',
+            fontFamily: fonts.sans,
           }}>
             A small group (up to 10 women) that meets regularly around a shared interest. It's where lasting friendships are built over time.
           </p>
@@ -421,7 +451,7 @@ export default function AllCirclesView({
         justifyContent: 'space-between',
         marginBottom: '16px',
       }}>
-        <p style={{ fontSize: '13px', color: colors.textLight, margin: 0 }}>
+        <p style={{ fontSize: '13px', color: colors.textMuted, margin: 0, fontFamily: fonts.sans }}>
           {filteredCircles.length} circle{filteredCircles.length !== 1 ? 's' : ''} found
         </p>
         {(searchQuery || selectedCategory !== 'All') && (
@@ -430,10 +460,12 @@ export default function AllCirclesView({
             style={{
               background: 'none',
               border: 'none',
-              color: colors.primary,
+              color: 'rgba(107, 86, 71, 0.77)',
               fontSize: '13px',
               fontWeight: '500',
+              fontFamily: fonts.serif,
               cursor: 'pointer',
+              letterSpacing: '0.15px',
             }}
           >
             Clear filters
@@ -443,22 +475,21 @@ export default function AllCirclesView({
 
       {/* My Circles */}
       {myCircles.length > 0 && (
-        <section style={{ marginBottom: '32px' }}>
+        <section style={{
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
+          borderRadius: '19px',
+          padding: isMobile ? '16px 0' : '24px 0',
+          marginBottom: isMobile ? '16px' : '20px',
+          backdropFilter: 'blur(2px)',
+        }}>
           <h2 style={{
-            fontSize: '15px',
-            fontWeight: '600',
-            color: colors.text,
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
+            fontFamily: fonts.serif,
+            fontSize: isMobile ? '20px' : '24px',
+            fontWeight: '500',
+            color: '#3F1906',
+            marginBottom: '16px',
+            letterSpacing: '0.15px',
           }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              backgroundColor: colors.primary,
-              borderRadius: '50%',
-            }} />
             My Circles
           </h2>
           <div style={{
@@ -481,22 +512,21 @@ export default function AllCirclesView({
 
       {/* Open Circles */}
       {openCircles.length > 0 && (
-        <section style={{ marginBottom: '32px' }}>
+        <section style={{
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
+          borderRadius: '19px',
+          padding: isMobile ? '16px 0' : '24px 0',
+          marginBottom: isMobile ? '16px' : '20px',
+          backdropFilter: 'blur(2px)',
+        }}>
           <h2 style={{
-            fontSize: '15px',
-            fontWeight: '600',
-            color: colors.text,
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
+            fontFamily: fonts.serif,
+            fontSize: isMobile ? '20px' : '24px',
+            fontWeight: '500',
+            color: '#3F1906',
+            marginBottom: '16px',
+            letterSpacing: '0.15px',
           }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              backgroundColor: colors.success,
-              borderRadius: '50%',
-            }} />
             Open to Join
           </h2>
           <div style={{
@@ -518,22 +548,21 @@ export default function AllCirclesView({
 
       {/* Waitlist Circles */}
       {waitlistCircles.length > 0 && (
-        <section style={{ marginBottom: '32px' }}>
+        <section style={{
+          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
+          borderRadius: '19px',
+          padding: isMobile ? '16px 0' : '24px 0',
+          marginBottom: isMobile ? '16px' : '20px',
+          backdropFilter: 'blur(2px)',
+        }}>
           <h2 style={{
-            fontSize: '15px',
-            fontWeight: '600',
-            color: colors.text,
-            marginBottom: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
+            fontFamily: fonts.serif,
+            fontSize: isMobile ? '20px' : '24px',
+            fontWeight: '500',
+            color: '#3F1906',
+            marginBottom: '16px',
+            letterSpacing: '0.15px',
           }}>
-            <span style={{
-              width: '8px',
-              height: '8px',
-              backgroundColor: colors.warning,
-              borderRadius: '50%',
-            }} />
             Waitlist
           </h2>
           <div style={{
@@ -557,9 +586,9 @@ export default function AllCirclesView({
       <div
         onClick={() => onNavigate?.('createCircle')}
         style={{
-          backgroundColor: colors.warmWhite,
-          borderRadius: '24px',
-          border: `2px dashed ${colors.border}`,
+          background: 'linear-gradient(135deg, #F5EDE4 0%, #E8DDD0 100%)',
+          borderRadius: '19px',
+          border: '1px dashed rgba(139, 111, 92, 0.2)',
           padding: '32px 24px',
           display: 'flex',
           flexDirection: 'column',
@@ -568,15 +597,17 @@ export default function AllCirclesView({
           textAlign: 'center',
           cursor: 'pointer',
           transition: 'all 0.2s ease',
+          backdropFilter: 'blur(2px)',
         }}
       >
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>🌱</div>
         <h3 style={{
           fontSize: '18px',
-          fontWeight: '600',
-          color: colors.text,
+          fontWeight: '500',
+          color: '#584233',
           margin: '0 0 8px',
           fontFamily: fonts.serif,
+          letterSpacing: '0.15px',
         }}>
           Start Your Own Circle
         </h3>
@@ -586,6 +617,7 @@ export default function AllCirclesView({
           margin: '0 0 20px',
           maxWidth: '280px',
           lineHeight: '1.5',
+          fontFamily: fonts.sans,
         }}>
           Have a topic you're passionate about? Gather your people and create a space for connection.
         </p>
@@ -595,12 +627,13 @@ export default function AllCirclesView({
             alignItems: 'center',
             gap: '8px',
             padding: '12px 24px',
-            backgroundColor: colors.primary,
+            background: 'linear-gradient(88.65deg, rgba(134, 112, 96, 0.63) 56.79%, rgba(197, 172, 150, 0.63) 98.85%)',
             color: 'white',
             border: 'none',
             borderRadius: '12px',
             fontSize: '14px',
             fontWeight: '600',
+            fontFamily: fonts.sans,
             cursor: 'pointer',
           }}
         >
@@ -618,26 +651,28 @@ export default function AllCirclesView({
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
           <h3 style={{
             fontSize: '18px',
-            fontWeight: '600',
-            color: colors.text,
+            fontWeight: '500',
+            color: '#584233',
             margin: '0 0 8px',
             fontFamily: fonts.serif,
+            letterSpacing: '0.15px',
           }}>
             No circles found
           </h3>
-          <p style={{ fontSize: '14px', color: colors.textLight, margin: '0 0 20px' }}>
+          <p style={{ fontSize: '14px', color: colors.textLight, margin: '0 0 20px', fontFamily: fonts.sans }}>
             Try a different search or start your own!
           </p>
           <button
             onClick={clearFilters}
             style={{
               padding: '12px 24px',
-              backgroundColor: colors.primary,
+              background: 'linear-gradient(88.65deg, rgba(134, 112, 96, 0.63) 56.79%, rgba(197, 172, 150, 0.63) 98.85%)',
               color: 'white',
               border: 'none',
               borderRadius: '12px',
               fontSize: '14px',
               fontWeight: '600',
+              fontFamily: fonts.sans,
               cursor: 'pointer',
             }}
           >
@@ -672,49 +707,53 @@ export default function AllCirclesView({
 }
 
 function CircleCard({ circle, isMobile, onClick, isMember = false }) {
+  const avatarColors = ['#9C8068', '#C9A96E', '#8B9E7E'];
+
   const spotsColor = isMember
-    ? { bg: colors.primary, text: 'white' }
+    ? { bg: 'rgba(168, 132, 98, 0.75)', text: 'white' }
     : circle.spotsLeft === 0
       ? { bg: colors.warning, text: 'white' }
       : circle.spotsLeft <= 2
         ? { bg: colors.danger, text: 'white' }
-        : { bg: colors.success, text: 'white' };
+        : { bg: 'rgba(77, 182, 172, 0.8)', text: 'white' };
 
   return (
     <div
       onClick={onClick}
       style={{
-        backgroundColor: 'white',
-        borderRadius: '24px',
+        background: 'rgba(255, 255, 255, 0.35)',
+        borderRadius: '19px',
         overflow: 'hidden',
-        boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
-        border: isMember ? `2px solid ${colors.primary}` : `1px solid ${colors.border}`,
+        border: isMember ? '1px solid rgba(168, 132, 98, 0.3)' : '1px solid rgba(139, 111, 92, 0.08)',
         cursor: 'pointer',
-        transition: 'all 0.2s ease',
+        transition: 'all 0.3s ease',
+        backdropFilter: 'blur(2px)',
       }}
     >
       {/* Header with Emoji */}
       <div style={{
-        height: isMobile ? '100px' : '112px',
+        height: isMobile ? '90px' : '100px',
         background: circle.gradient,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
       }}>
-        <span style={{ fontSize: isMobile ? '40px' : '48px' }}>{circle.emoji}</span>
+        <span style={{ fontSize: isMobile ? '36px' : '44px' }}>{circle.emoji}</span>
 
         {/* Spots/Member Badge */}
         <span style={{
           position: 'absolute',
-          top: '12px',
-          right: '12px',
-          padding: '4px 12px',
+          top: '10px',
+          right: '10px',
+          padding: '4px 10px',
           backgroundColor: spotsColor.bg,
           color: spotsColor.text,
-          borderRadius: '12px',
-          fontSize: '11px',
+          borderRadius: '20px',
+          fontSize: '10px',
           fontWeight: '600',
+          fontFamily: fonts.sans,
+          letterSpacing: '0.3px',
         }}>
           {isMember ? 'Member' : circle.spotsLeft === 0 ? 'Waitlist' : `${circle.spotsLeft} spot${circle.spotsLeft !== 1 ? 's' : ''} left`}
         </span>
@@ -722,27 +761,29 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
         {/* Category Badge */}
         <span style={{
           position: 'absolute',
-          top: '12px',
-          left: '12px',
+          top: '10px',
+          left: '10px',
           padding: '4px 10px',
-          backgroundColor: 'rgba(255,255,255,0.9)',
-          color: colors.text,
-          borderRadius: '12px',
-          fontSize: '11px',
+          backgroundColor: 'rgba(255,255,255,0.75)',
+          color: '#584233',
+          borderRadius: '20px',
+          fontSize: '10px',
           fontWeight: '500',
+          fontFamily: fonts.sans,
         }}>
           {circle.category}
         </span>
       </div>
 
       {/* Content */}
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: '14px 16px' }}>
         <h3 style={{
-          fontSize: '16px',
-          fontWeight: '600',
-          color: colors.text,
-          margin: '0 0 8px',
+          fontSize: '15px',
+          fontWeight: '500',
+          color: '#3F1906',
+          margin: '0 0 10px',
           fontFamily: fonts.serif,
+          letterSpacing: '0.15px',
         }}>
           {circle.name}
         </h3>
@@ -752,53 +793,53 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingTop: '12px',
-          borderTop: `1px solid ${colors.border}`,
+          paddingTop: '10px',
+          borderTop: '1px solid rgba(139, 111, 92, 0.08)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <div style={{ display: 'flex' }}>
-              {circle.members?.slice(0, 4).map((member, idx) => (
+              {circle.members?.slice(0, 3).map((member, idx) => (
                 <div key={member.id} style={{
-                  width: '28px',
-                  height: '28px',
+                  width: '24px',
+                  height: '24px',
                   borderRadius: '50%',
-                  backgroundColor: colors.primary,
-                  border: '2px solid white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '11px',
-                  fontWeight: '600',
-                  color: 'white',
-                  marginLeft: idx > 0 ? '-8px' : 0,
-                }}>
-                  {member.user?.name?.charAt(0) || '?'}
-                </div>
-              ))}
-              {circle.memberCount > 4 && (
-                <div style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  backgroundColor: colors.cream,
-                  border: '2px solid white',
+                  background: `linear-gradient(135deg, ${avatarColors[idx % 3]}, #7A5C42)`,
+                  border: '2px solid rgba(255,255,255,0.8)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '10px',
                   fontWeight: '600',
-                  color: colors.text,
-                  marginLeft: '-8px',
+                  color: 'white',
+                  marginLeft: idx > 0 ? '-6px' : 0,
                 }}>
-                  +{circle.memberCount - 4}
+                  {member.user?.name?.charAt(0) || '?'}
+                </div>
+              ))}
+              {circle.memberCount > 3 && (
+                <div style={{
+                  width: '24px',
+                  height: '24px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(189, 173, 162, 0.5)',
+                  border: '2px solid rgba(255,255,255,0.8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '9px',
+                  fontWeight: '600',
+                  color: '#605045',
+                  marginLeft: '-6px',
+                }}>
+                  +{circle.memberCount - 3}
                 </div>
               )}
             </div>
-            <span style={{ fontSize: '12px', color: colors.textLight, marginLeft: '8px' }}>
+            <span style={{ fontSize: '11px', color: '#B8A089', marginLeft: '8px', fontFamily: fonts.sans }}>
               {circle.memberCount}/{circle.totalSpots}
             </span>
           </div>
-          <ChevronRight size={20} style={{ color: colors.primaryLight }} />
+          <ChevronRight size={18} style={{ color: '#B8A089' }} />
         </div>
       </div>
     </div>
@@ -867,7 +908,7 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
       {/* Modal */}
       <div style={{
         position: 'relative',
-        backgroundColor: colors.warmWhite,
+        background: 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)',
         borderRadius: isMobile ? '24px 24px 0 0' : '24px',
         width: '100%',
         maxWidth: '400px',
@@ -927,10 +968,11 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
           <div style={{ textAlign: 'center', marginBottom: '20px' }}>
             <h2 style={{
               fontSize: '24px',
-              fontWeight: '600',
-              color: colors.text,
+              fontWeight: '500',
+              color: '#584233',
               margin: '0 0 4px',
               fontFamily: fonts.serif,
+              letterSpacing: '0.15px',
             }}>
               {circle.name}
             </h2>
@@ -942,16 +984,17 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
             alignItems: 'center',
             gap: '12px',
             padding: '12px',
-            backgroundColor: '#FFF8F0',
+            backgroundColor: 'rgba(255, 255, 255, 0.35)',
             borderRadius: '12px',
             marginBottom: '20px',
-            border: `1px solid ${colors.border}`,
+            border: '1px solid rgba(139, 111, 92, 0.08)',
+            backdropFilter: 'blur(2px)',
           }}>
             <div style={{
               width: '40px',
               height: '40px',
               borderRadius: '50%',
-              backgroundColor: colors.primary,
+              background: 'linear-gradient(135deg, #9C8068, #7A5C42)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -962,8 +1005,8 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
               {circle.host?.name?.charAt(0) || '?'}
             </div>
             <div>
-              <p style={{ fontSize: '12px', color: colors.textLight, margin: 0 }}>Hosted by</p>
-              <p style={{ fontSize: '14px', fontWeight: '600', color: colors.text, margin: 0 }}>
+              <p style={{ fontSize: '12px', color: colors.textMuted, margin: 0, fontFamily: fonts.sans }}>Hosted by</p>
+              <p style={{ fontSize: '14px', fontWeight: '500', color: '#3F1906', margin: 0, fontFamily: fonts.serif }}>
                 {circle.host?.name || 'Unknown'}
               </p>
             </div>
@@ -973,43 +1016,44 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
           <div style={{ marginBottom: '20px' }}>
             <h3 style={{
               fontSize: '14px',
-              fontWeight: '600',
-              color: colors.text,
+              fontWeight: '500',
+              color: '#3F1906',
               marginBottom: '12px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              fontFamily: fonts.serif,
             }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={16} />
                 Members ({circle.memberCount}/{circle.totalSpots})
               </span>
               {circle.spotsLeft > 0 ? (
-                <span style={{ fontSize: '12px', fontWeight: 'normal', color: colors.success }}>
+                <span style={{ fontSize: '12px', fontWeight: 'normal', color: colors.success, fontFamily: fonts.sans }}>
                   {circle.spotsLeft} spots open
                 </span>
               ) : (
-                <span style={{ fontSize: '12px', fontWeight: 'normal', color: colors.warning }}>
+                <span style={{ fontSize: '12px', fontWeight: 'normal', color: colors.warning, fontFamily: fonts.sans }}>
                   Waitlist
                 </span>
               )}
             </h3>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {circle.members?.map((member) => (
+              {circle.members?.map((member, idx) => (
                 <div key={member.id} style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
                   padding: '6px 12px',
-                  backgroundColor: 'white',
+                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
                   borderRadius: '20px',
-                  border: `1px solid ${colors.border}`,
+                  border: '1px solid rgba(139, 111, 92, 0.08)',
                 }}>
                   <div style={{
                     width: '24px',
                     height: '24px',
                     borderRadius: '50%',
-                    backgroundColor: colors.primary,
+                    background: `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E'][idx % 3]}, #7A5C42)`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -1019,7 +1063,7 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
                   }}>
                     {member.user?.name?.charAt(0) || '?'}
                   </div>
-                  <span style={{ fontSize: '13px', color: colors.text }}>
+                  <span style={{ fontSize: '13px', color: '#3F1906', fontFamily: fonts.sans }}>
                     {member.user?.name || 'Unknown'}
                   </span>
                 </div>
@@ -1029,19 +1073,22 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
 
           {/* What to Expect */}
           <div style={{
-            backgroundColor: '#F5EDE5',
-            borderRadius: '16px',
+            background: 'rgba(255, 255, 255, 0.35)',
+            borderRadius: '15px',
             padding: '16px',
             marginBottom: '24px',
+            backdropFilter: 'blur(2px)',
+            border: '1px solid rgba(139, 111, 92, 0.08)',
           }}>
             <h3 style={{
               fontSize: '14px',
-              fontWeight: '600',
-              color: colors.text,
+              fontWeight: '500',
+              color: '#3F1906',
               marginBottom: '12px',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
+              fontFamily: fonts.serif,
             }}>
               <span>✨</span> What to expect
             </h3>
@@ -1051,6 +1098,7 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
               margin: 0,
               fontSize: '13px',
               color: colors.textLight,
+              fontFamily: fonts.sans,
             }}>
               <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
                 <span style={{ color: colors.success }}>•</span>
@@ -1075,12 +1123,13 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
               style={{
                 width: '100%',
                 padding: '16px',
-                backgroundColor: colors.primary,
+                background: 'linear-gradient(88.65deg, rgba(134, 112, 96, 0.63) 56.79%, rgba(197, 172, 150, 0.63) 98.85%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '12px',
                 fontSize: '15px',
                 fontWeight: '600',
+                fontFamily: fonts.sans,
                 cursor: isRequesting ? 'not-allowed' : 'pointer',
                 opacity: isRequesting ? 0.7 : 1,
                 display: 'flex',
@@ -1107,8 +1156,9 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
             <div style={{
               textAlign: 'center',
               padding: '16px',
-              backgroundColor: '#E5F0E5',
+              backgroundColor: 'rgba(77, 182, 172, 0.1)',
               borderRadius: '12px',
+              border: '1px solid rgba(77, 182, 172, 0.15)',
             }}>
               <div style={{
                 display: 'flex',
@@ -1117,11 +1167,12 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
                 gap: '8px',
                 color: colors.success,
                 fontWeight: '600',
+                fontFamily: fonts.sans,
               }}>
                 <Check size={18} />
                 {circle.isOpen ? 'Request Sent!' : 'Added to Waitlist!'}
               </div>
-              <p style={{ fontSize: '12px', color: colors.textLight, marginTop: '4px' }}>
+              <p style={{ fontSize: '12px', color: colors.textLight, marginTop: '4px', fontFamily: fonts.sans }}>
                 {circle.host?.name?.split(' ')[0] || 'The host'} will review your request
               </p>
             </div>
@@ -1133,6 +1184,7 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
             color: colors.textMuted,
             textAlign: 'center',
             marginTop: '16px',
+            fontFamily: fonts.sans,
           }}>
             Circle hosts review requests to ensure a good fit for everyone
           </p>

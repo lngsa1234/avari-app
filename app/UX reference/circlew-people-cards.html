@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CircleW — People Cards</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #F5EDE4;
+    --bg-secondary: #EDE4D8;
+    --brown-900: #3D2B1F;
+    --brown-800: #4A3728;
+    --brown-700: #5C4033;
+    --brown-600: #6B4F3E;
+    --brown-500: #8B6F5E;
+    --brown-400: #A68B7B;
+    --brown-300: #C4AC9C;
+    --brown-200: #D9C7B8;
+    --brown-100: #EDE4D8;
+    --accent-warm: #C17F59;
+    --accent-coffee: #7B5B3A;
+    --text-primary: #3D2B1F;
+    --text-secondary: #6B4F3E;
+    --text-muted: #A68B7B;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 999px;
+    --shadow-md: 0 4px 14px rgba(61,43,31,0.1);
+    --shadow-lg: 0 8px 28px rgba(61,43,31,0.12);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 40px 24px;
+  }
+
+  .section-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--brown-800);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  /* ═══════════════════════════════════════ */
+  /*  GRID LAYOUTS                          */
+  /* ═══════════════════════════════════════ */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 20px;
+    max-width: 1080px;
+    margin: 0 auto 60px;
+  }
+
+  .card-row {
+    display: flex;
+    gap: 20px;
+    max-width: 1080px;
+    margin: 0 auto 60px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* ═══════════════════════════════════════ */
+  /*  FROSTED GRAIN MIXIN                   */
+  /* ═══════════════════════════════════════ */
+
+  /* Grain overlay — applied via canvas JS */
+  .grain-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    opacity: 0.25;
+    mix-blend-mode: soft-light;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  /* ═══════════════════════════════════════ */
+  /*  STYLE A — VERTICAL CARD (Discover)    */
+  /* ═══════════════════════════════════════ */
+  .people-card-v {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-xl);
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  .people-card-v:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Gradient header */
+  .pcv-header {
+    position: relative;
+    height: 140px;
+    overflow: hidden;
+  }
+  .pcv-gradient {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+  .pcv-gradient.mocha { background: linear-gradient(135deg, #C4A882, #8B6F4E); }
+  .pcv-gradient.warm { background: linear-gradient(135deg, #D4A574, #8B5E3C); }
+  .pcv-gradient.rose { background: linear-gradient(135deg, #C9A090, #8B6058); }
+  .pcv-gradient.sage { background: linear-gradient(135deg, #A8B89A, #6B7F5E); }
+  .pcv-gradient.slate { background: linear-gradient(135deg, #A0A8B0, #5E6B78); }
+  .pcv-gradient.plum { background: linear-gradient(135deg, #B09AB0, #705878); }
+
+  .pcv-header .grain-layer { border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+
+  /* Online indicator on header */
+  .pcv-online {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    color: white;
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(8px);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+  }
+  .pcv-online-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #6ECF6E;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* Interests on header */
+  .pcv-interests {
+    position: absolute;
+    bottom: 10px;
+    left: 12px;
+    z-index: 3;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .pcv-interest-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(6px);
+    color: white;
+  }
+
+  /* Avatar overlapping header/body */
+  .pcv-avatar-wrap {
+    position: relative;
+    z-index: 4;
+    margin-top: -36px;
+    padding: 0 16px;
+  }
+  .pcv-avatar {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    border: 3px solid white;
+    background: var(--brown-300);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 24px; font-weight: 700; color: white;
+    box-shadow: 0 2px 8px rgba(61,43,31,0.15);
+  }
+
+  /* Body */
+  .pcv-body {
+    background: white;
+    padding: 12px 16px 18px;
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+  }
+
+  .pcv-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+  .pcv-role {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .pcv-bio {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin-top: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .pcv-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--brown-100);
+  }
+
+  .pcv-mutual {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .pcv-mutual-stack { display: flex; }
+  .pcv-mutual-av {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 1.5px solid white; margin-left: -5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; font-weight: 700; color: white;
+  }
+  .pcv-mutual-av:first-child { margin-left: 0; }
+
+  .pcv-connect-btn {
+    display: flex; align-items: center; gap: 5px;
+    padding: 7px 16px; border-radius: var(--radius-full);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; border: none; font-family: inherit;
+    background: var(--brown-800); color: white;
+  }
+  .pcv-connect-btn:hover {
+    background: var(--brown-700);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  /* ═══════════════════════════════════════ */
+  /*  STYLE B — HORIZONTAL CARD (Coffee)    */
+  /* ═══════════════════════════════════════ */
+  .people-card-h {
+    display: flex;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    width: 420px;
+    background: white;
+  }
+  .people-card-h:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .pch-gradient-side {
+    position: relative;
+    width: 130px;
+    flex-shrink: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .pch-gradient-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+  .pch-gradient-side .grain-layer {
+    border-radius: var(--radius-xl) 0 0 var(--radius-xl);
+  }
+
+  .pch-avatar {
+    position: relative;
+    z-index: 2;
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.5);
+    background: var(--brown-300);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 22px; font-weight: 700; color: white;
+  }
+  .pch-online-badge {
+    position: relative;
+    z-index: 2;
+    font-size: 9px;
+    font-weight: 600;
+    color: white;
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(6px);
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .pch-online-badge .dot {
+    width: 5px; height: 5px; border-radius: 50%; background: #6ECF6E;
+  }
+
+  .pch-content {
+    flex: 1;
+    padding: 18px 18px 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pch-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .pch-role {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .pch-bio {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.45;
+    margin-top: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .pch-tags {
+    display: flex;
+    gap: 4px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .pch-tag {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: var(--radius-full);
+    background: var(--brown-100);
+    color: var(--brown-600);
+  }
+  .pch-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: auto;
+    padding-top: 10px;
+  }
+  .pch-btn {
+    display: flex; align-items: center; gap: 4px;
+    padding: 7px 14px; border-radius: var(--radius-full);
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; border: none; font-family: inherit;
+  }
+  .pch-btn.primary { background: var(--brown-800); color: white; }
+  .pch-btn.primary:hover { background: var(--brown-700); }
+  .pch-btn.secondary {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--brown-200);
+  }
+  .pch-btn.secondary:hover { border-color: var(--brown-400); background: var(--bg-secondary); }
+
+  /* ═══════════════════════════════════════ */
+  /*  STYLE C — COMPACT ROW CARD (List)     */
+  /* ═══════════════════════════════════════ */
+  .people-card-c {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border-radius: var(--radius-lg);
+    background: white;
+    cursor: pointer;
+    transition: all 0.25s;
+    border: 1px solid var(--brown-200);
+  }
+  .people-card-c:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--brown-300);
+  }
+
+  .pcc-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .pcc-avatar {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+  }
+  .pcc-avatar-gradient {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+  }
+  .pcc-avatar .grain-layer {
+    border-radius: 50%;
+  }
+  .pcc-avatar-letter {
+    position: relative;
+    z-index: 2;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px; font-weight: 700; color: white;
+  }
+  .pcc-online-ring {
+    position: absolute;
+    bottom: 0; right: 0;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #6ECF6E;
+    border: 2px solid white;
+    z-index: 3;
+  }
+
+  .pcc-info { flex: 1; min-width: 0; }
+  .pcc-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 16px; font-weight: 700; color: var(--text-primary);
+  }
+  .pcc-role { font-size: 11px; color: var(--text-muted); }
+  .pcc-match {
+    font-size: 10px; color: var(--accent-warm); font-weight: 600;
+    margin-top: 3px;
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  .pcc-action {
+    flex-shrink: 0;
+  }
+  .pcc-btn {
+    padding: 8px 16px; border-radius: var(--radius-full);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s; border: none; font-family: inherit;
+    background: var(--brown-800); color: white;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .pcc-btn:hover { background: var(--brown-700); }
+
+  /* ═══════════════════════════════════════ */
+  /*  ANIMATIONS                            */
+  /* ═══════════════════════════════════════ */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-in { animation: fadeUp 0.45s ease-out forwards; opacity: 0; }
+  .d1 { animation-delay: 0.05s; }
+  .d2 { animation-delay: 0.1s; }
+  .d3 { animation-delay: 0.15s; }
+  .d4 { animation-delay: 0.2s; }
+  .d5 { animation-delay: 0.25s; }
+  .d6 { animation-delay: 0.3s; }
+  .d7 { animation-delay: 0.35s; }
+  .d8 { animation-delay: 0.4s; }
+
+  .divider {
+    max-width: 1080px;
+    margin: 0 auto 40px;
+    height: 1px;
+    background: var(--brown-200);
+  }
+
+  @media (max-width: 640px) {
+    .people-card-h { width: 100%; }
+    .card-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════ SECTION A: VERTICAL CARDS ═══════ -->
+<h1 class="section-title animate-in d1">Discover People</h1>
+<p class="section-subtitle animate-in d1">Vertical cards — for Discover page grid</p>
+
+<div class="card-grid">
+
+  <!-- Card 1 -->
+  <div class="people-card-v animate-in d2">
+    <div class="pcv-header">
+      <div class="pcv-gradient mocha"></div>
+      <canvas class="grain-layer" data-grain></canvas>
+      <div class="pcv-online"><span class="pcv-online-dot"></span> Online</div>
+      <div class="pcv-interests">
+        <span class="pcv-interest-tag">Product</span>
+        <span class="pcv-interest-tag">AI/ML</span>
+      </div>
+    </div>
+    <div class="pcv-avatar-wrap">
+      <div class="pcv-avatar">SW</div>
+    </div>
+    <div class="pcv-body">
+      <div class="pcv-name">Sarah Williams</div>
+      <div class="pcv-role">Senior PM @ Google</div>
+      <div class="pcv-bio">Building AI-powered search experiences. Passionate about product strategy and user-centered design thinking.</div>
+      <div class="pcv-footer">
+        <div class="pcv-mutual">
+          <div class="pcv-mutual-stack">
+            <div class="pcv-mutual-av" style="background: var(--brown-400); z-index:2;">L</div>
+            <div class="pcv-mutual-av" style="background: var(--accent-warm); z-index:1;">A</div>
+          </div>
+          2 mutual
+        </div>
+        <button class="pcv-connect-btn">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Connect
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 2 -->
+  <div class="people-card-v animate-in d3">
+    <div class="pcv-header">
+      <div class="pcv-gradient warm"></div>
+      <canvas class="grain-layer" data-grain></canvas>
+      <div class="pcv-interests">
+        <span class="pcv-interest-tag">UX Design</span>
+        <span class="pcv-interest-tag">Startups</span>
+      </div>
+    </div>
+    <div class="pcv-avatar-wrap">
+      <div class="pcv-avatar" style="background: var(--accent-warm);">MR</div>
+    </div>
+    <div class="pcv-body">
+      <div class="pcv-name">Maya Rodriguez</div>
+      <div class="pcv-role">Design Lead @ Figma</div>
+      <div class="pcv-bio">Design systems nerd. Helping teams build better products through thoughtful component architecture.</div>
+      <div class="pcv-footer">
+        <div class="pcv-mutual">
+          <div class="pcv-mutual-stack">
+            <div class="pcv-mutual-av" style="background: var(--brown-500); z-index:2;">T</div>
+          </div>
+          1 mutual
+        </div>
+        <button class="pcv-connect-btn">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Connect
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 3 -->
+  <div class="people-card-v animate-in d4">
+    <div class="pcv-header">
+      <div class="pcv-gradient sage"></div>
+      <canvas class="grain-layer" data-grain></canvas>
+      <div class="pcv-online"><span class="pcv-online-dot"></span> Online</div>
+      <div class="pcv-interests">
+        <span class="pcv-interest-tag">Founder</span>
+        <span class="pcv-interest-tag">B2B SaaS</span>
+      </div>
+    </div>
+    <div class="pcv-avatar-wrap">
+      <div class="pcv-avatar" style="background: #6B7F5E;">JK</div>
+    </div>
+    <div class="pcv-body">
+      <div class="pcv-name">Jessie Kim</div>
+      <div class="pcv-role">Co-founder @ Relay</div>
+      <div class="pcv-bio">Ex-Stripe PM turned founder. Building workflow automation for ops teams. Always down for a coffee chat.</div>
+      <div class="pcv-footer">
+        <div class="pcv-mutual">
+          <div class="pcv-mutual-stack">
+            <div class="pcv-mutual-av" style="background: var(--brown-400); z-index:3;">L</div>
+            <div class="pcv-mutual-av" style="background: var(--accent-warm); z-index:2;">M</div>
+            <div class="pcv-mutual-av" style="background: var(--brown-300); z-index:1;">S</div>
+          </div>
+          3 mutual
+        </div>
+        <button class="pcv-connect-btn">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Connect
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card 4 -->
+  <div class="people-card-v animate-in d5">
+    <div class="pcv-header">
+      <div class="pcv-gradient plum"></div>
+      <canvas class="grain-layer" data-grain></canvas>
+      <div class="pcv-interests">
+        <span class="pcv-interest-tag">Growth</span>
+        <span class="pcv-interest-tag">Analytics</span>
+      </div>
+    </div>
+    <div class="pcv-avatar-wrap">
+      <div class="pcv-avatar" style="background: #705878;">AP</div>
+    </div>
+    <div class="pcv-body">
+      <div class="pcv-name">Anika Patel</div>
+      <div class="pcv-role">Growth PM @ Notion</div>
+      <div class="pcv-bio">Data-driven growth thinker. Obsessed with activation funnels and aha moments.</div>
+      <div class="pcv-footer">
+        <div class="pcv-mutual">
+          <div class="pcv-mutual-stack">
+            <div class="pcv-mutual-av" style="background: var(--brown-400); z-index:2;">L</div>
+          </div>
+          1 mutual
+        </div>
+        <button class="pcv-connect-btn">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Connect
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════ SECTION B: HORIZONTAL CARDS ═══════ -->
+<h1 class="section-title animate-in d4">Coffee Chat Suggestions</h1>
+<p class="section-subtitle animate-in d4">Horizontal cards — for Coffee page invites</p>
+
+<div class="card-row">
+
+  <div class="people-card-h animate-in d5">
+    <div class="pch-gradient-side">
+      <div class="pch-gradient-bg pcv-gradient mocha"></div>
+      <canvas class="grain-layer" data-grain></canvas>
+      <div class="pch-avatar">SW</div>
+      <div class="pch-online-badge"><span class="dot"></span> Online</div>
+    </div>
+    <div class="pch-content">
+      <div class="pch-name">Sarah Williams</div>
+      <div class="pch-role">Senior PM @ Google</div>
+      <div class="pch-bio">Building AI-powered search experiences. Passionate about product strategy and design thinking.</div>
+      <div class="pch-tags">
+        <span class="pch-tag">Product</span>
+        <span class="pch-tag">AI/ML</span>
+        <span class="pch-tag">Search</span>
+      </div>
+      <div class="pch-actions">
+        <button class="pch-btn primary">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-3-3.87M9 21v-2a4 4 0 0 1 3-3.87m0-10a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+          ☕ Invite
+        </button>
+        <button class="pch-btn secondary">View Profile</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="people-card-h animate-in d6">
+    <div class="pch-gradient-side">
+      <div class="pch-gradient-bg pcv-gradient rose"></div>
+      <canvas class="grain-layer" data-grain></canvas>
+      <div class="pch-avatar" style="background: #8B6058;">MR</div>
+    </div>
+    <div class="pch-content">
+      <div class="pch-name">Maya Rodriguez</div>
+      <div class="pch-role">Design Lead @ Figma</div>
+      <div class="pch-bio">Design systems nerd. Building better products through thoughtful component architecture.</div>
+      <div class="pch-tags">
+        <span class="pch-tag">UX</span>
+        <span class="pch-tag">Design Systems</span>
+        <span class="pch-tag">Figma</span>
+      </div>
+      <div class="pch-actions">
+        <button class="pch-btn primary">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-3-3.87M9 21v-2a4 4 0 0 1 3-3.87m0-10a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+          ☕ Invite
+        </button>
+        <button class="pch-btn secondary">View Profile</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════ SECTION C: COMPACT ROW CARDS ═══════ -->
+<h1 class="section-title animate-in d6">Circle Members</h1>
+<p class="section-subtitle animate-in d6">Compact row cards — for member lists</p>
+
+<div style="max-width: 520px; margin: 0 auto 60px; display: flex; flex-direction: column; gap: 10px;">
+
+  <div class="people-card-c animate-in d6">
+    <div class="pcc-avatar-wrap">
+      <div class="pcc-avatar">
+        <div class="pcc-avatar-gradient pcv-gradient mocha"></div>
+        <canvas class="grain-layer" data-grain></canvas>
+        <span class="pcc-avatar-letter">SW</span>
+      </div>
+      <div class="pcc-online-ring"></div>
+    </div>
+    <div class="pcc-info">
+      <div class="pcc-name">Sarah Williams</div>
+      <div class="pcc-role">Senior PM @ Google</div>
+      <div class="pcc-match">
+        <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>
+        92% match
+      </div>
+    </div>
+    <div class="pcc-action">
+      <button class="pcc-btn">
+        ☕ Chat
+      </button>
+    </div>
+  </div>
+
+  <div class="people-card-c animate-in d7">
+    <div class="pcc-avatar-wrap">
+      <div class="pcc-avatar">
+        <div class="pcc-avatar-gradient pcv-gradient sage"></div>
+        <canvas class="grain-layer" data-grain></canvas>
+        <span class="pcc-avatar-letter">JK</span>
+      </div>
+      <div class="pcc-online-ring"></div>
+    </div>
+    <div class="pcc-info">
+      <div class="pcc-name">Jessie Kim</div>
+      <div class="pcc-role">Co-founder @ Relay</div>
+      <div class="pcc-match">
+        <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>
+        88% match
+      </div>
+    </div>
+    <div class="pcc-action">
+      <button class="pcc-btn">
+        ☕ Chat
+      </button>
+    </div>
+  </div>
+
+  <div class="people-card-c animate-in d8">
+    <div class="pcc-avatar-wrap">
+      <div class="pcc-avatar">
+        <div class="pcc-avatar-gradient pcv-gradient plum"></div>
+        <canvas class="grain-layer" data-grain></canvas>
+        <span class="pcc-avatar-letter">AP</span>
+      </div>
+    </div>
+    <div class="pcc-info">
+      <div class="pcc-name">Anika Patel</div>
+      <div class="pcc-role">Growth PM @ Notion</div>
+      <div class="pcc-match">
+        <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/></svg>
+        85% match
+      </div>
+    </div>
+    <div class="pcc-action">
+      <button class="pcc-btn">
+        ☕ Chat
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Generate grain on all canvases
+document.querySelectorAll('[data-grain]').forEach(canvas => {
+  const parent = canvas.parentElement;
+
+  function render() {
+    const rect = parent.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const val = Math.random() * 255;
+      data[i] = val;
+      data[i + 1] = val;
+      data[i + 2] = val;
+      data[i + 3] = 50;
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // Render after layout settles
+  requestAnimationFrame(() => {
+    requestAnimationFrame(render);
+  });
+
+  window.addEventListener('resize', render);
+});
+</script>
+
+</body>
+</html>

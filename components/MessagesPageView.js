@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, ChevronLeft, Send, MoreVertical, X, CheckCheck, Plus, Users, MessageCircle } from 'lucide-react';
 
-export default function MessagesPageView({ currentUser, supabase, onNavigate, initialChatId, initialChatType }) {
+export default function MessagesPageView({ currentUser, supabase, onNavigate, initialChatId, initialChatType, previousView }) {
   const [conversations, setConversations] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,7 +112,6 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
           connection_groups:group_id (
             id,
             name,
-            emoji,
             description
           )
         `)
@@ -163,7 +162,7 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
           id: `circle-${circle.id}`,
           circleId: circle.id,
           name: circle.name,
-          emoji: circle.emoji || '👥',
+          emoji: '👥',
           bg: 'bg-[#E8E0D8]',
           isGroup: true,
           memberCount: memberCount || 0,
@@ -289,14 +288,14 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
         const groupIds = membershipData.map(m => m.group_id);
         const { data: circleData } = await supabase
           .from('connection_groups')
-          .select('id, name, emoji')
+          .select('id, name')
           .in('id', groupIds);
 
         if (circleData) {
           groups = circleData.map(c => ({
             id: c.id,
             name: c.name,
-            emoji: c.emoji || '👥',
+            emoji: '👥',
             bg: 'bg-[#E8E0D8]',
             isGroup: true,
             subtitle: 'Circle'
@@ -473,6 +472,8 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
           totalUnread={totalUnread}
           onSelectChat={setActiveChat}
           onCompose={() => setShowCompose(true)}
+          previousView={previousView}
+          onNavigate={onNavigate}
         />
       ) : (
         <ChatView
@@ -658,12 +659,33 @@ function ComposeView({ contacts, onClose, onSend }) {
 }
 
 // Inbox View Component
-function InboxView({ conversations, searchQuery, setSearchQuery, totalUnread, onSelectChat, onCompose }) {
+function InboxView({ conversations, searchQuery, setSearchQuery, totalUnread, onSelectChat, onCompose, previousView, onNavigate }) {
   return (
     <>
       {/* Header */}
       <header style={styles.inboxHeader}>
         <div style={styles.inboxHeaderInner}>
+          {/* Back button when navigating from another page */}
+          {previousView && previousView !== 'messages' && (
+            <button
+              onClick={() => onNavigate?.(previousView)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                background: 'none',
+                border: 'none',
+                color: '#8C7B6B',
+                fontSize: '14px',
+                cursor: 'pointer',
+                padding: '4px 0',
+                marginBottom: '4px',
+              }}
+            >
+              <ChevronLeft size={18} />
+              Back
+            </button>
+          )}
           {/* Title */}
           <div style={styles.inboxTitleRow}>
             <div>

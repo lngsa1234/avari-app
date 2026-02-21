@@ -146,6 +146,7 @@ export function useCallRoom(callType, roomId) {
 
               related = {
                 ...groupData,
+                meetupId: meetupData?.id || null,
                 meetupTopic: meetupData?.topic || null,
                 meetupDate: meetupData?.date || null,
                 meetupTime: meetupData?.time || null,

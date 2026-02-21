@@ -21,18 +21,19 @@ const colors = {
   primary: '#8B6F5C',
   primaryDark: '#6B5344',
   cream: '#FDF8F3',
-  text: '#3D2B1A',
-  textLight: '#5C4033',
-  textMuted: '#7A5C42',
+  text: '#3F1906',
+  textLight: '#584233',
+  textMuted: 'rgba(107, 86, 71, 0.77)',
   textSoft: '#A89080',
   border: 'rgba(139, 111, 92, 0.1)',
   sage: '#8B9E7E',
   gold: '#C9A96E',
   purple: '#9B7EC4',
+  gradient: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
 };
 
 const fonts = {
-  serif: '"Playfair Display", Georgia, serif',
+  serif: '"Lora", Georgia, serif',
   sans: '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 };
 
@@ -161,8 +162,8 @@ export default function RecapDetailPage() {
   const recapId = params.id;
 
   const { width: windowWidth } = useWindowSize();
-  const isMobile = windowWidth < 480;
-  const isTablet = windowWidth >= 480 && windowWidth < 768;
+  const isMobile = windowWidth < 640;
+  const isTablet = windowWidth >= 640 && windowWidth < 768;
 
   const [recap, setRecap] = useState(null);
   const [parsed, setParsed] = useState(null);
@@ -266,13 +267,13 @@ export default function RecapDetailPage() {
   }
 
   // Responsive styles
-  const containerPadding = isMobile ? '0 12px 32px' : isTablet ? '0 16px 36px' : '0 20px 40px';
-  const heroGap = isMobile ? '12px' : '16px';
-  const heroPadding = isMobile ? '16px 12px' : isTablet ? '20px 16px' : '24px 20px';
-  const titleSize = isMobile ? '18px' : isTablet ? '20px' : '22px';
-  const cardPadding = isMobile ? '14px' : isTablet ? '16px' : '20px';
+  const containerPadding = isMobile ? '0 16px 32px' : isTablet ? '0 20px 36px' : '0 20px 40px';
+  const heroGap = isMobile ? '14px' : '16px';
+  const heroPadding = isMobile ? '20px 16px' : isTablet ? '20px 16px' : '24px 20px';
+  const titleSize = isMobile ? '20px' : isTablet ? '22px' : '24px';
+  const cardPadding = isMobile ? '16px' : isTablet ? '18px' : '20px';
   const cardRadius = isMobile ? '14px' : '16px';
-  const sectionTitleSize = isMobile ? '14px' : '15px';
+  const sectionTitleSize = isMobile ? '15px' : '16px';
   const metaFontSize = isMobile ? '12px' : '13px';
   const bodyFontSize = isMobile ? '13px' : '14px';
 
@@ -288,7 +289,7 @@ export default function RecapDetailPage() {
 
   if (!recap || !parsed) {
     return (
-      <div style={{ ...styles.container, fontFamily: fonts.sans }}>
+      <div style={styles.container}>
         <div style={styles.emptyState}>
           <FileText size={isMobile ? 40 : 48} style={{ color: colors.textSoft, marginBottom: '16px' }} />
           <h2 style={{ color: colors.text, margin: '0 0 8px', fontSize: isMobile ? '18px' : '22px', fontFamily: fonts.serif }}>Recap not found</h2>
@@ -310,7 +311,7 @@ export default function RecapDetailPage() {
   return (
     <div style={styles.container}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
@@ -444,7 +445,7 @@ export default function RecapDetailPage() {
                     alignItems: 'center',
                     gap: isMobile ? '6px' : '8px',
                     padding: isMobile ? '6px 10px' : '8px 12px',
-                    backgroundColor: '#FAF5EF',
+                    backgroundColor: 'rgba(250, 245, 239, 0.7)',
                     borderRadius: '20px',
                     fontSize: isMobile ? '12px' : '13px',
                     color: colors.textLight,
@@ -738,8 +739,9 @@ export default function RecapDetailPage() {
 const styles = {
   container: {
     minHeight: '100vh',
-    backgroundColor: '#FDF8F3',
+    background: colors.gradient,
     fontFamily: fonts.sans,
+    paddingBottom: '80px',
   },
   loadingContainer: {
     minHeight: '100vh',
@@ -747,7 +749,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FDF8F3',
+    background: colors.gradient,
     fontFamily: fonts.sans,
   },
   spinner: {
@@ -764,7 +766,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottom: `1px solid rgba(139, 111, 92, 0.1)`,
-    backgroundColor: 'rgba(253, 248, 243, 0.95)',
+    backgroundColor: 'rgba(247, 242, 236, 0.95)',
     backdropFilter: 'blur(10px)',
     WebkitBackdropFilter: 'blur(10px)',
     position: 'sticky',
@@ -807,8 +809,10 @@ const styles = {
     lineHeight: '1.1',
   },
   card: {
-    backgroundColor: 'white',
+    background: colors.gradient,
+    borderRadius: '16px',
     boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
+    border: '1px solid rgba(139, 111, 92, 0.08)',
   },
   sectionTitle: {
     fontWeight: '600',

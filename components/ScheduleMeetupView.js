@@ -49,6 +49,7 @@ export default function ScheduleMeetupView({
   const [topic, setTopic] = useState('');
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState('Virtual');
+  const [participantLimit, setParticipantLimit] = useState(20);
 
   const [availableCircles, setAvailableCircles] = useState([]);
   const [availableConnections, setAvailableConnections] = useState([]);
@@ -170,6 +171,11 @@ export default function ScheduleMeetupView({
       return;
     }
 
+    if (meetupType === 'community' && !topic.trim()) {
+      alert('Please enter a topic for the event');
+      return;
+    }
+
     if (!location.trim()) {
       alert('Please enter a location');
       return;
@@ -185,8 +191,10 @@ export default function ScheduleMeetupView({
     try {
       if (meetupType === 'coffee') {
         await scheduleCoffeeChat();
-      } else {
+      } else if (meetupType === 'circle') {
         await scheduleCircleMeetup();
+      } else if (meetupType === 'community') {
+        await scheduleCommunityEvent();
       }
     } catch (error) {
       alert('Error scheduling meetup: ' + error.message);
@@ -263,6 +271,47 @@ export default function ScheduleMeetupView({
     onNavigate?.('circleDetail', { circleId: selectedCircle.id });
   };
 
+  const scheduleCommunityEvent = async () => {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    if (!authUser) {
+      throw new Error('Not authenticated');
+    }
+
+    const formattedTime = scheduledTime.includes(':') ? scheduledTime : `${scheduledTime}:00`;
+
+    const { data: meetupData, error } = await supabase
+      .from('meetups')
+      .insert({
+        circle_id: null,
+        date: scheduledDate,
+        time: formattedTime,
+        topic: topic.trim(),
+        description: notes || 'Community event',
+        duration: 60,
+        location: location,
+        created_by: authUser.id,
+        participant_limit: participantLimit,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Insert error details:', error);
+      throw error;
+    }
+
+    // Auto-RSVP the creator
+    if (meetupData?.id) {
+      await supabase
+        .from('meetup_signups')
+        .insert({ meetup_id: meetupData.id, user_id: authUser.id });
+    }
+
+    alert('Community event created!');
+    onNavigate?.('meetups');
+  };
+
   // Get today's date for min date
   const today = new Date().toISOString().split('T')[0];
 
@@ -316,6 +365,17 @@ export default function ScheduleMeetupView({
                 ? 'No circles available'
                 : 'Group meetup with circle members'}
             </span>
+          </button>
+          <button
+            style={{
+              ...styles.typeBtn,
+              ...(meetupType === 'community' ? styles.typeBtnActive : {}),
+            }}
+            onClick={() => setMeetupType('community')}
+          >
+            <span style={styles.typeIcon}>🌐</span>
+            <span style={styles.typeLabel}>Community Event</span>
+            <span style={styles.typeDesc}>Open meetup for all members</span>
           </button>
         </div>
       </div>
@@ -389,6 +449,24 @@ export default function ScheduleMeetupView({
         </div>
       )}
 
+      {/* Participant Limit for Community Events */}
+      {meetupType === 'community' && (
+        <div style={styles.section}>
+          <label style={styles.label}>Participant Limit</label>
+          <div style={styles.inputGroup}>
+            <Users size={18} style={styles.inputIcon} />
+            <input
+              type="number"
+              value={participantLimit}
+              min={2}
+              max={100}
+              onChange={(e) => setParticipantLimit(parseInt(e.target.value) || 20)}
+              style={styles.input}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Date & Time */}
       {meetupType && (
         <>
@@ -439,7 +517,7 @@ export default function ScheduleMeetupView({
               type="text"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder={meetupType === 'coffee' ? "What would you like to chat about?" : "What will you discuss?"}
+              placeholder={meetupType === 'coffee' ? "What would you like to chat about?" : meetupType === 'community' ? "What's the event about?" : "What will you discuss?"}
               style={styles.textInput}
             />
           </div>
@@ -471,7 +549,13 @@ export default function ScheduleMeetupView({
             onClick={handleSubmit}
             disabled={submitting}
           >
-            {submitting ? 'Scheduling...' : meetupType === 'coffee' ? 'Send Request' : 'Schedule Meetup'}
+            {submitting
+              ? 'Scheduling...'
+              : meetupType === 'coffee'
+                ? 'Send Request'
+                : meetupType === 'community'
+                  ? 'Create Event'
+                  : 'Schedule Meetup'}
           </button>
         </>
       )}
@@ -488,7 +572,7 @@ export default function ScheduleMeetupView({
 const styles = {
   container: {
     fontFamily: fonts.sans,
-    maxWidth: '600px',
+    maxWidth: '100%',
     margin: '0 auto',
     paddingBottom: '40px',
   },

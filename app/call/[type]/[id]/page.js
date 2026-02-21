@@ -1502,6 +1502,28 @@ export default function UnifiedCallPage() {
     // Small delay to ensure video cleanup is complete
     await new Promise(resolve => setTimeout(resolve, 100));
 
+    // Step 3.5: Mark meetup/coffee chat as completed (non-blocking)
+    try {
+      if (callType === 'coffee' && relatedData?.id) {
+        await supabase
+          .from('coffee_chats')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', relatedData.id);
+      } else if (callType === 'meetup' && relatedData?.id) {
+        await supabase
+          .from('meetups')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', relatedData.id);
+      } else if (callType === 'circle' && relatedData?.meetupId) {
+        await supabase
+          .from('meetups')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', relatedData.meetupId);
+      }
+    } catch (err) {
+      console.error('[UnifiedCall] Error marking as completed (non-blocking):', err);
+    }
+
     // Step 4: Prepare recap data
     let allParticipants = [];
     if (participantIds.length > 0) {
