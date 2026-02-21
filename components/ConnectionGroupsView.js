@@ -4,7 +4,7 @@
 
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   checkGroupEligibility,
   getEligibleConnections,
@@ -129,73 +129,86 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   const loadPeerSuggestions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
-        .neq('id', currentUser.id)
-        .not('name', 'is', null)
-        .limit(10);
+      // Parallel: fetch profiles, my matches, and my interests at the same time
+      const connectedIds = new Set((connectionsProp || []).map(c => (c.connected_user || c).id));
 
-      if (error) {
+      const [profilesResult, mutualResult, interestsResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
+          .neq('id', currentUser.id)
+          .not('name', 'is', null)
+          .limit(10),
+        supabase
+          .rpc('get_mutual_matches', { for_user_id: currentUser.id }),
+        supabase
+          .from('user_interests')
+          .select('interested_in_user_id')
+          .eq('user_id', currentUser.id),
+      ]);
+
+      if (profilesResult.error) {
         setPeerSuggestions([]);
         return;
       }
 
-      const connectedIds = new Set((connectionsProp || []).map(c => (c.connected_user || c).id));
+      const myMatchIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
+      const myInterestIds = new Set((interestsResult.data || []).map(i => i.interested_in_user_id));
 
-      const { data: mutualMatches } = await supabase
-        .rpc('get_mutual_matches', { for_user_id: currentUser.id });
-      const myMatchIds = new Set((mutualMatches || []).map(m => m.matched_user_id));
-
-      const { data: myInterests } = await supabase
-        .from('user_interests')
-        .select('interested_in_user_id')
-        .eq('user_id', currentUser.id);
-      const myInterestIds = new Set((myInterests || []).map(i => i.interested_in_user_id));
-
-      const suggestions = (data || []).filter(u =>
+      const suggestions = (profilesResult.data || []).filter(u =>
         !connectedIds.has(u.id) && !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
       );
-      const suggestionIds = suggestions.map(s => s.id);
 
-      let userCircleCount = {};
-      if (suggestionIds.length > 0) {
-        const { data: myCircles } = await supabase
+      // Only enrich the final 4 we'll actually show
+      const finalSuggestions = suggestions.slice(0, 4);
+      const finalIds = finalSuggestions.map(s => s.id);
+
+      if (finalIds.length === 0) {
+        setPeerSuggestions([]);
+        return;
+      }
+
+      // Parallel: fetch shared circles and mutual connections for the 4 suggestions
+      const [myCirclesResult, ...matchResults] = await Promise.all([
+        supabase
           .from('connection_group_members')
           .select('group_id')
           .eq('user_id', currentUser.id)
+          .eq('status', 'accepted'),
+        // Batch all RPC calls in parallel instead of sequential loop
+        ...finalIds.map(personId =>
+          supabase.rpc('get_mutual_matches', { for_user_id: personId })
+        ),
+      ]);
+
+      // Build mutual connections map from parallel results
+      const userMutualConnections = {};
+      finalIds.forEach((personId, i) => {
+        let count = 0;
+        (matchResults[i].data || []).forEach(m => {
+          if (myMatchIds.has(m.matched_user_id)) count++;
+        });
+        userMutualConnections[personId] = count;
+      });
+
+      // Build shared circles map
+      let userCircleCount = {};
+      const myCircleIds = (myCirclesResult.data || []).map(c => c.group_id);
+      if (myCircleIds.length > 0) {
+        const { data: sharedMembers } = await supabase
+          .from('connection_group_members')
+          .select('user_id, group_id')
+          .in('group_id', myCircleIds)
+          .in('user_id', finalIds)
           .eq('status', 'accepted');
-        const myCircleIds = (myCircles || []).map(c => c.group_id);
 
-        if (myCircleIds.length > 0) {
-          const { data: sharedMembers } = await supabase
-            .from('connection_group_members')
-            .select('user_id, group_id')
-            .in('group_id', myCircleIds)
-            .in('user_id', suggestionIds)
-            .eq('status', 'accepted');
-
-          (sharedMembers || []).forEach(m => {
-            if (!userCircleCount[m.user_id]) userCircleCount[m.user_id] = new Set();
-            userCircleCount[m.user_id].add(m.group_id);
-          });
-        }
+        (sharedMembers || []).forEach(m => {
+          if (!userCircleCount[m.user_id]) userCircleCount[m.user_id] = new Set();
+          userCircleCount[m.user_id].add(m.group_id);
+        });
       }
 
-      let userMutualConnections = {};
-      if (suggestionIds.length > 0) {
-        for (const personId of suggestionIds) {
-          const { data: personMatches } = await supabase
-            .rpc('get_mutual_matches', { for_user_id: personId });
-          let count = 0;
-          (personMatches || []).forEach(m => {
-            if (myMatchIds.has(m.matched_user_id)) count++;
-          });
-          userMutualConnections[personId] = count;
-        }
-      }
-
-      const enriched = suggestions.slice(0, 4).map(person => ({
+      const enriched = finalSuggestions.map(person => ({
         ...person,
         mutualCircles: userCircleCount[person.id] ? userCircleCount[person.id].size : 0,
         mutualConnections: userMutualConnections[person.id] || 0,
@@ -412,7 +425,44 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     }
   };
 
-  const onlineCount = connections.filter(c => c.status === 'online').length;
+  const onlineCount = useMemo(() => connections.filter(c => c.status === 'online').length, [connections]);
+
+  // Pre-compute group card data so filtering/date-parsing doesn't re-run on every render
+  const themes = [
+    { emoji: '💼', color: '#8B6F5C' },
+    { emoji: '🚀', color: '#A67B5B' },
+    { emoji: '💪', color: '#6B4423' },
+    { emoji: '🔄', color: '#D4A574' },
+    { emoji: '🏙️', color: '#C4956A' },
+  ];
+
+  const enrichedGroups = useMemo(() => {
+    return connectionGroups.map((group, index) => {
+      const acceptedMembers = group.members?.filter(m => m.status === 'accepted') || [];
+      const activeMembers = acceptedMembers.filter(m =>
+        isUserActive(m.user?.last_active, 10)
+      );
+      const activeNames = activeMembers
+        .map(m => m.user?.name?.split(' ')[0])
+        .filter(Boolean);
+      const theme = themes[index % themes.length];
+      const hasUpcoming = !!group.nextMeetup;
+      const sessionCount = group.pastSessionCount || 0;
+
+      let daysUntilMeetup = null;
+      if (hasUpcoming) {
+        const meetupDate = parseLocalDate(group.nextMeetup.date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        meetupDate.setHours(0, 0, 0, 0);
+        daysUntilMeetup = Math.round((meetupDate - today) / (1000 * 60 * 60 * 24));
+      }
+
+      const hasNoActivity = !hasUpcoming && !group.lastMessage;
+
+      return { group, acceptedMembers, activeMembers, activeNames, theme, hasUpcoming, sessionCount, daysUntilMeetup, hasNoActivity };
+    });
+  }, [connectionGroups]);
 
   if (loading) {
     return (
@@ -766,39 +816,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 </button>
               </div>
             ) : (
-              connectionGroups.map((group, index) => {
-                const acceptedMembers = group.members?.filter(m => m.status === 'accepted') || [];
-                const activeMembers = acceptedMembers.filter(m =>
-                  isUserActive(m.user?.last_active, 10)
-                );
-                const activeNames = activeMembers
-                  .map(m => m.user?.name?.split(' ')[0])
-                  .filter(Boolean);
-
-                const themes = [
-                  { emoji: '💼', color: '#8B6F5C' },
-                  { emoji: '🚀', color: '#A67B5B' },
-                  { emoji: '💪', color: '#6B4423' },
-                  { emoji: '🔄', color: '#D4A574' },
-                  { emoji: '🏙️', color: '#C4956A' },
-                ];
-                const theme = themes[index % themes.length];
-
-                const hasUpcoming = !!group.nextMeetup;
-                const sessionCount = group.pastSessionCount || 0;
-
-                // Calculate "in X days" for next meetup
-                let daysUntilMeetup = null;
-                if (hasUpcoming) {
-                  const meetupDate = parseLocalDate(group.nextMeetup.date);
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  meetupDate.setHours(0, 0, 0, 0);
-                  daysUntilMeetup = Math.round((meetupDate - today) / (1000 * 60 * 60 * 24));
-                }
-
-                const hasNoActivity = !hasUpcoming && !group.lastMessage;
-
+              enrichedGroups.map(({ group, acceptedMembers, activeMembers, activeNames, theme, hasUpcoming, sessionCount, daysUntilMeetup, hasNoActivity }, index) => {
                 return (
                   <div
                     key={group.id}

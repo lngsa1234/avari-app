@@ -38,10 +38,8 @@ function MainApp({ currentUser, onSignOut }) {
   const mountTimeRef = useRef(Date.now())
   const componentIdRef = useRef(Math.random().toString(36).substring(7))
   
-  console.log('🔥 MainApp loaded - UPDATED VERSION with TIME ORDERING')
-  console.log(`🔁 Render #${renderCountRef.current} | Component ID: ${componentIdRef.current} | Age: ${Date.now() - mountTimeRef.current}ms`)
-  console.log(`👤 currentUser.id: ${currentUser?.id}`)
-  console.log(`🔑 Props changed: currentUser=${!!currentUser}, onSignOut=${!!onSignOut}, supabase=${!!supabase}`)
+  // Debug: uncomment to track renders
+  // console.log(`🔁 Render #${renderCountRef.current} | Age: ${Date.now() - mountTimeRef.current}ms`)
   
   // 🔥 WRAPPER for sign out with debugging
   const handleSignOut = useCallback(async () => {
@@ -232,25 +230,38 @@ function MainApp({ currentUser, onSignOut }) {
     console.log('🚀 useEffect running for the FIRST time')
     hasLoadedRef.current = true
     
+    // Phase 1: Load meetups + signups (what the user sees first)
     loadMeetupsFromDatabase()
-    loadSignupsForMeetups([]) // Load all signups
+    loadSignupsForMeetups([])
     loadUserSignups()
-    loadConnections()
-    loadMyInterests()
-    loadConnectionRequests()
-    loadMeetupPeople()
-    updateAttendedCount()
-    loadUnreadMessageCount()
-    loadGroupsCount()
-    loadCoffeeChatsCount()
     loadUpcomingCoffeeChats()
-    loadPendingRecaps()
+
+    // Phase 2: Secondary home page data (badges, counts) — slight delay to avoid render storm
+    setTimeout(() => {
+      loadConnectionRequests()
+      updateAttendedCount()
+      loadUnreadMessageCount()
+      loadGroupsCount()
+      loadCoffeeChatsCount()
+    }, 300)
+
+    // Phase 3: Data not needed for home page (connections, discover, recaps)
+    setTimeout(() => {
+      loadConnections()
+      loadMyInterests()
+      loadMeetupPeople()
+      loadPendingRecaps()
+    }, 2000)
 
   }, []) // Empty array - run once on mount
 
-  // Reload meetups when navigating back to home view
+  // Reload meetups when navigating BACK to home view (not on initial mount)
+  const previousViewRef = useRef(currentView)
   useEffect(() => {
-    if (currentView === 'home' && hasLoadedRef.current) {
+    const prevView = previousViewRef.current
+    previousViewRef.current = currentView
+    // Only reload if we're returning to home from a different view
+    if (currentView === 'home' && prevView !== 'home' && hasLoadedRef.current) {
       loadMeetupsFromDatabase()
       loadSignupsForMeetups([])
       loadUserSignups()
@@ -265,6 +276,11 @@ function MainApp({ currentUser, onSignOut }) {
     try {
       setLoadingMeetups(true)
 
+      // Only fetch meetups from yesterday onwards (grace period for recently ended ones)
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - 1)
+      const cutoff = cutoffDate.toISOString().split('T')[0]
+
       // Get circles where user is a member
       const { data: memberCircles, error: circleError } = await supabase
         .from('connection_group_members')
@@ -277,7 +293,7 @@ function MainApp({ currentUser, onSignOut }) {
       const memberCircleIds = (memberCircles || []).map(m => m.group_id)
       console.log('Member circle IDs:', memberCircleIds)
 
-      // Load public meetups AND circle meetups from user's circles
+      // Load public meetups AND circle meetups from user's circles (upcoming only)
       let data, error
 
       if (memberCircleIds.length > 0) {
@@ -286,6 +302,7 @@ function MainApp({ currentUser, onSignOut }) {
           .from('meetups')
           .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
           .or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
+          .gte('date', cutoff)
           .order('date', { ascending: true })
           .order('time', { ascending: true })
 
@@ -297,6 +314,7 @@ function MainApp({ currentUser, onSignOut }) {
           .from('meetups')
           .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
           .is('circle_id', null)
+          .gte('date', cutoff)
           .order('date', { ascending: true })
           .order('time', { ascending: true })
 
@@ -322,14 +340,11 @@ function MainApp({ currentUser, onSignOut }) {
   const loadSignupsForMeetups = useCallback(async (meetupsList) => {
     try {
       console.log('Loading signups...')
-      
-      // Get all signups first
+
+      // Get all signups
       const { data: signupsData, error: signupsError } = await supabase
         .from('meetup_signups')
         .select('*')
-
-      console.log('Signups raw data:', signupsData)
-      console.log('Signups error:', signupsError)
 
       if (signupsError) {
         console.error('Error loading signups:', signupsError)
@@ -342,23 +357,17 @@ function MainApp({ currentUser, onSignOut }) {
         return
       }
 
-      // Get user IDs from signups
+      // Get profiles for all signup users in one query
       const userIds = [...new Set(signupsData.map(s => s.user_id))]
-      
-      // Get profiles for those users
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, name, career, city, state, profile_picture')
         .in('id', userIds)
-
-      console.log('Profiles data:', profilesData)
-      console.log('Profiles error:', profilesError)
 
       if (profilesError) {
         console.error('Error loading profiles:', profilesError)
       }
 
-      // Create a map of user profiles
       const profilesMap = {}
       if (profilesData) {
         profilesData.forEach(profile => {
@@ -366,7 +375,7 @@ function MainApp({ currentUser, onSignOut }) {
         })
       }
 
-      // Combine signups with profiles and group by meetup_id
+      // Group by meetup_id
       const signupsByMeetup = {}
       signupsData.forEach(signup => {
         if (!signupsByMeetup[signup.meetup_id]) {
@@ -897,69 +906,64 @@ function MainApp({ currentUser, onSignOut }) {
 
       console.log('🚫 Excluding', connectedUserIds.size, 'existing connections:', Array.from(connectedUserIds))
 
-      // STEP 5: For each meetup, get other attendees and FILTER OUT connections
-      const meetupPeopleMap = {}
+      // STEP 5: Batch fetch all signups for past meetups in ONE query
+      const pastMeetupIds = meetupsData.map(m => m.id)
+      const { data: allSignups, error: allSignupsError } = await supabase
+        .from('meetup_signups')
+        .select('meetup_id, user_id')
+        .in('meetup_id', pastMeetupIds)
+        .neq('user_id', currentUser.id)
 
-      for (const meetup of meetupsData) {
-        console.log('🔎 Checking past meetup:', meetup.date, meetup.time, '- Meetup ID:', meetup.id)
-        
-        // Get attendee user_ids for this meetup
-        const { data: signups, error: signupsError } = await supabase
-          .from('meetup_signups')
-          .select('user_id')
-          .eq('meetup_id', meetup.id)
-          .neq('user_id', currentUser.id)
-
-        console.log('🔍 Raw signups query result:', signups)
-
-        if (signupsError) {
-          console.error('❌ Error loading signups:', signupsError)
-          continue
-        }
-
-        if (!signups || signups.length === 0) {
-          console.log('⚠️ No other attendees at this meetup')
-          continue
-        }
-
-        // 🔥 CRITICAL FIX: Filter out existing connections
-        const userIds = signups
-          .map(s => s.user_id)
-          .filter(userId => !connectedUserIds.has(userId))
-
-        console.log('👥 Found', signups.length, 'total attendees,', userIds.length, 'after filtering connections')
-
-        if (userIds.length === 0) {
-          console.log('✨ All attendees are already connections - nothing to discover here')
-          continue
-        }
-
-        // Get profile data for these user_ids
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, name, career, city, state, bio, last_active')
-          .in('id', userIds)
-
-        if (profilesError) {
-          console.error('❌ Error loading profiles:', profilesError)
-          continue
-        }
-
-        // Combine into people array
-        const people = profiles.map(profile => ({
-          id: profile.id,
-          user: profile
-        }))
-
-        console.log('✅ Available people to discover:', people.length)
-
-        if (people.length > 0) {
-          meetupPeopleMap[meetup.id] = {
-            meetup: meetup,
-            people: people
-          }
-        }
+      if (allSignupsError) {
+        console.error('❌ Error loading signups:', allSignupsError)
+        setMeetupPeople({})
+        return
       }
+
+      // Filter out connected users and collect all unique user IDs
+      const signupsByMeetup = {}
+      const allUserIds = new Set()
+      ;(allSignups || []).forEach(s => {
+        if (connectedUserIds.has(s.user_id)) return
+        if (!signupsByMeetup[s.meetup_id]) signupsByMeetup[s.meetup_id] = []
+        signupsByMeetup[s.meetup_id].push(s.user_id)
+        allUserIds.add(s.user_id)
+      })
+
+      if (allUserIds.size === 0) {
+        console.log('✨ No new people to discover')
+        setMeetupPeople({})
+        return
+      }
+
+      // ONE profile query for all users
+      const { data: allProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, career, city, state, bio, last_active')
+        .in('id', Array.from(allUserIds))
+
+      if (profilesError) {
+        console.error('❌ Error loading profiles:', profilesError)
+        setMeetupPeople({})
+        return
+      }
+
+      const profileMap = {}
+      ;(allProfiles || []).forEach(p => { profileMap[p.id] = p })
+
+      // Assemble result
+      const meetupPeopleMap = {}
+      const meetupMap = {}
+      meetupsData.forEach(m => { meetupMap[m.id] = m })
+
+      Object.entries(signupsByMeetup).forEach(([meetupId, userIds]) => {
+        const people = userIds
+          .map(uid => profileMap[uid] ? { id: uid, user: profileMap[uid] } : null)
+          .filter(Boolean)
+        if (people.length > 0) {
+          meetupPeopleMap[meetupId] = { meetup: meetupMap[meetupId], people }
+        }
+      })
 
       setMeetupPeople(meetupPeopleMap)
       console.log('🎉 Final result:', Object.keys(meetupPeopleMap).length, 'meetups with people')
