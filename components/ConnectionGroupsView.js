@@ -21,7 +21,7 @@ import {
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
 import { parseLocalDate } from '../lib/dateUtils';
-import { MapPin, Users, UserPlus, Check, ChevronRight } from 'lucide-react';
+import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee } from 'lucide-react';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
   const [connectionGroups, setConnectionGroups] = useState([]);
@@ -466,18 +466,36 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {/* Single Column Layout */}
       <div style={styles.singleColumn}>
 
-        {/* Connections Section - Horizontal Slide Bar */}
+        {/* Connections Section */}
         <section style={styles.card} className="circles-card">
           <div style={styles.cardHeader} className="circles-card-header">
             <h2 style={styles.cardTitle} className="circles-card-title">
               Connections
             </h2>
-            <span style={styles.onlineBadge}>
-              <span style={styles.pulsingDot}></span>
-              {onlineCount} online
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={styles.onlineBadge}>
+                <span style={styles.pulsingDot}></span>
+                {onlineCount} online
+              </span>
+              <button
+                onClick={() => onNavigate?.('allPeople')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#8B6F5C',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}>
+                See all <ChevronRight size={14} />
+              </button>
+            </div>
           </div>
 
+          {/* Existing connections - slide bar */}
           <div style={styles.slideBar}>
             {connections.map((user, index) => (
               <div
@@ -489,7 +507,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 className="circles-slide-card"
                 onClick={() => setSelectedUser(user)}
               >
-                <div style={styles.slideAvatarContainer}>
+                <div
+                  style={{ ...styles.slideAvatarContainer, cursor: 'pointer' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onNavigate?.('userProfile', { userId: user.id });
+                  }}
+                >
                   {user.avatar ? (
                     <img src={user.avatar} alt={user.name} style={styles.slideAvatarImg} className="circles-slide-avatar" />
                   ) : (
@@ -502,6 +526,28 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 </div>
                 <span style={styles.slideName} className="circles-slide-name">{user.name?.split(' ')[0]}</span>
                 <span style={styles.slideRole}>{user.career}</span>
+                <div style={styles.slideActions} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    style={styles.slideActionBtn}
+                    className="slide-action-btn"
+                    onClick={() => onNavigate?.('messages', { chatId: user.id, chatType: 'user' })}
+                    title="Message"
+                  >
+                    <MessageCircle size={13} />
+                  </button>
+                  <button
+                    style={styles.slideActionBtn}
+                    className="slide-action-btn"
+                    onClick={() => onNavigate?.('scheduleMeetup', {
+                      type: 'coffee',
+                      scheduleConnectionId: user.id,
+                      scheduleConnectionName: user.name,
+                    })}
+                    title="Schedule Coffee"
+                  >
+                    <Coffee size={13} />
+                  </button>
+                </div>
               </div>
             ))}
 
@@ -516,6 +562,185 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             </div>
           </div>
 
+          {/* People you may know */}
+          {peerSuggestions.length > 0 && (
+            <>
+              <div style={{
+                marginTop: '20px',
+                paddingTop: '16px',
+                borderTop: '1px solid rgba(139, 111, 92, 0.1)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>
+                    People you may know
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#A89080' }}>
+                    From events & circles
+                  </span>
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  overflowX: 'auto',
+                  paddingBottom: '8px',
+                  WebkitOverflowScrolling: 'touch',
+                }}>
+                  {peerSuggestions.map((person) => (
+                    <div
+                      key={person.id}
+                      style={{
+                        minWidth: '220px',
+                        background: 'linear-gradient(160deg, #3E2C1E 0%, #5C4033 50%, #7A5C42 100%)',
+                        borderRadius: '16px',
+                        padding: '16px',
+                        boxShadow: '0 4px 16px rgba(139, 94, 60, 0.2)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{
+                          width: '48px',
+                          height: '48px',
+                          borderRadius: '50%',
+                          backgroundColor: '#8B6F5C',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '22px',
+                          flexShrink: 0,
+                          color: 'white',
+                          fontWeight: '600',
+                        }}>
+                          {person.profile_picture ? (
+                            <img
+                              src={person.profile_picture}
+                              alt={person.name}
+                              style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            (person.name?.[0] || '?').toUpperCase()
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            color: '#FFF8F0',
+                            margin: '0 0 2px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {person.name}
+                          </h4>
+                          <p style={{
+                            fontSize: '12px',
+                            color: '#E8D5C0',
+                            margin: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            {person.career || 'Professional'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Hook / Ask me about */}
+                      {person.hook && (
+                        <p style={{
+                          fontSize: '12px',
+                          color: '#F5E6D5',
+                          margin: '10px 0 0',
+                          lineHeight: '1.4',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                        }}>
+                          {person.hook}
+                        </p>
+                      )}
+
+                      {/* Mutual + Location row */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginTop: '10px',
+                        paddingTop: '10px',
+                        borderTop: '1px solid rgba(255,248,240,0.12)',
+                        fontSize: '10px',
+                        color: '#E8D5C0',
+                      }}>
+                        {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#A8E6CF' }}>
+                            <Users size={10} />
+                            {person.mutualConnections || 0} mutual
+                          </span>
+                        )}
+                        {person.city && (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <MapPin size={10} style={{ opacity: 0.7 }} />
+                            {person.city}{person.state ? `, ${person.state}` : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Connect button */}
+                      {sentRequests.has(person.id) ? (
+                        <div style={{
+                          width: '100%',
+                          marginTop: '10px',
+                          padding: '7px',
+                          backgroundColor: 'rgba(168,230,207,0.2)',
+                          color: '#A8E6CF',
+                          border: '1.5px solid rgba(168,230,207,0.4)',
+                          borderRadius: '10px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          boxSizing: 'border-box',
+                        }}>
+                          <Check size={13} />
+                          Requested
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => handleConnect(person.id)}
+                          style={{
+                            width: '100%',
+                            marginTop: '10px',
+                            padding: '7px',
+                            backgroundColor: 'rgba(255,248,240,0.18)',
+                            color: '#FFF8F0',
+                            border: '1.5px solid rgba(255,248,240,0.3)',
+                            borderRadius: '10px',
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            boxSizing: 'border-box',
+                          }}
+                        >
+                          <UserPlus size={13} />
+                          Connect
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         {/* My Groups Section */}
@@ -781,240 +1006,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           </div>
         </section>
 
-        {/* Connect with People */}
-        {peerSuggestions.length > 0 && (
-          <section style={styles.card} className="circles-card">
-            <div style={styles.cardHeader} className="circles-card-header">
-              <h2 style={styles.cardTitle} className="circles-card-title">
-                Connect with people
-              </h2>
-              <button
-                onClick={() => onNavigate?.('allPeople')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  background: 'none',
-                  border: 'none',
-                  color: '#8B6F5C',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                }}>
-                See all <ChevronRight size={14} />
-              </button>
-            </div>
-            <p style={{ fontSize: '13px', color: '#7A6855', margin: '-8px 0 16px' }}>
-              Women you've met in events and circles
-            </p>
-
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              overflowX: 'auto',
-              paddingBottom: '8px',
-              WebkitOverflowScrolling: 'touch',
-            }}>
-              {peerSuggestions.map((person) => (
-                <div
-                  key={person.id}
-                  style={{
-                    minWidth: '220px',
-                    background: 'linear-gradient(160deg, #3E2C1E 0%, #5C4033 50%, #7A5C42 100%)',
-                    borderRadius: '16px',
-                    padding: '16px',
-                    boxShadow: '0 4px 16px rgba(139, 94, 60, 0.2)',
-                    flexShrink: 0,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{
-                      width: '48px',
-                      height: '48px',
-                      borderRadius: '50%',
-                      backgroundColor: '#8B6F5C',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '22px',
-                      flexShrink: 0,
-                      color: 'white',
-                      fontWeight: '600',
-                    }}>
-                      {person.profile_picture ? (
-                        <img
-                          src={person.profile_picture}
-                          alt={person.name}
-                          style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        (person.name?.[0] || '?').toUpperCase()
-                      )}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: '12px', color: '#F5E6D5', margin: '0 0 4px' }}>
-                        Ask me about:
-                      </p>
-                      <h4 style={{
-                        fontSize: '15px',
-                        fontWeight: '600',
-                        color: '#FFF8F0',
-                        margin: '0 0 4px',
-                        lineHeight: '1.3',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                      }}>
-                        {person.hook || person.career || 'Professional networking'}
-                      </h4>
-                      <p style={{
-                        fontSize: '12px',
-                        color: '#E8D5C0',
-                        margin: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {person.name} | {person.career || 'Professional'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Location */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    marginTop: '10px',
-                    fontSize: '11px',
-                    color: '#E8D5C0',
-                  }}>
-                    <MapPin size={11} style={{ flexShrink: 0, opacity: 0.8 }} />
-                    <span>{person.city ? `${person.city}${person.state ? `, ${person.state}` : ''}` : '—'}</span>
-                  </div>
-
-                  {/* Tags */}
-                  <div style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: '6px',
-                    marginTop: '10px',
-                    minHeight: '22px',
-                    alignItems: 'center',
-                  }}>
-                    {person.industry ? (
-                      <span style={{
-                        padding: '3px 9px',
-                        backgroundColor: 'rgba(255,248,240,0.18)',
-                        color: '#FFF3E8',
-                        fontSize: '10px',
-                        fontWeight: '500',
-                        borderRadius: '10px',
-                      }}>
-                        {person.industry}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: '10px', color: 'rgba(232,213,192,0.5)', fontStyle: 'italic' }}>
-                        No tags
-                      </span>
-                    )}
-                    {person.career_stage && (
-                      <span style={{
-                        padding: '3px 9px',
-                        backgroundColor: 'rgba(255,248,240,0.18)',
-                        color: '#FFF3E8',
-                        fontSize: '10px',
-                        fontWeight: '500',
-                        borderRadius: '10px',
-                      }}>
-                        {person.career_stage}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Mutual info */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    marginTop: '10px',
-                    paddingTop: '10px',
-                    borderTop: '1px solid rgba(255,248,240,0.15)',
-                    fontSize: '10px',
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      color: person.mutualConnections > 0 ? '#A8E6CF' : '#E8D5C0',
-                    }}>
-                      <Users size={10} />
-                      <span>{person.mutualConnections || 0} mutual</span>
-                    </div>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      color: person.mutualCircles > 0 ? '#A8E6CF' : '#E8D5C0',
-                    }}>
-                      <span style={{ opacity: 0.5 }}>•</span>
-                      <span>{person.mutualCircles || 0} circles</span>
-                    </div>
-                  </div>
-
-                  {/* Connect button */}
-                  {sentRequests.has(person.id) ? (
-                    <div style={{
-                      width: '100%',
-                      marginTop: '12px',
-                      padding: '8px',
-                      backgroundColor: 'rgba(168,230,207,0.2)',
-                      color: '#A8E6CF',
-                      border: '1.5px solid rgba(168,230,207,0.4)',
-                      borderRadius: '10px',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      boxSizing: 'border-box',
-                    }}>
-                      <Check size={13} />
-                      Requested
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleConnect(person.id)}
-                      style={{
-                        width: '100%',
-                        marginTop: '12px',
-                        padding: '8px',
-                        backgroundColor: 'rgba(255,248,240,0.18)',
-                        color: '#FFF8F0',
-                        border: '1.5px solid rgba(255,248,240,0.3)',
-                        borderRadius: '10px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '6px',
-                        boxSizing: 'border-box',
-                      }}
-                    >
-                      <UserPlus size={13} />
-                      Connect
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
 
       </div>
 
@@ -1244,6 +1235,12 @@ const keyframeStyles = `
   .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(3) { transition-delay: 0.1s; }
   .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(4) { transition-delay: 0.15s; }
   .circles-circle-card:hover .sparkline-container .sparkline-bar:nth-child(5) { transition-delay: 0.2s; }
+
+  .slide-action-btn:hover {
+    background-color: rgba(139, 111, 92, 0.15) !important;
+    border-color: rgba(139, 111, 92, 0.3) !important;
+    color: #5C4033 !important;
+  }
 
   /* Responsive styles */
   @media (max-width: 640px) {
@@ -1668,6 +1665,25 @@ const styles = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  slideActions: {
+    display: 'flex',
+    gap: '6px',
+    marginTop: '4px',
+  },
+  slideActionBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '30px',
+    height: '30px',
+    borderRadius: '50%',
+    border: '1px solid rgba(139, 111, 92, 0.15)',
+    backgroundColor: 'rgba(139, 111, 92, 0.06)',
+    color: '#8B6F5C',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    padding: 0,
   },
   addConnectionCard: {
     display: 'flex',
