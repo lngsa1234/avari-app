@@ -3577,6 +3577,7 @@ function MainApp({ currentUser, onSignOut }) {
             supabase={supabase}
             connections={connections}
             onNavigate={handleNavigate}
+            previousView={previousView}
             initialType={scheduleMeetupContext.type}
             initialCircleId={scheduleMeetupContext.circleId}
             initialCircleName={scheduleMeetupContext.circleName}

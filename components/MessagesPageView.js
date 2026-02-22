@@ -33,35 +33,29 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
   const loadConversations = async () => {
     setLoading(true);
     try {
-      // Load 1:1 conversations
-      const { data: messages1on1, error: msg1on1Error } = await supabase
-        .from('messages')
-        .select(`
-          id,
-          sender_id,
-          receiver_id,
-          content,
-          created_at,
-          read
-        `)
-        .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
-        .order('created_at', { ascending: false });
+      // Fire both 1:1 messages and circle memberships in parallel
+      const [messagesResult, circleMembersResult] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('id, sender_id, receiver_id, content, created_at, read')
+          .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('connection_group_members')
+          .select(`group_id, connection_groups:group_id (id, name, description)`)
+          .eq('user_id', currentUser.id),
+      ]);
 
-      if (msg1on1Error) {
-        console.error('Error loading 1:1 messages:', msg1on1Error);
-      }
+      const messages1on1 = messagesResult.data || [];
+      if (messagesResult.error) console.error('Error loading 1:1 messages:', messagesResult.error);
+      if (circleMembersResult.error) console.error('Error loading circle memberships:', circleMembersResult.error);
 
       // Group messages by conversation partner
       const conversationMap = new Map();
-      (messages1on1 || []).forEach(msg => {
+      messages1on1.forEach(msg => {
         const oderId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
         if (!conversationMap.has(oderId)) {
-          conversationMap.set(oderId, {
-            oderId,
-            messages: [],
-            lastMessage: msg,
-            unread: 0
-          });
+          conversationMap.set(oderId, { oderId, messages: [], lastMessage: msg, unread: 0 });
         }
         conversationMap.get(oderId).messages.push(msg);
         if (!msg.read && msg.receiver_id === currentUser.id) {
@@ -69,20 +63,17 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
         }
       });
 
-      // Get profile info for conversation partners
+      // Fetch profiles for conversation partners
       const oderIds = Array.from(conversationMap.keys());
-      let profiles = [];
+      let profileMap = new Map();
       if (oderIds.length > 0) {
         const { data: profileData } = await supabase
           .from('profiles')
           .select('id, name, profile_picture, career')
           .in('id', oderIds);
-        profiles = profileData || [];
+        profileMap = new Map((profileData || []).map(p => [p.id, p]));
       }
 
-      const profileMap = new Map(profiles.map(p => [p.id, p]));
-
-      // Build 1:1 conversation objects
       const oneOnOneConvos = Array.from(conversationMap.values()).map(convo => {
         const profile = profileMap.get(convo.oderId);
         return {
@@ -100,48 +91,46 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
             isMe: convo.lastMessage.sender_id === currentUser.id
           },
           unread: convo.unread,
-          messages: convo.messages.reverse()
+          messages: convo.messages.reverse().map(msg => ({
+            id: msg.id,
+            text: msg.content,
+            time: formatTime(msg.created_at),
+            isMe: msg.sender_id === currentUser.id,
+            sender: {
+              id: msg.sender_id,
+              name: msg.sender_id === currentUser.id ? (currentUser.name || 'You') : (profile?.name || 'Unknown'),
+              avatar: msg.sender_id === currentUser.id ? currentUser.profile_picture : profile?.profile_picture
+            }
+          }))
         };
       });
 
-      // Load circle group conversations
-      const { data: circleMembers, error: circleMembersError } = await supabase
-        .from('connection_group_members')
-        .select(`
-          group_id,
-          connection_groups:group_id (
-            id,
-            name,
-            description
-          )
-        `)
-        .eq('user_id', currentUser.id);
+      // Process all circles in parallel instead of sequentially
+      const validCircles = (circleMembersResult.data || [])
+        .map(m => m.connection_groups)
+        .filter(Boolean);
 
-      if (circleMembersError) {
-        console.error('Error loading circle memberships:', circleMembersError);
-      }
+      const circleConvos = await Promise.all(validCircles.map(async (circle) => {
+        // Fire messages and member count in parallel per circle
+        const [messagesRes, countRes] = await Promise.all([
+          supabase
+            .from('circle_messages')
+            .select('id, circle_id, sender_id, content, created_at')
+            .eq('circle_id', circle.id)
+            .order('created_at', { ascending: false })
+            .limit(50),
+          supabase
+            .from('connection_group_members')
+            .select('id', { count: 'exact', head: true })
+            .eq('group_id', circle.id),
+        ]);
 
-      // Get circle messages for each circle
-      const circleConvos = [];
-      for (const membership of (circleMembers || [])) {
-        const circle = membership.connection_groups;
-        if (!circle) continue;
+        if (messagesRes.error) return null;
 
-        const { data: circleMessages, error: circleMessagesError } = await supabase
-          .from('circle_messages')
-          .select('id, circle_id, sender_id, content, created_at')
-          .eq('circle_id', circle.id)
-          .order('created_at', { ascending: false })
-          .limit(50);
+        const circleMessages = messagesRes.data || [];
+        const lastMsg = circleMessages[0];
 
-        if (circleMessagesError) {
-          // Table might not exist yet
-          console.log('Circle messages table may not exist:', circleMessagesError.message);
-          continue;
-        }
-
-        // Fetch sender profile for last message
-        const lastMsg = circleMessages?.[0];
+        // Fetch last message sender name only if needed
         let lastMsgSenderName = 'Unknown';
         if (lastMsg) {
           const { data: senderProfile } = await supabase
@@ -152,32 +141,22 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
           lastMsgSenderName = senderProfile?.name || 'Unknown';
         }
 
-        // Get member count
-        const { count: memberCount } = await supabase
-          .from('connection_group_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('group_id', circle.id);
-
-        circleConvos.push({
+        return {
           id: `circle-${circle.id}`,
           circleId: circle.id,
           name: circle.name,
           emoji: '👥',
           bg: 'bg-[#E8E0D8]',
           isGroup: true,
-          memberCount: memberCount || 0,
+          memberCount: countRes.count || 0,
           lastMessage: lastMsg ? {
             sender: lastMsgSenderName,
             text: lastMsg.content,
             time: formatTime(lastMsg.created_at),
             isMe: lastMsg.sender_id === currentUser.id
-          } : {
-            text: 'No messages yet',
-            time: '',
-            isMe: false
-          },
-          unread: 0, // TODO: Implement unread tracking for circles
-          messages: (circleMessages || []).reverse().map(msg => ({
+          } : { text: 'No messages yet', time: '', isMe: false },
+          unread: 0,
+          messages: circleMessages.reverse().map(msg => ({
             id: msg.id,
             sender: {
               id: msg.sender_id,
@@ -188,11 +167,11 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
             time: formatTime(msg.created_at),
             isMe: msg.sender_id === currentUser.id
           }))
-        });
-      }
+        };
+      }));
 
       // Combine and sort by most recent
-      const allConvos = [...oneOnOneConvos, ...circleConvos].sort((a, b) => {
+      const allConvos = [...oneOnOneConvos, ...circleConvos.filter(Boolean)].sort((a, b) => {
         const timeA = a.lastMessage?.time || '';
         const timeB = b.lastMessage?.time || '';
         return timeB.localeCompare(timeA);
@@ -208,51 +187,45 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
 
   const loadContacts = async () => {
     try {
+      // Fire all three independent queries in parallel
+      const [matchesResult, messagePartnersResult, membershipResult] = await Promise.all([
+        supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }).then(res => res, () => ({ data: null })),
+        supabase
+          .from('messages')
+          .select('sender_id, receiver_id')
+          .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`),
+        supabase
+          .from('connection_group_members')
+          .select('group_id')
+          .eq('user_id', currentUser.id),
+      ]);
+
+      // Build people from matches
       let people = [];
+      const matches = matchesResult.data || [];
+      if (matches.length > 0) {
+        const matchedUserIds = matches.map(m => m.matched_user_id);
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, name, profile_picture, career')
+          .in('id', matchedUserIds);
 
-      // Try to load connections (mutual matches) using the database function
-      try {
-        const { data: matches, error: matchError } = await supabase
-          .rpc('get_mutual_matches', { for_user_id: currentUser.id });
-
-        if (!matchError && matches && matches.length > 0) {
-          // Get profile details for matched users
-          const matchedUserIds = matches.map(m => m.matched_user_id);
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, name, profile_picture, career')
-            .in('id', matchedUserIds);
-
-          if (profiles) {
-            people = profiles.map(p => ({
-              id: p.id,
-              name: p.name,
-              emoji: getInitialEmoji(p.name),
-              avatar: p.profile_picture,
-              bg: 'bg-[#E6DCD4]',
-              isGroup: false,
-              subtitle: p.career || ''
-            }));
-          }
+        if (profiles) {
+          people = profiles.map(p => ({
+            id: p.id, name: p.name, emoji: getInitialEmoji(p.name),
+            avatar: p.profile_picture, bg: 'bg-[#E6DCD4]', isGroup: false, subtitle: p.career || ''
+          }));
         }
-      } catch (rpcError) {
-        console.log('get_mutual_matches not available, using fallback');
       }
 
-      // Fallback: Also load people the user has messaged before
-      const { data: messagePartners } = await supabase
-        .from('messages')
-        .select('sender_id, receiver_id')
-        .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`);
-
-      if (messagePartners && messagePartners.length > 0) {
+      // Add message partners not already in matches
+      const messagePartners = messagePartnersResult.data || [];
+      if (messagePartners.length > 0) {
         const partnerIds = new Set();
         messagePartners.forEach(msg => {
           if (msg.sender_id !== currentUser.id) partnerIds.add(msg.sender_id);
           if (msg.receiver_id !== currentUser.id) partnerIds.add(msg.receiver_id);
         });
-
-        // Remove IDs we already have
         const existingIds = new Set(people.map(p => p.id));
         const newPartnerIds = Array.from(partnerIds).filter(id => !existingIds.has(id));
 
@@ -261,50 +234,32 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
             .from('profiles')
             .select('id, name, profile_picture, career')
             .in('id', newPartnerIds);
-
           if (partnerProfiles) {
-            const additionalPeople = partnerProfiles.map(p => ({
-              id: p.id,
-              name: p.name,
-              emoji: getInitialEmoji(p.name),
-              avatar: p.profile_picture,
-              bg: 'bg-[#E6DCD4]',
-              isGroup: false,
-              subtitle: p.career || ''
-            }));
-            people = [...people, ...additionalPeople];
+            people = [...people, ...partnerProfiles.map(p => ({
+              id: p.id, name: p.name, emoji: getInitialEmoji(p.name),
+              avatar: p.profile_picture, bg: 'bg-[#E6DCD4]', isGroup: false, subtitle: p.career || ''
+            }))];
           }
         }
       }
 
-      // Load circles user is member of
-      const { data: membershipData, error: circlesError } = await supabase
-        .from('connection_group_members')
-        .select('group_id')
-        .eq('user_id', currentUser.id);
-
+      // Build circle contacts
       let groups = [];
-      if (!circlesError && membershipData && membershipData.length > 0) {
+      const membershipData = membershipResult.data || [];
+      if (!membershipResult.error && membershipData.length > 0) {
         const groupIds = membershipData.map(m => m.group_id);
         const { data: circleData } = await supabase
           .from('connection_groups')
           .select('id, name')
           .in('id', groupIds);
-
         if (circleData) {
           groups = circleData.map(c => ({
-            id: c.id,
-            name: c.name,
-            emoji: '👥',
-            bg: 'bg-[#E8E0D8]',
-            isGroup: true,
-            subtitle: 'Circle'
+            id: c.id, name: c.name, emoji: '👥', bg: 'bg-[#E8E0D8]', isGroup: true, subtitle: 'Circle'
           }));
         }
       }
 
       setContacts([...people, ...groups]);
-      console.log('Loaded contacts:', people.length, 'people,', groups.length, 'circles');
     } catch (err) {
       console.error('Error loading contacts:', err);
     }

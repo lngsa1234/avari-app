@@ -31,6 +31,7 @@ export default function ScheduleMeetupView({
   supabase,
   connections = [],
   onNavigate,
+  previousView,
   // Pre-fill props from navigation context
   initialType = null,
   initialCircleId = null,
@@ -253,7 +254,7 @@ export default function ScheduleMeetupView({
     if (error) throw error;
 
     alert(`Request sent to ${selectedConnection.name}!`);
-    onNavigate?.('meetups');
+    onNavigate?.(previousView || 'meetups');
   };
 
   const scheduleCircleMeetup = async () => {
@@ -369,7 +370,7 @@ export default function ScheduleMeetupView({
     }
 
     alert('Community event created!');
-    onNavigate?.('meetups');
+    onNavigate?.(previousView || 'meetups');
   };
 
   // Get today's date for min date
@@ -388,7 +389,7 @@ export default function ScheduleMeetupView({
     <div style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
-        <button style={styles.backBtn} onClick={() => onNavigate?.('meetups')}>
+        <button style={styles.backBtn} onClick={() => onNavigate?.(previousView || 'meetups')}>
           <ChevronLeft size={20} />
         </button>
         <h1 style={styles.title}>Schedule a Meetup</h1>
