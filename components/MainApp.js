@@ -2,7 +2,7 @@
 
 import { supabase } from '@/lib/supabase'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Coffee, Users, Star, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search, Sparkles, ChevronRight, FileText, CheckCircle } from 'lucide-react'
+import { Calendar, Coffee, Users, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search, Sparkles, ChevronRight, FileText, CheckCircle } from 'lucide-react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import MeetupsView from './MeetupsView'
@@ -90,7 +90,6 @@ function MainApp({ currentUser, onSignOut }) {
   const [coffeeChatsCount, setCoffeeChatsCount] = useState(0) // Number of 1:1 coffee chats completed
   const [upcomingCoffeeChats, setUpcomingCoffeeChats] = useState([]) // Accepted coffee chats for home view
   const [nextStepPrompt, setNextStepPrompt] = useState(null) // { type, data } for post-action prompts
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false) // Profile dropdown in header
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
   const [meetupsInitialView, setMeetupsInitialView] = useState(null) // 'past' when coming from review recaps
@@ -3233,89 +3232,6 @@ function MainApp({ currentUser, onSignOut }) {
     )
   }
 
-  const ProfileView = () => (
-    <div className="space-y-6">
-      <div className="bg-white rounded-lg p-6 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
-        <div className="flex items-center mb-6">
-          {currentUser.profile_picture ? (
-            <img
-              src={currentUser.profile_picture}
-              alt="Profile"
-              className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-4 border-rose-200"
-            />
-          ) : (
-            <div className="w-16 h-16 md:w-20 md:h-20 bg-rose-200 rounded-full flex items-center justify-center text-2xl md:text-3xl text-rose-600 font-bold">
-              {(currentUser.name || currentUser.email?.split('@')[0] || 'User').charAt(0)}
-            </div>
-          )}
-          <div className="ml-4">
-            <h3 className="text-xl md:text-2xl font-bold text-gray-800">{currentUser.name || currentUser.email?.split('@')[0] || 'User'}</h3>
-            <p className="text-gray-600">{currentUser.career} • Age {currentUser.age}</p>
-            <p className="text-sm text-gray-500">{currentUser.city}, {currentUser.state}</p>
-            {currentUser.role === 'admin' && (
-              <span className="inline-block mt-2 bg-[#E8DDD0] text-[#6B4F3F] text-xs px-3 py-1 rounded-full font-medium">
-                Admin
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
-            <p className="text-gray-700">{currentUser.bio || 'No bio yet'}</p>
-          </div>
-
-          <div className="border-t pt-4">
-            <h4 className="font-semibold text-gray-800 mb-2">Stats</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-rose-50 rounded p-3">
-                <div className="text-2xl font-bold text-rose-600">{currentUser.meetups_attended}</div>
-                <div className="text-sm text-gray-600">Meetups Attended</div>
-              </div>
-              <div className="bg-[#F4EEE6] rounded p-3">
-                <div className="text-2xl font-bold text-[#6B4F3F]">{connections.length}</div>
-                <div className="text-sm text-gray-600">Connections</div>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={openEditProfile}
-            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 rounded transition-colors"
-          >
-            Edit Profile
-          </button>
-
-          <button
-            onClick={() => setShowOnboarding(true)}
-            className="w-full bg-[#F4EEE6] hover:bg-[#E8DDD0] text-[#6B4F3F] font-medium py-2 rounded transition-colors border border-[#D4A574] flex items-center justify-center"
-          >
-            <span className="mr-2">&#128218;</span>
-            View App Tutorial
-          </button>
-
-          {/* Admin Dashboard Link */}
-          {currentUser.role === 'admin' && (
-            <button
-              onClick={() => setCurrentView('admin')}
-              className="w-full bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-2 rounded transition-colors flex items-center justify-center"
-            >
-              <Star className="w-4 h-4 mr-2" />
-              Admin Dashboard
-            </button>
-          )}
-
-          <button
-            onClick={handleSignOut}
-            className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-medium py-2 rounded transition-colors border border-red-200 mt-4"
-          >
-            Log Out
-          </button>
-        </div>
-      </div>
-    </div>
-  )
 
   const AdminDashboard = () => (
     <div className="space-y-6">
@@ -3530,62 +3446,26 @@ function MainApp({ currentUser, onSignOut }) {
                 />
               </div>
 
-              {/* Profile Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                  className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-[#8B6F5C] focus:outline-none focus:ring-2 focus:ring-[#8B6F5C]"
-                  style={{
-                    backgroundColor: currentUser.profile_picture ? 'transparent' : '#E6D5C3'
-                  }}
-                >
-                  {currentUser.profile_picture ? (
-                    <img
-                      src={currentUser.profile_picture}
-                      alt="Profile"
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-[#5C4033]">
-                      {(currentUser.name || currentUser.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                </button>
-
-                {/* Dropdown Menu */}
-                {showProfileDropdown && (
-                  <>
-                    {/* Backdrop to close dropdown */}
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowProfileDropdown(false)}
-                    />
-                    <div className="absolute right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-[#FDF8F3] rounded-lg border border-[#E6D5C3] py-1 z-50" style={{ boxShadow: '0 4px 12px rgba(139, 111, 92, 0.12)' }}>
-                      <button
-                        onClick={() => {
-                          setShowProfileDropdown(false)
-                          setCurrentView('profile')
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-[#6B5344] hover:bg-[#8B6F5C]/10 flex items-center"
-                      >
-                        <User className="w-4 h-4 mr-2" />
-                        View Profile
-                      </button>
-                      <hr className="my-1 border-[#E6D5C3]" />
-                      <button
-                        onClick={() => {
-                          setShowProfileDropdown(false)
-                          handleSignOut()
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Sign Out
-                      </button>
-                    </div>
-                  </>
+              {/* Profile Avatar */}
+              <button
+                onClick={() => setCurrentView('profile')}
+                className="w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center text-lg font-bold transition-all hover:ring-2 hover:ring-[#8B6F5C] focus:outline-none focus:ring-2 focus:ring-[#8B6F5C]"
+                style={{
+                  backgroundColor: currentUser.profile_picture ? 'transparent' : '#E6D5C3'
+                }}
+              >
+                {currentUser.profile_picture ? (
+                  <img
+                    src={currentUser.profile_picture}
+                    alt="Profile"
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[#5C4033]">
+                    {(currentUser.name || currentUser.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
+                  </span>
                 )}
-              </div>
+              </button>
             </div>
           </div>
         </div>
@@ -3667,7 +3547,19 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'messages' && <MessagesPageView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} initialChatId={selectedChatId} initialChatType={selectedChatType} previousView={previousView} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'meetupProposals' && <MeetupProposalsView currentUser={currentUser} supabase={supabase} isAdmin={currentUser.role === 'admin'} />}
-        {currentView === 'profile' && <ProfileView />}
+        {currentView === 'profile' && (
+          <UserProfileView
+            currentUser={currentUser}
+            supabase={supabase}
+            userId={currentUser.id}
+            onNavigate={handleNavigate}
+            previousView={previousView}
+            onEditProfile={openEditProfile}
+            onShowTutorial={() => setShowOnboarding(true)}
+            onSignOut={handleSignOut}
+            onAdminDashboard={() => setCurrentView('admin')}
+          />
+        )}
         {currentView === 'admin' && currentUser.role === 'admin' && <AdminDashboard />}
         {currentView === 'adminFeedback' && currentUser.role === 'admin' && <AdminFeedbackView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'allEvents' && <AllEventsView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}

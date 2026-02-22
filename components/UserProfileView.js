@@ -1,9 +1,64 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, TrendingUp, Sparkles, Crown, Heart, Rocket } from 'lucide-react';
+import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut } from 'lucide-react';
 
-export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved }) {
+const COLORS = {
+  bg: '#FAF6F1',
+  bgCard: '#F5EDE4',
+  bgCardHover: '#EDE3D7',
+  brown900: '#3D2B1F',
+  brown700: '#5C4033',
+  brown600: '#6B4C3B',
+  brown500: '#8B6F5E',
+  brown400: '#A68B7B',
+  brown300: '#C4A882',
+  brown200: '#D4C4A8',
+  brown100: '#E8DDD0',
+  accent: '#7B5B3A',
+  accentLight: '#A67C52',
+  green: '#4A7C59',
+  greenLight: '#E8F2EB',
+  greenDot: '#5BA36B',
+  white: '#FFFFFF',
+  shadow: 'rgba(61,43,31,0.08)',
+  shadowMd: 'rgba(61,43,31,0.12)',
+  red: '#B85C4A',
+  redBg: '#FDF0ED',
+  blue: '#4A6A8B',
+  blueLight: '#EBF1F7',
+};
+
+const FONT = "'DM Sans', 'Nunito', system-ui, sans-serif";
+const DISPLAY_FONT = "'Playfair Display', 'Georgia', serif";
+
+const CAREER_STAGE_LABELS = {
+  emerging: 'Early Career',
+  scaling: 'Mid-Career',
+  leading: 'Manager / Director',
+  legacy: 'Executive / Founder',
+};
+
+const CAREER_STAGE_COLORS = {
+  emerging: { bg: '#E8F2EB', text: '#4A7C59' },
+  scaling: { bg: '#EBF1F7', text: '#4A6A8B' },
+  leading: { bg: '#F3EEF8', text: '#7C5DAF' },
+  legacy: { bg: '#FDF3EB', text: '#C4763B' },
+};
+
+const VIBE_LABELS = {
+  advice: 'Looking for advice',
+  vent: 'Wants to vent',
+  grow: 'Wants to grow',
+};
+
+const VIBE_COLORS = {
+  advice: { bg: '#FDF0ED', text: '#B85C4A' },
+  vent: { bg: '#FDF3EB', text: '#C4763B' },
+  grow: { bg: '#E8F2EB', text: '#4A7C59' },
+};
+
+export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
@@ -11,6 +66,9 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [showConfirm, setShowConfirm] = useState(false);
   const [mutualCircles, setMutualCircles] = useState([]);
   const [connectionCount, setConnectionCount] = useState(0);
+  const [loaded, setLoaded] = useState(false);
+
+  const isOwnProfile = userId === currentUser.id;
 
   useEffect(() => {
     if (userId) loadProfile();
@@ -19,7 +77,6 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const loadProfile = async () => {
     setLoading(true);
     try {
-      // Fetch full profile
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -29,24 +86,19 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       if (error) throw error;
       setProfile(data);
 
-      // Check if connected (mutual match) & count their connections
       const { data: matches } = await supabase
         .rpc('get_mutual_matches', { for_user_id: currentUser.id });
       const matchedIds = (matches || []).map(m => m.matched_user_id);
       setIsConnected(matchedIds.includes(userId));
 
-      // Count their connections
       if (userId === currentUser.id) {
-        // Viewing own profile — use our own matches
         setConnectionCount((matches || []).length);
       } else {
-        // Count mutual connections (their matches that overlap with ours)
         const { data: theirMatches } = await supabase
           .rpc('get_mutual_matches', { for_user_id: userId });
         setConnectionCount((theirMatches || []).length);
       }
 
-      // Load mutual circles
       const { data: myCircles } = await supabase
         .from('connection_group_members')
         .select('group_id')
@@ -66,7 +118,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         if (sharedIds.length > 0) {
           const { data: circles } = await supabase
             .from('connection_groups')
-            .select('id, name')
+            .select('id, name, connection_group_members(count)')
             .in('id', sharedIds);
           setMutualCircles(circles || []);
         }
@@ -75,6 +127,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       console.error('Error loading user profile:', err);
     } finally {
       setLoading(false);
+      setTimeout(() => setLoaded(true), 50);
     }
   };
 
@@ -108,227 +161,390 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const isActive = profile?.last_active &&
     (Date.now() - new Date(profile.last_active).getTime()) < 10 * 60 * 1000;
 
+  const fadeIn = (delay = 0) => ({
+    opacity: loaded ? 1 : 0,
+    transform: loaded ? 'translateY(0)' : 'translateY(12px)',
+    transition: `all 0.45s ease ${delay}s`,
+  });
+
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner}></div>
-        <p style={styles.loadingText}>Loading profile...</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: FONT }}>
         <style>{keyframeStyles}</style>
+        <div style={{ width: 32, height: 32, border: `3px solid ${COLORS.brown100}`, borderTopColor: COLORS.accent, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ marginTop: 12, color: COLORS.brown400, fontSize: 14 }}>Loading profile...</p>
       </div>
     );
   }
 
   if (!profile) {
     return (
-      <div style={styles.container}>
-        <div style={styles.header}>
-          <button style={styles.backButton} onClick={() => onNavigate?.(previousView || 'connectionGroups')}>
-            <ChevronLeft size={22} color="#3F1906" />
+      <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 16px', fontFamily: FONT }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
+          <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
+            <ChevronLeft size={20} />
           </button>
         </div>
-        <div style={styles.emptyState}>
-          <p style={{ color: '#8B7355', fontSize: '16px' }}>User not found</p>
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <p style={{ color: COLORS.brown400, fontSize: 16 }}>User not found</p>
         </div>
       </div>
     );
   }
 
+  const locationText = profile.city
+    ? `${profile.city}${profile.state ? `, ${profile.state}` : ''}`
+    : profile.state || null;
+
+  const roleText = [profile.career, profile.industry].filter(Boolean).join(' \u00B7 ');
+
   return (
-    <div style={styles.container}>
+    <>
       <style>{keyframeStyles}</style>
 
-      {/* Header */}
-      <div style={styles.header}>
-        <button style={styles.backButton} onClick={() => onNavigate?.(previousView || 'connectionGroups')}>
-          <ChevronLeft size={22} color="#3F1906" />
-        </button>
-        <h2 style={styles.headerTitle}>Profile</h2>
-        <div style={{ width: 40 }}></div>
-      </div>
+      <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 16px 60px', fontFamily: FONT, minHeight: '100vh' }}>
 
-      {/* Profile Card */}
-      <div style={styles.profileCard}>
-        {/* Avatar */}
-        <div style={styles.avatarSection}>
-          <div style={{ position: 'relative' }}>
-            {profile.profile_picture ? (
-              <img src={profile.profile_picture} alt={profile.name} style={styles.avatar} />
-            ) : (
-              <div style={styles.avatarFallback}>
-                {profile.name?.[0] || '?'}
-              </div>
-            )}
+        {/* ─── Top Nav ─── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 0', position: 'sticky', top: 0, zIndex: 10,
+          ...fadeIn(0),
+        }}>
+          <button
+            onClick={() => onNavigate?.(previousView || (isOwnProfile ? 'home' : 'connectionGroups'))}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <span style={{ fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600, color: COLORS.brown900 }}>
+            Profile
+          </span>
+          {isOwnProfile && onEditProfile ? (
+            <button
+              onClick={onEditProfile}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: COLORS.brown500, display: 'flex', alignItems: 'center',
+                gap: 4, fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: 4,
+              }}
+            >
+              <Edit3 size={15} /> Edit
+            </button>
+          ) : (
+            <div style={{ width: 40 }} />
+          )}
+        </div>
+
+        {/* ─── Hero Section ─── */}
+        <div style={{ textAlign: 'center', paddingTop: 8, paddingBottom: 4, ...fadeIn(0.05) }}>
+          {/* Avatar */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <div style={{ position: 'relative', width: 96, height: 96 }}>
+              {profile.profile_picture ? (
+                <img
+                  src={profile.profile_picture}
+                  alt={profile.name}
+                  style={{
+                    width: 96, height: 96, borderRadius: 48, objectFit: 'cover',
+                    boxShadow: `0 4px 16px ${COLORS.shadowMd}`,
+                  }}
+                />
+              ) : (
+                <div style={{
+                  width: 96, height: 96, borderRadius: 48,
+                  background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.brown700})`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: COLORS.white, fontFamily: DISPLAY_FONT, fontWeight: 600,
+                  fontSize: 38, letterSpacing: 1,
+                  boxShadow: `0 4px 16px ${COLORS.shadowMd}`,
+                }}>
+                  {(profile.name || '?')[0].toUpperCase()}
+                </div>
+              )}
+              <div style={{
+                position: 'absolute', bottom: 2, right: 2,
+                width: 16, height: 16, borderRadius: 8,
+                background: isActive ? COLORS.greenDot : '#9E9E9E',
+                border: `3px solid ${COLORS.white}`,
+              }} />
+            </div>
+          </div>
+
+          {/* Name */}
+          <h1 style={{
+            fontFamily: DISPLAY_FONT, fontSize: 30, fontWeight: 700,
+            color: COLORS.brown900, letterSpacing: -0.3, margin: 0,
+          }}>
+            {profile.name}
+          </h1>
+
+          {/* Hook / Headline */}
+          {profile.hook && (
+            <p style={{
+              fontFamily: FONT, fontSize: 14.5, color: COLORS.brown400,
+              marginTop: 6, lineHeight: 1.4, maxWidth: 340, margin: '6px auto 0',
+              fontStyle: 'italic',
+            }}>
+              {profile.hook}
+            </p>
+          )}
+
+          {/* Connected badge */}
+          {!isOwnProfile && isConnected && (
             <span style={{
-              ...styles.statusDot,
-              backgroundColor: isActive ? '#4CAF50' : '#9E9E9E',
-            }}></span>
-          </div>
-
-          <h1 style={styles.name}>{profile.name}</h1>
-
-          {isConnected && (
-            <span style={styles.connectedBadge}>Connected</span>
+              display: 'inline-block', marginTop: 10,
+              padding: '4px 14px', background: COLORS.greenLight,
+              color: COLORS.green, fontSize: 12, fontWeight: 600, borderRadius: 20,
+            }}>
+              Connected
+            </span>
           )}
-        </div>
 
-        {/* Info Cards */}
-        <div style={styles.infoSection}>
-          {profile.career && (
-            <div style={styles.infoCard}>
-              <div style={styles.infoIcon}>
-                <Briefcase size={16} color="#8B7355" />
-              </div>
-              <div>
-                <p style={styles.infoLabel}>{profile.career}</p>
-                {profile.industry && <p style={styles.infoSub}>{profile.industry}</p>}
-              </div>
+          {/* Compact role + location */}
+          {(roleText || locationText) && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 14, marginTop: 14, flexWrap: 'wrap',
+            }}>
+              {roleText && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  fontFamily: FONT, fontSize: 13, color: COLORS.brown500, fontWeight: 500,
+                }}>
+                  <Briefcase size={14} color={COLORS.brown300} />
+                  {roleText}
+                </span>
+              )}
+              {locationText && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  fontFamily: FONT, fontSize: 13, color: COLORS.brown500, fontWeight: 500,
+                }}>
+                  <MapPin size={14} color={COLORS.brown300} />
+                  {locationText}
+                </span>
+              )}
             </div>
           )}
 
-          {(profile.city || profile.state) && (
-            <div style={styles.infoCard}>
-              <div style={styles.infoIcon}>
-                <MapPin size={16} color="#8B7355" />
-              </div>
-              <div>
-                <p style={styles.infoLabel}>
-                  {profile.city ? `${profile.city}${profile.state ? `, ${profile.state}` : ''}` : profile.state}
-                </p>
-              </div>
+          {/* Tags: career stage + vibe */}
+          {(profile.career_stage || profile.vibe_category) && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+              {profile.career_stage && (
+                <span style={{
+                  fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                  color: CAREER_STAGE_COLORS[profile.career_stage]?.text || COLORS.green,
+                  background: CAREER_STAGE_COLORS[profile.career_stage]?.bg || COLORS.greenLight,
+                  borderRadius: 20, padding: '5px 14px',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  {CAREER_STAGE_LABELS[profile.career_stage] || profile.career_stage}
+                </span>
+              )}
+              {profile.vibe_category && (
+                <span style={{
+                  fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                  color: VIBE_COLORS[profile.vibe_category]?.text || COLORS.blue,
+                  background: VIBE_COLORS[profile.vibe_category]?.bg || COLORS.blueLight,
+                  borderRadius: 20, padding: '5px 14px',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  {VIBE_LABELS[profile.vibe_category] || profile.vibe_category}
+                </span>
+              )}
             </div>
           )}
         </div>
 
-        {/* Career Stage & Vibe */}
-        {(profile.career_stage || profile.vibe_category) && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '20px', justifyContent: 'center' }}>
-            {profile.career_stage && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '5px 14px',
-                backgroundColor: CAREER_STAGE_COLORS[profile.career_stage]?.bg || '#F5EDE4',
-                color: CAREER_STAGE_COLORS[profile.career_stage]?.text || '#5E4530',
-                fontSize: '12px',
-                fontWeight: '600',
-                borderRadius: '20px',
-              }}>
-                {CAREER_STAGE_LABELS[profile.career_stage] || profile.career_stage}
-              </span>
-            )}
-            {profile.vibe_category && (
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                padding: '5px 14px',
-                backgroundColor: VIBE_COLORS[profile.vibe_category]?.bg || '#F5EDE4',
-                color: VIBE_COLORS[profile.vibe_category]?.text || '#5E4530',
-                fontSize: '12px',
-                fontWeight: '600',
-                borderRadius: '20px',
-              }}>
-                {VIBE_LABELS[profile.vibe_category] || profile.vibe_category}
-              </span>
-            )}
+        {/* ─── Visitor CTA (connected, not own profile) ─── */}
+        {!isOwnProfile && isConnected && (
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, ...fadeIn(0.1) }}>
+            <button
+              onClick={() => onNavigate?.('messages', { chatId: userId, chatType: 'user' })}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8, background: COLORS.accent, color: COLORS.white, border: 'none',
+                borderRadius: 14, padding: '12px 22px',
+                fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              <MessageCircle size={16} /> Message
+            </button>
+            <button
+              onClick={() => onNavigate?.('scheduleMeetup', {
+                type: 'coffee',
+                scheduleConnectionId: userId,
+                scheduleConnectionName: profile.name,
+              })}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8, background: 'transparent', color: COLORS.brown600,
+                border: `1.5px solid ${COLORS.brown200}`,
+                borderRadius: 14, padding: '12px 22px',
+                fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+              }}
+            >
+              <Coffee size={16} /> Coffee Chat
+            </button>
           </div>
         )}
 
-        {/* Stats */}
-        <div style={styles.statsRow}>
-          <div style={styles.statCard}>
-            <span style={styles.statNumber}>{profile.meetups_attended || 0}</span>
-            <span style={styles.statLabel}>Meetups</span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={styles.statNumber}>{connectionCount}</span>
-            <span style={styles.statLabel}>Connections</span>
-          </div>
-          <div style={styles.statCard}>
-            <span style={styles.statNumber}>{mutualCircles.length}</span>
-            <span style={styles.statLabel}>Shared Circles</span>
+        {/* ─── Stats ─── */}
+        <div style={{ marginTop: 24, ...fadeIn(0.12) }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {[
+              { value: profile.meetups_attended || 0, label: 'Meetups' },
+              { value: connectionCount, label: 'Connections' },
+              { value: mutualCircles.length, label: 'Shared Circles' },
+            ].map((stat, i) => (
+              <div key={i} style={{
+                flex: 1, background: COLORS.bgCard, borderRadius: 14,
+                padding: '14px 8px', textAlign: 'center',
+              }}>
+                <div style={{ fontFamily: FONT, fontWeight: 800, fontSize: 22, color: COLORS.brown700, lineHeight: 1 }}>
+                  {stat.value}
+                </div>
+                <div style={{ fontFamily: FONT, fontSize: 11.5, color: COLORS.brown400, marginTop: 4, fontWeight: 500 }}>
+                  {stat.label}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Bio / Hook */}
+        {/* ─── Divider ─── */}
+        <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '24px 0' }} />
+
+        {/* ─── About ─── */}
         {(profile.bio || profile.hook) && (
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>About</h3>
-            {profile.hook && (
-              <p style={styles.hookText}>"{profile.hook}"</p>
-            )}
+          <div style={fadeIn(0.15)}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              fontFamily: FONT, fontWeight: 700, fontSize: 14,
+              color: COLORS.brown700, marginBottom: 12,
+              textTransform: 'uppercase', letterSpacing: 0.8,
+            }}>
+              About
+            </div>
             {profile.bio && (
-              <p style={styles.bioText}>{profile.bio}</p>
+              <p style={{
+                fontFamily: FONT, fontSize: 14, color: COLORS.brown600,
+                lineHeight: 1.65, background: COLORS.bgCard,
+                borderRadius: 14, padding: '16px 18px', margin: 0,
+              }}>
+                {profile.bio}
+              </p>
             )}
           </div>
         )}
 
-        {/* Mutual Circles */}
+        {/* ─── Shared Circles ─── */}
         {mutualCircles.length > 0 && (
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>
-              <Users size={14} style={{ marginRight: '6px' }} />
-              Shared Circles
-            </h3>
-            <div style={styles.tagsList}>
-              {mutualCircles.map(circle => (
-                <button
-                  key={circle.id}
-                  onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
-                  style={styles.circleChip}
-                >
-                  {circle.name}
-                </button>
-              ))}
+          <>
+            <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '24px 0' }} />
+            <div style={fadeIn(0.21)}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                fontFamily: FONT, fontWeight: 700, fontSize: 14,
+                color: COLORS.brown700, marginBottom: 12,
+                textTransform: 'uppercase', letterSpacing: 0.8,
+              }}>
+                <Users size={14} color={COLORS.brown400} />
+                Shared Circles
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {mutualCircles.map(circle => {
+                  const memberCount = circle.connection_group_members?.[0]?.count;
+                  return (
+                    <button
+                      key={circle.id}
+                      onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        background: COLORS.bgCard, border: 'none', borderRadius: 14,
+                        padding: '12px 16px', cursor: 'pointer', width: '100%',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 10,
+                        background: `linear-gradient(135deg, ${COLORS.brown200}, ${COLORS.brown100})`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 16, flexShrink: 0,
+                      }}>
+                        <Users size={16} color={COLORS.brown500} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: COLORS.brown700 }}>{circle.name}</div>
+                        {memberCount != null && (
+                          <div style={{ fontFamily: FONT, fontSize: 11.5, color: COLORS.brown400, marginTop: 1 }}>
+                            {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                          </div>
+                        )}
+                      </div>
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M4.5 2.5L8 6L4.5 9.5" stroke={COLORS.brown300} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          </>
         )}
 
-        {/* Action Buttons (only if connected) */}
-        {isConnected && (
+        {/* ─── Remove Connection (visitor only) ─── */}
+        {!isOwnProfile && isConnected && (
           <>
-            <div style={styles.actions}>
-              <button
-                style={styles.primaryBtn}
-                onClick={() => onNavigate?.('messages', { chatId: userId, chatType: 'user' })}
-              >
-                <MessageCircle size={16} />
-                Message
-              </button>
-              <button
-                style={styles.secondaryBtn}
-                onClick={() => onNavigate?.('scheduleMeetup', {
-                  type: 'coffee',
-                  scheduleConnectionId: userId,
-                  scheduleConnectionName: profile.name,
-                })}
-              >
-                <Coffee size={16} />
-                Coffee Chat
-              </button>
-            </div>
-
-            {/* Remove Connection */}
-            <div style={styles.dangerSection}>
+            <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '24px 0' }} />
+            <div style={fadeIn(0.27)}>
               {!showConfirm ? (
-                <button style={styles.removeBtn} onClick={() => setShowConfirm(true)}>
-                  <UserMinus size={16} />
-                  Remove Connection
+                <button
+                  onClick={() => setShowConfirm(true)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    gap: 8, width: '100%', padding: 12,
+                    background: 'transparent', color: COLORS.red,
+                    border: `1.5px solid rgba(184,92,74,0.2)`,
+                    borderRadius: 14, fontFamily: FONT, fontSize: 14,
+                    fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  <UserMinus size={16} /> Remove Connection
                 </button>
               ) : (
-                <div style={styles.confirmBox}>
-                  <p style={styles.confirmText}>
+                <div style={{
+                  background: COLORS.redBg, borderRadius: 14,
+                  padding: 16, border: '1px solid rgba(184,92,74,0.12)',
+                }}>
+                  <p style={{
+                    fontFamily: FONT, fontSize: 14, color: COLORS.brown600,
+                    lineHeight: 1.5, margin: '0 0 14px',
+                  }}>
                     Remove connection with {profile.name}? You'll no longer see each other in your connections.
                   </p>
-                  <div style={styles.confirmActions}>
-                    <button style={styles.cancelBtn} onClick={() => setShowConfirm(false)}>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      onClick={() => setShowConfirm(false)}
+                      style={{
+                        flex: 1, padding: 10, background: 'transparent',
+                        color: COLORS.brown600, border: `1.5px solid ${COLORS.brown200}`,
+                        borderRadius: 12, fontFamily: FONT, fontSize: 14,
+                        fontWeight: 600, cursor: 'pointer',
+                      }}
+                    >
                       Cancel
                     </button>
                     <button
-                      style={{ ...styles.confirmRemoveBtn, opacity: removing ? 0.6 : 1 }}
                       onClick={handleRemoveConnection}
                       disabled={removing}
+                      style={{
+                        flex: 1, padding: 10, background: COLORS.red,
+                        color: COLORS.white, border: 'none',
+                        borderRadius: 12, fontFamily: FONT, fontSize: 14,
+                        fontWeight: 600, cursor: 'pointer',
+                        opacity: removing ? 0.6 : 1,
+                      }}
                     >
                       {removing ? 'Removing...' : 'Yes, Remove'}
                     </button>
@@ -338,353 +554,66 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             </div>
           </>
         )}
+
+        {/* ─── Own Profile Footer ─── */}
+        {isOwnProfile && (
+          <>
+            <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '24px 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 24, flexWrap: 'wrap', ...fadeIn(0.3) }}>
+              {onShowTutorial && (
+                <button
+                  onClick={onShowTutorial}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: FONT, fontSize: 13, color: COLORS.brown400,
+                    fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <BookOpen size={14} /> App Tutorial
+                </button>
+              )}
+              {currentUser.role === 'admin' && onAdminDashboard && (
+                <button
+                  onClick={onAdminDashboard}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: FONT, fontSize: 13, color: COLORS.brown400,
+                    fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <Shield size={14} /> Admin
+                </button>
+              )}
+              {onSignOut && (
+                <button
+                  onClick={onSignOut}
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: FONT, fontSize: 13, color: COLORS.red,
+                    fontWeight: 500, display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <LogOut size={14} /> Log Out
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ─── Tagline ─── */}
+        <div style={{ textAlign: 'center', marginTop: 40, ...fadeIn(0.33) }}>
+          <span style={{
+            fontFamily: DISPLAY_FONT, fontSize: 16, color: COLORS.brown300, fontStyle: 'italic',
+          }}>
+            Find your circle. Move forward.
+          </span>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-const CAREER_STAGE_LABELS = {
-  emerging: 'Early Career',
-  scaling: 'Mid-Career',
-  leading: 'Manager / Director',
-  legacy: 'Executive / Founder',
-};
-
-const CAREER_STAGE_COLORS = {
-  emerging: { bg: '#ECFDF5', text: '#059669' },
-  scaling: { bg: '#EEF2FF', text: '#4F46E5' },
-  leading: { bg: '#F5F3FF', text: '#7C3AED' },
-  legacy: { bg: '#FFF7ED', text: '#D97706' },
-};
-
-const VIBE_LABELS = {
-  advice: 'Looking for advice',
-  vent: 'Wants to vent',
-  grow: 'Wants to grow',
-};
-
-const VIBE_COLORS = {
-  advice: { bg: '#FFF1F2', text: '#E11D48' },
-  vent: { bg: '#FFF7ED', text: '#EA580C' },
-  grow: { bg: '#ECFDF5', text: '#059669' },
-};
-
 const keyframeStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap');
   @keyframes spin { to { transform: rotate(360deg); } }
 `;
-
-const styles = {
-  container: {
-    minHeight: '100vh',
-    padding: '0 16px 32px',
-  },
-  loadingContainer: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '60vh',
-  },
-  loadingSpinner: {
-    width: '32px',
-    height: '32px',
-    border: '3px solid #E8DDD0',
-    borderTopColor: '#8B6F5C',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  loadingText: {
-    marginTop: '12px',
-    color: '#8B7355',
-    fontSize: '14px',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '16px 0',
-  },
-  backButton: {
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '8px',
-    borderRadius: '12px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#3F1906',
-    fontFamily: '"Lora", serif',
-  },
-  profileCard: {
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    backdropFilter: 'blur(8px)',
-    borderRadius: '20px',
-    border: '1px solid rgba(139,111,92,0.15)',
-    padding: '28px 24px',
-  },
-  avatarSection: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    marginBottom: '24px',
-  },
-  avatar: {
-    width: '96px',
-    height: '96px',
-    borderRadius: '50%',
-    objectFit: 'cover',
-    border: '3px solid rgba(139,111,92,0.2)',
-  },
-  avatarFallback: {
-    width: '96px',
-    height: '96px',
-    borderRadius: '50%',
-    backgroundColor: '#8B6F5C',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: '36px',
-    fontWeight: '600',
-    color: 'white',
-  },
-  statusDot: {
-    position: 'absolute',
-    bottom: '4px',
-    right: '4px',
-    width: '16px',
-    height: '16px',
-    borderRadius: '50%',
-    border: '3px solid white',
-  },
-  name: {
-    fontSize: '24px',
-    fontWeight: '700',
-    color: '#3F1906',
-    fontFamily: '"Lora", serif',
-    margin: '12px 0 6px',
-    textAlign: 'center',
-  },
-  connectedBadge: {
-    padding: '4px 14px',
-    backgroundColor: 'rgba(168,230,207,0.2)',
-    color: '#2E7D5B',
-    fontSize: '12px',
-    fontWeight: '600',
-    borderRadius: '20px',
-  },
-  statsRow: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '20px',
-  },
-  statCard: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '14px 8px',
-    backgroundColor: '#F5EDE4',
-    borderRadius: '14px',
-  },
-  statNumber: {
-    fontSize: '22px',
-    fontWeight: '700',
-    color: '#3F1906',
-    fontFamily: '"Lora", serif',
-  },
-  statLabel: {
-    fontSize: '11px',
-    color: '#8B7355',
-    fontWeight: '500',
-    marginTop: '2px',
-  },
-  infoSection: {
-    marginBottom: '20px',
-  },
-  infoCard: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '12px',
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    border: '1px solid rgba(139,111,92,0.1)',
-    marginBottom: '8px',
-  },
-  infoIcon: {
-    width: '36px',
-    height: '36px',
-    backgroundColor: '#F5EDE4',
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  infoLabel: {
-    fontSize: '14px',
-    fontWeight: '500',
-    color: '#3F1906',
-    margin: 0,
-  },
-  infoSub: {
-    fontSize: '12px',
-    color: '#8B7355',
-    margin: 0,
-  },
-  section: {
-    borderTop: '1px solid rgba(139,111,92,0.1)',
-    paddingTop: '18px',
-    marginBottom: '18px',
-  },
-  sectionTitle: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#3F1906',
-    margin: '0 0 10px',
-    fontFamily: '"Lora", serif',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  hookText: {
-    fontSize: '14px',
-    color: '#6B5744',
-    fontStyle: 'italic',
-    backgroundColor: '#FFF8F0',
-    padding: '12px',
-    borderRadius: '12px',
-    border: '1px solid rgba(139,111,92,0.1)',
-    margin: '0 0 8px',
-    lineHeight: '1.5',
-  },
-  bioText: {
-    fontSize: '14px',
-    color: '#6B5744',
-    lineHeight: '1.6',
-    margin: 0,
-  },
-  tagsList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  tag: {
-    padding: '5px 12px',
-    backgroundColor: '#F5EDE4',
-    color: '#5E4530',
-    fontSize: '13px',
-    fontWeight: '500',
-    borderRadius: '20px',
-  },
-  circleChip: {
-    padding: '6px 14px',
-    backgroundColor: 'rgba(139,111,92,0.08)',
-    color: '#5E4530',
-    fontSize: '13px',
-    fontWeight: '500',
-    borderRadius: '20px',
-    border: '1px solid rgba(139,111,92,0.15)',
-    cursor: 'pointer',
-  },
-  actions: {
-    display: 'flex',
-    gap: '10px',
-    marginBottom: '20px',
-  },
-  primaryBtn: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '12px 16px',
-    backgroundColor: '#5E4530',
-    color: '#FFF8F0',
-    border: 'none',
-    borderRadius: '14px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-  },
-  secondaryBtn: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    padding: '12px 16px',
-    backgroundColor: 'rgba(94,69,48,0.1)',
-    color: '#5E4530',
-    border: '1.5px solid rgba(94,69,48,0.2)',
-    borderRadius: '14px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-  },
-  dangerSection: {
-    borderTop: '1px solid rgba(139,111,92,0.1)',
-    paddingTop: '18px',
-  },
-  removeBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '8px',
-    width: '100%',
-    padding: '12px',
-    backgroundColor: 'transparent',
-    color: '#C0392B',
-    border: '1.5px solid rgba(192,57,43,0.2)',
-    borderRadius: '14px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-  },
-  confirmBox: {
-    backgroundColor: 'rgba(192,57,43,0.05)',
-    borderRadius: '14px',
-    padding: '16px',
-    border: '1px solid rgba(192,57,43,0.12)',
-  },
-  confirmText: {
-    fontSize: '14px',
-    color: '#6B5744',
-    lineHeight: '1.5',
-    margin: '0 0 14px',
-  },
-  confirmActions: {
-    display: 'flex',
-    gap: '10px',
-  },
-  cancelBtn: {
-    flex: 1,
-    padding: '10px',
-    backgroundColor: 'transparent',
-    color: '#6B5744',
-    border: '1.5px solid rgba(139,111,92,0.2)',
-    borderRadius: '12px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-  },
-  confirmRemoveBtn: {
-    flex: 1,
-    padding: '10px',
-    backgroundColor: '#C0392B',
-    color: 'white',
-    border: 'none',
-    borderRadius: '12px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-  },
-  emptyState: {
-    textAlign: 'center',
-    padding: '60px 20px',
-  },
-};
