@@ -138,7 +138,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
           .neq('id', currentUser.id)
           .not('name', 'is', null)
-          .limit(10),
+          .limit(50),
         supabase
           .rpc('get_mutual_matches', { for_user_id: currentUser.id }),
         supabase
@@ -483,7 +483,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       <section style={styles.titleSection} className="circles-title-section">
         <div style={styles.titleContent}>
           <h1 style={styles.pageTitle} className="circles-page-title">Circles</h1>
-          <p style={styles.tagline}>Your community, your connections</p>
+          <p style={styles.tagline}>Where meaningful connections grow deeper</p>
         </div>
       </section>
 
@@ -622,7 +622,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                   <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>
-                    People you may know
+                    Recommend to Connect
                   </h3>
                   <span style={{ fontSize: '12px', color: '#A89080' }}>
                     From events & circles

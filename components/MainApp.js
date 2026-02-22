@@ -434,7 +434,14 @@ function MainApp({ currentUser, onSignOut }) {
     // Fast initial load: fetch everything the home page needs in minimal round trips
     loadHomePageData()
 
-    // Deferred: data not needed for home page (connections, discover, recaps)
+    // Phase 1 deferred: secondary counts and requests (not needed for initial render)
+    loadConnectionRequests()
+    updateAttendedCount()
+    loadUnreadMessageCount()
+    loadGroupsCount()
+    loadCoffeeChatsCount()
+
+    // Phase 2 deferred: heavier data not needed for home page
     loadConnections()
     loadMyInterests()
     loadMeetupPeople()
@@ -1160,18 +1167,7 @@ function MainApp({ currentUser, onSignOut }) {
       // Get other people who attended the same meetups
       const { data: otherSignups, error: othersError } = await supabase
         .from('meetup_signups')
-        .select(`
-          user_id,
-          meetup_id,
-          profiles:user_id (
-            id,
-            name,
-            career,
-            city,
-            state,
-            bio
-          )
-        `)
+        .select('user_id, meetup_id')
         .in('meetup_id', myMeetupIds)
         .neq('user_id', currentUser.id)
 
@@ -1189,14 +1185,11 @@ function MainApp({ currentUser, onSignOut }) {
       const potentialMap = {}
       otherSignups.forEach(signup => {
         const userId = signup.user_id
-        
-        // Skip if already matched
         if (matchedUserIds.has(userId)) return
 
         if (!potentialMap[userId]) {
           potentialMap[userId] = {
             id: userId,
-            user: signup.profiles,
             shared_meetups: [],
             meetup_count: 0
           }
@@ -1205,16 +1198,31 @@ function MainApp({ currentUser, onSignOut }) {
         potentialMap[userId].meetup_count++
       })
 
-      // Convert to array, flatten profile data, and sort by most shared meetups
+      // Fetch profiles for potential connections
+      const potentialUserIds = Object.keys(potentialMap)
+      if (potentialUserIds.length === 0) {
+        setPotentialConnections([])
+        return
+      }
+
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, career, city, state, bio, profile_picture')
+        .in('id', potentialUserIds)
+
+      const profileMap = {}
+      ;(profiles || []).forEach(p => { profileMap[p.id] = p })
+
+      // Convert to array with profile data and sort by most shared meetups
       const potentialArray = Object.values(potentialMap)
         .map(p => ({
           id: p.id,
-          name: p.user?.name,
-          career: p.user?.career,
-          city: p.user?.city,
-          state: p.user?.state,
-          bio: p.user?.bio,
-          profile_picture: p.user?.profile_picture,
+          name: profileMap[p.id]?.name,
+          career: profileMap[p.id]?.career,
+          city: profileMap[p.id]?.city,
+          state: profileMap[p.id]?.state,
+          bio: profileMap[p.id]?.bio,
+          profile_picture: profileMap[p.id]?.profile_picture,
           shared_meetups: p.shared_meetups,
           meetup_count: p.meetup_count,
         }))
@@ -3070,101 +3078,6 @@ function MainApp({ currentUser, onSignOut }) {
               </>)
             })()}
 
-            {/* Suggested Connections */}
-            {potentialConnections.length > 0 && (
-              <div style={homeStyles.card}>
-                <h3 style={{ ...homeStyles.cardTitle, fontSize: isMobile ? '15px' : '17px', marginBottom: '16px' }}>Suggested for You</h3>
-                {potentialConnections.slice(0, 3).map((person, idx) => (
-                  <div
-                    key={person.id}
-                    style={{
-                      ...homeStyles.suggestion,
-                      borderTop: idx > 0 ? '1px solid #F3ECE2' : 'none',
-                    }}
-                  >
-                    {person.profile_picture ? (
-                      <img
-                        src={person.profile_picture}
-                        alt={person.name}
-                        style={{
-                          width: '40px',
-                          height: '40px',
-                          borderRadius: '50%',
-                          objectFit: 'cover',
-                          flexShrink: 0,
-                        }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        background: `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E', '#C4868B'][idx % 4]}, #7A5C42)`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: 'white',
-                        fontWeight: '600',
-                        fontSize: '14px',
-                        flexShrink: 0,
-                      }}>
-                        {person.name?.[0] || '?'}
-                      </div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h4 style={{
-                        fontSize: '13px',
-                        fontWeight: '600',
-                        color: '#3D2B1A',
-                        margin: 0,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}>{person.name}</h4>
-                      <p style={{
-                        fontSize: '11px',
-                        color: '#B8A089',
-                        margin: 0,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}>{person.career || 'Professional'}</p>
-                    </div>
-                    <button
-                      onClick={() => handleShowInterest(person.id, person.name)}
-                      style={{
-                        width: '30px',
-                        height: '30px',
-                        borderRadius: '50%',
-                        border: '1.5px solid #D4C4B0',
-                        background: 'transparent',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        color: '#9C8068',
-                        transition: 'all 0.2s ease',
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={isMobile ? undefined : (e) => {
-                        e.currentTarget.style.background = '#5E4530'
-                        e.currentTarget.style.borderColor = '#5E4530'
-                        e.currentTarget.style.color = 'white'
-                      }}
-                      onMouseLeave={isMobile ? undefined : (e) => {
-                        e.currentTarget.style.background = 'transparent'
-                        e.currentTarget.style.borderColor = '#D4C4B0'
-                        e.currentTarget.style.color = '#9C8068'
-                      }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M12 5v14M5 12h14"/>
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
         </div>
       </div>
     )

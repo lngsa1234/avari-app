@@ -129,18 +129,7 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
 
         const { data: circleMessages, error: circleMessagesError } = await supabase
           .from('circle_messages')
-          .select(`
-            id,
-            circle_id,
-            sender_id,
-            content,
-            created_at,
-            profiles:sender_id (
-              id,
-              name,
-              profile_picture
-            )
-          `)
+          .select('id, circle_id, sender_id, content, created_at')
           .eq('circle_id', circle.id)
           .order('created_at', { ascending: false })
           .limit(50);
@@ -151,13 +140,24 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
           continue;
         }
 
+        // Fetch sender profile for last message
+        const lastMsg = circleMessages?.[0];
+        let lastMsgSenderName = 'Unknown';
+        if (lastMsg) {
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', lastMsg.sender_id)
+            .single();
+          lastMsgSenderName = senderProfile?.name || 'Unknown';
+        }
+
         // Get member count
         const { count: memberCount } = await supabase
           .from('connection_group_members')
           .select('id', { count: 'exact', head: true })
           .eq('group_id', circle.id);
 
-        const lastMsg = circleMessages?.[0];
         circleConvos.push({
           id: `circle-${circle.id}`,
           circleId: circle.id,
@@ -167,7 +167,7 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
           isGroup: true,
           memberCount: memberCount || 0,
           lastMessage: lastMsg ? {
-            sender: lastMsg.profiles?.name || 'Unknown',
+            sender: lastMsgSenderName,
             text: lastMsg.content,
             time: formatTime(lastMsg.created_at),
             isMe: lastMsg.sender_id === currentUser.id
