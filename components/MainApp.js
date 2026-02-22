@@ -221,8 +221,8 @@ function MainApp({ currentUser, onSignOut }) {
 
   // Optimized: load all home page data in 2 round trips instead of 4+ sequential
   const loadHomePageData = useCallback(async () => {
+    const t0 = Date.now()
     try {
-      const t0 = Date.now()
       setLoadingMeetups(true)
 
       const cutoffDate = new Date()

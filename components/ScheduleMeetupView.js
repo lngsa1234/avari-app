@@ -4,7 +4,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin } from 'lucide-react';
+import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat } from 'lucide-react';
+
 
 // Color palette - Mocha Brown theme
 const colors = {
@@ -50,6 +51,8 @@ export default function ScheduleMeetupView({
   const [notes, setNotes] = useState('');
   const [location, setLocation] = useState('Virtual');
   const [participantLimit, setParticipantLimit] = useState(20);
+  const [isRepeating, setIsRepeating] = useState(false);
+  const [repeatCadence, setRepeatCadence] = useState('Weekly');
 
   const [availableCircles, setAvailableCircles] = useState([]);
   const [availableConnections, setAvailableConnections] = useState([]);
@@ -60,12 +63,42 @@ export default function ScheduleMeetupView({
     loadData();
   }, [currentUser.id]);
 
-  // Sync selectedCircle with full data after circles are loaded
+  // Sync selectedCircle with full data after circles are loaded, and prefill schedule
   useEffect(() => {
     if (initialCircleId && availableCircles.length > 0) {
       const fullCircleData = availableCircles.find(c => c.id === initialCircleId);
       if (fullCircleData) {
         setSelectedCircle(fullCircleData);
+
+        // Prefill schedule fields from existing circle settings
+        if (fullCircleData.cadence && fullCircleData.cadence !== 'As needed') {
+          setIsRepeating(true);
+          setRepeatCadence(fullCircleData.cadence);
+        }
+        if (fullCircleData.time_of_day && fullCircleData.time_of_day !== 'Flexible') {
+          // Convert display time (e.g. "7:00 PM") to input format (e.g. "19:00")
+          const match = fullCircleData.time_of_day.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+          if (match) {
+            let hours = parseInt(match[1]);
+            const minutes = match[2];
+            const period = match[3].toUpperCase();
+            if (period === 'PM' && hours !== 12) hours += 12;
+            else if (period === 'AM' && hours === 12) hours = 0;
+            setScheduledTime(`${hours.toString().padStart(2, '0')}:${minutes}`);
+          }
+        }
+        if (fullCircleData.meeting_day) {
+          // Set the date to the next occurrence of the meeting day
+          const DAYS = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
+          const dayIndex = DAYS[fullCircleData.meeting_day];
+          if (dayIndex !== undefined) {
+            const today = new Date();
+            const daysUntil = (dayIndex - today.getDay() + 7) % 7;
+            const nextDate = new Date(today);
+            nextDate.setDate(today.getDate() + (daysUntil === 0 ? 7 : daysUntil));
+            setScheduledDate(nextDate.toISOString().split('T')[0]);
+          }
+        }
       }
     }
   }, [initialCircleId, availableCircles]);
@@ -239,32 +272,59 @@ export default function ScheduleMeetupView({
     // Format time to HH:MM format if needed
     const formattedTime = scheduledTime.includes(':') ? scheduledTime : `${scheduledTime}:00`;
 
-    const { data: meetupData, error } = await supabase
-      .from('meetups')
-      .insert({
-        circle_id: selectedCircle.id,
-        date: scheduledDate,
-        time: formattedTime,
-        topic: topic.trim(),
-        description: notes || `Meetup for ${selectedCircle.name}`,
-        duration: 60,
-        location: location,
-        created_by: authUser.id,  // Use auth user ID directly
-        participant_limit: 10,
-      })
-      .select('id')
-      .single();
+    if (isRepeating) {
+      const repeatDay = new Date(scheduledDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' });
 
-    if (error) {
-      console.error('Insert error details:', error);
-      throw error;
-    }
+      // Convert 24h time to display format (e.g. "14:00" → "2:00 PM")
+      const [hours, minutes] = formattedTime.split(':').map(Number);
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+      const timeOfDay = `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
 
-    // Auto-RSVP the creator
-    if (meetupData?.id) {
+      // Update circle's cadence settings — getOrCreateCircleMeetups will
+      // auto-generate meetups on the new schedule when the page loads
       await supabase
-        .from('meetup_signups')
-        .insert({ meetup_id: meetupData.id, user_id: authUser.id });
+        .from('connection_groups')
+        .update({
+          meeting_day: repeatDay,
+          cadence: repeatCadence,
+          time_of_day: timeOfDay,
+        })
+        .eq('id', selectedCircle.id);
+    } else {
+      // Non-repeating: insert a single meetup
+      const { data: existingOnDate } = await supabase
+        .from('meetups')
+        .select('id')
+        .eq('circle_id', selectedCircle.id)
+        .eq('date', scheduledDate)
+        .maybeSingle();
+
+      if (!existingOnDate) {
+        const { data: meetupData, error } = await supabase
+          .from('meetups')
+          .insert({
+            circle_id: selectedCircle.id,
+            date: scheduledDate,
+            time: formattedTime,
+            topic: topic.trim(),
+            description: notes || `Meetup for ${selectedCircle.name}`,
+            duration: 60,
+            location: location,
+            created_by: authUser.id,
+            participant_limit: 10,
+          })
+          .select('id')
+          .single();
+
+        if (error) throw error;
+
+        if (meetupData?.id) {
+          await supabase
+            .from('meetup_signups')
+            .insert({ meetup_id: meetupData.id, user_id: authUser.id });
+        }
+      }
     }
 
     alert(`Meetup scheduled for ${selectedCircle.name}!`);
@@ -494,6 +554,64 @@ export default function ScheduleMeetupView({
               </div>
             </div>
           </div>
+
+          {/* Repeat Toggle - Circle meetups only */}
+          {meetupType === 'circle' && (
+            <div style={styles.section}>
+              <div
+                style={styles.toggleRow}
+                onClick={() => setIsRepeating(!isRepeating)}
+              >
+                <div style={styles.toggleInfo}>
+                  <Repeat size={18} color={isRepeating ? colors.primary : colors.textMuted} />
+                  <span style={styles.toggleLabel}>Repeat this meetup</span>
+                </div>
+                <div style={{
+                  ...styles.toggle,
+                  ...(isRepeating ? styles.toggleActive : {}),
+                }}>
+                  <div style={{
+                    ...styles.toggleKnob,
+                    ...(isRepeating ? styles.toggleKnobActive : {}),
+                  }} />
+                </div>
+              </div>
+
+              {isRepeating && (
+                <div style={{ marginTop: '16px' }}>
+                  <label style={styles.label}>How often?</label>
+                  <div style={styles.cadenceButtons}>
+                    {[
+                      { value: 'Weekly', label: 'Weekly' },
+                      { value: 'Biweekly', label: 'Every other week' },
+                      { value: 'Monthly', label: 'Monthly' },
+                      { value: '1st & 3rd', label: '1st & 3rd week' },
+                    ].map(option => (
+                      <button
+                        key={option.value}
+                        style={{
+                          ...styles.cadenceBtn,
+                          ...(repeatCadence === option.value ? styles.cadenceBtnActive : {}),
+                        }}
+                        onClick={() => setRepeatCadence(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {scheduledDate && (
+                    <div style={styles.repeatInfo}>
+                      <Repeat size={14} color={colors.primary} />
+                      <span style={styles.repeatInfoText}>
+                        Future sessions will be auto-generated on {new Date(scheduledDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}s, {repeatCadence === 'Biweekly' ? 'every other week' : repeatCadence === '1st & 3rd' ? '1st & 3rd week of month' : repeatCadence.toLowerCase()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Location */}
           <div style={styles.section}>
@@ -795,6 +913,86 @@ const styles = {
     boxSizing: 'border-box',
     resize: 'vertical',
     fontFamily: fonts.sans,
+  },
+  toggleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    cursor: 'pointer',
+    userSelect: 'none',
+  },
+  toggleInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  toggleLabel: {
+    fontSize: '15px',
+    fontWeight: '600',
+    color: colors.text,
+  },
+  toggle: {
+    width: '48px',
+    height: '28px',
+    borderRadius: '14px',
+    backgroundColor: colors.border,
+    position: 'relative',
+    transition: 'background-color 0.2s ease',
+    flexShrink: 0,
+  },
+  toggleActive: {
+    backgroundColor: colors.primary,
+  },
+  toggleKnob: {
+    width: '22px',
+    height: '22px',
+    borderRadius: '50%',
+    backgroundColor: 'white',
+    position: 'absolute',
+    top: '3px',
+    left: '3px',
+    transition: 'transform 0.2s ease',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+  },
+  toggleKnobActive: {
+    transform: 'translateX(20px)',
+  },
+  cadenceButtons: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+  },
+  cadenceBtn: {
+    padding: '10px 16px',
+    borderRadius: '10px',
+    border: `1.5px solid ${colors.border}`,
+    backgroundColor: colors.warmWhite,
+    fontSize: '13px',
+    fontWeight: '500',
+    color: colors.textLight,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontFamily: fonts.sans,
+  },
+  cadenceBtnActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(139, 111, 92, 0.08)',
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  repeatInfo: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '8px',
+    marginTop: '14px',
+    padding: '12px 14px',
+    backgroundColor: 'rgba(139, 111, 92, 0.06)',
+    borderRadius: '10px',
+  },
+  repeatInfoText: {
+    fontSize: '13px',
+    color: colors.textLight,
+    lineHeight: '1.4',
   },
   submitBtn: {
     width: '100%',

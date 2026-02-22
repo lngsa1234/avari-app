@@ -12,6 +12,7 @@ import {
   cancelRSVP,
   calculateUpcomingDates,
   deleteCircleMeetup,
+  deleteAllFutureCircleMeetups,
 } from '@/lib/circleMeetupHelpers';
 
 // Color palette
@@ -89,9 +90,6 @@ export default function CircleDetailView({
   const [editForm, setEditForm] = useState({
     name: '',
     description: '',
-    meeting_day: '',
-    cadence: '',
-    time_of_day: '',
     location: '',
     vibe_category: '',
   });
@@ -107,6 +105,7 @@ export default function CircleDetailView({
   const [showEditCircleMeetupModal, setShowEditCircleMeetupModal] = useState(false);
   const [deletingCircleMeetupId, setDeletingCircleMeetupId] = useState(null);
   const [showDeleteCircleMeetupConfirm, setShowDeleteCircleMeetupConfirm] = useState(false);
+  const [deleteAllFuture, setDeleteAllFuture] = useState(false);
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -334,11 +333,21 @@ export default function CircleDetailView({
 
   const handleDeleteCircleMeetup = async (meetupId) => {
     try {
-      const result = await deleteCircleMeetup(meetupId);
+      let result;
+      if (deleteAllFuture) {
+        result = await deleteAllFutureCircleMeetups(circleId);
+      } else {
+        result = await deleteCircleMeetup(meetupId);
+      }
       if (result.success) {
         setShowDeleteCircleMeetupConfirm(false);
         setDeletingCircleMeetupId(null);
-        await loadCircleMeetups(circle);
+        setDeleteAllFuture(false);
+        if (deleteAllFuture) {
+          await loadCircleDetails();
+        } else {
+          await loadCircleMeetups(circle);
+        }
       }
     } catch (error) {
       console.error('Error deleting circle meetup:', error);
@@ -419,9 +428,6 @@ export default function CircleDetailView({
     setEditForm({
       name: circle?.name || '',
       description: circle?.description || '',
-      meeting_day: circle?.meeting_day || '',
-      cadence: circle?.cadence || '',
-      time_of_day: circle?.time_of_day || '',
       location: circle?.location || '',
       vibe_category: circle?.vibe_category || '',
     });
@@ -453,9 +459,6 @@ export default function CircleDetailView({
       const extendedData = {
         ...updateData,
         description: editForm.description?.trim() || null,
-        meeting_day: editForm.meeting_day || null,
-        cadence: editForm.cadence || null,
-        time_of_day: editForm.time_of_day || null,
         location: editForm.location?.trim() || null,
       };
 
@@ -534,15 +537,6 @@ export default function CircleDetailView({
           <ChevronLeft size={24} color={colors.text} />
         </button>
 
-        {isHost && (
-          <button
-            style={styles.settingsButton}
-            onClick={handleOpenEdit}
-          >
-            <Edit3 size={20} color={colors.text} />
-          </button>
-        )}
-
         <div style={styles.headerContent}>
           <div style={styles.emojiContainer}>
             <span style={styles.emoji}>{emoji}</span>
@@ -568,35 +562,7 @@ export default function CircleDetailView({
 
         {/* Regular Schedule */}
         <div style={styles.section}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-            <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>Regular Schedule</h3>
-            {isHost && (
-              <button
-                onClick={() => onNavigate?.('scheduleMeetup', {
-                  meetupType: 'circle',
-                  scheduleCircleId: circle.id,
-                  scheduleCircleName: circle.name,
-                })}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '7px 14px',
-                  backgroundColor: 'transparent',
-                  color: colors.primary,
-                  border: `1.5px solid ${colors.primary}`,
-                  borderRadius: '10px',
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  fontFamily: fonts.sans,
-                }}
-              >
-                <Plus size={13} />
-                Add Meetup
-              </button>
-            )}
-          </div>
+          <h3 style={styles.sectionTitle}>Regular Schedule</h3>
 
           {/* Schedule grid */}
           <div style={{
@@ -782,65 +748,6 @@ export default function CircleDetailView({
             );
           })()}
 
-          {/* Upcoming meetups list with edit/delete for host */}
-          {isHost && circleMeetups.length > 1 && (
-            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '11px', fontWeight: '600', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Upcoming Sessions
-              </span>
-              {circleMeetups.slice(1).map((meetup) => {
-                const meetupDate = parseLocalDate(meetup.date);
-                const dateStr = meetupDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                const timeStr = meetup.time
-                  ? new Date(`2000-01-01T${meetup.time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-                  : null;
-                return (
-                  <div key={meetup.id} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '10px 12px',
-                    backgroundColor: colors.cream,
-                    borderRadius: '10px',
-                  }}>
-                    <Calendar size={14} color={colors.textMuted} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: colors.text }}>
-                        {meetup.topic || 'Circle Meetup'}
-                      </span>
-                      <span style={{ display: 'block', fontSize: '12px', color: colors.textMuted }}>
-                        {dateStr}{timeStr ? ` · ${timeStr}` : ''}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleEditCircleMeetup(meetup)}
-                      style={{
-                        width: '30px', height: '30px', borderRadius: '8px',
-                        backgroundColor: `${colors.primary}10`, border: 'none',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', color: colors.primary,
-                      }}
-                      title="Edit"
-                    >
-                      <Edit3 size={13} />
-                    </button>
-                    <button
-                      onClick={() => { setDeletingCircleMeetupId(meetup.id); setShowDeleteCircleMeetupConfirm(true); }}
-                      style={{
-                        width: '30px', height: '30px', borderRadius: '8px',
-                        backgroundColor: 'rgba(211, 47, 47, 0.08)', border: 'none',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', color: '#D32F2F',
-                      }}
-                      title="Delete"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         {/* Host Section */}
@@ -878,7 +785,11 @@ export default function CircleDetailView({
 
           <div style={styles.membersList}>
             {acceptedMembers.map((member) => (
-              <div key={member.id} style={styles.memberCard}>
+              <div
+                key={member.id}
+                style={{ ...styles.memberCard, cursor: 'pointer' }}
+                onClick={() => onNavigate?.('userProfile', { userId: member.user_id })}
+              >
                 <div style={styles.memberAvatar}>
                   {member.profile?.profile_picture ? (
                     <img src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
@@ -1040,10 +951,8 @@ export default function CircleDetailView({
             </div>
           </div>
         )}
-      </div>
 
-      {/* Action Footer */}
-      <div style={styles.footer}>
+        {/* Actions */}
         {!isMember && !isPending && (
           <button
             style={{
@@ -1076,10 +985,6 @@ export default function CircleDetailView({
             <button style={styles.actionButton} onClick={handleEnterChat}>
               <MessageCircle size={18} />
               <span>Chat</span>
-            </button>
-            <button style={styles.actionButton} onClick={handleStartCall}>
-              <Video size={18} />
-              <span>Call</span>
             </button>
             <button
               style={{ ...styles.actionButton, ...styles.leaveButton }}
@@ -1178,74 +1083,6 @@ export default function CircleDetailView({
                   <option value="advice">💡 Get Advice</option>
                   <option value="vent">🤝 Find Support</option>
                   <option value="grow">🚀 Career Growth</option>
-                </select>
-              </div>
-
-              {/* Schedule Section */}
-              <div style={styles.formSectionTitle}>Schedule</div>
-
-              {/* Day of Week */}
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Meeting Day</label>
-                <select
-                  value={editForm.meeting_day || ''}
-                  onChange={(e) => setEditForm({ ...editForm, meeting_day: e.target.value })}
-                  style={styles.formSelect}
-                >
-                  <option value="">Select day</option>
-                  <option value="Monday">Monday</option>
-                  <option value="Tuesday">Tuesday</option>
-                  <option value="Wednesday">Wednesday</option>
-                  <option value="Thursday">Thursday</option>
-                  <option value="Friday">Friday</option>
-                  <option value="Saturday">Saturday</option>
-                  <option value="Sunday">Sunday</option>
-                  <option value="Flexible">Flexible</option>
-                </select>
-              </div>
-
-              {/* Cadence */}
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Frequency</label>
-                <select
-                  value={editForm.cadence}
-                  onChange={(e) => setEditForm({ ...editForm, cadence: e.target.value })}
-                  style={styles.formSelect}
-                >
-                  <option value="">Select frequency</option>
-                  <option value="Weekly">Every week</option>
-                  <option value="Biweekly">Every other week</option>
-                  <option value="Monthly">Once a month</option>
-                  <option value="1st & 3rd">1st & 3rd week of month</option>
-                  <option value="As needed">As needed</option>
-                </select>
-              </div>
-
-              {/* Time */}
-              <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Meeting Time</label>
-                <select
-                  value={editForm.time_of_day}
-                  onChange={(e) => setEditForm({ ...editForm, time_of_day: e.target.value })}
-                  style={styles.formSelect}
-                >
-                  <option value="">Select time</option>
-                  <option value="7:00 AM">7:00 AM</option>
-                  <option value="8:00 AM">8:00 AM</option>
-                  <option value="9:00 AM">9:00 AM</option>
-                  <option value="10:00 AM">10:00 AM</option>
-                  <option value="11:00 AM">11:00 AM</option>
-                  <option value="12:00 PM">12:00 PM</option>
-                  <option value="1:00 PM">1:00 PM</option>
-                  <option value="2:00 PM">2:00 PM</option>
-                  <option value="3:00 PM">3:00 PM</option>
-                  <option value="4:00 PM">4:00 PM</option>
-                  <option value="5:00 PM">5:00 PM</option>
-                  <option value="6:00 PM">6:00 PM</option>
-                  <option value="7:00 PM">7:00 PM</option>
-                  <option value="8:00 PM">8:00 PM</option>
-                  <option value="9:00 PM">9:00 PM</option>
-                  <option value="Flexible">Flexible</option>
                 </select>
               </div>
 
@@ -1348,18 +1185,43 @@ export default function CircleDetailView({
 
       {/* Delete Circle Meetup Confirmation */}
       {showDeleteCircleMeetupConfirm && (
-        <div style={styles.modalOverlay} onClick={() => { setShowDeleteCircleMeetupConfirm(false); setDeletingCircleMeetupId(null); }}>
+        <div style={styles.modalOverlay} onClick={() => { setShowDeleteCircleMeetupConfirm(false); setDeletingCircleMeetupId(null); setDeleteAllFuture(false); }}>
           <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
             <h3 style={styles.modalTitle}>Delete Meetup?</h3>
             <p style={styles.modalText}>
-              This will remove the meetup for all circle members. This action cannot be undone.
+              {deleteAllFuture
+                ? 'This will remove all future meetups and stop the recurring schedule. This action cannot be undone.'
+                : 'This will remove the meetup for all circle members. This action cannot be undone.'}
             </p>
+            {circle?.cadence && circle.cadence !== 'As needed' && (
+              <label style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '12px',
+                backgroundColor: colors.cream,
+                borderRadius: '10px',
+                marginBottom: '16px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                color: colors.text,
+                fontWeight: '500',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={deleteAllFuture}
+                  onChange={(e) => setDeleteAllFuture(e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: colors.primary, cursor: 'pointer' }}
+                />
+                Delete all future meetups and stop recurring schedule
+              </label>
+            )}
             <div style={styles.modalActions}>
-              <button style={styles.cancelButton} onClick={() => { setShowDeleteCircleMeetupConfirm(false); setDeletingCircleMeetupId(null); }}>
+              <button style={styles.cancelButton} onClick={() => { setShowDeleteCircleMeetupConfirm(false); setDeletingCircleMeetupId(null); setDeleteAllFuture(false); }}>
                 Cancel
               </button>
               <button style={styles.confirmLeaveButton} onClick={() => handleDeleteCircleMeetup(deletingCircleMeetupId)}>
-                Delete
+                {deleteAllFuture ? 'Delete All' : 'Delete'}
               </button>
             </div>
           </div>
@@ -1488,7 +1350,7 @@ const styles = {
   },
   content: {
     flex: 1,
-    padding: '0 20px 120px',
+    padding: '0 20px 40px',
     marginTop: '-30px',
     position: 'relative',
     zIndex: 1,
