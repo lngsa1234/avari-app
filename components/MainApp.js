@@ -438,6 +438,7 @@ function MainApp({ currentUser, onSignOut }) {
     loadConnections()
     loadMyInterests()
     loadMeetupPeople()
+    loadPotentialConnections()
     loadPendingRecaps()
   }, []) // Empty array - run once on mount
 
