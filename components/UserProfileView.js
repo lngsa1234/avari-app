@@ -36,9 +36,15 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       setIsConnected(matchedIds.includes(userId));
 
       // Count their connections
-      const { data: theirMatches } = await supabase
-        .rpc('get_mutual_matches', { for_user_id: userId });
-      setConnectionCount((theirMatches || []).length);
+      if (userId === currentUser.id) {
+        // Viewing own profile — use our own matches
+        setConnectionCount((matches || []).length);
+      } else {
+        // Count mutual connections (their matches that overlap with ours)
+        const { data: theirMatches } = await supabase
+          .rpc('get_mutual_matches', { for_user_id: userId });
+        setConnectionCount((theirMatches || []).length);
+      }
 
       // Load mutual circles
       const { data: myCircles } = await supabase
