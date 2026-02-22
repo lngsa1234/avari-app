@@ -435,12 +435,10 @@ function MainApp({ currentUser, onSignOut }) {
     loadHomePageData()
 
     // Deferred: data not needed for home page (connections, discover, recaps)
-    setTimeout(() => {
-      loadConnections()
-      loadMyInterests()
-      loadMeetupPeople()
-      loadPendingRecaps()
-    }, 2000)
+    loadConnections()
+    loadMyInterests()
+    loadMeetupPeople()
+    loadPendingRecaps()
   }, []) // Empty array - run once on mount
 
   // Reload meetups when navigating BACK to home view (not on initial mount)
