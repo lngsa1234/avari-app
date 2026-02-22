@@ -219,40 +219,232 @@ function MainApp({ currentUser, onSignOut }) {
     setShowOnboarding(false)
   }, [currentUser?.id])
 
-  // Load meetups from Supabase on component mount
+  // Optimized: load all home page data in 2 round trips instead of 4+ sequential
+  const loadHomePageData = useCallback(async () => {
+    try {
+      const t0 = Date.now()
+      setLoadingMeetups(true)
+
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - 1)
+      const cutoff = cutoffDate.toISOString().split('T')[0]
+
+      // === ROUND 1: Fire all independent queries in parallel ===
+      const [circlesResult, userSignupsResult, coffeeResult, unreadResult, groupsResult, coffeeCountResult, requestsResult, attendedResult] = await Promise.all([
+        // 1. Member circles (needed for meetups query)
+        supabase
+          .from('connection_group_members')
+          .select('group_id')
+          .eq('user_id', currentUser.id)
+          .eq('status', 'accepted'),
+        // 2. User's own signups
+        supabase
+          .from('meetup_signups')
+          .select('meetup_id')
+          .eq('user_id', currentUser.id),
+        // 3. Coffee chats
+        supabase
+          .from('coffee_chats')
+          .select('*')
+          .in('status', ['pending', 'accepted', 'scheduled'])
+          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+          .order('scheduled_time', { ascending: true }),
+        // 4. Unread message count
+        supabase
+          .from('messages')
+          .select('*', { count: 'exact', head: true })
+          .eq('receiver_id', currentUser.id)
+          .eq('read', false),
+        // 5. Groups count
+        supabase
+          .from('connection_group_members')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', currentUser.id)
+          .eq('status', 'accepted'),
+        // 6. Coffee chats completed count
+        supabase
+          .from('coffee_chats')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'completed')
+          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`),
+        // 7. Connection requests (incoming interests)
+        supabase
+          .from('user_interests')
+          .select('user_id, created_at')
+          .eq('interested_in_user_id', currentUser.id),
+        // 8. Attended meetups count
+        supabase
+          .from('meetup_signups')
+          .select('meetup_id, meetups(date, time)')
+          .eq('user_id', currentUser.id),
+      ])
+
+      // Set simple counts immediately (batch these state updates)
+      setUserSignups((userSignupsResult.data || []).map(s => s.meetup_id))
+      setUnreadMessageCount(unreadResult.count || 0)
+      setGroupsCount(groupsResult.count || 0)
+      setCoffeeChatsCount(coffeeCountResult.count || 0)
+
+      // Process attended count
+      const now = new Date()
+      const attendedCount = (attendedResult.data || []).filter(signup => {
+        try {
+          if (!signup.meetups) return false
+          const meetupDate = parseLocalDate(signup.meetups.date)
+          if (isNaN(meetupDate.getTime())) return false
+          const meetupTime = signup.meetups.time || '00:00'
+          const [hours, minutes] = meetupTime.split(':').map(Number)
+          meetupDate.setHours(hours, minutes, 0, 0)
+          return meetupDate < now
+        } catch { return false }
+      }).length
+      if (attendedCount !== currentUser.meetups_attended) {
+        supabase.from('profiles').update({ meetups_attended: attendedCount }).eq('id', currentUser.id)
+        currentUser.meetups_attended = attendedCount
+      }
+
+      console.log(`⏱️ Round 1 done in ${Date.now() - t0}ms`)
+      // === ROUND 2: Queries that depend on Round 1 results ===
+      const memberCircleIds = (circlesResult.data || []).map(m => m.group_id)
+
+      // Build meetups query
+      let meetupsQuery = supabase
+        .from('meetups')
+        .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
+        .gte('date', cutoff)
+        .order('date', { ascending: true })
+        .order('time', { ascending: true })
+
+      if (memberCircleIds.length > 0) {
+        meetupsQuery = meetupsQuery.or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
+      } else {
+        meetupsQuery = meetupsQuery.is('circle_id', null)
+      }
+
+      // Coffee chat profile IDs
+      const chats = coffeeResult.data || []
+      const coffeeOtherIds = [...new Set(chats.map(c =>
+        c.requester_id === currentUser.id ? c.recipient_id : c.requester_id
+      ).filter(Boolean))]
+
+      // Connection request: get user's outgoing interests to filter mutual
+      const incomingInterests = requestsResult.data || []
+      const requestUserIds = incomingInterests.map(i => i.user_id)
+
+      // Fire Round 2 queries in parallel
+      const round2Promises = [meetupsQuery]
+      if (coffeeOtherIds.length > 0) {
+        round2Promises.push(
+          supabase.from('profiles').select('id, name').in('id', coffeeOtherIds)
+        )
+      }
+      if (requestUserIds.length > 0) {
+        round2Promises.push(
+          supabase.from('user_interests').select('interested_in_user_id').eq('user_id', currentUser.id)
+        )
+      }
+
+      const round2Results = await Promise.all(round2Promises)
+
+      // Process meetups
+      const meetupsData = round2Results[0].data || []
+      setMeetups(meetupsData)
+
+      // Process coffee chats
+      if (coffeeOtherIds.length > 0) {
+        const coffeeProfiles = round2Results[1]?.data || []
+        const profileMap = {}
+        coffeeProfiles.forEach(p => { profileMap[p.id] = p })
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const upcoming = chats.filter(chat => {
+          if (!chat.scheduled_time) return true
+          return new Date(chat.scheduled_time) > sevenDaysAgo
+        }).map(chat => {
+          const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
+          return { ...chat, _otherPerson: profileMap[otherId] || null }
+        })
+        setUpcomingCoffeeChats(upcoming)
+      } else {
+        setUpcomingCoffeeChats([])
+      }
+
+      // Process connection requests
+      if (requestUserIds.length > 0) {
+        const myInterestIdx = coffeeOtherIds.length > 0 ? 2 : 1
+        const myInterestIds = new Set((round2Results[myInterestIdx]?.data || []).map(i => i.interested_in_user_id))
+        const pendingIds = incomingInterests.filter(i => !myInterestIds.has(i.user_id)).map(i => i.user_id)
+        if (pendingIds.length > 0) {
+          const { data: reqProfiles } = await supabase
+            .from('profiles').select('id, name, career, city, state, profile_picture').in('id', pendingIds)
+          setConnectionRequests((reqProfiles || []).map(p => ({ ...p, type: 'connection_request' })))
+        } else {
+          setConnectionRequests([])
+        }
+      } else {
+        setConnectionRequests([])
+      }
+
+      console.log(`⏱️ Round 2 done in ${Date.now() - t0}ms`)
+      // === ROUND 3: Signups for the loaded meetups ===
+      if (meetupsData.length > 0) {
+        const meetupIds = meetupsData.map(m => m.id)
+        const { data: signupsData } = await supabase
+          .from('meetup_signups')
+          .select('*')
+          .in('meetup_id', meetupIds)
+
+        if (signupsData && signupsData.length > 0) {
+          const signupUserIds = [...new Set(signupsData.map(s => s.user_id))]
+          const { data: signupProfiles } = await supabase
+            .from('profiles')
+            .select('id, name, career, city, state, profile_picture')
+            .in('id', signupUserIds)
+
+          const profilesMap = {}
+          ;(signupProfiles || []).forEach(p => { profilesMap[p.id] = p })
+
+          const signupsByMeetup = {}
+          signupsData.forEach(signup => {
+            if (!signupsByMeetup[signup.meetup_id]) signupsByMeetup[signup.meetup_id] = []
+            signupsByMeetup[signup.meetup_id].push({ ...signup, profiles: profilesMap[signup.user_id] || null })
+          })
+          setSignups(signupsByMeetup)
+        } else {
+          setSignups({})
+        }
+      }
+
+    } catch (err) {
+      console.error('Error loading home page data:', err)
+    } finally {
+      console.log(`⏱️ Home page data loaded in ${Date.now() - t0}ms`)
+      setLoadingMeetups(false)
+    }
+  }, [supabase, currentUser.id])
+
+  // Load data on component mount
   useEffect(() => {
     // CRITICAL: Only run once, ignore React Strict Mode double-render
     if (hasLoadedRef.current) {
-      console.log('⏭️ useEffect already ran, skipping to prevent duplicates')
       return
     }
-    
-    console.log('🚀 useEffect running for the FIRST time')
+
     hasLoadedRef.current = true
-    
-    // Phase 1: Load meetups + signups (what the user sees first)
-    loadMeetupsFromDatabase()
-    loadSignupsForMeetups([])
-    loadUserSignups()
-    loadUpcomingCoffeeChats()
 
-    // Phase 2: Secondary home page data (badges, counts) — slight delay to avoid render storm
-    setTimeout(() => {
-      loadConnectionRequests()
-      updateAttendedCount()
-      loadUnreadMessageCount()
-      loadGroupsCount()
-      loadCoffeeChatsCount()
-    }, 300)
+    // Fast initial load: fetch everything the home page needs in minimal round trips
+    loadHomePageData()
 
-    // Phase 3: Data not needed for home page (connections, discover, recaps)
-    setTimeout(() => {
+    // Deferred: data not needed for home page (connections, discover, recaps)
+    const timer = setTimeout(() => {
       loadConnections()
       loadMyInterests()
       loadMeetupPeople()
       loadPendingRecaps()
     }, 2000)
 
+    return () => {
+      clearTimeout(timer)
+    }
   }, []) // Empty array - run once on mount
 
   // Reload meetups when navigating BACK to home view (not on initial mount)
@@ -262,10 +454,7 @@ function MainApp({ currentUser, onSignOut }) {
     previousViewRef.current = currentView
     // Only reload if we're returning to home from a different view
     if (currentView === 'home' && prevView !== 'home' && hasLoadedRef.current) {
-      loadMeetupsFromDatabase()
-      loadSignupsForMeetups([])
-      loadUserSignups()
-      loadUpcomingCoffeeChats()
+      loadHomePageData()
     }
   }, [currentView])
 
@@ -288,10 +477,7 @@ function MainApp({ currentUser, onSignOut }) {
         .eq('user_id', currentUser.id)
         .eq('status', 'accepted')
 
-      console.log('Member circles:', memberCircles, 'Error:', circleError)
-
       const memberCircleIds = (memberCircles || []).map(m => m.group_id)
-      console.log('Member circle IDs:', memberCircleIds)
 
       // Load public meetups AND circle meetups from user's circles (upcoming only)
       let data, error
@@ -322,29 +508,31 @@ function MainApp({ currentUser, onSignOut }) {
         error = result.error
       }
 
-      console.log('Loaded meetups:', data, 'Error:', error)
-
       if (error) {
         console.error('Error loading meetups:', error)
+        return []
       } else {
         setMeetups(data || [])
+        return data || []
       }
     } catch (err) {
       console.error('Error:', err)
+      return []
     } finally {
       setLoadingMeetups(false)
     }
   }, [supabase, currentUser.id])
 
 
-  const loadSignupsForMeetups = useCallback(async (meetupsList) => {
+  const loadSignupsForMeetups = useCallback(async (meetupIds) => {
     try {
-      console.log('Loading signups...')
+      // Build query — filter by meetup IDs if provided
+      let query = supabase.from('meetup_signups').select('*')
+      if (meetupIds && meetupIds.length > 0) {
+        query = query.in('meetup_id', meetupIds)
+      }
 
-      // Get all signups
-      const { data: signupsData, error: signupsError } = await supabase
-        .from('meetup_signups')
-        .select('*')
+      const { data: signupsData, error: signupsError } = await query
 
       if (signupsError) {
         console.error('Error loading signups:', signupsError)
@@ -352,7 +540,6 @@ function MainApp({ currentUser, onSignOut }) {
       }
 
       if (!signupsData || signupsData.length === 0) {
-        console.log('No signups found')
         setSignups({})
         return
       }
@@ -387,7 +574,6 @@ function MainApp({ currentUser, onSignOut }) {
         })
       })
 
-      console.log('Signups by meetup:', signupsByMeetup)
       setSignups(signupsByMeetup)
     } catch (err) {
       console.error('Error loading signups:', err)
@@ -414,27 +600,17 @@ function MainApp({ currentUser, onSignOut }) {
 
   const loadConnections = useCallback(async () => {
     try {
-      console.log('🔍 Loading connections (mutual matches)...')
-      // Get mutual matches using the database function
       const { data: matches, error } = await supabase
         .rpc('get_mutual_matches', { for_user_id: currentUser.id })
 
-      if (error) {
-        console.error('💥 Error calling get_mutual_matches:', error)
-        throw error
-      }
-
-      console.log('📊 Raw mutual matches result:', matches)
+      if (error) throw error
 
       if (!matches || matches.length === 0) {
-        console.log('⚠️ No mutual matches found')
         setConnections([])
         return
       }
 
-      // Get profile details for matched users
       const matchedUserIds = matches.map(m => m.matched_user_id)
-      console.log('👥 Matched user IDs:', matchedUserIds)
       
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
@@ -454,7 +630,6 @@ function MainApp({ currentUser, onSignOut }) {
       })
 
       setConnections(connectionsWithProfiles)
-      console.log('✅ Loaded mutual matches:', connectionsWithProfiles.length, 'connections')
     } catch (err) {
       console.error('💥 Error loading connections:', err)
       setConnections([])
@@ -484,7 +659,7 @@ function MainApp({ currentUser, onSignOut }) {
   // Load incoming connection requests (people interested in me, but not mutual yet)
   const loadConnectionRequests = useCallback(async () => {
     try {
-      console.log('🔍 Loading connection requests...')
+      // Load incoming connection requests (non-mutual interests)
 
       // Step 1: Get people who expressed interest in current user
       const { data: incomingInterests, error: incomingError } = await supabase
@@ -495,7 +670,6 @@ function MainApp({ currentUser, onSignOut }) {
       if (incomingError) throw incomingError
 
       if (!incomingInterests || incomingInterests.length === 0) {
-        console.log('📭 No incoming interests')
         setConnectionRequests([])
         return
       }
@@ -516,7 +690,6 @@ function MainApp({ currentUser, onSignOut }) {
         .map(i => ({ user_id: i.user_id, created_at: i.created_at }))
 
       if (pendingRequestUserIds.length === 0) {
-        console.log('📭 All incoming interests are mutual (already connections)')
         setConnectionRequests([])
         return
       }
@@ -605,16 +778,13 @@ function MainApp({ currentUser, onSignOut }) {
         .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
         .order('scheduled_time', { ascending: true })
 
-      console.log('☕ Coffee chats query result:', { chats, error })
-
       if (error) {
-        console.error('☕ Coffee chats query error:', error)
+        console.error('Error loading coffee chats:', error)
         setUpcomingCoffeeChats([])
         return
       }
 
       if (!chats || chats.length === 0) {
-        console.log('☕ No accepted coffee chats found')
         setUpcomingCoffeeChats([])
         return
       }
@@ -642,7 +812,6 @@ function MainApp({ currentUser, onSignOut }) {
         return { ...chat, _otherPerson: profileMap[otherId] || null }
       })
 
-      console.log('☕ Upcoming coffee chats:', upcoming.length, upcoming)
       setUpcomingCoffeeChats(upcoming)
     } catch (err) {
       console.error('☕ Error loading upcoming coffee chats:', err)
@@ -839,8 +1008,6 @@ function MainApp({ currentUser, onSignOut }) {
 
   const loadMeetupPeople = useCallback(async () => {
     try {
-      console.log('🔍 Loading meetup people...')
-
       // STEP 1: Get meetups current user attended
       const { data: mySignups, error: signupsError } = await supabase
         .from('meetup_signups')
@@ -850,10 +1017,8 @@ function MainApp({ currentUser, onSignOut }) {
       if (signupsError) throw signupsError
 
       const myMeetupIds = mySignups.map(s => s.meetup_id)
-      console.log('📋 User attended', myMeetupIds.length, 'meetups')
 
       if (myMeetupIds.length === 0) {
-        console.log('❌ No meetups attended')
         setMeetupPeople({})
         return
       }
@@ -873,18 +1038,13 @@ function MainApp({ currentUser, onSignOut }) {
         const meetupDateTime = parseLocalDate(meetup.date)
         if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); meetupDateTime.setHours(h, m, 0, 0) }
         const isPast = meetupDateTime < now
-        
-        console.log(`📅 Meetup: ${meetup.date} ${meetup.time} - Is Past? ${isPast}`)
         return isPast
       })
 
       if (!meetupsData || meetupsData.length === 0) {
-        console.log('⚠️ No PAST meetups found (based on date + time)')
         setMeetupPeople({})
         return
       }
-
-      console.log('✅ Loaded', meetupsData.length, 'PAST meetup details (date + time verified)')
 
       // STEP 4: 🔥 Get existing connections to exclude them
       // Use the same RPC function as loadConnections
@@ -903,8 +1063,6 @@ function MainApp({ currentUser, onSignOut }) {
           connectedUserIds.add(match.matched_user_id)
         })
       }
-
-      console.log('🚫 Excluding', connectedUserIds.size, 'existing connections:', Array.from(connectedUserIds))
 
       // STEP 5: Batch fetch all signups for past meetups in ONE query
       const pastMeetupIds = meetupsData.map(m => m.id)
@@ -931,7 +1089,6 @@ function MainApp({ currentUser, onSignOut }) {
       })
 
       if (allUserIds.size === 0) {
-        console.log('✨ No new people to discover')
         setMeetupPeople({})
         return
       }
@@ -966,11 +1123,6 @@ function MainApp({ currentUser, onSignOut }) {
       })
 
       setMeetupPeople(meetupPeopleMap)
-      console.log('🎉 Final result:', Object.keys(meetupPeopleMap).length, 'meetups with people')
-      
-      // Log summary
-      const totalPeople = Object.values(meetupPeopleMap).reduce((sum, mp) => sum + mp.people.length, 0)
-      console.log('👥 Total people to discover:', totalPeople)
     } catch (err) {
       console.error('💥 Error loading meetup people:', err)
       setMeetupPeople({})
@@ -1082,11 +1234,8 @@ function MainApp({ currentUser, onSignOut }) {
         .eq('user_id', currentUser.id)
       
       if (error || !signups) {
-        console.log('No signups found or error:', error)
         return
       }
-      
-      console.log('Found signups:', signups)
       
       // Count how many meetups are in the past
       const now = new Date()
@@ -1110,8 +1259,6 @@ function MainApp({ currentUser, onSignOut }) {
           
           // Now compare full datetime
           const isPast = meetupDate < now
-          console.log(`Meetup ${signup.meetups.date} ${meetupTime}: ${isPast ? 'PAST' : 'FUTURE'}`)
-          
           return isPast
         } catch (err) {
           console.error('Error parsing date:', err)
@@ -1119,28 +1266,18 @@ function MainApp({ currentUser, onSignOut }) {
         }
       }).length
       
-      console.log(`Attended count: ${attendedCount}, Current: ${currentUser.meetups_attended}`)
-      
       // Update profile if count changed
       if (attendedCount !== currentUser.meetups_attended) {
-        console.log(`Updating meetups_attended from ${currentUser.meetups_attended} to ${attendedCount}`)
-        
         const { error: updateError } = await supabase
           .from('profiles')
           .update({ meetups_attended: attendedCount })
           .eq('id', currentUser.id)
-        
+
         if (!updateError) {
-          // Update local state
           currentUser.meetups_attended = attendedCount
-          console.log(`✅ Updated meetups_attended to ${attendedCount}`)
-          // Force re-render
-          window.location.reload()
         } else {
           console.error('Error updating profile:', updateError)
         }
-      } else {
-        console.log('✅ Attended count already correct')
       }
     } catch (err) {
       console.error('Error updating attended count:', err)

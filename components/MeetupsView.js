@@ -5,7 +5,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles } from 'lucide-react';
+import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null }) {
@@ -19,6 +19,21 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     coffeeChats: 0,
     circleInvites: 0
   });
+  const [actionMenuOpen, setActionMenuOpen] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingMeetup, setEditingMeetup] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletingMeetupId, setDeletingMeetupId] = useState(null);
+  const [showCancelChatConfirm, setShowCancelChatConfirm] = useState(false);
+  const [cancellingChatId, setCancellingChatId] = useState(null);
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    if (!actionMenuOpen) return;
+    const handleClick = () => setActionMenuOpen(null);
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [actionMenuOpen]);
 
   // Responsive
   const [isMobile, setIsMobile] = useState(() => {
@@ -309,6 +324,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           originalDate: meetup.date,
           rawDate: parseLocalDate(meetup.date),
           date: formatDate(meetup.date),
+          rawTime: meetup.time,
           time: formatTime(meetup.time),
           duration: `${meetup.duration || 60} min`,
           location: meetup.location || 'Virtual',
@@ -743,6 +759,89 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     if (onNavigate) onNavigate('scheduleMeetup');
   };
 
+  const handleEditMeetup = (item) => {
+    setEditingMeetup({
+      id: item.id,
+      topic: item.topic || item.title || '',
+      date: item.originalDate || '',
+      time: item.rawTime || '',
+      location: item.location || '',
+    });
+    setShowEditModal(true);
+    setActionMenuOpen(null);
+  };
+
+  const handleUpdateMeetup = async () => {
+    if (!editingMeetup) return;
+    try {
+      const { error } = await supabase
+        .from('meetups')
+        .update({
+          topic: editingMeetup.topic,
+          date: editingMeetup.date,
+          time: editingMeetup.time,
+          location: editingMeetup.location,
+        })
+        .eq('id', editingMeetup.id);
+
+      if (!error) {
+        setGroupEvents(prev => prev.map(e =>
+          e.id === editingMeetup.id ? {
+            ...e,
+            topic: editingMeetup.topic,
+            title: editingMeetup.topic || e.title,
+            originalDate: editingMeetup.date,
+            rawDate: parseLocalDate(editingMeetup.date),
+            date: formatDate(editingMeetup.date),
+            rawTime: editingMeetup.time,
+            time: formatTime(editingMeetup.time),
+            location: editingMeetup.location,
+          } : e
+        ));
+        setShowEditModal(false);
+        setEditingMeetup(null);
+      }
+    } catch (err) {
+      console.error('Error updating meetup:', err);
+    }
+  };
+
+  const handleDeleteMeetup = async (meetupId) => {
+    try {
+      // Delete signups first, then the meetup
+      await supabase.from('meetup_signups').delete().eq('meetup_id', meetupId);
+      const { error } = await supabase
+        .from('meetups')
+        .delete()
+        .eq('id', meetupId);
+
+      if (!error) {
+        setGroupEvents(prev => prev.filter(e => e.id !== meetupId));
+        setShowDeleteConfirm(false);
+        setDeletingMeetupId(null);
+      }
+    } catch (err) {
+      console.error('Error deleting meetup:', err);
+    }
+  };
+
+  const handleCancelCoffeeChat = async (chatId) => {
+    try {
+      const { error } = await supabase
+        .from('coffee_chats')
+        .update({ status: 'cancelled' })
+        .eq('id', chatId);
+
+      if (!error) {
+        setCoffeeChats(prev => prev.filter(c => c.id !== chatId));
+        setShowCancelChatConfirm(false);
+        setCancellingChatId(null);
+      }
+    } catch (err) {
+      console.error('Error cancelling coffee chat:', err);
+    }
+  };
+
   // Separate circle and public events
   const circleEvents = groupEvents.filter(e => e.isCircleMeetup);
   const publicEvents = groupEvents.filter(e => !e.isCircleMeetup);
@@ -957,15 +1056,35 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           </button>
                         </>
                       ) : item.isPending ? (
-                        <button style={{...styles.actionBtnWaiting, width: isMobile ? '100%' : undefined}} disabled>
-                          <Clock size={14} style={{ marginRight: 6 }} />
-                          Awaiting
-                        </button>
+                        <>
+                          <button style={{...styles.actionBtnWaiting, width: isMobile ? '100%' : undefined}} disabled>
+                            <Clock size={14} style={{ marginRight: 6 }} />
+                            Awaiting
+                          </button>
+                          {item.requester_id === currentUser.id && (
+                            <button
+                              style={{...styles.cancelChatBtn, width: isMobile ? '100%' : undefined}}
+                              onClick={() => { setCancellingChatId(item.id); setShowCancelChatConfirm(true); }}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </>
                       ) : (
-                        <button style={{...styles.actionBtnPrimary, width: isMobile ? '100%' : undefined}} onClick={() => handleJoinCall(item)}>
-                          <Video size={14} style={{ marginRight: 6 }} />
-                          Join
-                        </button>
+                        <>
+                          <button style={{...styles.actionBtnPrimary, width: isMobile ? '100%' : undefined}} onClick={() => handleJoinCall(item)}>
+                            <Video size={14} style={{ marginRight: 6 }} />
+                            Join
+                          </button>
+                          {item.requester_id === currentUser.id && (
+                            <button
+                              style={{...styles.cancelChatBtn, width: isMobile ? '100%' : undefined}}
+                              onClick={() => { setCancellingChatId(item.id); setShowCancelChatConfirm(true); }}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -1024,9 +1143,31 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   <div style={styles.cardContent}>
                     <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '8px'}}>
                       <h3 style={{...styles.eventTitle, margin: 0}}>{item.title}</h3>
-                      {item.time && item.time !== 'TBD' && (
-                        <span style={{...styles.cardTime, flexShrink: 0}}>{item.time}</span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                        {item.time && item.time !== 'TBD' && (
+                          <span style={styles.cardTime}>{item.time}</span>
+                        )}
+                        {item.created_by === currentUser.id && (
+                          <div style={{ position: 'relative' }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setActionMenuOpen(actionMenuOpen === item.id ? null : item.id); }}
+                              style={styles.moreBtn}
+                            >
+                              <MoreHorizontal size={16} />
+                            </button>
+                            {actionMenuOpen === item.id && (
+                              <div style={styles.actionMenu}>
+                                <button style={styles.actionMenuItem} onClick={(e) => { e.stopPropagation(); handleEditMeetup(item); }}>
+                                  <Edit3 size={14} /> Edit
+                                </button>
+                                <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setDeletingMeetupId(item.id); setShowDeleteConfirm(true); setActionMenuOpen(null); }}>
+                                  <Trash2 size={14} /> Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 4px 0' }}>
                       {item.hostProfile?.profile_picture ? (
@@ -1252,6 +1393,104 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             Browse Events
           </button>
         </section>
+      )}
+
+      {/* Edit Meetup Modal */}
+      {showEditModal && editingMeetup && (
+        <div style={styles.modalOverlay} onClick={() => setShowEditModal(false)}>
+          <div style={styles.editModal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.editModalHeader}>
+              <h3 style={styles.editModalTitle}>Edit Meetup</h3>
+              <button style={styles.editModalClose} onClick={() => setShowEditModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={styles.editModalBody}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Topic</label>
+                <input
+                  type="text"
+                  value={editingMeetup.topic}
+                  onChange={(e) => setEditingMeetup({ ...editingMeetup, topic: e.target.value })}
+                  style={styles.formInput}
+                  placeholder="Meetup topic"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Date</label>
+                <input
+                  type="date"
+                  value={editingMeetup.date}
+                  onChange={(e) => setEditingMeetup({ ...editingMeetup, date: e.target.value })}
+                  style={styles.formInput}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Time</label>
+                <input
+                  type="time"
+                  value={editingMeetup.time}
+                  onChange={(e) => setEditingMeetup({ ...editingMeetup, time: e.target.value })}
+                  style={styles.formInput}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Location</label>
+                <input
+                  type="text"
+                  value={editingMeetup.location}
+                  onChange={(e) => setEditingMeetup({ ...editingMeetup, location: e.target.value })}
+                  style={styles.formInput}
+                  placeholder="Virtual, city name, or venue"
+                />
+              </div>
+            </div>
+            <div style={styles.editModalFooter}>
+              <button style={styles.editModalCancel} onClick={() => setShowEditModal(false)}>
+                Cancel
+              </button>
+              <button style={styles.editModalSave} onClick={handleUpdateMeetup}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Meetup Confirmation */}
+      {showDeleteConfirm && (
+        <div style={styles.modalOverlay} onClick={() => { setShowDeleteConfirm(false); setDeletingMeetupId(null); }}>
+          <div style={styles.confirmModal} onClick={(e) => e.stopPropagation()}>
+            <h3 style={styles.confirmTitle}>Delete Meetup?</h3>
+            <p style={styles.confirmText}>This will remove the meetup for all attendees. This action cannot be undone.</p>
+            <div style={styles.confirmActions}>
+              <button style={styles.confirmCancel} onClick={() => { setShowDeleteConfirm(false); setDeletingMeetupId(null); }}>
+                Cancel
+              </button>
+              <button style={styles.confirmDelete} onClick={() => handleDeleteMeetup(deletingMeetupId)}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Coffee Chat Confirmation */}
+      {showCancelChatConfirm && (
+        <div style={styles.modalOverlay} onClick={() => { setShowCancelChatConfirm(false); setCancellingChatId(null); }}>
+          <div style={styles.confirmModal} onClick={(e) => e.stopPropagation()}>
+            <h3 style={styles.confirmTitle}>Cancel Coffee Chat?</h3>
+            <p style={styles.confirmText}>This will cancel the scheduled coffee chat.</p>
+            <div style={styles.confirmActions}>
+              <button style={styles.confirmCancel} onClick={() => { setShowCancelChatConfirm(false); setCancellingChatId(null); }}>
+                Keep It
+              </button>
+              <button style={styles.confirmDelete} onClick={() => handleCancelCoffeeChat(cancellingChatId)}>
+                Cancel Chat
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <style>{keyframeStyles}</style>
@@ -2347,6 +2586,209 @@ const styles = {
     border: 'none',
     borderRadius: '100px',
     color: 'white',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+  },
+  // Action menu styles
+  moreBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '30px',
+    height: '30px',
+    borderRadius: '8px',
+    border: 'none',
+    backgroundColor: 'rgba(139, 111, 92, 0.08)',
+    color: '#8B6F5C',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+  },
+  actionMenu: {
+    position: 'absolute',
+    top: '100%',
+    right: 0,
+    marginTop: '4px',
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
+    border: '1px solid rgba(139, 111, 92, 0.12)',
+    overflow: 'hidden',
+    zIndex: 50,
+    minWidth: '120px',
+  },
+  actionMenuItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    padding: '10px 14px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: '#5C4033',
+    fontSize: '13px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+    textAlign: 'left',
+    transition: 'background-color 0.15s',
+  },
+  cancelChatBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '8px 16px',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(139, 111, 92, 0.2)',
+    borderRadius: '10px',
+    color: '#8B6F5C',
+    fontSize: '12px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: '"Lora", serif',
+  },
+  // Edit modal styles
+  editModal: {
+    backgroundColor: '#FDF8F3',
+    borderRadius: '20px',
+    maxWidth: '440px',
+    width: '100%',
+    maxHeight: '90vh',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+  },
+  editModalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '18px 20px',
+    borderBottom: '1px solid rgba(139, 111, 92, 0.12)',
+  },
+  editModalTitle: {
+    fontFamily: '"Lora", serif',
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#3F1906',
+    margin: 0,
+  },
+  editModalClose: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    backgroundColor: 'rgba(139, 111, 92, 0.08)',
+    border: 'none',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    color: '#5C4033',
+  },
+  editModalBody: {
+    padding: '20px',
+    overflowY: 'auto',
+    flex: 1,
+  },
+  editModalFooter: {
+    display: 'flex',
+    gap: '10px',
+    padding: '16px 20px',
+    borderTop: '1px solid rgba(139, 111, 92, 0.12)',
+  },
+  editModalCancel: {
+    flex: 1,
+    padding: '12px',
+    backgroundColor: 'rgba(139, 111, 92, 0.08)',
+    color: '#5C4033',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+  },
+  editModalSave: {
+    flex: 1,
+    padding: '12px',
+    backgroundColor: '#5C4033',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+  },
+  formGroup: {
+    marginBottom: '16px',
+  },
+  formLabel: {
+    display: 'block',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#5C4033',
+    marginBottom: '6px',
+    fontFamily: '"DM Sans", sans-serif',
+  },
+  formInput: {
+    width: '100%',
+    padding: '10px 14px',
+    fontSize: '14px',
+    border: '1.5px solid rgba(139, 111, 92, 0.2)',
+    borderRadius: '10px',
+    backgroundColor: 'white',
+    color: '#3F1906',
+    fontFamily: '"DM Sans", sans-serif',
+    outline: 'none',
+    boxSizing: 'border-box',
+  },
+  // Confirm modal styles
+  confirmModal: {
+    backgroundColor: 'white',
+    borderRadius: '20px',
+    padding: '24px',
+    maxWidth: '340px',
+    width: '100%',
+    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+  },
+  confirmTitle: {
+    fontFamily: '"Lora", serif',
+    fontSize: '18px',
+    fontWeight: '600',
+    color: '#3F1906',
+    margin: '0 0 10px',
+  },
+  confirmText: {
+    fontSize: '14px',
+    color: '#6B5344',
+    lineHeight: '1.5',
+    margin: '0 0 20px',
+  },
+  confirmActions: {
+    display: 'flex',
+    gap: '10px',
+  },
+  confirmCancel: {
+    flex: 1,
+    padding: '12px',
+    backgroundColor: 'rgba(139, 111, 92, 0.08)',
+    color: '#5C4033',
+    border: 'none',
+    borderRadius: '12px',
+    fontSize: '14px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    fontFamily: '"DM Sans", sans-serif',
+  },
+  confirmDelete: {
+    flex: 1,
+    padding: '12px',
+    backgroundColor: '#D32F2F',
+    color: 'white',
+    border: 'none',
+    borderRadius: '12px',
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',

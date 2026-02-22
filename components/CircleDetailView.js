@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Check, UserPlus, Plus, FileText } from 'lucide-react';
+import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Trash2, Check, UserPlus, Plus, FileText } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 import {
   getOrCreateCircleMeetups,
@@ -11,6 +11,7 @@ import {
   rsvpToMeetup,
   cancelRSVP,
   calculateUpcomingDates,
+  deleteCircleMeetup,
 } from '@/lib/circleMeetupHelpers';
 
 // Color palette
@@ -102,6 +103,10 @@ export default function CircleDetailView({
   const [pastMeetups, setPastMeetups] = useState([]);
   const [showAllPast, setShowAllPast] = useState(false);
   const [recapMap, setRecapMap] = useState({});
+  const [editingCircleMeetup, setEditingCircleMeetup] = useState(null);
+  const [showEditCircleMeetupModal, setShowEditCircleMeetupModal] = useState(false);
+  const [deletingCircleMeetupId, setDeletingCircleMeetupId] = useState(null);
+  const [showDeleteCircleMeetupConfirm, setShowDeleteCircleMeetupConfirm] = useState(false);
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -290,6 +295,53 @@ export default function CircleDetailView({
       console.error('Error handling RSVP:', error);
     } finally {
       setRsvpLoading(prev => ({ ...prev, [meetupId]: false }));
+    }
+  };
+
+  const handleEditCircleMeetup = (meetup) => {
+    setEditingCircleMeetup({
+      id: meetup.id,
+      topic: meetup.topic || '',
+      date: meetup.date || '',
+      time: meetup.time || '',
+      location: meetup.location || circle?.location || '',
+    });
+    setShowEditCircleMeetupModal(true);
+  };
+
+  const handleUpdateCircleMeetup = async () => {
+    if (!editingCircleMeetup) return;
+    try {
+      const { error } = await supabase
+        .from('meetups')
+        .update({
+          topic: editingCircleMeetup.topic,
+          date: editingCircleMeetup.date,
+          time: editingCircleMeetup.time,
+          location: editingCircleMeetup.location,
+        })
+        .eq('id', editingCircleMeetup.id);
+
+      if (!error) {
+        setShowEditCircleMeetupModal(false);
+        setEditingCircleMeetup(null);
+        await loadCircleMeetups(circle);
+      }
+    } catch (error) {
+      console.error('Error updating circle meetup:', error);
+    }
+  };
+
+  const handleDeleteCircleMeetup = async (meetupId) => {
+    try {
+      const result = await deleteCircleMeetup(meetupId);
+      if (result.success) {
+        setShowDeleteCircleMeetupConfirm(false);
+        setDeletingCircleMeetupId(null);
+        await loadCircleMeetups(circle);
+      }
+    } catch (error) {
+      console.error('Error deleting circle meetup:', error);
     }
   };
 
@@ -540,8 +592,8 @@ export default function CircleDetailView({
                   fontFamily: fonts.sans,
                 }}
               >
-                <Edit3 size={13} />
-                Manage
+                <Plus size={13} />
+                Add Meetup
               </button>
             )}
           </div>
@@ -658,35 +710,137 @@ export default function CircleDetailView({
                     {displayTime} · {circle.location || 'Virtual'}
                   </span>
                 </div>
-                {isMember && nextMeetup && (
-                  <button
-                    onClick={() => handleRSVP(nextMeetup.id)}
-                    disabled={rsvpLoading[nextMeetup.id]}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: userRSVPs[nextMeetup.id] ? 'rgba(255,255,255,0.2)' : 'white',
-                      color: userRSVPs[nextMeetup.id] ? 'white' : colors.primary,
-                      border: userRSVPs[nextMeetup.id] ? '1.5px solid rgba(255,255,255,0.4)' : 'none',
-                      borderRadius: '10px',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {rsvpLoading[nextMeetup.id] ? '...' : userRSVPs[nextMeetup.id] ? (
-                      <><Check size={14} /> Going</>
-                    ) : (
-                      <><UserPlus size={14} /> RSVP</>
-                    )}
-                  </button>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  {isHost && nextMeetup && (
+                    <>
+                      <button
+                        onClick={() => handleEditCircleMeetup(nextMeetup)}
+                        style={{
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(255,255,255,0.2)',
+                          border: '1.5px solid rgba(255,255,255,0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: 'white',
+                        }}
+                        title="Edit meetup"
+                      >
+                        <Edit3 size={14} />
+                      </button>
+                      <button
+                        onClick={() => { setDeletingCircleMeetupId(nextMeetup.id); setShowDeleteCircleMeetupConfirm(true); }}
+                        style={{
+                          width: '34px',
+                          height: '34px',
+                          borderRadius: '8px',
+                          backgroundColor: 'rgba(255,255,255,0.2)',
+                          border: '1.5px solid rgba(255,255,255,0.3)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                          color: 'white',
+                        }}
+                        title="Delete meetup"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
+                  )}
+                  {isMember && nextMeetup && (
+                    <button
+                      onClick={() => handleRSVP(nextMeetup.id)}
+                      disabled={rsvpLoading[nextMeetup.id]}
+                      style={{
+                        padding: '8px 16px',
+                        backgroundColor: userRSVPs[nextMeetup.id] ? 'rgba(255,255,255,0.2)' : 'white',
+                        color: userRSVPs[nextMeetup.id] ? 'white' : colors.primary,
+                        border: userRSVPs[nextMeetup.id] ? '1.5px solid rgba(255,255,255,0.4)' : 'none',
+                        borderRadius: '10px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {rsvpLoading[nextMeetup.id] ? '...' : userRSVPs[nextMeetup.id] ? (
+                        <><Check size={14} /> Going</>
+                      ) : (
+                        <><UserPlus size={14} /> RSVP</>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })()}
+
+          {/* Upcoming meetups list with edit/delete for host */}
+          {isHost && circleMeetups.length > 1 && (
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: '600', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Upcoming Sessions
+              </span>
+              {circleMeetups.slice(1).map((meetup) => {
+                const meetupDate = parseLocalDate(meetup.date);
+                const dateStr = meetupDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const timeStr = meetup.time
+                  ? new Date(`2000-01-01T${meetup.time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                  : null;
+                return (
+                  <div key={meetup.id} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '10px 12px',
+                    backgroundColor: colors.cream,
+                    borderRadius: '10px',
+                  }}>
+                    <Calendar size={14} color={colors.textMuted} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: colors.text }}>
+                        {meetup.topic || 'Circle Meetup'}
+                      </span>
+                      <span style={{ display: 'block', fontSize: '12px', color: colors.textMuted }}>
+                        {dateStr}{timeStr ? ` · ${timeStr}` : ''}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleEditCircleMeetup(meetup)}
+                      style={{
+                        width: '30px', height: '30px', borderRadius: '8px',
+                        backgroundColor: `${colors.primary}10`, border: 'none',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', color: colors.primary,
+                      }}
+                      title="Edit"
+                    >
+                      <Edit3 size={13} />
+                    </button>
+                    <button
+                      onClick={() => { setDeletingCircleMeetupId(meetup.id); setShowDeleteCircleMeetupConfirm(true); }}
+                      style={{
+                        width: '30px', height: '30px', borderRadius: '8px',
+                        backgroundColor: 'rgba(211, 47, 47, 0.08)', border: 'none',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', color: '#D32F2F',
+                      }}
+                      title="Delete"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Host Section */}
@@ -1124,6 +1278,88 @@ export default function CircleDetailView({
                 disabled={saving}
               >
                 {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Circle Meetup Modal */}
+      {showEditCircleMeetupModal && editingCircleMeetup && (
+        <div style={styles.modalOverlay} onClick={() => setShowEditCircleMeetupModal(false)}>
+          <div style={styles.editModal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.editModalHeader}>
+              <h3 style={styles.modalTitle}>Edit Meetup</h3>
+              <button style={styles.closeButton} onClick={() => setShowEditCircleMeetupModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={styles.editModalBody}>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Topic</label>
+                <input
+                  type="text"
+                  value={editingCircleMeetup.topic}
+                  onChange={(e) => setEditingCircleMeetup({ ...editingCircleMeetup, topic: e.target.value })}
+                  style={styles.formInput}
+                  placeholder="Meetup topic"
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Date</label>
+                <input
+                  type="date"
+                  value={editingCircleMeetup.date}
+                  onChange={(e) => setEditingCircleMeetup({ ...editingCircleMeetup, date: e.target.value })}
+                  style={styles.formInput}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Time</label>
+                <input
+                  type="time"
+                  value={editingCircleMeetup.time}
+                  onChange={(e) => setEditingCircleMeetup({ ...editingCircleMeetup, time: e.target.value })}
+                  style={styles.formInput}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Location</label>
+                <input
+                  type="text"
+                  value={editingCircleMeetup.location}
+                  onChange={(e) => setEditingCircleMeetup({ ...editingCircleMeetup, location: e.target.value })}
+                  style={styles.formInput}
+                  placeholder="Virtual, city name, or venue"
+                />
+              </div>
+            </div>
+            <div style={styles.editModalFooter}>
+              <button style={styles.cancelButton} onClick={() => setShowEditCircleMeetupModal(false)}>
+                Cancel
+              </button>
+              <button style={styles.saveButton} onClick={handleUpdateCircleMeetup}>
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Circle Meetup Confirmation */}
+      {showDeleteCircleMeetupConfirm && (
+        <div style={styles.modalOverlay} onClick={() => { setShowDeleteCircleMeetupConfirm(false); setDeletingCircleMeetupId(null); }}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <h3 style={styles.modalTitle}>Delete Meetup?</h3>
+            <p style={styles.modalText}>
+              This will remove the meetup for all circle members. This action cannot be undone.
+            </p>
+            <div style={styles.modalActions}>
+              <button style={styles.cancelButton} onClick={() => { setShowDeleteCircleMeetupConfirm(false); setDeletingCircleMeetupId(null); }}>
+                Cancel
+              </button>
+              <button style={styles.confirmLeaveButton} onClick={() => handleDeleteCircleMeetup(deletingCircleMeetupId)}>
+                Delete
               </button>
             </div>
           </div>
