@@ -179,7 +179,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
   if (!profile) {
     return (
-      <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 16px', fontFamily: FONT }}>
+      <div style={{ width: '100%', fontFamily: FONT }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
           <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
             <ChevronLeft size={20} />
@@ -202,7 +202,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
     <>
       <style>{keyframeStyles}</style>
 
-      <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 16px 60px', fontFamily: FONT, minHeight: '100vh' }}>
+      <div className="profile-container" style={{ fontFamily: FONT, minHeight: '100vh' }}>
 
         {/* ─── Top Nav ─── */}
         <div style={{
@@ -239,26 +239,30 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         <div style={{ textAlign: 'center', paddingTop: 8, paddingBottom: 4, ...fadeIn(0.05) }}>
           {/* Avatar */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-            <div style={{ position: 'relative', width: 96, height: 96 }}>
+            <div className="profile-avatar" style={{ position: 'relative', borderRadius: '50%' }}>
               {profile.profile_picture ? (
                 <img
                   src={profile.profile_picture}
                   alt={profile.name}
+                  className="profile-avatar"
                   style={{
-                    width: 96, height: 96, borderRadius: 48, objectFit: 'cover',
+                    borderRadius: '50%', objectFit: 'cover',
                     boxShadow: `0 4px 16px ${COLORS.shadowMd}`,
                   }}
                 />
               ) : (
-                <div style={{
-                  width: 96, height: 96, borderRadius: 48,
-                  background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.brown700})`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: COLORS.white, fontFamily: DISPLAY_FONT, fontWeight: 600,
-                  fontSize: 38, letterSpacing: 1,
-                  boxShadow: `0 4px 16px ${COLORS.shadowMd}`,
-                }}>
-                  {(profile.name || '?')[0].toUpperCase()}
+                <div
+                  className="profile-avatar"
+                  style={{
+                    borderRadius: '50%',
+                    background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.brown700})`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: COLORS.white, fontFamily: DISPLAY_FONT, fontWeight: 600,
+                    letterSpacing: 1,
+                    boxShadow: `0 4px 16px ${COLORS.shadowMd}`,
+                  }}
+                >
+                  <span className="profile-avatar-initial">{(profile.name || '?')[0].toUpperCase()}</span>
                 </div>
               )}
               <div style={{
@@ -271,8 +275,8 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           </div>
 
           {/* Name */}
-          <h1 style={{
-            fontFamily: DISPLAY_FONT, fontSize: 30, fontWeight: 700,
+          <h1 className="profile-name" style={{
+            fontFamily: DISPLAY_FONT, fontWeight: 700,
             color: COLORS.brown900, letterSpacing: -0.3, margin: 0,
           }}>
             {profile.name}
@@ -280,9 +284,9 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
           {/* Hook / Headline */}
           {profile.hook && (
-            <p style={{
-              fontFamily: FONT, fontSize: 14.5, color: COLORS.brown400,
-              marginTop: 6, lineHeight: 1.4, maxWidth: 340, margin: '6px auto 0',
+            <p className="profile-hook" style={{
+              fontFamily: FONT, color: COLORS.brown400,
+              marginTop: 6, lineHeight: 1.4, marginLeft: 'auto', marginRight: 'auto',
               fontStyle: 'italic',
             }}>
               {profile.hook}
@@ -302,23 +306,23 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
           {/* Compact role + location */}
           {(roleText || locationText) && (
-            <div style={{
+            <div className="profile-role-row" style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              gap: 14, marginTop: 14, flexWrap: 'wrap',
+              flexWrap: 'wrap',
             }}>
               {roleText && (
-                <span style={{
+                <span className="profile-role-text" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
-                  fontFamily: FONT, fontSize: 13, color: COLORS.brown500, fontWeight: 500,
+                  fontFamily: FONT, color: COLORS.brown500, fontWeight: 500,
                 }}>
                   <Briefcase size={14} color={COLORS.brown300} />
                   {roleText}
                 </span>
               )}
               {locationText && (
-                <span style={{
+                <span className="profile-role-text" style={{
                   display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontFamily: FONT, fontSize: 13, color: COLORS.brown500, fontWeight: 500,
+                  fontFamily: FONT, color: COLORS.brown500, fontWeight: 500,
                 }}>
                   <MapPin size={14} color={COLORS.brown300} />
                   {locationText}
@@ -360,17 +364,19 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         {!isOwnProfile && isConnected && (
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, ...fadeIn(0.1) }}>
             <button
+              className="profile-cta-btn"
               onClick={() => onNavigate?.('messages', { chatId: userId, chatType: 'user' })}
               style={{
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 gap: 8, background: COLORS.accent, color: COLORS.white, border: 'none',
-                borderRadius: 14, padding: '12px 22px',
-                fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                borderRadius: 14,
+                fontFamily: FONT, fontWeight: 600, cursor: 'pointer',
               }}
             >
               <MessageCircle size={16} /> Message
             </button>
             <button
+              className="profile-cta-btn"
               onClick={() => onNavigate?.('scheduleMeetup', {
                 type: 'coffee',
                 scheduleConnectionId: userId,
@@ -380,8 +386,8 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 gap: 8, background: 'transparent', color: COLORS.brown600,
                 border: `1.5px solid ${COLORS.brown200}`,
-                borderRadius: 14, padding: '12px 22px',
-                fontFamily: FONT, fontWeight: 600, fontSize: 14, cursor: 'pointer',
+                borderRadius: 14,
+                fontFamily: FONT, fontWeight: 600, cursor: 'pointer',
               }}
             >
               <Coffee size={16} /> Coffee Chat
@@ -401,10 +407,10 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                 flex: 1, background: COLORS.bgCard, borderRadius: 14,
                 padding: '14px 8px', textAlign: 'center',
               }}>
-                <div style={{ fontFamily: FONT, fontWeight: 800, fontSize: 22, color: COLORS.brown700, lineHeight: 1 }}>
+                <div className="profile-stat-value" style={{ fontFamily: FONT, fontWeight: 800, color: COLORS.brown700, lineHeight: 1 }}>
                   {stat.value}
                 </div>
-                <div style={{ fontFamily: FONT, fontSize: 11.5, color: COLORS.brown400, marginTop: 4, fontWeight: 500 }}>
+                <div className="profile-stat-label" style={{ fontFamily: FONT, color: COLORS.brown400, marginTop: 4, fontWeight: 500 }}>
                   {stat.label}
                 </div>
               </div>
@@ -412,40 +418,15 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           </div>
         </div>
 
-        {/* ─── Divider ─── */}
-        <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '24px 0' }} />
-
-        {/* ─── About ─── */}
-        {(profile.bio || profile.hook) && (
-          <div style={fadeIn(0.15)}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              fontFamily: FONT, fontWeight: 700, fontSize: 14,
-              color: COLORS.brown700, marginBottom: 12,
-              textTransform: 'uppercase', letterSpacing: 0.8,
-            }}>
-              About
-            </div>
-            {profile.bio && (
-              <p style={{
-                fontFamily: FONT, fontSize: 14, color: COLORS.brown600,
-                lineHeight: 1.65, background: COLORS.bgCard,
-                borderRadius: 14, padding: '16px 18px', margin: 0,
-              }}>
-                {profile.bio}
-              </p>
-            )}
-          </div>
-        )}
 
         {/* ─── Shared Circles ─── */}
         {mutualCircles.length > 0 && (
           <>
             <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '24px 0' }} />
             <div style={fadeIn(0.21)}>
-              <div style={{
+              <div className="profile-section-label" style={{
                 display: 'flex', alignItems: 'center', gap: 7,
-                fontFamily: FONT, fontWeight: 700, fontSize: 14,
+                fontFamily: FONT, fontWeight: 700,
                 color: COLORS.brown700, marginBottom: 12,
                 textTransform: 'uppercase', letterSpacing: 0.8,
               }}>
@@ -457,12 +438,13 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                   const memberCount = circle.connection_group_members?.[0]?.count;
                   return (
                     <button
+                      className="profile-circle-chip"
                       key={circle.id}
                       onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 10,
                         background: COLORS.bgCard, border: 'none', borderRadius: 14,
-                        padding: '12px 16px', cursor: 'pointer', width: '100%',
+                        cursor: 'pointer', width: '100%',
                         textAlign: 'left',
                       }}
                     >
@@ -475,7 +457,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                         <Users size={16} color={COLORS.brown500} />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: FONT, fontWeight: 600, fontSize: 13.5, color: COLORS.brown700 }}>{circle.name}</div>
+                        <div className="profile-circle-name" style={{ fontFamily: FONT, fontWeight: 600, color: COLORS.brown700 }}>{circle.name}</div>
                         {memberCount != null && (
                           <div style={{ fontFamily: FONT, fontSize: 11.5, color: COLORS.brown400, marginTop: 1 }}>
                             {memberCount} {memberCount === 1 ? 'member' : 'members'}
@@ -601,9 +583,9 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         )}
 
         {/* ─── Tagline ─── */}
-        <div style={{ textAlign: 'center', marginTop: 40, ...fadeIn(0.33) }}>
+        <div className="profile-tagline" style={{ textAlign: 'center', ...fadeIn(0.33) }}>
           <span style={{
-            fontFamily: DISPLAY_FONT, fontSize: 16, color: COLORS.brown300, fontStyle: 'italic',
+            fontFamily: DISPLAY_FONT, color: COLORS.brown300, fontStyle: 'italic',
           }}>
             Find your circle. Move forward.
           </span>
@@ -616,4 +598,53 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 const keyframeStyles = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap');
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .profile-container { width: 100%; padding: 0 0 60px; }
+  .profile-avatar { width: 96px; height: 96px; }
+  .profile-avatar-initial { font-size: 38px; }
+  .profile-name { font-size: 28px; }
+  .profile-hook { font-size: 14.5px; max-width: 90%; }
+  .profile-role-row { gap: 14px; margin-top: 14px; }
+  .profile-role-text { font-size: 13px; }
+  .profile-stat-value { font-size: 22px; }
+  .profile-stat-label { font-size: 11.5px; }
+  .profile-cta-btn { padding: 12px 22px; font-size: 14px; }
+  .profile-section-label { font-size: 14px; }
+  .profile-circle-chip { padding: 12px 16px; }
+  .profile-circle-name { font-size: 13.5px; }
+  .profile-tagline { font-size: 16px; margin-top: 40px; }
+
+  @media (min-width: 640px) {
+    .profile-container { padding: 0 0 72px; }
+    .profile-avatar { width: 116px; height: 116px; }
+    .profile-avatar-initial { font-size: 46px; }
+    .profile-name { font-size: 34px; }
+    .profile-hook { font-size: 15.5px; max-width: 80%; }
+    .profile-role-row { gap: 18px; margin-top: 16px; }
+    .profile-role-text { font-size: 14px; }
+    .profile-stat-value { font-size: 26px; }
+    .profile-stat-label { font-size: 12.5px; }
+    .profile-cta-btn { padding: 14px 28px; font-size: 15px; }
+    .profile-section-label { font-size: 15px; }
+    .profile-circle-chip { padding: 14px 18px; }
+    .profile-circle-name { font-size: 14.5px; }
+    .profile-tagline { font-size: 17px; margin-top: 48px; }
+  }
+
+  @media (min-width: 1024px) {
+    .profile-container { padding: 0 0 80px; }
+    .profile-avatar { width: 128px; height: 128px; }
+    .profile-avatar-initial { font-size: 50px; }
+    .profile-name { font-size: 38px; }
+    .profile-hook { font-size: 16px; max-width: 70%; }
+    .profile-role-row { gap: 20px; margin-top: 18px; }
+    .profile-role-text { font-size: 15px; }
+    .profile-stat-value { font-size: 28px; }
+    .profile-stat-label { font-size: 13px; }
+    .profile-cta-btn { padding: 14px 32px; font-size: 15px; }
+    .profile-section-label { font-size: 15px; }
+    .profile-circle-chip { padding: 16px 20px; }
+    .profile-circle-name { font-size: 15px; }
+    .profile-tagline { font-size: 18px; margin-top: 56px; }
+  }
 `;

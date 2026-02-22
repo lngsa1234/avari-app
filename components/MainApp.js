@@ -2921,7 +2921,7 @@ function MainApp({ currentUser, onSignOut }) {
                   icon: <Users style={{ width: '20px', height: '20px', color: '#9B7EC4' }} />,
                   gradient: 'linear-gradient(135deg, #F5F0FA 0%, #E8DEF5 100%)',
                   iconBg: '#E8DEF5',
-                  onClick: () => setCurrentView('connections'),
+                  onClick: () => setCurrentView('connectionGroups'),
                   badge: potentialConnections.length > 3 ? potentialConnections.length : null,
                   thumbnail: '/thumbnails/coffee-chat.svg'
                 }
