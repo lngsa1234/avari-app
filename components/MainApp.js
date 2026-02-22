@@ -3563,7 +3563,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'admin' && currentUser.role === 'admin' && <AdminDashboard />}
         {currentView === 'adminFeedback' && currentUser.role === 'admin' && <AdminFeedbackView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'allEvents' && <AllEventsView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
-        {currentView === 'allPeople' && <AllPeopleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'allPeople' && <AllPeopleView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} previousView={previousView} />}
         {currentView === 'allCircles' && <AllCirclesView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
         {currentView === 'createCircle' && <CreateCircleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'circleDetail' && <CircleDetailView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} circleId={selectedCircleId} previousView={previousView} />}

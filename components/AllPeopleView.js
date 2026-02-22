@@ -81,6 +81,7 @@ export default function AllPeopleView({
   currentUser,
   supabase,
   onNavigate,
+  previousView,
 }) {
   const [people, setPeople] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -309,7 +310,7 @@ export default function AllPeopleView({
         marginBottom: '8px',
       }}>
         <button
-          onClick={() => onNavigate?.('discover')}
+          onClick={() => onNavigate?.(previousView || 'home')}
           style={{
             display: 'flex',
             alignItems: 'center',
