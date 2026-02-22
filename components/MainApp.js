@@ -1205,12 +1205,22 @@ function MainApp({ currentUser, onSignOut }) {
         potentialMap[userId].meetup_count++
       })
 
-      // Convert to array and sort by most shared meetups
+      // Convert to array, flatten profile data, and sort by most shared meetups
       const potentialArray = Object.values(potentialMap)
+        .map(p => ({
+          id: p.id,
+          name: p.user?.name,
+          career: p.user?.career,
+          city: p.user?.city,
+          state: p.user?.state,
+          bio: p.user?.bio,
+          profile_picture: p.user?.profile_picture,
+          shared_meetups: p.shared_meetups,
+          meetup_count: p.meetup_count,
+        }))
         .sort((a, b) => b.meetup_count - a.meetup_count)
 
       setPotentialConnections(potentialArray)
-      console.log('Loaded potential connections:', potentialArray.length)
     } catch (err) {
       console.error('Error loading potential connections:', err)
       setPotentialConnections([])
