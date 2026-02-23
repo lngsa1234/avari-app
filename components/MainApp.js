@@ -490,6 +490,7 @@ function MainApp({ currentUser, onSignOut }) {
           .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
           .or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
           .gte('date', cutoff)
+          .not('status', 'eq', 'cancelled')
           .order('date', { ascending: true })
           .order('time', { ascending: true })
 
@@ -502,6 +503,7 @@ function MainApp({ currentUser, onSignOut }) {
           .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
           .is('circle_id', null)
           .gte('date', cutoff)
+          .not('status', 'eq', 'cancelled')
           .order('date', { ascending: true })
           .order('time', { ascending: true })
 
@@ -1508,22 +1510,22 @@ function MainApp({ currentUser, onSignOut }) {
   }
 
   const handleDeleteMeetup = async (meetupId) => {
-    if (!confirm('Are you sure you want to delete this meetup?')) {
+    if (!confirm('Are you sure you want to cancel this meetup?')) {
       return
     }
 
     try {
       const { error } = await supabase
         .from('meetups')
-        .delete()
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
         .eq('id', meetupId)
 
       if (error) {
-        alert('Error deleting meetup: ' + error.message)
+        alert('Error cancelling meetup: ' + error.message)
       } else {
         // Reload meetups from database
         await loadMeetupsFromDatabase()
-        alert('Meetup deleted successfully!')
+        alert('Meetup cancelled successfully!')
       }
     } catch (err) {
       alert('Error: ' + err.message)
@@ -1823,6 +1825,9 @@ function MainApp({ currentUser, onSignOut }) {
       const GRACE_PERIOD_HOURS = 4
 
       const filteredMeetups = meetups.filter(meetup => {
+        // Skip cancelled/completed meetups
+        if (meetup.status === 'cancelled' || meetup.status === 'completed') return false
+
         try {
           let meetupDate
           const dateStr = meetup.date

@@ -562,7 +562,35 @@ export default function CircleDetailView({
 
         {/* Regular Schedule */}
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Regular Schedule</h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={styles.sectionTitle}>Regular Schedule</h3>
+            {isHost && (
+              <button
+                onClick={() => onNavigate?.('scheduleMeetup', {
+                  meetupType: 'circle',
+                  scheduleCircleId: circle.id,
+                  scheduleCircleName: circle.name
+                })}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  backgroundColor: 'transparent',
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: colors.primary,
+                  cursor: 'pointer',
+                  fontFamily: fonts.sans,
+                }}
+              >
+                <Edit3 size={14} />
+                Edit
+              </button>
+            )}
+          </div>
 
           {/* Schedule grid */}
           <div style={{
@@ -935,7 +963,7 @@ export default function CircleDetailView({
                   fontFamily: fonts.sans,
                 }}
               >
-                {showAllPast ? 'Show less' : `View all ${pastMeetups.length} sessions`}
+                {showAllPast ? 'Show less' : `View all ${pastMeetups.length} past sessions`}
               </button>
             )}
           </div>
@@ -969,19 +997,6 @@ export default function CircleDetailView({
 
         {isMember && (
           <div style={styles.memberActions}>
-            {circle?.cadence === 'As needed' && circle?.creator_id === currentUser?.id && (
-              <button
-                style={styles.actionButton}
-                onClick={() => onNavigate?.('scheduleMeetup', {
-                  meetupType: 'circle',
-                  scheduleCircleId: circle.id,
-                  scheduleCircleName: circle.name
-                })}
-              >
-                <Plus size={18} />
-                <span>Schedule</span>
-              </button>
-            )}
             <button style={styles.actionButton} onClick={handleEnterChat}>
               <MessageCircle size={18} />
               <span>Chat</span>

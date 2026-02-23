@@ -5,6 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat } from 'lucide-react';
+import { reconcileCircleMeetups } from '@/lib/circleMeetupHelpers';
 
 
 // Color palette - Mocha Brown theme
@@ -88,6 +89,9 @@ export default function ScheduleMeetupView({
             setScheduledTime(`${hours.toString().padStart(2, '0')}:${minutes}`);
           }
         }
+        // Prefill topic
+        setTopic(`${fullCircleData.name} Meetup`);
+
         if (fullCircleData.meeting_day) {
           // Set the date to the next occurrence of the meeting day
           const DAYS = { 'Sunday': 0, 'Monday': 1, 'Tuesday': 2, 'Wednesday': 3, 'Thursday': 4, 'Friday': 5, 'Saturday': 6 };
@@ -282,8 +286,7 @@ export default function ScheduleMeetupView({
       const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
       const timeOfDay = `${displayHours}:${String(minutes).padStart(2, '0')} ${period}`;
 
-      // Update circle's cadence settings — getOrCreateCircleMeetups will
-      // auto-generate meetups on the new schedule when the page loads
+      // Update circle's cadence settings
       await supabase
         .from('connection_groups')
         .update({
@@ -292,6 +295,14 @@ export default function ScheduleMeetupView({
           time_of_day: timeOfDay,
         })
         .eq('id', selectedCircle.id);
+
+      // Reconcile meetup records with the new schedule
+      await reconcileCircleMeetups(selectedCircle.id, {
+        ...selectedCircle,
+        meeting_day: repeatDay,
+        cadence: repeatCadence,
+        time_of_day: timeOfDay,
+      });
     } else {
       // Non-repeating: insert a single meetup
       const { data: existingOnDate } = await supabase
