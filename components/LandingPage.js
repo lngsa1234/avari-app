@@ -1,9 +1,53 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 
+const colors = {
+  primary: '#8B6F5C',
+  primaryDark: '#6B5344',
+  cream: '#FDF8F3',
+  warmWhite: '#FFFAF5',
+  text: '#3F1906',
+  textLight: '#584233',
+  textMuted: 'rgba(107, 86, 71, 0.77)',
+  textSoft: '#A89080',
+  border: 'rgba(139, 111, 92, 0.15)',
+  borderMedium: 'rgba(139, 111, 92, 0.25)',
+  selectedBg: 'rgba(139, 111, 92, 0.08)',
+  success: '#4CAF50',
+  error: '#C0392B',
+  errorBg: 'rgba(192, 57, 43, 0.06)',
+  errorBorder: 'rgba(192, 57, 43, 0.15)',
+  successBg: 'rgba(76, 175, 80, 0.06)',
+  successBorder: 'rgba(76, 175, 80, 0.15)',
+  gradient: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
+}
+
+const fonts = {
+  serif: '"Lora", Georgia, serif',
+  sans: '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+}
+
+const useWindowSize = () => {
+  const [windowSize, setWindowSize] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
+  })
+
+  useEffect(() => {
+    const handleResize = () => setWindowSize({ width: window.innerWidth })
+    window.addEventListener('resize', handleResize)
+    handleResize()
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  return windowSize
+}
+
 export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSignIn }) {
+  const { width: windowWidth } = useWindowSize()
+  const isMobile = windowWidth < 640
+
   const [showLogin, setShowLogin] = useState(false)
   const [showEmailSignup, setShowEmailSignup] = useState(false)
   const [showForgotPassword, setShowForgotPassword] = useState(false)
@@ -16,7 +60,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
     setMessage(null)
     try {
       const result = await onEmailSignUp(email, password)
-      
+
       if (result?.needsVerification) {
         setMessage({
           type: 'success',
@@ -68,14 +112,14 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
     }
 
     try {
-      const { error } = await import('@/lib/supabase').then(mod => 
+      const { error } = await import('@/lib/supabase').then(mod =>
         mod.supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/reset-password`
         })
       )
-      
+
       if (error) throw error
-      
+
       setMessage({
         type: 'success',
         text: `Password reset link sent to ${email}. Check your inbox!`
@@ -88,38 +132,147 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
     }
   }
 
+  // Shared styles
+  const pageStyle = {
+    minHeight: '100vh',
+    background: colors.gradient,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: isMobile ? 16 : 24,
+  }
+
+  const cardStyle = {
+    maxWidth: 420,
+    width: '100%',
+    background: colors.warmWhite,
+    borderRadius: 24,
+    boxShadow: '0 16px 48px rgba(139, 111, 92, 0.12)',
+    padding: isMobile ? '28px 24px' : '36px 32px',
+  }
+
+  const inputStyle = {
+    width: '100%',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 12,
+    padding: '13px 16px',
+    fontSize: 15,
+    fontFamily: fonts.sans,
+    color: colors.text,
+    background: '#fff',
+    outline: 'none',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.2s',
+  }
+
+  const primaryButtonStyle = {
+    width: '100%',
+    background: colors.primary,
+    color: '#fff',
+    fontWeight: 600,
+    fontFamily: fonts.sans,
+    fontSize: 15,
+    padding: '13px 0',
+    borderRadius: 12,
+    border: 'none',
+    cursor: 'pointer',
+    transition: 'background 0.2s',
+  }
+
+  const secondaryButtonStyle = {
+    width: '100%',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.textMuted,
+    padding: '8px 0',
+    transition: 'color 0.2s',
+  }
+
+  const renderMessage = () => {
+    if (!message) return null
+    const isError = message.type === 'error'
+    return (
+      <div style={{
+        marginBottom: 16,
+        padding: 12,
+        borderRadius: 12,
+        background: isError ? colors.errorBg : colors.successBg,
+        border: `1px solid ${isError ? colors.errorBorder : colors.successBorder}`,
+        color: isError ? colors.error : colors.success,
+        fontSize: 14,
+        fontFamily: fonts.sans,
+        lineHeight: 1.5,
+      }}>
+        {message.text}
+      </div>
+    )
+  }
+
+  const renderPasswordInput = (onEnter) => (
+    <div style={{ position: 'relative' }}>
+      <input
+        type={showPassword ? 'text' : 'password'}
+        placeholder={showEmailSignup ? 'Password (min 6 characters)' : 'Password'}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        onKeyPress={(e) => e.key === 'Enter' && onEnter()}
+        style={{ ...inputStyle, paddingRight: 48 }}
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword(!showPassword)}
+        style={{
+          position: 'absolute',
+          right: 12,
+          top: '50%',
+          transform: 'translateY(-50%)',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: colors.textSoft,
+          display: 'flex',
+          padding: 4,
+        }}
+      >
+        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+      </button>
+    </div>
+  )
+
   // Forgot Password Screen
   if (showForgotPassword) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Reset Password</h2>
-            <p className="text-gray-600">Enter your email to receive a password reset link</p>
+      <div style={pageStyle}>
+        <div style={cardStyle}>
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{
+              fontSize: 24,
+              fontWeight: 700,
+              fontFamily: fonts.serif,
+              color: colors.text,
+              margin: '0 0 8px',
+            }}>
+              Reset Password
+            </h2>
+            <p style={{ color: colors.textLight, fontFamily: fonts.sans, fontSize: 15, margin: 0 }}>
+              Enter your email to receive a password reset link
+            </p>
           </div>
 
-          {message && (
-            <div className={`mb-4 p-3 rounded-lg ${
-              message.type === 'error' 
-                ? 'bg-red-50 text-red-700 border border-red-200' 
-                : 'bg-green-50 text-green-700 border border-green-200'
-            }`}>
-              {message.text}
-            </div>
-          )}
+          {renderMessage()}
 
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <input
               type="email"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3"
+              style={inputStyle}
             />
-            <button
-              onClick={handleForgotPassword}
-              className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
-            >
+            <button onClick={handleForgotPassword} style={primaryButtonStyle}>
               Send Reset Link
             </button>
             <button
@@ -128,7 +281,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
                 setShowLogin(true)
                 setMessage(null)
               }}
-              className="w-full text-gray-600 hover:text-gray-800 text-sm"
+              style={secondaryButtonStyle}
             >
               Back to Login
             </button>
@@ -141,52 +294,35 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   // Login Screen
   if (showLogin) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome Back</h2>
-            <p className="text-gray-600">Log in to your CircleW account</p>
+      <div style={pageStyle}>
+        <div style={cardStyle}>
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{
+              fontSize: 24,
+              fontWeight: 700,
+              fontFamily: fonts.serif,
+              color: colors.text,
+              margin: '0 0 8px',
+            }}>
+              Welcome Back
+            </h2>
+            <p style={{ color: colors.textLight, fontFamily: fonts.sans, fontSize: 15, margin: 0 }}>
+              Log in to your account
+            </p>
           </div>
 
-          {message && (
-            <div className={`mb-4 p-3 rounded-lg ${
-              message.type === 'error' 
-                ? 'bg-red-50 text-red-700 border border-red-200' 
-                : 'bg-green-50 text-green-700 border border-green-200'
-            }`}>
-              {message.text}
-            </div>
-          )}
+          {renderMessage()}
 
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <input
               type="email"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3"
+              style={inputStyle}
             />
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleEmailSignIn()}
-                className="w-full border border-gray-300 rounded-lg p-3 pr-12"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-            <button
-              onClick={handleEmailSignIn}
-              className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
-            >
+            {renderPasswordInput(handleEmailSignIn)}
+            <button onClick={handleEmailSignIn} style={primaryButtonStyle}>
               Log In
             </button>
             <button
@@ -195,7 +331,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
                 setShowLogin(false)
                 setMessage(null)
               }}
-              className="w-full text-stone-600 hover:text-stone-700 text-sm"
+              style={{ ...secondaryButtonStyle, color: colors.primary, fontWeight: 500 }}
             >
               Forgot password?
             </button>
@@ -204,7 +340,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
                 setShowLogin(false)
                 setMessage(null)
               }}
-              className="w-full text-gray-600 hover:text-gray-800 text-sm"
+              style={secondaryButtonStyle}
             >
               Back
             </button>
@@ -217,51 +353,35 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   // Signup Screen
   if (showEmailSignup) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Sign Up with Email</h2>
+      <div style={pageStyle}>
+        <div style={cardStyle}>
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{
+              fontSize: 24,
+              fontWeight: 700,
+              fontFamily: fonts.serif,
+              color: colors.text,
+              margin: '0 0 8px',
+            }}>
+              Create Account
+            </h2>
+            <p style={{ color: colors.textLight, fontFamily: fonts.sans, fontSize: 15, margin: 0 }}>
+              Sign up with your email
+            </p>
           </div>
 
-          {message && (
-            <div className={`mb-4 p-3 rounded-lg ${
-              message.type === 'error' 
-                ? 'bg-red-50 text-red-700 border border-red-200' 
-                : 'bg-green-50 text-green-700 border border-green-200'
-            }`}>
-              {message.text}
-            </div>
-          )}
+          {renderMessage()}
 
-          <div className="space-y-4">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <input
               type="email"
               placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-3"
+              style={inputStyle}
             />
-            <div className="relative">
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Password (min 6 characters)"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleEmailSignUp()}
-                className="w-full border border-gray-300 rounded-lg p-3 pr-12"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
-            <button
-              onClick={handleEmailSignUp}
-              className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
-            >
+            {renderPasswordInput(handleEmailSignUp)}
+            <button onClick={handleEmailSignUp} style={primaryButtonStyle}>
               Sign Up
             </button>
             <button
@@ -269,7 +389,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
                 setShowEmailSignup(false)
                 setMessage(null)
               }}
-              className="w-full text-gray-600 hover:text-gray-800 text-sm"
+              style={secondaryButtonStyle}
             >
               Back
             </button>
@@ -281,37 +401,68 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
 
   // Main Landing Page
   return (
-    <div className="min-h-screen bg-gradient-to-br from-amber-50 via-stone-100 to-amber-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
-        <div className="text-center mb-8">
-          {/* CircleW Logo */}
-          <div className="flex justify-center mb-4">
-            <svg width="80" height="80" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="45" fill="none" stroke="#78716c" strokeWidth="4" strokeDasharray="220 60"/>
-              <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill="#78716c">W</text>
+    <div style={pageStyle}>
+      <div style={cardStyle}>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          {/* Logo */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <svg width="72" height="72" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="45" fill="none" stroke={colors.primary} strokeWidth="4" strokeDasharray="220 60"/>
+              <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill={colors.primary}>W</text>
             </svg>
           </div>
-          <h1 className="text-4xl font-bold text-stone-700 mb-2">CircleW</h1>
-          <p className="text-stone-600">Connect and grow through coffee</p>
-          <p className="text-xs text-stone-400 mt-1">Women's Networking Community</p>
+          <h1 style={{
+            fontSize: 36,
+            fontWeight: 700,
+            fontFamily: fonts.serif,
+            color: colors.text,
+            margin: '0 0 8px',
+          }}>
+            CircleW
+          </h1>
+          <p style={{
+            color: colors.textLight,
+            fontFamily: fonts.sans,
+            fontSize: 16,
+            margin: '0 0 4px',
+          }}>
+            Connect and grow through coffee
+          </p>
+          <p style={{
+            color: colors.textSoft,
+            fontFamily: fonts.sans,
+            fontSize: 12,
+            margin: 0,
+          }}>
+            Women's Networking Community
+          </p>
         </div>
 
-        {message && (
-          <div className={`mb-4 p-3 rounded-lg ${
-            message.type === 'error' 
-              ? 'bg-red-50 text-red-700 border border-red-200' 
-              : 'bg-green-50 text-green-700 border border-green-200'
-          }`}>
-            {message.text}
-          </div>
-        )}
+        {renderMessage()}
 
-        <div className="space-y-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Google button */}
           <button
             onClick={handleGoogleSignIn}
-            className="w-full bg-white border-2 border-gray-300 hover:border-rose-400 text-gray-700 font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-3"
+            style={{
+              width: '100%',
+              background: '#fff',
+              border: `2px solid ${colors.border}`,
+              borderRadius: 12,
+              padding: '13px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+              cursor: 'pointer',
+              fontFamily: fonts.sans,
+              fontWeight: 500,
+              fontSize: 15,
+              color: colors.text,
+              transition: 'border-color 0.2s',
+            }}
           >
-            <svg className="w-6 h-6" viewBox="0 0 24 24">
+            <svg width="22" height="22" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -320,34 +471,31 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
             Continue with Google
           </button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">or</span>
-            </div>
+          {/* Divider */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
+            <div style={{ flex: 1, height: 1, background: colors.border }} />
+            <span style={{ fontSize: 13, color: colors.textSoft, fontFamily: fonts.sans }}>or</span>
+            <div style={{ flex: 1, height: 1, background: colors.border }} />
           </div>
 
-          <button
-            onClick={() => setShowEmailSignup(true)}
-            className="w-full bg-stone-600 hover:bg-stone-700 text-white font-medium py-3 rounded-lg"
-          >
+          <button onClick={() => setShowEmailSignup(true)} style={primaryButtonStyle}>
             Sign up with Email
           </button>
 
-          <div className="text-center">
+          <div style={{ textAlign: 'center' }}>
             <button
               onClick={() => setShowLogin(true)}
-              className="text-stone-600 hover:text-stone-700 font-medium text-sm"
+              style={{ ...secondaryButtonStyle, color: colors.primary, fontWeight: 500 }}
             >
               Already have an account? Log in
             </button>
           </div>
         </div>
 
-        <div className="mt-8 text-center">
-          <p className="text-sm text-stone-500 mb-4">Join a community of women building meaningful connections</p>
+        <div style={{ marginTop: 28, textAlign: 'center' }}>
+          <p style={{ fontSize: 14, color: colors.textMuted, fontFamily: fonts.sans, margin: 0 }}>
+            Join a community of women building meaningful connections
+          </p>
         </div>
       </div>
     </div>

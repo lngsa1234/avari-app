@@ -36,48 +36,47 @@ export function AuthProvider({ children }) {
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .maybeSingle()
 
       if (!mountedRef.current) return
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          // Profile doesn't exist - create it automatically
-          console.log('📝 Profile not found, creating...')
-          
-          // Extract first name from email or use default
-          const defaultName = userEmail 
-            ? userEmail.split('@')[0].split('.')[0] 
-            : 'User'
-          
-          const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              id: userId,
-              email: userEmail || user?.email,
-              name: userName || defaultName, // ← Add name field!
-              timezone: detectedTz,
-            })
-            .select()
-            .single()
+        // Real error — log and handle
+        console.error('❌ Profile error:', error.code)
+        setStatus('signed_out')
+        setProfile(null)
+      } else if (!data) {
+        // Profile doesn't exist — create it
+        console.log('📝 Profile not found, creating...')
 
-          if (createError) {
-            console.error('❌ Profile creation error:', createError)
-            // If auto-creation fails, show profile setup screen
-            setStatus('profile_missing')
-            setProfile(null)
-          } else {
-            console.log('✅ Profile created:', newProfile.email)
-            setProfile(newProfile)
-            setStatus('ready')
-          }
-        } else {
-          console.error('❌ Profile error:', error.code)
-          setStatus('signed_out')
+        // Extract first name from email or use default
+        const defaultName = userEmail
+          ? userEmail.split('@')[0].split('.')[0]
+          : 'User'
+
+        const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            email: userEmail || user?.email,
+            name: userName || defaultName,
+            timezone: detectedTz,
+          })
+          .select()
+          .single()
+
+        if (createError) {
+          console.error('❌ Profile creation error:', createError)
+          setStatus('profile_missing')
           setProfile(null)
+        } else {
+          console.log('✅ Profile created:', newProfile.email)
+          setProfile(newProfile)
+          setStatus('ready')
         }
-      } else if (data) {
+      } else {
+        // Profile loaded
         console.log('✅ Profile loaded:', data.name || data.email)
         // Auto-detect timezone if not yet set
         if (!data.timezone) {

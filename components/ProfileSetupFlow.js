@@ -22,7 +22,59 @@ import {
   Lock
 } from 'lucide-react';
 
-// Predefined lists for autocomplete
+// ============================================================
+// DESIGN TOKENS
+// ============================================================
+
+const colors = {
+  primary: '#8B6F5C',
+  primaryDark: '#6B5344',
+  primaryLight: '#A89080',
+  cream: '#FDF8F3',
+  warmWhite: '#FFFAF5',
+  text: '#3F1906',
+  textLight: '#584233',
+  textMuted: 'rgba(107, 86, 71, 0.77)',
+  textSoft: '#A89080',
+  border: 'rgba(139, 111, 92, 0.15)',
+  borderMedium: 'rgba(139, 111, 92, 0.25)',
+  selectedBg: 'rgba(139, 111, 92, 0.08)',
+  success: '#4CAF50',
+  sage: '#8B9E7E',
+  gold: '#C9A96E',
+  gradient: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
+};
+
+const fonts = {
+  serif: '"Lora", Georgia, serif',
+  sans: '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+};
+
+// ============================================================
+// RESPONSIVE HOOK
+// ============================================================
+
+const useWindowSize = () => {
+  const [windowSize, setWindowSize] = useState({
+    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowSize({ width: window.innerWidth });
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return windowSize;
+};
+
+// ============================================================
+// DATA
+// ============================================================
+
 const COMMON_ROLES = [
   'Product Manager', 'Software Engineer', 'Data Scientist', 'UX Designer',
   'Marketing Manager', 'Sales Executive', 'Operations Manager', 'HR Manager',
@@ -56,7 +108,7 @@ const CAREER_STAGES = [
     subtitle: 'Early Career',
     description: 'Building foundations, learning the ropes',
     icon: Sparkles,
-    color: 'from-green-400 to-emerald-500'
+    gradient: 'linear-gradient(135deg, #8B9E7E, #6B8C5E)',
   },
   {
     id: 'scaling',
@@ -64,7 +116,7 @@ const CAREER_STAGES = [
     subtitle: 'Mid-Career',
     description: 'Growing expertise, seeking new challenges',
     icon: TrendingUp,
-    color: 'from-blue-400 to-indigo-500'
+    gradient: 'linear-gradient(135deg, #C9A96E, #B08D4F)',
   },
   {
     id: 'leading',
@@ -72,7 +124,7 @@ const CAREER_STAGES = [
     subtitle: 'Manager / Director',
     description: 'Managing teams, driving strategy',
     icon: Briefcase,
-    color: 'from-purple-400 to-violet-500'
+    gradient: 'linear-gradient(135deg, #A88070, #8B6F5C)',
   },
   {
     id: 'legacy',
@@ -80,7 +132,7 @@ const CAREER_STAGES = [
     subtitle: 'Executive / Founder',
     description: 'Shaping industries, mentoring others',
     icon: Crown,
-    color: 'from-amber-400 to-orange-500'
+    gradient: 'linear-gradient(135deg, #D4A06A, #C48B4A)',
   }
 ];
 
@@ -90,31 +142,38 @@ const VIBE_OPTIONS = [
     label: 'I need advice',
     caption: "I'm looking for a mentor or a guide.",
     icon: Heart,
-    color: 'from-rose-400 to-pink-500',
-    bgColor: 'bg-rose-50',
-    borderColor: 'border-rose-300'
+    gradient: 'linear-gradient(135deg, #D4837A, #C96B6B)',
+    selectedBg: 'rgba(212, 131, 122, 0.08)',
+    selectedBorder: '#D4837A',
   },
   {
     id: 'vent',
     label: 'I want to vent',
     caption: 'I need a safe space with peers who get it.',
     icon: MessageCircle,
-    color: 'from-amber-400 to-orange-500',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-300'
+    gradient: 'linear-gradient(135deg, #D4A06A, #C48B4A)',
+    selectedBg: 'rgba(212, 160, 106, 0.08)',
+    selectedBorder: '#D4A06A',
   },
   {
     id: 'grow',
     label: 'I want to grow',
     caption: "I'm here to sharpen my skills.",
     icon: Rocket,
-    color: 'from-emerald-400 to-green-500',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-300'
+    gradient: 'linear-gradient(135deg, #8B9E7E, #6B8C5E)',
+    selectedBg: 'rgba(139, 158, 126, 0.08)',
+    selectedBorder: '#8B9E7E',
   }
 ];
 
+// ============================================================
+// COMPONENT
+// ============================================================
+
 export default function ProfileSetupFlow({ session, supabase, onComplete }) {
+  const { width: windowWidth } = useWindowSize();
+  const isMobile = windowWidth < 640;
+
   const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [roleSearch, setRoleSearch] = useState('');
@@ -155,30 +214,20 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
   // Validation for each step
   const isStepValid = () => {
     switch (currentStepData.id) {
-      case 'vibe':
-        return !!profile.vibe_category;
-      case 'role':
-        return !!profile.career && !!profile.industry;
-      case 'stage':
-        return !!profile.career_stage;
-      case 'hook':
-        return true; // Optional
-      case 'hosting':
-        return true; // Always valid (boolean)
-      case 'identity':
-        return !!profile.name?.trim();
-      case 'photo':
-        return true; // Optional
-      case 'preview':
-        return true;
-      default:
-        return false;
+      case 'vibe': return !!profile.vibe_category;
+      case 'role': return !!profile.career && !!profile.industry;
+      case 'stage': return !!profile.career_stage;
+      case 'hook': return true;
+      case 'hosting': return true;
+      case 'identity': return !!profile.name?.trim();
+      case 'photo': return true;
+      case 'preview': return true;
+      default: return false;
     }
   };
 
   const handleNext = async () => {
     if (currentStep === totalSteps - 1) {
-      // Final step - save and complete
       await handleSave();
     } else {
       setCurrentStep(prev => prev + 1);
@@ -234,7 +283,6 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file');
       return;
@@ -289,497 +337,899 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     return name.slice(0, 2).toUpperCase() || '?';
   };
 
-  // Render step content
-  const renderStepContent = () => {
-    switch (currentStepData.id) {
-      case 'vibe':
-        return (
-          <div className="space-y-4">
-            {VIBE_OPTIONS.map((vibe) => {
-              const Icon = vibe.icon;
-              const isSelected = profile.vibe_category === vibe.id;
+  // ============================================================
+  // SHARED STYLES
+  // ============================================================
 
-              return (
-                <button
-                  key={vibe.id}
-                  onClick={() => setProfile(prev => ({ ...prev, vibe_category: vibe.id }))}
-                  className={`w-full p-5 rounded-2xl border-2 transition-all text-left ${
-                    isSelected
-                      ? `${vibe.bgColor} ${vibe.borderColor} shadow-lg scale-[1.02]`
-                      : 'bg-white border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${vibe.color} flex items-center justify-center`}>
-                      <Icon className="w-7 h-7 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-gray-800 text-lg">{vibe.label}</p>
-                      <p className="text-gray-600 text-sm mt-0.5">{vibe.caption}</p>
-                    </div>
-                    {isSelected && (
-                      <Check className="w-6 h-6 text-green-500" />
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        );
-
-      case 'role':
-        return (
-          <div className="space-y-6">
-            {/* Role Input */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Your Role
-              </label>
-              <div className="relative">
-                <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={profile.career}
-                  onChange={(e) => {
-                    setProfile(prev => ({ ...prev, career: e.target.value }));
-                    setRoleSearch(e.target.value);
-                    setShowRoleDropdown(true);
-                  }}
-                  onFocus={() => setShowRoleDropdown(true)}
-                  onBlur={() => setTimeout(() => setShowRoleDropdown(false), 200)}
-                  placeholder="e.g. Product Manager"
-                  className="w-full pl-11 pr-4 py-3.5 border border-gray-300 rounded-xl text-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                />
-                {showRoleDropdown && filteredRoles.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                    {filteredRoles.slice(0, 8).map((role) => (
-                      <button
-                        key={role}
-                        onClick={() => {
-                          setProfile(prev => ({ ...prev, career: role }));
-                          setShowRoleDropdown(false);
-                        }}
-                        className="w-full px-4 py-2.5 text-left hover:bg-gray-50 text-gray-700"
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Industry Input */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Your Industry
-              </label>
-
-              {/* Popular chips */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                {INDUSTRIES.filter(i => i.popular).map((ind) => (
-                  <button
-                    key={ind.id}
-                    onClick={() => setProfile(prev => ({ ...prev, industry: ind.label }))}
-                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                      profile.industry === ind.label
-                        ? 'bg-indigo-500 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {ind.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={profile.industry}
-                  onChange={(e) => {
-                    setProfile(prev => ({ ...prev, industry: e.target.value }));
-                    setIndustrySearch(e.target.value);
-                  }}
-                  placeholder="Search or select industry"
-                  className="w-full pl-11 pr-4 py-3.5 border border-gray-300 rounded-xl text-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case 'stage':
-        return (
-          <div className="space-y-3">
-            {CAREER_STAGES.map((stage) => {
-              const Icon = stage.icon;
-              const isSelected = profile.career_stage === stage.id;
-
-              return (
-                <button
-                  key={stage.id}
-                  onClick={() => setProfile(prev => ({ ...prev, career_stage: stage.id }))}
-                  className={`w-full p-4 rounded-xl border-2 transition-all text-left ${
-                    isSelected
-                      ? 'border-indigo-500 bg-indigo-50 shadow-md'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stage.color} flex items-center justify-center`}>
-                      <Icon className="w-6 h-6 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-gray-800">{stage.label}</p>
-                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                          {stage.subtitle}
-                        </span>
-                      </div>
-                      <p className="text-gray-600 text-sm mt-0.5">{stage.description}</p>
-                    </div>
-                    {isSelected && (
-                      <Check className="w-5 h-5 text-indigo-500" />
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        );
-
-      case 'hook':
-        return (
-          <div className="space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-              <div className="flex items-start gap-3">
-                <Lightbulb className="w-5 h-5 text-amber-500 mt-0.5" />
-                <div>
-                  <p className="text-sm text-amber-800 font-medium">Examples:</p>
-                  <p className="text-sm text-amber-700 mt-1">
-                    "Negotiating raises" / "SEO strategies" / "Managing burnout" / "Career pivots"
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ask me about:
-              </label>
-              <textarea
-                value={profile.hook}
-                onChange={(e) => setProfile(prev => ({ ...prev, hook: e.target.value }))}
-                placeholder="What expertise can you share with others?"
-                maxLength={150}
-                className="w-full p-4 border border-gray-300 rounded-xl text-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 h-32 resize-none"
-              />
-              <p className="text-right text-sm text-gray-500 mt-1">
-                {profile.hook?.length || 0}/150
-              </p>
-            </div>
-          </div>
-        );
-
-      case 'hosting':
-        return (
-          <div className="space-y-4">
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
-              <div className="flex items-start gap-3">
-                <Calendar className="w-5 h-5 text-indigo-500 mt-0.5" />
-                <p className="text-sm text-indigo-800">
-                  When community members request a meetup topic you're knowledgeable about, we'll notify you. No obligation to host!
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                onClick={() => setProfile(prev => ({ ...prev, open_to_hosting: true }))}
-                className={`p-6 rounded-2xl border-2 transition-all text-center ${
-                  profile.open_to_hosting
-                    ? 'border-green-500 bg-green-50 shadow-md'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-              >
-                <div className="w-16 h-16 mx-auto rounded-full bg-green-100 flex items-center justify-center mb-3">
-                  <Check className="w-8 h-8 text-green-600" />
-                </div>
-                <p className="font-semibold text-gray-800 text-lg">Yes</p>
-                <p className="text-sm text-gray-600 mt-1">I'm open to it</p>
-              </button>
-
-              <button
-                onClick={() => setProfile(prev => ({ ...prev, open_to_hosting: false }))}
-                className={`p-6 rounded-2xl border-2 transition-all text-center ${
-                  !profile.open_to_hosting
-                    ? 'border-gray-500 bg-gray-50 shadow-md'
-                    : 'border-gray-200 bg-white hover:border-gray-300'
-                }`}
-              >
-                <div className="w-16 h-16 mx-auto rounded-full bg-gray-100 flex items-center justify-center mb-3">
-                  <span className="text-2xl text-gray-500">-</span>
-                </div>
-                <p className="font-semibold text-gray-800 text-lg">Not now</p>
-                <p className="text-sm text-gray-600 mt-1">Maybe later</p>
-              </button>
-            </div>
-          </div>
-        );
-
-      case 'identity':
-        return (
-          <div className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Full Name *
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="text"
-                  value={profile.name}
-                  onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Enter your full name"
-                  className="w-full pl-11 pr-4 py-3.5 border border-gray-300 rounded-xl text-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                This name will appear on your profile and in meetups
-              </p>
-            </div>
-
-            <div className="border-t border-gray-200 pt-5">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Location <span className="text-gray-400">(optional)</span>
-              </label>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      type="text"
-                      value={profile.city}
-                      onChange={(e) => setProfile(prev => ({ ...prev, city: e.target.value }))}
-                      placeholder="City"
-                      className="w-full pl-11 pr-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    value={profile.state}
-                    onChange={(e) => setProfile(prev => ({ ...prev, state: e.target.value }))}
-                    placeholder="State / Province"
-                    className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-                <input
-                  type="text"
-                  value={profile.country}
-                  onChange={(e) => setProfile(prev => ({ ...prev, country: e.target.value }))}
-                  placeholder="Country"
-                  className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                />
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Helps us show you local meetups and events
-              </p>
-            </div>
-          </div>
-        );
-
-      case 'photo':
-        return (
-          <div className="text-center">
-            {/* Photo preview */}
-            <div className="relative w-40 h-40 mx-auto mb-6">
-              {profile.profile_picture ? (
-                <img
-                  src={profile.profile_picture}
-                  alt="Profile"
-                  className="w-full h-full rounded-full object-cover border-4 border-white shadow-xl"
-                />
-              ) : (
-                <div className="w-full h-full rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white text-4xl font-bold border-4 border-white shadow-xl">
-                  {getInitials()}
-                </div>
-              )}
-              <div className="absolute -bottom-2 -right-2 w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center shadow-lg">
-                <Camera className="w-5 h-5 text-white" />
-              </div>
-            </div>
-
-            {/* Upload buttons */}
-            <div className="space-y-3">
-              <label className="block w-full">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                />
-                <div className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-colors">
-                  <Upload className="w-5 h-5" />
-                  Upload Photo
-                </div>
-              </label>
-
-              <label className="block w-full">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="user"
-                  onChange={handlePhotoUpload}
-                  className="hidden"
-                />
-                <div className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2 transition-colors">
-                  <Camera className="w-5 h-5" />
-                  Take Photo
-                </div>
-              </label>
-            </div>
-
-            <p className="text-sm text-gray-500 mt-4">
-              A real photo increases your connection rate by 2x
-            </p>
-          </div>
-        );
-
-      case 'preview':
-        return (
-          <div className="flex flex-col items-center">
-            {/* Preview Card */}
-            <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl border border-gray-200 p-6 mb-6">
-              {/* Photo */}
-              <div className="flex justify-center mb-4">
-                {profile.profile_picture ? (
-                  <img
-                    src={profile.profile_picture}
-                    alt="Profile"
-                    className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-lg"
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white text-3xl font-bold border-4 border-white shadow-lg">
-                    {getInitials()}
-                  </div>
-                )}
-              </div>
-
-              {/* Name */}
-              <h3 className="text-xl font-bold text-gray-800 text-center">
-                {profile.name || 'Your Name'}
-              </h3>
-
-              {/* Role & Industry */}
-              <p className="text-gray-600 text-center mt-1">
-                {profile.career || 'Your Role'}
-                {profile.industry && ` in ${profile.industry}`}
-              </p>
-
-              {/* Location */}
-              {(profile.city || profile.state || profile.country) && (
-                <p className="text-gray-500 text-sm text-center mt-1">
-                  {[profile.city, profile.state, profile.country].filter(Boolean).join(', ')}
-                </p>
-              )}
-
-              {/* Hook */}
-              {profile.hook && (
-                <div className="mt-4 bg-gray-50 rounded-lg p-3">
-                  <p className="text-sm text-gray-600 italic">
-                    Ask me about: "{profile.hook}"
-                  </p>
-                </div>
-              )}
-
-              {/* Lock indicator */}
-              <div className="flex items-center justify-center gap-2 mt-4 text-gray-400 text-sm">
-                <Lock className="w-4 h-4" />
-                Connect to chat
-              </div>
-            </div>
-
-            <p className="text-gray-600 text-center">
-              This is how others will see you in the community
-            </p>
-          </div>
-        );
-
-      default:
-        return null;
-    }
+  const inputStyle = {
+    width: '100%',
+    padding: '14px 16px 14px 44px',
+    border: `1px solid ${colors.border}`,
+    borderRadius: 12,
+    fontSize: isMobile ? 16 : 18,
+    fontFamily: fonts.sans,
+    color: colors.text,
+    background: '#fff',
+    outline: 'none',
+    transition: 'border-color 0.2s',
   };
 
-  return (
-    <div className="fixed inset-0 bg-gradient-to-br from-indigo-50 via-white to-rose-50 z-50 flex flex-col">
-      {/* Progress bar */}
-      <div className="h-1.5 bg-gray-200">
-        <div
-          className="h-full bg-gradient-to-r from-indigo-500 to-rose-500 transition-all duration-500"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
+  const inputStyleNoIcon = {
+    ...inputStyle,
+    paddingLeft: 16,
+  };
 
-      {/* Header */}
-      <div className="px-6 pt-8 pb-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-500">
-            Step {currentStep + 1} of {totalSteps}
-          </span>
-          {!currentStepData.required && (
-            <button
-              onClick={handleSkip}
-              className="text-sm text-gray-500 hover:text-gray-700"
-            >
-              Skip for now
-            </button>
+  const inputIconStyle = {
+    position: 'absolute',
+    left: 12,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: 20,
+    height: 20,
+    color: colors.textSoft,
+  };
+
+  const labelStyle = {
+    display: 'block',
+    fontSize: 14,
+    fontWeight: 500,
+    fontFamily: fonts.sans,
+    color: colors.textLight,
+    marginBottom: 8,
+  };
+
+  // ============================================================
+  // STEP RENDERERS
+  // ============================================================
+
+  const renderVibeStep = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {VIBE_OPTIONS.map((vibe) => {
+        const Icon = vibe.icon;
+        const isSelected = profile.vibe_category === vibe.id;
+
+        return (
+          <button
+            key={vibe.id}
+            onClick={() => setProfile(prev => ({ ...prev, vibe_category: vibe.id }))}
+            style={{
+              width: '100%',
+              padding: isMobile ? 16 : 20,
+              borderRadius: 16,
+              border: `2px solid ${isSelected ? vibe.selectedBorder : colors.border}`,
+              background: isSelected ? vibe.selectedBg : '#fff',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.2s',
+              transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+              boxShadow: isSelected ? '0 4px 16px rgba(139, 111, 92, 0.12)' : 'none',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{
+                width: isMobile ? 48 : 56,
+                height: isMobile ? 48 : 56,
+                borderRadius: 12,
+                background: vibe.gradient,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Icon style={{ width: isMobile ? 24 : 28, height: isMobile ? 24 : 28, color: '#fff' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontWeight: 600, color: colors.text, fontSize: isMobile ? 16 : 18, fontFamily: fonts.sans, margin: 0 }}>
+                  {vibe.label}
+                </p>
+                <p style={{ color: colors.textLight, fontSize: 14, fontFamily: fonts.sans, marginTop: 2, margin: 0 }}>
+                  {vibe.caption}
+                </p>
+              </div>
+              {isSelected && (
+                <Check style={{ width: 24, height: 24, color: colors.success, flexShrink: 0 }} />
+              )}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const renderRoleStep = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Role Input */}
+      <div>
+        <label style={labelStyle}>Your Role</label>
+        <div style={{ position: 'relative' }}>
+          <Briefcase style={inputIconStyle} />
+          <input
+            type="text"
+            value={profile.career}
+            onChange={(e) => {
+              setProfile(prev => ({ ...prev, career: e.target.value }));
+              setRoleSearch(e.target.value);
+              setShowRoleDropdown(true);
+            }}
+            onFocus={() => setShowRoleDropdown(true)}
+            onBlur={() => setTimeout(() => setShowRoleDropdown(false), 200)}
+            placeholder="e.g. Product Manager"
+            style={inputStyle}
+          />
+          {showRoleDropdown && filteredRoles.length > 0 && (
+            <div style={{
+              position: 'absolute',
+              zIndex: 10,
+              width: '100%',
+              marginTop: 4,
+              background: '#fff',
+              border: `1px solid ${colors.border}`,
+              borderRadius: 12,
+              boxShadow: '0 8px 24px rgba(139, 111, 92, 0.12)',
+              maxHeight: 192,
+              overflowY: 'auto',
+            }}>
+              {filteredRoles.slice(0, 8).map((role) => (
+                <button
+                  key={role}
+                  onClick={() => {
+                    setProfile(prev => ({ ...prev, career: role }));
+                    setShowRoleDropdown(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px 16px',
+                    textAlign: 'left',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: colors.textLight,
+                    fontFamily: fonts.sans,
+                    fontSize: 15,
+                  }}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
           )}
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">
-          {currentStepData.title}
-        </h1>
-        <p className="text-gray-600 mt-1">
-          {currentStepData.subtitle}
+      </div>
+
+      {/* Industry Input */}
+      <div>
+        <label style={labelStyle}>Your Industry</label>
+
+        {/* Popular chips */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+          {INDUSTRIES.filter(i => i.popular).map((ind) => {
+            const isSelected = profile.industry === ind.label;
+            return (
+              <button
+                key={ind.id}
+                onClick={() => setProfile(prev => ({ ...prev, industry: ind.label }))}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 20,
+                  fontSize: 14,
+                  fontWeight: 500,
+                  fontFamily: fonts.sans,
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  background: isSelected ? colors.primary : 'rgba(139, 111, 92, 0.08)',
+                  color: isSelected ? '#fff' : colors.textLight,
+                }}
+              >
+                {ind.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ position: 'relative' }}>
+          <Building2 style={inputIconStyle} />
+          <input
+            type="text"
+            value={profile.industry}
+            onChange={(e) => {
+              setProfile(prev => ({ ...prev, industry: e.target.value }));
+              setIndustrySearch(e.target.value);
+            }}
+            placeholder="Search or select industry"
+            style={inputStyle}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStageStep = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {CAREER_STAGES.map((stage) => {
+        const Icon = stage.icon;
+        const isSelected = profile.career_stage === stage.id;
+
+        return (
+          <button
+            key={stage.id}
+            onClick={() => setProfile(prev => ({ ...prev, career_stage: stage.id }))}
+            style={{
+              width: '100%',
+              padding: 16,
+              borderRadius: 12,
+              border: `2px solid ${isSelected ? colors.primary : colors.border}`,
+              background: isSelected ? colors.selectedBg : '#fff',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.2s',
+              boxShadow: isSelected ? '0 4px 12px rgba(139, 111, 92, 0.1)' : 'none',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{
+                width: 48,
+                height: 48,
+                borderRadius: 12,
+                background: stage.gradient,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Icon style={{ width: 24, height: 24, color: '#fff' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <p style={{ fontWeight: 600, color: colors.text, fontFamily: fonts.sans, margin: 0, fontSize: 15 }}>
+                    {stage.label}
+                  </p>
+                  <span style={{
+                    fontSize: 12,
+                    color: colors.textMuted,
+                    background: 'rgba(139, 111, 92, 0.06)',
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    fontFamily: fonts.sans,
+                  }}>
+                    {stage.subtitle}
+                  </span>
+                </div>
+                <p style={{ color: colors.textLight, fontSize: 14, fontFamily: fonts.sans, marginTop: 2, margin: 0 }}>
+                  {stage.description}
+                </p>
+              </div>
+              {isSelected && (
+                <Check style={{ width: 20, height: 20, color: colors.primary, flexShrink: 0 }} />
+              )}
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const renderHookStep = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <p style={{
+        fontSize: 14,
+        color: colors.textMuted,
+        fontFamily: fonts.sans,
+        fontStyle: 'italic',
+        margin: 0,
+        lineHeight: 1.5,
+      }}>
+        e.g. "Fundraising for early-stage startups" or "Building high-performing teams"
+      </p>
+
+      <div>
+        <label style={labelStyle}>Ask me about:</label>
+        <textarea
+          value={profile.hook}
+          onChange={(e) => setProfile(prev => ({ ...prev, hook: e.target.value }))}
+          placeholder="What expertise can you share with others?"
+          maxLength={150}
+          style={{
+            width: '100%',
+            padding: 16,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            fontSize: isMobile ? 16 : 18,
+            fontFamily: fonts.sans,
+            color: colors.text,
+            background: '#fff',
+            outline: 'none',
+            height: 128,
+            resize: 'none',
+            transition: 'border-color 0.2s',
+            boxSizing: 'border-box',
+          }}
+        />
+        <p style={{ textAlign: 'right', fontSize: 14, color: colors.textMuted, fontFamily: fonts.sans, marginTop: 4 }}>
+          {profile.hook?.length || 0}/150
+        </p>
+      </div>
+    </div>
+  );
+
+  const renderHostingStep = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{
+        background: colors.selectedBg,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 8,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <Calendar style={{ width: 20, height: 20, color: colors.primary, marginTop: 2, flexShrink: 0 }} />
+          <p style={{ fontSize: 14, color: colors.textLight, fontFamily: fonts.sans, margin: 0 }}>
+            When community members request a meetup topic you're knowledgeable about, we'll notify you. No obligation to host!
+          </p>
+        </div>
+      </div>
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr',
+        gap: 16,
+      }}>
+        <button
+          onClick={() => setProfile(prev => ({ ...prev, open_to_hosting: true }))}
+          style={{
+            padding: isMobile ? 20 : 24,
+            borderRadius: 16,
+            border: `2px solid ${profile.open_to_hosting ? colors.success : colors.border}`,
+            background: profile.open_to_hosting ? 'rgba(76, 175, 80, 0.06)' : '#fff',
+            cursor: 'pointer',
+            textAlign: 'center',
+            transition: 'all 0.2s',
+            boxShadow: profile.open_to_hosting ? '0 4px 12px rgba(76, 175, 80, 0.1)' : 'none',
+          }}
+        >
+          <div style={{
+            width: isMobile ? 56 : 64,
+            height: isMobile ? 56 : 64,
+            margin: '0 auto 12px',
+            borderRadius: '50%',
+            background: 'rgba(76, 175, 80, 0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Check style={{ width: 32, height: 32, color: colors.success }} />
+          </div>
+          <p style={{ fontWeight: 600, color: colors.text, fontSize: isMobile ? 16 : 18, fontFamily: fonts.sans, margin: 0 }}>Yes</p>
+          <p style={{ fontSize: 14, color: colors.textLight, fontFamily: fonts.sans, marginTop: 4 }}>I'm open to it</p>
+        </button>
+
+        <button
+          onClick={() => setProfile(prev => ({ ...prev, open_to_hosting: false }))}
+          style={{
+            padding: isMobile ? 20 : 24,
+            borderRadius: 16,
+            border: `2px solid ${!profile.open_to_hosting ? colors.primaryLight : colors.border}`,
+            background: !profile.open_to_hosting ? colors.selectedBg : '#fff',
+            cursor: 'pointer',
+            textAlign: 'center',
+            transition: 'all 0.2s',
+            boxShadow: !profile.open_to_hosting ? '0 4px 12px rgba(139, 111, 92, 0.1)' : 'none',
+          }}
+        >
+          <div style={{
+            width: isMobile ? 56 : 64,
+            height: isMobile ? 56 : 64,
+            margin: '0 auto 12px',
+            borderRadius: '50%',
+            background: 'rgba(139, 111, 92, 0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <span style={{ fontSize: 24, color: colors.textSoft }}>-</span>
+          </div>
+          <p style={{ fontWeight: 600, color: colors.text, fontSize: isMobile ? 16 : 18, fontFamily: fonts.sans, margin: 0 }}>Not now</p>
+          <p style={{ fontSize: 14, color: colors.textLight, fontFamily: fonts.sans, marginTop: 4 }}>Maybe later</p>
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderIdentityStep = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div>
+        <label style={labelStyle}>Full Name *</label>
+        <div style={{ position: 'relative' }}>
+          <User style={inputIconStyle} />
+          <input
+            type="text"
+            value={profile.name}
+            onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
+            placeholder="Enter your full name"
+            style={inputStyle}
+          />
+        </div>
+        <p style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.sans, marginTop: 4 }}>
+          This name will appear on your profile and in meetups
         </p>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 pb-6">
-        {renderStepContent()}
+      <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 20 }}>
+        <label style={labelStyle}>
+          Location <span style={{ color: colors.textSoft }}>(optional)</span>
+        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+            gap: 12,
+          }}>
+            <div style={{ position: 'relative' }}>
+              <MapPin style={inputIconStyle} />
+              <input
+                type="text"
+                value={profile.city}
+                onChange={(e) => setProfile(prev => ({ ...prev, city: e.target.value }))}
+                placeholder="City"
+                style={inputStyle}
+              />
+            </div>
+            <input
+              type="text"
+              value={profile.state}
+              onChange={(e) => setProfile(prev => ({ ...prev, state: e.target.value }))}
+              placeholder="State / Province"
+              style={inputStyleNoIcon}
+            />
+          </div>
+          <input
+            type="text"
+            value={profile.country}
+            onChange={(e) => setProfile(prev => ({ ...prev, country: e.target.value }))}
+            placeholder="Country"
+            style={inputStyleNoIcon}
+          />
+        </div>
+        <p style={{ fontSize: 12, color: colors.textMuted, fontFamily: fonts.sans, marginTop: 4 }}>
+          Helps us show you local meetups and events
+        </p>
       </div>
+    </div>
+  );
 
-      {/* Navigation */}
-      <div className="px-6 pb-8 pt-4 bg-white border-t border-gray-100">
-        <div className="flex gap-3">
-          {currentStep > 0 && (
-            <button
-              onClick={handleBack}
-              className="flex-1 flex items-center justify-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3.5 rounded-xl font-medium transition"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              Back
-            </button>
+  const renderPhotoStep = () => {
+    const avatarSize = isMobile ? 120 : 160;
+    return (
+      <div style={{ textAlign: 'center' }}>
+        {/* Photo preview */}
+        <div style={{ position: 'relative', width: avatarSize, height: avatarSize, margin: '0 auto 24px' }}>
+          {profile.profile_picture ? (
+            <img
+              src={profile.profile_picture}
+              alt="Profile"
+              style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '4px solid #fff',
+                boxShadow: '0 8px 24px rgba(139, 111, 92, 0.15)',
+              }}
+            />
+          ) : (
+            <div style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #D4837A, #C96B6B)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontSize: isMobile ? 32 : 40,
+              fontWeight: 700,
+              fontFamily: fonts.sans,
+              border: '4px solid #fff',
+              boxShadow: '0 8px 24px rgba(139, 111, 92, 0.15)',
+            }}>
+              {getInitials()}
+            </div>
           )}
+          <div style={{
+            position: 'absolute',
+            bottom: -4,
+            right: -4,
+            width: 40,
+            height: 40,
+            background: colors.primary,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 12px rgba(139, 111, 92, 0.2)',
+          }}>
+            <Camera style={{ width: 20, height: 20, color: '#fff' }} />
+          </div>
+        </div>
 
-          <button
-            onClick={handleNext}
-            disabled={!isStepValid() || isLoading}
-            className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-500 to-rose-500 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed text-white py-3.5 rounded-xl font-semibold transition"
-          >
-            {isLoading ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : currentStep === totalSteps - 1 ? (
-              "Let's Go!"
-            ) : (
-              <>
-                Next
-                <ChevronRight className="w-5 h-5" />
-              </>
-            )}
-          </button>
+        {/* Upload buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <label style={{ display: 'block', width: '100%', cursor: 'pointer' }}>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              style={{ display: 'none' }}
+            />
+            <div style={{
+              width: '100%',
+              background: colors.primary,
+              color: '#fff',
+              fontWeight: 500,
+              fontFamily: fonts.sans,
+              fontSize: 15,
+              padding: '12px 0',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              transition: 'opacity 0.2s',
+            }}>
+              <Upload style={{ width: 20, height: 20 }} />
+              Upload Photo
+            </div>
+          </label>
+
+          <label style={{ display: 'block', width: '100%', cursor: 'pointer' }}>
+            <input
+              type="file"
+              accept="image/*"
+              capture="user"
+              onChange={handlePhotoUpload}
+              style={{ display: 'none' }}
+            />
+            <div style={{
+              width: '100%',
+              background: 'rgba(139, 111, 92, 0.08)',
+              color: colors.textLight,
+              fontWeight: 500,
+              fontFamily: fonts.sans,
+              fontSize: 15,
+              padding: '12px 0',
+              borderRadius: 12,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              transition: 'background 0.2s',
+            }}>
+              <Camera style={{ width: 20, height: 20 }} />
+              Take Photo
+            </div>
+          </label>
+        </div>
+
+        <p style={{ fontSize: 14, color: colors.textMuted, fontFamily: fonts.sans, marginTop: 16 }}>
+          A real photo increases your connection rate by 2x
+        </p>
+      </div>
+    );
+  };
+
+  const renderPreviewStep = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* Preview Card */}
+      <div style={{
+        width: '100%',
+        maxWidth: 360,
+        background: '#fff',
+        borderRadius: 16,
+        boxShadow: '0 8px 32px rgba(139, 111, 92, 0.12)',
+        border: `1px solid ${colors.border}`,
+        padding: 24,
+        marginBottom: 24,
+      }}>
+        {/* Photo */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+          {profile.profile_picture ? (
+            <img
+              src={profile.profile_picture}
+              alt="Profile"
+              style={{
+                width: 96,
+                height: 96,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '4px solid #fff',
+                boxShadow: '0 4px 16px rgba(139, 111, 92, 0.12)',
+              }}
+            />
+          ) : (
+            <div style={{
+              width: 96,
+              height: 96,
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #D4837A, #C96B6B)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontSize: 30,
+              fontWeight: 700,
+              fontFamily: fonts.sans,
+              border: '4px solid #fff',
+              boxShadow: '0 4px 16px rgba(139, 111, 92, 0.12)',
+            }}>
+              {getInitials()}
+            </div>
+          )}
+        </div>
+
+        {/* Name */}
+        <h3 style={{
+          fontSize: 20,
+          fontWeight: 700,
+          fontFamily: fonts.serif,
+          color: colors.text,
+          textAlign: 'center',
+          margin: 0,
+        }}>
+          {profile.name || 'Your Name'}
+        </h3>
+
+        {/* Role & Industry */}
+        <p style={{ color: colors.textLight, textAlign: 'center', fontFamily: fonts.sans, fontSize: 15, marginTop: 4 }}>
+          {profile.career || 'Your Role'}
+          {profile.industry && ` in ${profile.industry}`}
+        </p>
+
+        {/* Location */}
+        {(profile.city || profile.state || profile.country) && (
+          <p style={{ color: colors.textMuted, fontSize: 14, textAlign: 'center', fontFamily: fonts.sans, marginTop: 4 }}>
+            {[profile.city, profile.state, profile.country].filter(Boolean).join(', ')}
+          </p>
+        )}
+
+        {/* Hook */}
+        {profile.hook && (
+          <div style={{
+            marginTop: 16,
+            background: colors.selectedBg,
+            borderRadius: 10,
+            padding: 12,
+          }}>
+            <p style={{ fontSize: 14, color: colors.textLight, fontStyle: 'italic', fontFamily: fonts.sans, margin: 0 }}>
+              Ask me about: "{profile.hook}"
+            </p>
+          </div>
+        )}
+
+        {/* Lock indicator */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          marginTop: 16,
+          color: colors.textSoft,
+          fontSize: 14,
+          fontFamily: fonts.sans,
+        }}>
+          <Lock style={{ width: 16, height: 16 }} />
+          Connect to chat
         </div>
       </div>
+
+      <p style={{ color: colors.textLight, textAlign: 'center', fontFamily: fonts.sans, fontSize: 15 }}>
+        This is how others will see you in the community
+      </p>
+    </div>
+  );
+
+  const renderStepContent = () => {
+    switch (currentStepData.id) {
+      case 'vibe': return renderVibeStep();
+      case 'role': return renderRoleStep();
+      case 'stage': return renderStageStep();
+      case 'hook': return renderHookStep();
+      case 'hosting': return renderHostingStep();
+      case 'identity': return renderIdentityStep();
+      case 'photo': return renderPhotoStep();
+      case 'preview': return renderPreviewStep();
+      default: return null;
+    }
+  };
+
+  // ============================================================
+  // MAIN RENDER
+  // ============================================================
+
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: colors.gradient,
+      zIndex: 50,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: 'env(safe-area-inset-top)',
+    }}>
+      {/* Centered card container */}
+      <div style={{
+        width: '100%',
+        maxWidth: isMobile ? '100%' : 480,
+        height: isMobile ? '100%' : 'auto',
+        maxHeight: isMobile ? '100%' : '90vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: isMobile ? 'transparent' : colors.warmWhite,
+        borderRadius: isMobile ? 0 : 24,
+        boxShadow: isMobile ? 'none' : '0 16px 48px rgba(139, 111, 92, 0.15)',
+        overflow: 'hidden',
+      }}>
+        {/* Progress bar */}
+        <div style={{ height: 6, background: 'rgba(139, 111, 92, 0.1)', flexShrink: 0 }}>
+          <div style={{
+            height: '100%',
+            background: `linear-gradient(to right, ${colors.primary}, ${colors.gold})`,
+            transition: 'width 0.5s ease',
+            width: `${progress}%`,
+            borderRadius: '0 3px 3px 0',
+          }} />
+        </div>
+
+        {/* Header */}
+        <div style={{
+          padding: isMobile ? '20px 16px 16px' : '28px 28px 16px',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 8,
+          }}>
+            <span style={{
+              fontSize: 14,
+              color: colors.textMuted,
+              fontFamily: fonts.sans,
+            }}>
+              Step {currentStep + 1} of {totalSteps}
+            </span>
+            {!currentStepData.required && (
+              <button
+                onClick={handleSkip}
+                style={{
+                  fontSize: 14,
+                  color: colors.textMuted,
+                  fontFamily: fonts.sans,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                }}
+              >
+                Skip for now
+              </button>
+            )}
+          </div>
+          <h1 style={{
+            fontSize: isMobile ? 22 : 24,
+            fontWeight: 700,
+            fontFamily: fonts.serif,
+            color: colors.text,
+            margin: 0,
+          }}>
+            {currentStepData.title}
+          </h1>
+          <p style={{
+            color: colors.textLight,
+            fontFamily: fonts.sans,
+            fontSize: 15,
+            marginTop: 4,
+          }}>
+            {currentStepData.subtitle}
+          </p>
+        </div>
+
+        {/* Content */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: isMobile ? '0 16px 24px' : '0 28px 24px',
+          WebkitOverflowScrolling: 'touch',
+          minHeight: 0,
+        }}>
+          {renderStepContent()}
+        </div>
+
+        {/* Navigation */}
+        <div style={{
+          padding: isMobile ? '16px 16px' : '16px 28px 24px',
+          paddingBottom: isMobile ? 'max(24px, env(safe-area-inset-bottom))' : 24,
+          background: colors.warmWhite,
+          borderTop: `1px solid ${colors.border}`,
+          flexShrink: 0,
+        }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            {currentStep > 0 && (
+              <button
+                onClick={handleBack}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  background: 'rgba(139, 111, 92, 0.08)',
+                  color: colors.textLight,
+                  padding: '14px 0',
+                  borderRadius: 12,
+                  fontWeight: 500,
+                  fontFamily: fonts.sans,
+                  fontSize: 15,
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s',
+                }}
+              >
+                <ChevronLeft style={{ width: 20, height: 20 }} />
+                Back
+              </button>
+            )}
+
+            <button
+              onClick={handleNext}
+              disabled={!isStepValid() || isLoading}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                background: (!isStepValid() || isLoading) ? colors.primaryLight : colors.primary,
+                color: '#fff',
+                padding: '14px 0',
+                borderRadius: 12,
+                fontWeight: 600,
+                fontFamily: fonts.sans,
+                fontSize: 15,
+                border: 'none',
+                cursor: (!isStepValid() || isLoading) ? 'not-allowed' : 'pointer',
+                opacity: (!isStepValid() || isLoading) ? 0.5 : 1,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {isLoading ? (
+                <div style={{
+                  width: 20,
+                  height: 20,
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderTopColor: '#fff',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+              ) : currentStep === totalSteps - 1 ? (
+                "Let's Go!"
+              ) : (
+                <>
+                  Next
+                  <ChevronRight style={{ width: 20, height: 20 }} />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Spinner animation */}
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 }
