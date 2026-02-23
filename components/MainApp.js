@@ -26,6 +26,7 @@ import MessagesPageView from './MessagesPageView'
 import CoffeeChatsView from './CoffeeChatsView'
 import UserProfileView from './UserProfileView'
 import ScheduleMeetupView from './ScheduleMeetupView'
+import SessionRecapDetailView from './SessionRecapDetailView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import NudgeBanner from './NudgeBanner'
 import { parseLocalDate } from '@/lib/dateUtils'
@@ -66,6 +67,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [selectedChatId, setSelectedChatId] = useState(null)
   const [selectedChatType, setSelectedChatType] = useState(null) // 'user' or 'circle'
   const [selectedUserId, setSelectedUserId] = useState(null)
+  const [selectedRecapId, setSelectedRecapId] = useState(null)
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -117,6 +119,9 @@ function MainApp({ currentUser, onSignOut }) {
       console.log('💬 Setting chatId:', data.chatId, 'type:', data.chatType)
       setSelectedChatId(data.chatId)
       setSelectedChatType(data.chatType || 'user')
+    }
+    if (data.recapId) {
+      setSelectedRecapId(data.recapId)
     }
     // Handle meetups initial view (e.g., 'past' for review recaps)
     if (view === 'meetups' && data.initialView) {
@@ -3536,7 +3541,7 @@ function MainApp({ currentUser, onSignOut }) {
         } : undefined}
       >
         {currentView === 'home' && <HomeView />}
-        {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={setCurrentView} initialView={meetupsInitialView} />}
+        {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={handleNavigate} initialView={meetupsInitialView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={(requestData) => {
@@ -3576,6 +3581,13 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'userProfile' && <UserProfileView currentUser={currentUser} supabase={supabase} userId={selectedUserId} onNavigate={handleNavigate} previousView={previousView} onConnectionRemoved={(userId) => {
           setConnections(prev => prev.filter(c => (c.connected_user?.id || c.id) !== userId));
         }} />}
+        {currentView === 'sessionRecapDetail' && (
+          <SessionRecapDetailView
+            recapId={selectedRecapId}
+            onNavigate={handleNavigate}
+            previousView={previousView}
+          />
+        )}
         {currentView === 'scheduleMeetup' && (
           <ScheduleMeetupView
             currentUser={currentUser}

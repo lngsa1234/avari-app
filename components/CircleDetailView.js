@@ -130,58 +130,66 @@ export default function CircleDetailView({
   const loadCircleDetails = async () => {
     setLoading(true);
     try {
-      // Fetch circle data
-      const { data: circleData, error: circleError } = await supabase
-        .from('connection_groups')
-        .select('*')
-        .eq('id', circleId)
-        .single();
+      // Fetch circle data and members in parallel (both only need circleId)
+      const [circleResult, membersResult] = await Promise.all([
+        supabase
+          .from('connection_groups')
+          .select('*')
+          .eq('id', circleId)
+          .single(),
+        supabase
+          .from('connection_group_members')
+          .select('id, user_id, status, invited_at, responded_at')
+          .eq('group_id', circleId),
+      ]);
 
-      if (circleError) throw circleError;
+      if (circleResult.error) throw circleResult.error;
+      const circleData = circleResult.data;
       setCircle(circleData);
 
-      // Fetch members
-      const { data: membersData, error: membersError } = await supabase
-        .from('connection_group_members')
-        .select('id, user_id, status, invited_at, responded_at')
-        .eq('group_id', circleId);
+      if (membersResult.error) throw membersResult.error;
+      const membersData = membersResult.data;
 
-      if (membersError) throw membersError;
-
-      // Get member profiles
+      // Fetch member profiles, host profile, and meetups in parallel
       const memberUserIds = membersData?.map(m => m.user_id) || [];
-      if (memberUserIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name, career, profile_picture, city, state')
-          .in('id', memberUserIds);
+      const profilesPromise = memberUserIds.length > 0
+        ? supabase
+            .from('profiles')
+            .select('id, name, career, profile_picture, city, state')
+            .in('id', memberUserIds)
+        : Promise.resolve({ data: [] });
 
-        const profileMap = (profiles || []).reduce((acc, p) => {
-          acc[p.id] = p;
-          return acc;
-        }, {});
+      const hostPromise = circleData?.creator_id
+        ? supabase
+            .from('profiles')
+            .select('id, name, career, profile_picture')
+            .eq('id', circleData.creator_id)
+            .single()
+        : Promise.resolve({ data: null });
 
-        const enrichedMembers = membersData.map(m => ({
-          ...m,
-          profile: profileMap[m.user_id] || {},
-        }));
-        setMembers(enrichedMembers);
-      } else {
-        setMembers([]);
+      const meetupsPromise = loadCircleMeetups(circleData);
+
+      const [profilesResult, hostResult] = await Promise.all([
+        profilesPromise,
+        hostPromise,
+        meetupsPromise,
+      ]);
+
+      // Process member profiles
+      const profileMap = (profilesResult.data || []).reduce((acc, p) => {
+        acc[p.id] = p;
+        return acc;
+      }, {});
+      const enrichedMembers = membersData.map(m => ({
+        ...m,
+        profile: profileMap[m.user_id] || {},
+      }));
+      setMembers(enrichedMembers);
+
+      // Set host
+      if (hostResult.data) {
+        setHost(hostResult.data);
       }
-
-      // Fetch host profile
-      if (circleData?.creator_id) {
-        const { data: hostProfile } = await supabase
-          .from('profiles')
-          .select('id, name, career, profile_picture')
-          .eq('id', circleData.creator_id)
-          .single();
-        setHost(hostProfile);
-      }
-
-      // Load circle meetups
-      await loadCircleMeetups(circleData);
     } catch (error) {
       console.error('Error loading circle details:', error);
     } finally {
@@ -193,39 +201,48 @@ export default function CircleDetailView({
     if (!circleData) return;
 
     try {
-      const { meetups, needsMigration } = await getOrCreateCircleMeetups(
-        circleId,
-        circleData,
-        4
-      );
+      const today = new Date().toISOString().split('T')[0];
+      const channelName = `connection-group-${circleId}`;
 
+      // Run all independent queries in parallel
+      const [meetupsResult, pastResult, recapResult] = await Promise.all([
+        getOrCreateCircleMeetups(circleId, circleData, 4),
+        supabase
+          .from('meetups')
+          .select('id, topic, date, time, location, duration, participant_limit, status')
+          .eq('circle_id', circleId)
+          .lt('date', today)
+          .not('status', 'eq', 'cancelled')
+          .order('date', { ascending: false })
+          .limit(10),
+        supabase
+          .from('call_recaps')
+          .select('id, channel_name, created_at, started_at')
+          .eq('channel_name', channelName)
+          .order('created_at', { ascending: false }),
+      ]);
+
+      // Process future meetups
+      const { meetups, needsMigration } = meetupsResult;
       if (needsMigration) {
-        // Fall back to calculated dates if circle_id column doesn't exist
         setUseFallbackDates(true);
         setCircleMeetups([]);
       } else {
         setUseFallbackDates(false);
         setCircleMeetups(meetups);
 
-        // Load user's RSVP status
+        // Load user's RSVP status (depends on meetups result)
         if (meetups.length > 0) {
           const meetupIds = meetups.map(m => m.id);
           const rsvpStatus = await getUserRSVPStatus(meetupIds);
           setUserRSVPs(rsvpStatus);
         }
       }
-      // Load past meetups
-      const today = new Date().toISOString().split('T')[0];
-      const { data: pastData } = await supabase
-        .from('meetups')
-        .select('id, topic, date, time, location, duration, participant_limit')
-        .eq('circle_id', circleId)
-        .lt('date', today)
-        .order('date', { ascending: false })
-        .limit(10);
 
+      // Process past meetups
+      const pastData = pastResult.data;
       if (pastData && pastData.length > 0) {
-        // Get attendee counts for past meetups
+        // Get attendee counts (depends on pastData IDs)
         const pastIds = pastData.map(m => m.id);
         const { data: pastSignups } = await supabase
           .from('meetup_signups')
@@ -243,28 +260,54 @@ export default function CircleDetailView({
         }));
         setPastMeetups(enrichedPast);
 
-        // Fetch recaps for this circle to match with past sessions
-        const { data: recapData } = await supabase
-          .from('call_recaps')
-          .select('id, channel_name, created_at')
-          .like('channel_name', `%${circleId}%`)
-          .order('created_at', { ascending: false });
+        // Match recaps to past meetups
+        const recapData = recapResult.data;
+        if (recapResult.error) {
+          console.warn('Could not fetch circle recaps:', recapResult.error.message);
+        }
 
         if (recapData && recapData.length > 0) {
-          // Match recaps to past meetups by date proximity (recap created same day or day after meetup)
           const rMap = {};
+          const usedRecaps = new Set();
+
+          // Build a lookup map from recaps: local date string -> recap
+          const recapsByDate = new Map();
+          recapData.forEach(r => {
+            const recapTime = new Date(r.started_at || r.created_at);
+            const dateStr = `${recapTime.getFullYear()}-${String(recapTime.getMonth() + 1).padStart(2, '0')}-${String(recapTime.getDate()).padStart(2, '0')}`;
+            if (!recapsByDate.has(dateStr)) {
+              recapsByDate.set(dateStr, []);
+            }
+            recapsByDate.get(dateStr).push(r);
+          });
+
+          // Pass 1: strict match (same day) using Map for O(1) lookup
           enrichedPast.forEach(meetup => {
-            const meetupDate = new Date(meetup.date + 'T00:00:00');
+            const candidates = recapsByDate.get(meetup.date) || [];
+            const match = candidates.find(r => !usedRecaps.has(r.id));
+            if (match) {
+              rMap[meetup.id] = match.id;
+              usedRecaps.add(match.id);
+            }
+          });
+
+          // Pass 2: wider match (within 2 days) for unmatched meetups only
+          enrichedPast.forEach(meetup => {
+            if (rMap[meetup.id]) return;
+            const meetupMs = new Date(meetup.date + 'T00:00:00').getTime();
             const matchingRecap = recapData.find(r => {
-              const recapDate = new Date(r.created_at);
-              const diffMs = recapDate - meetupDate;
-              const diffDays = diffMs / (1000 * 60 * 60 * 24);
-              return diffDays >= 0 && diffDays < 2; // recap created same day or next day
+              if (usedRecaps.has(r.id)) return false;
+              const recapTime = new Date(r.started_at || r.created_at);
+              const recapDateStr = `${recapTime.getFullYear()}-${String(recapTime.getMonth() + 1).padStart(2, '0')}-${String(recapTime.getDate()).padStart(2, '0')}`;
+              const recapMs = new Date(recapDateStr + 'T00:00:00').getTime();
+              return Math.abs(recapMs - meetupMs) / (1000 * 60 * 60 * 24) <= 2;
             });
             if (matchingRecap) {
               rMap[meetup.id] = matchingRecap.id;
+              usedRecaps.add(matchingRecap.id);
             }
           });
+
           setRecapMap(rMap);
         }
       }
@@ -890,7 +933,7 @@ export default function CircleDetailView({
                       borderRadius: '12px',
                       cursor: hasRecap ? 'pointer' : 'default',
                     }}
-                    onClick={hasRecap ? () => window.location.href = `/recaps/${recapMap[meetup.id]}` : undefined}
+                    onClick={hasRecap ? () => onNavigate?.('sessionRecapDetail', { recapId: recapMap[meetup.id] }) : undefined}
                   >
                     <div style={{
                       width: '40px',

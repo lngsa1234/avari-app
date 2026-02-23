@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import {
   ChevronLeft,
@@ -156,33 +155,20 @@ function getCallTypeLabel(callType) {
   }
 }
 
-export default function RecapDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-  const recapId = params.id;
-
+export default function SessionRecapDetailView({ recapId, onNavigate, previousView }) {
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 640;
   const isTablet = windowWidth >= 640 && windowWidth < 768;
-
-  // Track if we have browser history to go back to
-  const hasHistory = typeof window !== 'undefined' && window.history.length > 1;
-
-  const handleBack = () => {
-    // If there's real history (user came from within the app), go back
-    // Otherwise navigate to the home page
-    if (hasHistory && document.referrer && document.referrer.includes(window.location.host)) {
-      router.back();
-    } else {
-      router.push('/');
-    }
-  };
 
   const [recap, setRecap] = useState(null);
   const [parsed, setParsed] = useState(null);
   const [loading, setLoading] = useState(true);
   const [participantProfiles, setParticipantProfiles] = useState({});
   const [completedActions, setCompletedActions] = useState(new Set());
+
+  const handleBack = () => {
+    onNavigate?.(previousView || 'home');
+  };
 
   useEffect(() => {
     if (recapId) loadRecap();
@@ -280,9 +266,9 @@ export default function RecapDetailPage() {
   }
 
   // Responsive styles
-  const containerPadding = isMobile ? '0 16px 32px' : isTablet ? '0 20px 36px' : '0 20px 40px';
+  const containerPadding = isMobile ? '0 0 32px' : isTablet ? '0 4px 36px' : '0 4px 40px';
   const heroGap = isMobile ? '14px' : '16px';
-  const heroPadding = isMobile ? '20px 16px' : isTablet ? '20px 16px' : '24px 20px';
+  const heroPadding = isMobile ? '20px 0' : isTablet ? '20px 0' : '24px 4px';
   const titleSize = isMobile ? '20px' : isTablet ? '22px' : '24px';
   const cardPadding = isMobile ? '16px' : isTablet ? '18px' : '20px';
   const cardRadius = isMobile ? '14px' : '16px';
@@ -292,25 +278,27 @@ export default function RecapDetailPage() {
 
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', fontFamily: fonts.sans }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={styles.spinner}></div>
-        <p style={{ color: colors.textMuted, fontSize: '15px', fontFamily: fonts.sans }}>Loading recap...</p>
+        <div style={{ width: '40px', height: '40px', border: `3px solid ${colors.border}`, borderTopColor: colors.primary, borderRadius: '50%', animation: 'spin 1s linear infinite', marginBottom: '16px' }}></div>
+        <p style={{ color: colors.textMuted, fontSize: '15px' }}>Loading recap...</p>
       </div>
     );
   }
 
   if (!recap || !parsed) {
     return (
-      <div style={styles.container}>
-        <div style={styles.emptyState}>
-          <FileText size={isMobile ? 40 : 48} style={{ color: colors.textSoft, marginBottom: '16px' }} />
-          <h2 style={{ color: colors.text, margin: '0 0 8px', fontSize: isMobile ? '18px' : '22px', fontFamily: fonts.serif }}>Recap not found</h2>
-          <p style={{ color: colors.textMuted, marginBottom: '24px', fontSize: bodyFontSize }}>This recap may have been removed.</p>
-          <button style={styles.backBtn} onClick={handleBack}>
-            <ChevronLeft size={18} /> Go back
-          </button>
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', padding: '24px', textAlign: 'center', fontFamily: fonts.sans }}>
+        <FileText size={isMobile ? 40 : 48} style={{ color: colors.textSoft, marginBottom: '16px' }} />
+        <h2 style={{ color: colors.text, margin: '0 0 8px', fontSize: isMobile ? '18px' : '22px', fontFamily: fonts.serif }}>Recap not found</h2>
+        <p style={{ color: colors.textMuted, marginBottom: '24px', fontSize: bodyFontSize }}>This recap may have been removed.</p>
+        <button style={{
+          display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px',
+          backgroundColor: colors.primary, color: 'white', border: 'none', borderRadius: '12px',
+          fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: fonts.sans,
+        }} onClick={handleBack}>
+          <ChevronLeft size={18} /> Go back
+        </button>
       </div>
     );
   }
@@ -322,61 +310,41 @@ export default function RecapDetailPage() {
   );
 
   return (
-    <div style={styles.container}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap');
-        @keyframes spin { to { transform: rotate(360deg); } }
-        html, body { max-width: 100%; overflow-x: hidden; }
-      `}</style>
-
-      {/* Top Bar */}
+    <div style={{ fontFamily: fonts.sans, paddingBottom: '20px' }}>
+      {/* Back button + Title row */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        height: isMobile ? 56 : 64,
-        padding: isMobile ? '0 12px' : '0 16px',
-        borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
-        backgroundColor: 'rgba(247, 242, 236, 0.95)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 10,
-        boxSizing: 'border-box',
+        gap: '12px',
+        marginBottom: '16px',
       }}>
-        <button style={{
-          width: isMobile ? 36 : 40,
-          height: isMobile ? 36 : 40,
-          minWidth: isMobile ? 36 : 40,
-          minHeight: isMobile ? 36 : 40,
-          borderRadius: isMobile ? 10 : 12,
-          backgroundColor: 'rgba(139, 111, 92, 0.08)',
-          border: 'none',
-          margin: 0,
-          padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          flexShrink: 0,
-          WebkitAppearance: 'none',
-          appearance: 'none',
-          boxSizing: 'border-box',
-        }} onClick={handleBack}>
-          <ChevronLeft size={isMobile ? 20 : 22} color={colors.text} />
+        <button
+          onClick={handleBack}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: 'rgba(139, 111, 92, 0.08)',
+            border: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <ChevronLeft size={20} color={colors.text} />
         </button>
-        <span style={{
-          ...styles.topBarTitle,
-          fontSize: isMobile ? '14px' : '16px',
-        }}>Session Recap</span>
-        <div style={{ width: isMobile ? 36 : 40, flexShrink: 0 }} />
+        <h2 style={{
+          fontWeight: '600',
+          color: colors.text,
+          fontFamily: fonts.serif,
+          fontSize: isMobile ? '16px' : '18px',
+          margin: 0,
+        }}>Session Recap</h2>
       </div>
-
-      {/* Spacer for fixed top bar */}
-      <div style={{ height: isMobile ? 56 : 64 }} />
 
       {/* Hero Header */}
       <div style={{
@@ -384,25 +352,34 @@ export default function RecapDetailPage() {
         flexDirection: isMobile ? 'column' : 'row',
         gap: heroGap,
         padding: heroPadding,
-        alignItems: isMobile ? 'flex-start' : 'flex-start',
-        maxWidth: '900px',
-        margin: '0 auto',
-        boxSizing: 'border-box',
+        alignItems: 'flex-start',
       }}>
         <div style={{
-          ...styles.dateBadge,
+          backgroundColor: 'white',
+          borderRadius: '14px',
+          textAlign: 'center',
+          boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
+          border: `1px solid ${colors.border}`,
+          flexShrink: 0,
           padding: isMobile ? '10px 14px' : '12px 16px',
           minWidth: isMobile ? '56px' : '64px',
           alignSelf: isMobile ? 'flex-start' : 'auto',
         }}>
           <span style={{
-            ...styles.dateMonth,
+            display: 'block',
+            fontWeight: '700',
+            color: colors.primary,
+            letterSpacing: '0.5px',
             fontSize: isMobile ? '10px' : '11px',
           }}>
             {recapDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
           </span>
           <span style={{
-            ...styles.dateDay,
+            display: 'block',
+            fontWeight: '700',
+            color: colors.text,
+            fontFamily: fonts.serif,
+            lineHeight: '1.1',
             fontSize: isMobile ? '24px' : '28px',
           }}>{recapDate.getDate()}</span>
         </div>
@@ -466,10 +443,6 @@ export default function RecapDetailPage() {
         display: 'flex',
         flexDirection: 'column',
         gap: isMobile ? '12px' : '16px',
-        maxWidth: '900px',
-        margin: '0 auto',
-        width: '100%',
-        boxSizing: 'border-box',
       }}>
         {/* Participants */}
         {(recap.participant_ids || []).length > 0 && (
@@ -779,59 +752,6 @@ export default function RecapDetailPage() {
 }
 
 const styles = {
-  container: {
-    minHeight: '100vh',
-    background: colors.gradient,
-    fontFamily: fonts.sans,
-    paddingBottom: '80px',
-    overflowX: 'hidden',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  loadingContainer: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: colors.gradient,
-    fontFamily: fonts.sans,
-  },
-  spinner: {
-    width: '40px',
-    height: '40px',
-    border: `3px solid ${colors.border}`,
-    borderTopColor: colors.primary,
-    borderRadius: '50%',
-    animation: 'spin 1s linear infinite',
-    marginBottom: '16px',
-  },
-  topBarTitle: {
-    fontWeight: '600',
-    color: colors.text,
-    fontFamily: fonts.serif,
-  },
-  dateBadge: {
-    backgroundColor: 'white',
-    borderRadius: '14px',
-    textAlign: 'center',
-    boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
-    border: `1px solid ${colors.border}`,
-    flexShrink: 0,
-  },
-  dateMonth: {
-    display: 'block',
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: '0.5px',
-  },
-  dateDay: {
-    display: 'block',
-    fontWeight: '700',
-    color: colors.text,
-    fontFamily: fonts.serif,
-    lineHeight: '1.1',
-  },
   card: {
     background: colors.gradient,
     borderRadius: '16px',
@@ -848,28 +768,5 @@ const styles = {
     alignItems: 'center',
     gap: '8px',
     fontFamily: fonts.serif,
-  },
-  emptyState: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '60vh',
-    padding: '24px',
-    textAlign: 'center',
-  },
-  backBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '10px 20px',
-    backgroundColor: colors.primary,
-    color: 'white',
-    border: 'none',
-    borderRadius: '12px',
-    fontSize: '14px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: fonts.sans,
   },
 };

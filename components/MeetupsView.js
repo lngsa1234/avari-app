@@ -602,9 +602,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const handleViewRecap = (item) => {
     if (item.recapId) {
       markRecapReviewed(item.recapId);
-      window.location.href = `/recaps/${item.recapId}`;
-    } else {
-      window.location.href = '/recaps';
+      onNavigate('sessionRecapDetail', { recapId: item.recapId });
     }
   };
 

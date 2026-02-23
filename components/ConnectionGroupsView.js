@@ -476,8 +476,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   return (
     <div style={styles.container} className="circles-container">
-      <div style={styles.ambientBg}></div>
-      <div style={styles.grainOverlay}></div>
 
       {/* Title Section */}
       <section style={styles.titleSection} className="circles-title-section">
@@ -517,7 +515,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       <div style={styles.singleColumn}>
 
         {/* Connections Section */}
-        <section style={styles.card} className="circles-card">
+        <section style={styles.section} className="circles-card">
           <div style={styles.cardHeader} className="circles-card-header">
             <h2 style={styles.cardTitle} className="circles-card-title">
               Connections
@@ -615,15 +613,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           {/* People you may know */}
           {peerSuggestions.length > 0 && (
             <>
-              <div style={{
-                marginTop: '20px',
-                paddingTop: '16px',
-                borderTop: '1px solid rgba(139, 111, 92, 0.1)',
-              }}>
+              <div style={{ marginTop: '20px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '15px', fontWeight: '600', color: '#3D2B1F', margin: 0 }}>
+                  <h2 style={styles.cardTitle}>
                     Recommend to Connect
-                  </h3>
+                  </h2>
                   <span style={{ fontSize: '12px', color: '#A89080' }}>
                     From events & circles
                   </span>
@@ -793,11 +787,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           )}
         </section>
 
-        {/* My Groups Section */}
-        <section style={styles.card} className="circles-card">
+        {/* My Circles Section */}
+        <section style={styles.section} className="circles-card">
           <div style={styles.cardHeader} className="circles-card-header">
             <h2 style={styles.cardTitle} className="circles-card-title">
-              My Groups
+              My Circles
             </h2>
             <button style={styles.addGroupBtn} onClick={() => onNavigate && onNavigate('discover')}>Discover Circles</button>
           </div>
@@ -871,7 +865,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                           <h3 style={styles.circleName}>{group.name}</h3>
                           {sessionCount > 0 && (
                             <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0 }}>
-                              {sessionCount} session{sessionCount !== 1 ? 's' : ''}
+                              {sessionCount} past session{sessionCount !== 1 ? 's' : ''}
                             </span>
                           )}
                         </div>
@@ -1012,7 +1006,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                           className="circles-enter-btn"
                           onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}
                         >
-                          {hasUpcoming ? 'View Agenda' : hasNoActivity ? 'Get Started' : 'Enter'}
+                          {hasUpcoming ? 'Open' : hasNoActivity ? 'Get Started' : 'Enter'}
                         </button>
                       </div>
 
@@ -1215,7 +1209,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 }
 
 const keyframeStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap');
 
   @keyframes fadeInUp {
     from {
@@ -1263,7 +1257,7 @@ const keyframeStyles = `
   /* Responsive styles */
   @media (max-width: 640px) {
     .circles-container {
-      padding: 16px !important;
+      padding: 16px 0 !important;
     }
     .circles-title-section {
       flex-direction: column !important;
@@ -1374,36 +1368,9 @@ const keyframeStyles = `
 
 const styles = {
   container: {
-    minHeight: '100vh',
-    background: 'linear-gradient(165deg, #FDF8F3 0%, #F5EDE6 50%, #EDE4DB 100%)',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
     position: 'relative',
-    padding: '24px',
-  },
-  ambientBg: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: `
-      radial-gradient(ellipse at 20% 20%, rgba(139, 111, 92, 0.08) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 80%, rgba(166, 123, 91, 0.06) 0%, transparent 50%),
-      radial-gradient(ellipse at 50% 50%, rgba(212, 165, 116, 0.04) 0%, transparent 70%)
-    `,
-    pointerEvents: 'none',
-    zIndex: 0,
-  },
-  grainOverlay: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
-    opacity: 0.03,
-    pointerEvents: 'none',
-    zIndex: 0,
+    padding: '24px 0',
   },
   loadingContainer: {
     display: 'flex',
@@ -1443,18 +1410,23 @@ const styles = {
   },
   titleContent: {},
   pageTitle: {
-    fontFamily: '"Playfair Display", serif',
-    fontSize: '36px',
-    fontWeight: '600',
-    color: '#3D2B1F',
-    letterSpacing: '-1px',
+    fontFamily: '"Lora", serif',
+    fontSize: '32px',
+    fontWeight: '500',
+    color: '#584233',
+    letterSpacing: '0.15px',
+    lineHeight: 1.28,
     marginBottom: '4px',
     margin: 0,
   },
   tagline: {
+    fontFamily: '"Lora", serif',
     fontSize: '15px',
-    color: '#8B7355',
-    fontWeight: '400',
+    fontWeight: '500',
+    background: 'linear-gradient(89.8deg, #7E654D 27.14%, #B9A594 72.64%, #ECDDD2 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
     margin: 0,
   },
   quickStats: {
@@ -1472,7 +1444,7 @@ const styles = {
     alignItems: 'center',
   },
   statNumber: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '24px',
     fontWeight: '600',
     color: '#5C4033',
@@ -1556,14 +1528,23 @@ const styles = {
     maxWidth: '800px',
     margin: '0 auto 24px auto',
   },
+  section: {
+    padding: '20px 0',
+    display: 'flex',
+    flexDirection: 'column',
+    animation: 'fadeInUp 0.6s ease-out forwards',
+  },
+  sectionDivider: {
+    height: '1px',
+    backgroundColor: 'rgba(139, 111, 92, 0.15)',
+    margin: '0',
+  },
   card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    backgroundColor: 'transparent',
     borderRadius: '24px',
     padding: '20px',
-    boxShadow: '0 4px 24px rgba(139, 111, 92, 0.08)',
-    border: '1px solid rgba(139, 111, 92, 0.08)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
+    boxShadow: 'none',
+    border: 'none',
     display: 'flex',
     flexDirection: 'column',
     animation: 'fadeInUp 0.6s ease-out forwards',
@@ -1577,10 +1558,10 @@ const styles = {
     gap: '10px',
   },
   cardTitle: {
-    fontFamily: '"Playfair Display", serif',
-    fontSize: '18px',
-    fontWeight: '600',
-    color: '#3D2B1F',
+    fontFamily: '"Lora", serif',
+    fontSize: '20px',
+    fontWeight: '500',
+    color: '#3F1906',
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -1627,7 +1608,7 @@ const styles = {
     gap: '8px',
     padding: '16px 12px',
     minWidth: '90px',
-    backgroundColor: 'rgba(139, 111, 92, 0.04)',
+    backgroundColor: 'transparent',
     borderRadius: '16px',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
@@ -1768,7 +1749,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
     transition: 'all 0.3s ease',
   },
   userCard: {
@@ -1776,7 +1757,7 @@ const styles = {
     alignItems: 'center',
     gap: '12px',
     padding: '12px',
-    backgroundColor: 'rgba(139, 111, 92, 0.04)',
+    backgroundColor: 'transparent',
     borderRadius: '14px',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
@@ -1859,7 +1840,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   tabGroup: {
     display: 'flex',
@@ -1878,7 +1859,7 @@ const styles = {
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   tabActive: {
     backgroundColor: 'white',
@@ -1982,7 +1963,7 @@ const styles = {
     fontSize: '13px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   composeBtn: {
     width: '40px',
@@ -2000,15 +1981,15 @@ const styles = {
   },
   addGroupBtn: {
     padding: '6px 14px',
-    backgroundColor: 'rgba(139, 111, 92, 0.1)',
-    border: 'none',
+    backgroundColor: 'transparent',
+    border: '1px solid rgba(139, 111, 92, 0.2)',
     borderRadius: '100px',
-    color: '#6B5344',
+    color: '#8B7355',
     fontSize: '12px',
-    fontWeight: '600',
+    fontWeight: '500',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   circlesList: {
     display: 'flex',
@@ -2026,13 +2007,13 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   circleCard: {
     display: 'flex',
     flexDirection: 'column',
     padding: '14px',
-    backgroundColor: 'rgba(139, 111, 92, 0.04)',
+    backgroundColor: 'transparent',
     borderRadius: '14px',
     border: '1px solid rgba(139, 111, 92, 0.08)',
     transition: 'all 0.3s ease',
@@ -2142,7 +2123,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
     flexShrink: 0,
   },
   exploreBtn: {
@@ -2156,7 +2137,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2185,20 +2166,20 @@ const styles = {
     minWidth: '250px',
   },
   bannerQuote: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '40px',
     color: 'rgba(255, 255, 255, 0.3)',
     lineHeight: 1,
   },
   bannerQuoteEnd: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '40px',
     color: 'rgba(255, 255, 255, 0.3)',
     lineHeight: 1,
     alignSelf: 'flex-end',
   },
   bannerText: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '17px',
     color: 'white',
     fontWeight: '400',
@@ -2219,7 +2200,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
     flexShrink: 0,
   },
   bannerArrow: {
@@ -2260,7 +2241,7 @@ const styles = {
     borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
   },
   modalTitle: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '20px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -2308,7 +2289,7 @@ const styles = {
     fontSize: '15px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
     boxSizing: 'border-box',
   },
   connectionsList: {
@@ -2379,7 +2360,7 @@ const styles = {
     fontSize: '15px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   submitButton: {
     flex: 1,
@@ -2391,7 +2372,7 @@ const styles = {
     fontSize: '15px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   submitButtonDisabled: {
     backgroundColor: 'rgba(139, 111, 92, 0.3)',
@@ -2417,7 +2398,7 @@ const styles = {
     borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
   },
   chatTitle: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '18px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -2508,7 +2489,7 @@ const styles = {
     cursor: 'pointer',
     color: 'inherit',
     textDecoration: 'underline',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   chatInputBar: {
     display: 'flex',
@@ -2526,7 +2507,7 @@ const styles = {
     fontSize: '14px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: '"Lora", serif',
   },
   chatSendButton: {
     width: '44px',

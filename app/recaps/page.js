@@ -20,6 +20,17 @@ import {
   Quote
 } from 'lucide-react';
 
+const useWindowSize = () => {
+  const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
+  useEffect(() => {
+    const handleResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  return width;
+};
+
 /**
  * MeetupRecapsPage
  *
@@ -30,6 +41,10 @@ import {
  * - Expandable recap cards with AI summary, takeaways, action items
  */
 export default function MeetupRecapsPage() {
+  const windowWidth = useWindowSize();
+  const isMobile = windowWidth < 640;
+  const isTablet = windowWidth >= 640 && windowWidth < 768;
+
   const [recaps, setRecaps] = useState([]);
   const [filteredRecaps, setFilteredRecaps] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -432,72 +447,73 @@ export default function MeetupRecapsPage() {
     return ids.slice(0, 4).map(id => participantProfiles[id]).filter(Boolean);
   }
 
-  // Styles matching CircleW design
+  // Responsive styles
   const styles = {
     container: {
       maxWidth: '900px',
       margin: '0 auto',
-      padding: '24px',
+      padding: isMobile ? '16px 14px' : isTablet ? '20px 18px' : '24px',
       fontFamily: '"DM Sans", sans-serif',
     },
     header: {
-      marginBottom: '24px',
+      marginBottom: isMobile ? '16px' : '24px',
     },
     title: {
       fontFamily: '"Playfair Display", serif',
-      fontSize: '28px',
+      fontSize: isMobile ? '22px' : isTablet ? '25px' : '28px',
       fontWeight: '600',
       color: '#3D2B1A',
       marginBottom: '8px',
     },
     subtitle: {
-      fontSize: '15px',
+      fontSize: isMobile ? '13px' : '15px',
       color: '#7A5C42',
     },
     statsBar: {
       display: 'flex',
-      gap: '16px',
-      marginBottom: '24px',
+      gap: isMobile ? '8px' : '16px',
+      marginBottom: isMobile ? '16px' : '24px',
       flexWrap: 'wrap',
     },
     statCard: {
       backgroundColor: 'rgba(255, 255, 255, 0.8)',
-      borderRadius: '16px',
-      padding: '16px 24px',
+      borderRadius: isMobile ? '12px' : '16px',
+      padding: isMobile ? '12px 16px' : '16px 24px',
       boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
       border: '1px solid rgba(139, 111, 92, 0.1)',
       flex: '1',
-      minWidth: '140px',
+      minWidth: isMobile ? '90px' : '140px',
       textAlign: 'center',
     },
     statValue: {
-      fontSize: '28px',
+      fontSize: isMobile ? '22px' : '28px',
       fontWeight: '700',
       color: '#3D2B1A',
       fontFamily: '"Playfair Display", serif',
     },
     statLabel: {
-      fontSize: '13px',
+      fontSize: isMobile ? '11px' : '13px',
       color: '#7A5C42',
       marginTop: '4px',
     },
     filterBar: {
       backgroundColor: 'rgba(255, 255, 255, 0.8)',
-      borderRadius: '16px',
-      padding: '16px',
-      marginBottom: '20px',
+      borderRadius: isMobile ? '12px' : '16px',
+      padding: isMobile ? '12px' : '16px',
+      marginBottom: isMobile ? '14px' : '20px',
       boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
       border: '1px solid rgba(139, 111, 92, 0.1)',
     },
     tabs: {
       display: 'flex',
-      gap: '8px',
+      gap: isMobile ? '6px' : '8px',
       marginBottom: '12px',
+      flexWrap: 'wrap',
     },
     tab: (active) => ({
-      padding: '8px 16px',
+      padding: isMobile ? '6px 12px' : '8px 16px',
       borderRadius: '100px',
-      fontSize: '14px',
+      fontSize: isMobile ? '12px' : '14px',
       fontWeight: '500',
       cursor: 'pointer',
       border: 'none',
@@ -509,31 +525,33 @@ export default function MeetupRecapsPage() {
       display: 'flex',
       alignItems: 'center',
       gap: '6px',
-      padding: '8px 12px',
+      padding: isMobile ? '6px 10px' : '8px 12px',
       borderRadius: '8px',
       border: '1px solid rgba(139, 111, 92, 0.2)',
       backgroundColor: 'transparent',
       color: '#7A5C42',
-      fontSize: '13px',
+      fontSize: isMobile ? '12px' : '13px',
       cursor: 'pointer',
     },
     filterPanel: {
       display: 'flex',
-      gap: '16px',
-      marginTop: '16px',
-      paddingTop: '16px',
+      gap: isMobile ? '10px' : '16px',
+      marginTop: isMobile ? '12px' : '16px',
+      paddingTop: isMobile ? '12px' : '16px',
       borderTop: '1px solid rgba(139, 111, 92, 0.1)',
       flexWrap: 'wrap',
+      flexDirection: isMobile ? 'column' : 'row',
     },
     searchInput: {
       flex: '1',
-      minWidth: '200px',
-      padding: '10px 14px 10px 40px',
+      minWidth: isMobile ? '100%' : '200px',
+      padding: isMobile ? '10px 14px 10px 36px' : '10px 14px 10px 40px',
       borderRadius: '12px',
       border: '1px solid rgba(139, 111, 92, 0.2)',
       fontSize: '14px',
       outline: 'none',
       backgroundColor: 'white',
+      boxSizing: 'border-box',
     },
     select: {
       padding: '10px 14px',
@@ -543,12 +561,13 @@ export default function MeetupRecapsPage() {
       outline: 'none',
       backgroundColor: 'white',
       color: '#3D2B1A',
-      minWidth: '150px',
+      minWidth: isMobile ? '100%' : '150px',
+      boxSizing: 'border-box',
     },
     recapCard: {
       backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      borderRadius: '20px',
-      marginBottom: '16px',
+      borderRadius: isMobile ? '14px' : '20px',
+      marginBottom: isMobile ? '12px' : '16px',
       boxShadow: '0 4px 20px rgba(139, 111, 92, 0.08)',
       border: '1px solid rgba(139, 111, 92, 0.1)',
       overflow: 'hidden',
@@ -556,27 +575,27 @@ export default function MeetupRecapsPage() {
     },
     cardHeader: {
       display: 'flex',
-      padding: '20px',
+      padding: isMobile ? '14px' : '20px',
       cursor: 'pointer',
       alignItems: 'flex-start',
-      gap: '16px',
+      gap: isMobile ? '10px' : '16px',
     },
     dateBadge: {
       backgroundColor: '#FAF5EF',
-      borderRadius: '12px',
-      padding: '10px 14px',
+      borderRadius: isMobile ? '10px' : '12px',
+      padding: isMobile ? '8px 10px' : '10px 14px',
       textAlign: 'center',
-      minWidth: '60px',
+      minWidth: isMobile ? '48px' : '60px',
       border: '1px solid rgba(139, 111, 92, 0.1)',
     },
     dateMonth: {
-      fontSize: '11px',
+      fontSize: isMobile ? '10px' : '11px',
       fontWeight: '600',
       color: '#8B6F5C',
       letterSpacing: '0.5px',
     },
     dateDay: {
-      fontSize: '24px',
+      fontSize: isMobile ? '20px' : '24px',
       fontWeight: '700',
       color: '#3D2B1A',
       fontFamily: '"Playfair Display", serif',
@@ -584,27 +603,29 @@ export default function MeetupRecapsPage() {
     },
     cardContent: {
       flex: '1',
+      minWidth: 0,
     },
     cardTitle: {
-      fontSize: '17px',
+      fontSize: isMobile ? '15px' : '17px',
       fontWeight: '600',
       color: '#3D2B1A',
       marginBottom: '6px',
       display: 'flex',
       alignItems: 'center',
-      gap: '10px',
+      gap: isMobile ? '6px' : '10px',
+      flexWrap: 'wrap',
     },
     badge: (type) => ({
-      fontSize: '11px',
-      padding: '3px 10px',
+      fontSize: isMobile ? '10px' : '11px',
+      padding: isMobile ? '2px 8px' : '3px 10px',
       borderRadius: '100px',
       backgroundColor: type === 'meetup' ? 'rgba(139, 158, 126, 0.15)' : 'rgba(139, 111, 92, 0.1)',
       color: type === 'meetup' ? '#5C7A4E' : '#7A5C42',
       fontWeight: '500',
     }),
     unviewedBadge: {
-      fontSize: '11px',
-      padding: '3px 10px',
+      fontSize: isMobile ? '10px' : '11px',
+      padding: isMobile ? '2px 8px' : '3px 10px',
       borderRadius: '100px',
       backgroundColor: '#C9A96E',
       color: 'white',
@@ -613,36 +634,37 @@ export default function MeetupRecapsPage() {
     cardMeta: {
       display: 'flex',
       alignItems: 'center',
-      gap: '16px',
-      fontSize: '13px',
+      gap: isMobile ? '8px' : '16px',
+      fontSize: isMobile ? '12px' : '13px',
       color: '#7A5C42',
       marginBottom: '10px',
+      flexWrap: 'wrap',
     },
     metaItem: {
       display: 'flex',
       alignItems: 'center',
-      gap: '5px',
+      gap: isMobile ? '3px' : '5px',
     },
     avatarStack: {
       display: 'flex',
     },
     avatar: (index) => ({
-      width: '28px',
-      height: '28px',
+      width: isMobile ? '24px' : '28px',
+      height: isMobile ? '24px' : '28px',
       borderRadius: '50%',
       border: '2px solid white',
-      marginLeft: index > 0 ? '-10px' : '0',
+      marginLeft: index > 0 ? (isMobile ? '-8px' : '-10px') : '0',
       backgroundColor: '#E8DDD4',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      fontSize: '12px',
+      fontSize: isMobile ? '10px' : '12px',
       fontWeight: '600',
       color: '#8B6F5C',
       objectFit: 'cover',
     }),
     summaryPreview: {
-      fontSize: '14px',
+      fontSize: isMobile ? '13px' : '14px',
       color: '#5C4033',
       lineHeight: '1.5',
       display: '-webkit-box',
@@ -655,17 +677,17 @@ export default function MeetupRecapsPage() {
       flexShrink: 0,
     },
     expandedContent: {
-      padding: '16px 20px 20px',
+      padding: isMobile ? '12px 14px 16px' : '16px 20px 20px',
       borderTop: '1px solid rgba(139, 111, 92, 0.1)',
     },
     section: {
-      marginTop: '20px',
+      marginTop: isMobile ? '16px' : '20px',
     },
     sectionTitle: {
-      fontSize: '14px',
+      fontSize: isMobile ? '13px' : '14px',
       fontWeight: '600',
       color: '#3D2B1A',
-      marginBottom: '12px',
+      marginBottom: isMobile ? '10px' : '12px',
       display: 'flex',
       alignItems: 'center',
       gap: '8px',
@@ -673,8 +695,8 @@ export default function MeetupRecapsPage() {
     aiSummary: {
       backgroundColor: 'rgba(139, 111, 92, 0.05)',
       borderRadius: '12px',
-      padding: '16px',
-      fontSize: '14px',
+      padding: isMobile ? '12px' : '16px',
+      fontSize: isMobile ? '13px' : '14px',
       color: '#5C4033',
       lineHeight: '1.6',
     },
@@ -686,10 +708,10 @@ export default function MeetupRecapsPage() {
     takeawayItem: {
       display: 'flex',
       alignItems: 'flex-start',
-      gap: '10px',
-      padding: '10px 0',
+      gap: isMobile ? '8px' : '10px',
+      padding: isMobile ? '8px 0' : '10px 0',
       borderBottom: '1px solid rgba(139, 111, 92, 0.08)',
-      fontSize: '14px',
+      fontSize: isMobile ? '13px' : '14px',
       color: '#5C4033',
     },
     takeawayBullet: {
@@ -703,8 +725,8 @@ export default function MeetupRecapsPage() {
     actionItem: (completed) => ({
       display: 'flex',
       alignItems: 'flex-start',
-      gap: '10px',
-      padding: '10px 14px',
+      gap: isMobile ? '8px' : '10px',
+      padding: isMobile ? '8px 10px' : '10px 14px',
       borderRadius: '10px',
       backgroundColor: completed ? 'rgba(139, 158, 126, 0.1)' : 'rgba(139, 111, 92, 0.05)',
       marginBottom: '8px',
@@ -712,7 +734,7 @@ export default function MeetupRecapsPage() {
       transition: 'all 0.2s ease',
     }),
     actionText: (completed) => ({
-      fontSize: '14px',
+      fontSize: isMobile ? '13px' : '14px',
       color: completed ? '#8B9E7E' : '#5C4033',
       textDecoration: completed ? 'line-through' : 'none',
       flex: 1,
@@ -728,25 +750,25 @@ export default function MeetupRecapsPage() {
     },
     emptyState: {
       textAlign: 'center',
-      padding: '60px 20px',
+      padding: isMobile ? '40px 16px' : '60px 20px',
       backgroundColor: 'rgba(255, 255, 255, 0.8)',
-      borderRadius: '20px',
+      borderRadius: isMobile ? '14px' : '20px',
       border: '1px solid rgba(139, 111, 92, 0.1)',
     },
     emptyIcon: {
-      width: '64px',
-      height: '64px',
+      width: isMobile ? '48px' : '64px',
+      height: isMobile ? '48px' : '64px',
       color: '#D4C4B5',
       margin: '0 auto 16px',
     },
     emptyTitle: {
-      fontSize: '18px',
+      fontSize: isMobile ? '16px' : '18px',
       fontWeight: '600',
       color: '#3D2B1A',
       marginBottom: '8px',
     },
     emptyText: {
-      fontSize: '14px',
+      fontSize: isMobile ? '13px' : '14px',
       color: '#7A5C42',
     },
     loadingSpinner: {
@@ -915,27 +937,31 @@ export default function MeetupRecapsPage() {
 
                   <div style={styles.cardMeta}>
                     <span style={styles.metaItem}>
-                      <Clock size={14} />
+                      <Clock size={isMobile ? 12 : 14} />
                       {formatDuration(recap.duration_seconds)}
                     </span>
                     {recap.meetup_time && (
                       <span style={styles.metaItem}>
-                        <Calendar size={14} />
+                        <Calendar size={isMobile ? 12 : 14} />
                         {formatTime(recap.meetup_time)}
                       </span>
                     )}
                     <span style={styles.metaItem}>
-                      <Users size={14} />
-                      {recap.participant_count || 0} participants
+                      <Users size={isMobile ? 12 : 14} />
+                      {recap.participant_count || 0}{isMobile ? '' : ' participants'}
                     </span>
-                    <span style={{ ...styles.metaItem, color: parsed.keyTakeaways.length > 0 ? '#8B6F5C' : '#B8A089' }}>
-                      <FileText size={14} />
-                      {parsed.keyTakeaways.length} takeaways
-                    </span>
-                    <span style={{ ...styles.metaItem, color: parsed.actionItems.length > 0 ? '#8B9E7E' : '#B8A089' }}>
-                      <ListTodo size={14} />
-                      {parsed.actionItems.length} action items
-                    </span>
+                    {!isMobile && (
+                      <>
+                        <span style={{ ...styles.metaItem, color: parsed.keyTakeaways.length > 0 ? '#8B6F5C' : '#B8A089' }}>
+                          <FileText size={14} />
+                          {parsed.keyTakeaways.length} takeaways
+                        </span>
+                        <span style={{ ...styles.metaItem, color: parsed.actionItems.length > 0 ? '#8B9E7E' : '#B8A089' }}>
+                          <ListTodo size={14} />
+                          {parsed.actionItems.length} action items
+                        </span>
+                      </>
+                    )}
                   </div>
 
                   {/* Meetup Location */}
@@ -990,47 +1016,47 @@ export default function MeetupRecapsPage() {
                   {/* Participants Section */}
                   <div style={styles.section}>
                     <h4 style={styles.sectionTitle}>
-                      <Users size={16} style={{ color: '#8B6F5C' }} />
+                      <Users size={isMobile ? 14 : 16} style={{ color: '#8B6F5C' }} />
                       Participants ({(recap.participant_ids || []).length})
                     </h4>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '10px' }}>
                       {(recap.participant_ids || []).map(id => {
                         const profile = participantProfiles[id];
                         return (
                           <div key={id} style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
-                            padding: '8px 12px',
+                            gap: isMobile ? '6px' : '8px',
+                            padding: isMobile ? '6px 10px' : '8px 12px',
                             backgroundColor: '#FAF5EF',
                             borderRadius: '20px',
-                            fontSize: '13px',
+                            fontSize: isMobile ? '12px' : '13px',
                             color: '#5C4033'
                           }}>
                             {profile?.profile_picture ? (
                               <img
                                 src={profile.profile_picture}
                                 alt={profile.name}
-                                style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }}
+                                style={{ width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px', borderRadius: '50%', objectFit: 'cover' }}
                               />
                             ) : (
                               <div style={{
-                                width: '24px',
-                                height: '24px',
+                                width: isMobile ? '20px' : '24px',
+                                height: isMobile ? '20px' : '24px',
                                 borderRadius: '50%',
                                 backgroundColor: '#8B6F5C',
                                 color: 'white',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontSize: '11px',
+                                fontSize: isMobile ? '9px' : '11px',
                                 fontWeight: '600'
                               }}>
                                 {(profile?.name || 'U')[0].toUpperCase()}
                               </div>
                             )}
                             <span style={{ fontWeight: '500' }}>{profile?.name || 'Unknown'}</span>
-                            {profile?.career && (
+                            {profile?.career && !isMobile && (
                               <span style={{ color: '#9C8068', fontSize: '12px' }}>• {profile.career}</span>
                             )}
                           </div>
