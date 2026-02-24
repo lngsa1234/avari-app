@@ -23,3 +23,31 @@ USING (
     AND is_active = true
   )
 );
+
+-- Allow circle creators to see pending join requests (status = 'invited')
+-- This lets the home page show "wants to join" requests for circles the user created
+
+CREATE POLICY "select_pending_memberships_as_creator"
+ON connection_group_members
+FOR SELECT
+TO authenticated
+USING (
+  status = 'invited'
+  AND is_group_creator(group_id)
+);
+
+-- Allow circle creators to update memberships (accept/decline join requests)
+-- The existing UPDATE policy only allows user_id = auth.uid(), so creators can't approve others
+
+CREATE POLICY "update_memberships_as_creator"
+ON connection_group_members FOR UPDATE
+TO authenticated
+USING (is_group_creator(group_id))
+WITH CHECK (is_group_creator(group_id));
+
+-- Allow circle creators to delete memberships (decline join requests)
+
+CREATE POLICY "delete_memberships_as_creator"
+ON connection_group_members FOR DELETE
+TO authenticated
+USING (is_group_creator(group_id));

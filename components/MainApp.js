@@ -94,6 +94,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [nextStepPrompt, setNextStepPrompt] = useState(null) // { type, data } for post-action prompts
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
+  const [circleJoinRequests, setCircleJoinRequests] = useState([]) // Incoming circle join requests
   const [meetupsInitialView, setMeetupsInitialView] = useState(null) // 'past' when coming from review recaps
 
   // Schedule meetup context (for pre-filling)
@@ -234,7 +235,7 @@ function MainApp({ currentUser, onSignOut }) {
       const cutoff = cutoffDate.toISOString().split('T')[0]
 
       // === ROUND 1: Fire all independent queries in parallel ===
-      const [circlesResult, userSignupsResult, coffeeResult, unreadResult, groupsResult, coffeeCountResult, requestsResult, attendedResult] = await Promise.all([
+      const [circlesResult, userSignupsResult, coffeeResult, unreadResult, groupsResult, coffeeCountResult, requestsResult, attendedResult, createdCirclesResult] = await Promise.all([
         // 1. Member circles (needed for meetups query)
         supabase
           .from('connection_group_members')
@@ -281,6 +282,12 @@ function MainApp({ currentUser, onSignOut }) {
           .from('meetup_signups')
           .select('meetup_id, meetups(date, time)')
           .eq('user_id', currentUser.id),
+        // 9. Circles created by current user (for join requests)
+        supabase
+          .from('connection_groups')
+          .select('id, name')
+          .eq('creator_id', currentUser.id)
+          .eq('is_active', true),
       ])
 
       // Set simple counts immediately (batch these state updates)
@@ -386,6 +393,46 @@ function MainApp({ currentUser, onSignOut }) {
         }
       } else {
         setConnectionRequests([])
+      }
+
+      // Process circle join requests
+      const createdCircles = createdCirclesResult.data || []
+      if (createdCircles.length > 0) {
+        const createdCircleIds = createdCircles.map(c => c.id)
+        const circleNameMap = {}
+        createdCircles.forEach(c => { circleNameMap[c.id] = c.name })
+
+        const { data: pendingMembers } = await supabase
+          .from('connection_group_members')
+          .select('id, user_id, group_id, invited_at')
+          .eq('status', 'invited')
+          .in('group_id', createdCircleIds)
+
+        if (pendingMembers && pendingMembers.length > 0) {
+          const pendingUserIds = [...new Set(pendingMembers.map(m => m.user_id))]
+          const { data: pendingProfiles } = await supabase
+            .from('profiles')
+            .select('id, name, career, city, state, profile_picture')
+            .in('id', pendingUserIds)
+
+          const pendingProfileMap = {}
+          ;(pendingProfiles || []).forEach(p => { pendingProfileMap[p.id] = p })
+
+          const joinRequests = pendingMembers.map(m => ({
+            id: m.id,
+            user: pendingProfileMap[m.user_id] || null,
+            circleName: circleNameMap[m.group_id],
+            requested_at: m.invited_at,
+            type: 'circle_join_request',
+          })).filter(r => r.user)
+
+          joinRequests.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
+          setCircleJoinRequests(joinRequests)
+        } else {
+          setCircleJoinRequests([])
+        }
+      } else {
+        setCircleJoinRequests([])
       }
 
       console.log(`⏱️ Round 2 done in ${Date.now() - t0}ms`)
@@ -731,6 +778,38 @@ function MainApp({ currentUser, onSignOut }) {
       setConnectionRequests([])
     }
   }, [currentUser.id, supabase])
+
+  // Accept a circle join request
+  const handleAcceptCircleJoin = useCallback(async (membershipId) => {
+    try {
+      const { error } = await supabase
+        .from('connection_group_members')
+        .update({ status: 'accepted', responded_at: new Date().toISOString() })
+        .eq('id', membershipId)
+
+      if (error) throw error
+      setCircleJoinRequests(prev => prev.filter(r => r.id !== membershipId))
+      console.log('✅ Accepted circle join request:', membershipId)
+    } catch (err) {
+      console.error('💥 Error accepting circle join request:', err)
+    }
+  }, [supabase])
+
+  // Decline a circle join request
+  const handleDeclineCircleJoin = useCallback(async (membershipId) => {
+    try {
+      const { error } = await supabase
+        .from('connection_group_members')
+        .delete()
+        .eq('id', membershipId)
+
+      if (error) throw error
+      setCircleJoinRequests(prev => prev.filter(r => r.id !== membershipId))
+      console.log('✅ Declined circle join request:', membershipId)
+    } catch (err) {
+      console.error('💥 Error declining circle join request:', err)
+    }
+  }, [supabase])
 
   // Load groups count for journey progress
   const loadGroupsCount = useCallback(async () => {
@@ -2387,8 +2466,14 @@ function MainApp({ currentUser, onSignOut }) {
 
         {/* Main Content */}
         <div style={homeStyles.contentGrid}>
-          {/* Connection Requests Section */}
-            {connectionRequests.length > 0 && (
+          {/* Connection & Circle Join Requests Section */}
+            {(connectionRequests.length > 0 || circleJoinRequests.length > 0) && (() => {
+              const allRequests = [
+                ...connectionRequests.map(r => ({ ...r, type: r.type || 'connection_request' })),
+                ...circleJoinRequests,
+              ].sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0))
+
+              return (
               <div style={homeStyles.card}>
                 <h3 style={{
                   fontFamily: '"Lora", serif',
@@ -2403,7 +2488,8 @@ function MainApp({ currentUser, onSignOut }) {
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {connectionRequests.slice(0, 3).map(request => {
+                  {allRequests.slice(0, 5).map(request => {
+                    const isCircleJoin = request.type === 'circle_join_request'
                     const user = request.user || request
                     const rawDate = request.requested_at || request.created_at
                     const requestDate = rawDate ? new Date(rawDate) : null
@@ -2412,7 +2498,7 @@ function MainApp({ currentUser, onSignOut }) {
 
                     return (
                       <div
-                        key={request.id}
+                        key={`${request.type}-${request.id}`}
                         style={{
                           display: 'flex',
                           flexDirection: isMobile ? 'column' : 'row',
@@ -2446,9 +2532,18 @@ function MainApp({ currentUser, onSignOut }) {
                           )}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <h4 style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
-                            <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>{user.career || 'Professional'}</p>
-                            {user.city && (
+                            {isCircleJoin ? (
+                              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
+                                wants to join <strong>{request.circleName}</strong>
+                              </p>
+                            ) : (
+                              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>{user.career || 'Professional'}</p>
+                            )}
+                            {!isCircleJoin && user.city && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
+                            )}
+                            {isCircleJoin && user.career && (
+                              <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.career}</p>
                             )}
                           </div>
                           {!isMobile && (
@@ -2460,44 +2555,90 @@ function MainApp({ currentUser, onSignOut }) {
                           {isMobile && (
                             <span style={{ fontFamily: '"Lora", serif', fontSize: '12px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
                           )}
-                          <button
-                            onClick={() => handleShowInterest(request.id, user.name)}
-                            style={{
-                              padding: isMobile ? '7px 16px' : '9px 20px',
-                              background: 'rgba(103, 77, 59, 0.9)',
-                              border: 'none',
-                              borderRadius: '18px',
-                              color: '#F5EDE9',
-                              fontFamily: '"Lora", serif',
-                              fontStyle: 'italic',
-                              fontSize: isMobile ? '13px' : '15px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              letterSpacing: '0.15px',
-                            }}
-                          >
-                            <Heart style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
-                            Review
-                          </button>
+                          {isCircleJoin ? (
+                            <>
+                              <button
+                                onClick={() => handleDeclineCircleJoin(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 14px' : '9px 18px',
+                                  background: 'transparent',
+                                  border: '1px solid rgba(184, 160, 137, 0.4)',
+                                  borderRadius: '18px',
+                                  color: '#6B5647',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                Decline
+                              </button>
+                              <button
+                                onClick={() => handleAcceptCircleJoin(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 16px' : '9px 20px',
+                                  background: 'rgba(103, 77, 59, 0.9)',
+                                  border: 'none',
+                                  borderRadius: '18px',
+                                  color: '#F5EDE9',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                <Users style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
+                                Accept
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleShowInterest(request.id, user.name)}
+                              style={{
+                                padding: isMobile ? '7px 16px' : '9px 20px',
+                                background: 'rgba(103, 77, 59, 0.9)',
+                                border: 'none',
+                                borderRadius: '18px',
+                                color: '#F5EDE9',
+                                fontFamily: '"Lora", serif',
+                                fontStyle: 'italic',
+                                fontSize: isMobile ? '13px' : '15px',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                letterSpacing: '0.15px',
+                              }}
+                            >
+                              <Heart style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
+                              Review
+                            </button>
+                          )}
                         </div>
                       </div>
                     )
                   })}
                 </div>
 
-                {connectionRequests.length > 3 && (
+                {allRequests.length > 5 && (
                   <button
                     onClick={() => setCurrentView('discover')}
                     style={{ ...homeStyles.seeAllBtn, width: '100%', marginTop: '12px', textAlign: 'center', justifyContent: 'center' }}
                   >
-                    View all {connectionRequests.length} requests →
+                    View all {allRequests.length} requests →
                   </button>
                 )}
               </div>
-            )}
+              )
+            })()}
 
             {/* Upcoming Events Section with Date Badges */}
             <div style={homeStyles.card}>
