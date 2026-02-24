@@ -28,6 +28,7 @@ import UserProfileView from './UserProfileView'
 import ScheduleMeetupView from './ScheduleMeetupView'
 import SessionRecapDetailView from './SessionRecapDetailView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
+import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/coffeeChatHelpers'
 import NudgeBanner from './NudgeBanner'
 import { parseLocalDate } from '@/lib/dateUtils'
 
@@ -95,6 +96,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
   const [circleJoinRequests, setCircleJoinRequests] = useState([]) // Incoming circle join requests
+  const [coffeeChatRequests, setCoffeeChatRequests] = useState([]) // Incoming coffee chat requests
   const [meetupsInitialView, setMeetupsInitialView] = useState(null) // 'past' when coming from review recaps
 
   // Schedule meetup context (for pre-filling)
@@ -487,6 +489,7 @@ function MainApp({ currentUser, onSignOut }) {
 
     // Phase 1 deferred: secondary counts and requests (not needed for initial render)
     loadConnectionRequests()
+    loadCoffeeChatRequests()
     updateAttendedCount()
     loadUnreadMessageCount()
     loadGroupsCount()
@@ -508,6 +511,7 @@ function MainApp({ currentUser, onSignOut }) {
     // Only reload if we're returning to home from a different view
     if (currentView === 'home' && prevView !== 'home' && hasLoadedRef.current) {
       loadHomePageData()
+      loadCoffeeChatRequests()
     }
   }, [currentView])
 
@@ -808,6 +812,37 @@ function MainApp({ currentUser, onSignOut }) {
       console.log('✅ Declined circle join request:', membershipId)
     } catch (err) {
       console.error('💥 Error declining circle join request:', err)
+    }
+  }, [supabase])
+
+  // Load pending coffee chat requests
+  const loadCoffeeChatRequests = useCallback(async () => {
+    try {
+      const requests = await getPendingRequests(supabase)
+      setCoffeeChatRequests(requests)
+    } catch (err) {
+      console.error('Error loading coffee chat requests:', err)
+      setCoffeeChatRequests([])
+    }
+  }, [supabase])
+
+  // Accept a coffee chat request
+  const handleAcceptCoffeeChat = useCallback(async (chatId) => {
+    try {
+      await acceptCoffeeChat(supabase, chatId)
+      setCoffeeChatRequests(prev => prev.filter(r => r.id !== chatId))
+    } catch (err) {
+      console.error('Error accepting coffee chat:', err)
+    }
+  }, [supabase])
+
+  // Decline a coffee chat request
+  const handleDeclineCoffeeChat = useCallback(async (chatId) => {
+    try {
+      await declineCoffeeChat(supabase, chatId)
+      setCoffeeChatRequests(prev => prev.filter(r => r.id !== chatId))
+    } catch (err) {
+      console.error('Error declining coffee chat:', err)
     }
   }, [supabase])
 
@@ -2467,10 +2502,11 @@ function MainApp({ currentUser, onSignOut }) {
         {/* Main Content */}
         <div style={homeStyles.contentGrid}>
           {/* Connection & Circle Join Requests Section */}
-            {(connectionRequests.length > 0 || circleJoinRequests.length > 0) && (() => {
+            {(connectionRequests.length > 0 || circleJoinRequests.length > 0 || coffeeChatRequests.length > 0) && (() => {
               const allRequests = [
                 ...connectionRequests.map(r => ({ ...r, type: r.type || 'connection_request' })),
                 ...circleJoinRequests,
+                ...coffeeChatRequests.map(r => ({ ...r, type: 'coffee_chat_request' })),
               ].sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0))
 
               return (
@@ -2490,7 +2526,8 @@ function MainApp({ currentUser, onSignOut }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {allRequests.slice(0, 5).map(request => {
                     const isCircleJoin = request.type === 'circle_join_request'
-                    const user = request.user || request
+                    const isCoffeeChatRequest = request.type === 'coffee_chat_request'
+                    const user = isCoffeeChatRequest ? (request.requester || {}) : (request.user || request)
                     const rawDate = request.requested_at || request.created_at
                     const requestDate = rawDate ? new Date(rawDate) : null
                     const daysAgo = requestDate ? Math.floor((Date.now() - requestDate) / (1000 * 60 * 60 * 24)) : null
@@ -2532,14 +2569,26 @@ function MainApp({ currentUser, onSignOut }) {
                           )}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <h4 style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
-                            {isCircleJoin ? (
+                            {isCoffeeChatRequest ? (
+                              <>
+                                <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
+                                  wants a coffee chat {request.scheduled_time && <>· {new Date(request.scheduled_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(request.scheduled_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</>}
+                                </p>
+                                {user.career && (
+                                  <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.career}</p>
+                                )}
+                                {request.notes && (
+                                  <p style={{ fontSize: '11px', color: '#B8A089', margin: '2px 0 0 0', fontStyle: 'italic' }}>"{request.notes}"</p>
+                                )}
+                              </>
+                            ) : isCircleJoin ? (
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
                                 wants to join <strong>{request.circleName}</strong>
                               </p>
                             ) : (
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>{user.career || 'Professional'}</p>
                             )}
-                            {!isCircleJoin && user.city && (
+                            {!isCircleJoin && !isCoffeeChatRequest && user.city && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
                             )}
                             {isCircleJoin && user.career && (
@@ -2555,7 +2604,50 @@ function MainApp({ currentUser, onSignOut }) {
                           {isMobile && (
                             <span style={{ fontFamily: '"Lora", serif', fontSize: '12px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
                           )}
-                          {isCircleJoin ? (
+                          {isCoffeeChatRequest ? (
+                            <>
+                              <button
+                                onClick={() => handleDeclineCoffeeChat(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 14px' : '9px 18px',
+                                  background: 'transparent',
+                                  border: '1px solid rgba(184, 160, 137, 0.4)',
+                                  borderRadius: '18px',
+                                  color: '#6B5647',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                Decline
+                              </button>
+                              <button
+                                onClick={() => handleAcceptCoffeeChat(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 16px' : '9px 20px',
+                                  background: 'rgba(103, 77, 59, 0.9)',
+                                  border: 'none',
+                                  borderRadius: '18px',
+                                  color: '#F5EDE9',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                <Coffee style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
+                                Accept
+                              </button>
+                            </>
+                          ) : isCircleJoin ? (
                             <>
                               <button
                                 onClick={() => handleDeclineCircleJoin(request.id)}
