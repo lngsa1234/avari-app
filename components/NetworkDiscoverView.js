@@ -2,7 +2,7 @@
 // Network discovery page with Vibe Bar, Recommended Section, and Dynamic Results Feed
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { parseLocalDate } from '../lib/dateUtils';
 import {
   Search,
@@ -87,6 +87,84 @@ const PLACEHOLDER_HINTS = [
   'Looking for a co-founder?',
 ];
 
+// Score a circle's relevance for the current user
+function scoreCircleForUser(circle, currentUser, connectionIds) {
+  let score = 0;
+  const reasons = [];
+
+  const members = circle.members || [];
+
+  // 1. Connections as members (0.15 per connection, capped at 0.30)
+  const connMembers = members.filter(m => connectionIds.has(m.user_id));
+  if (connMembers.length > 0) {
+    score += Math.min(connMembers.length * 0.15, 0.30);
+    const names = connMembers
+      .map(m => m.user?.name?.split(' ')[0])
+      .filter(Boolean);
+    if (names.length === 1) {
+      reasons.push(`${names[0]} is a member`);
+    } else if (names.length > 1) {
+      reasons.push(`${names.length} of your connections are here`);
+    }
+  }
+
+  // 2. Interest overlap with members (0.08 per shared interest, capped at 0.25)
+  const userInterests = (currentUser.interests || []).map(i => i.toLowerCase());
+  if (userInterests.length > 0) {
+    const memberInterests = new Set();
+    members.forEach(m => {
+      (m.user?.interests || []).forEach(i => memberInterests.add(i.toLowerCase()));
+    });
+    const shared = userInterests.filter(i => memberInterests.has(i));
+    if (shared.length > 0) {
+      score += Math.min(shared.length * 0.08, 0.25);
+      reasons.push(`Shared interests: ${shared.slice(0, 3).join(', ')}`);
+    }
+  }
+
+  // 3. Career similarity with members (0.05 per match, capped at 0.15)
+  const userCareer = (currentUser.career || '').toLowerCase();
+  if (userCareer) {
+    const careerMatches = members.filter(m =>
+      (m.user?.career || '').toLowerCase() === userCareer
+    ).length;
+    if (careerMatches > 0) {
+      score += Math.min(careerMatches * 0.05, 0.15);
+      reasons.push(`${careerMatches} member${careerMatches > 1 ? 's' : ''} in ${currentUser.career}`);
+    }
+  }
+
+  // 4. Circle name/description matches user interests (0.08 per keyword, capped at 0.15)
+  if (userInterests.length > 0) {
+    const circleText = `${circle.name || ''} ${circle.description || ''}`.toLowerCase();
+    const keywordMatches = userInterests.filter(i => circleText.includes(i));
+    if (keywordMatches.length > 0) {
+      score += Math.min(keywordMatches.length * 0.08, 0.15);
+      reasons.push(`Matches your interests`);
+    }
+  }
+
+  // 5. Ideal group size 3-8 (0.10 for 3-8, 0.05 for 1-2)
+  const memberCount = members.length;
+  if (memberCount >= 3 && memberCount <= 8) {
+    score += 0.10;
+  } else if (memberCount >= 1 && memberCount <= 2) {
+    score += 0.05;
+  }
+
+  // 6. Vibe category exact match (0.05)
+  if (currentUser.vibe_category && circle.vibe_category === currentUser.vibe_category) {
+    score += 0.05;
+    reasons.push('Matches your vibe');
+  }
+
+  return {
+    score,
+    reason: reasons[0] || null,
+    reasons,
+  };
+}
+
 export default function NetworkDiscoverView({
   currentUser,
   supabase,
@@ -142,6 +220,24 @@ export default function NetworkDiscoverView({
   const isTablet = windowWidth >= 480 && windowWidth < 768;
 
   const isNewUser = connections.length === 0;
+
+  // Scored and sorted circles for recommendations
+  const connectionIds = useMemo(() =>
+    new Set(connections.map(c => c.id)), [connections]);
+
+  const scoredAvailableCircles = useMemo(() => {
+    const filtered = connectionGroups.filter(group => {
+      const isMember = group.members?.some(m => m.user_id === currentUser.id);
+      const memberCount = group.members?.length || 0;
+      return !isMember && memberCount < 10;
+    });
+    return filtered
+      .map(circle => ({
+        ...circle,
+        _scoring: scoreCircleForUser(circle, currentUser, connectionIds)
+      }))
+      .sort((a, b) => b._scoring.score - a._scoring.score);
+  }, [connectionGroups, currentUser, connectionIds]);
 
   // Rotating placeholder animation
   useEffect(() => {
@@ -310,7 +406,7 @@ export default function NetworkDiscoverView({
         .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(30);
 
       if (error) {
         console.error('Error fetching connection groups:', error);
@@ -1540,12 +1636,7 @@ export default function NetworkDiscoverView({
 
       {/* Intimate Circles */}
       {(() => {
-        // Filter groups where current user is NOT a member and group is not full
-        const availableCircles = connectionGroups.filter(group => {
-          const isMember = group.members?.some(m => m.user_id === currentUser.id);
-          const memberCount = group.members?.length || 0;
-          return !isMember && memberCount < 10;
-        });
+        const availableCircles = scoredAvailableCircles;
 
         const circleGradients = [
           'linear-gradient(160deg, #6B4226 0%, #A0714F 50%, #C49A6C 100%)',
@@ -1801,6 +1892,30 @@ export default function NetworkDiscoverView({
                         {isInviteOnly ? 'Invite Only' : 'Open'}
                       </span>
 
+                      {/* Recommendation reason badge */}
+                      {circle._scoring?.reason && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '10px',
+                          left: isInviteOnly ? '100px' : '68px',
+                          padding: '3px 10px',
+                          borderRadius: '999px',
+                          fontSize: isMobile ? '9px' : '10px',
+                          fontWeight: '600',
+                          backgroundColor: 'rgba(255,255,255,0.22)',
+                          backdropFilter: 'blur(4px)',
+                          WebkitBackdropFilter: 'blur(4px)',
+                          color: 'white',
+                          zIndex: 2,
+                          maxWidth: '130px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {circle._scoring.reason}
+                        </span>
+                      )}
+
                       {/* Top-right: member count */}
                       <span style={{
                         position: 'absolute',
@@ -1869,6 +1984,36 @@ export default function NetworkDiscoverView({
                         }}>
                           {description}
                         </p>
+
+                        {/* Connection social proof */}
+                        {(() => {
+                          const connInCircle = (circle.members || []).filter(m => connectionIds.has(m.user_id));
+                          if (connInCircle.length === 0) return null;
+                          const names = connInCircle.map(m => m.user?.name?.split(' ')[0]).filter(Boolean);
+                          const text = names.length === 1
+                            ? `${names[0]} is here`
+                            : `${names.length} of your connections are here`;
+                          return (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '6px 10px',
+                              borderRadius: '8px',
+                              backgroundColor: `${colors.primary}12`,
+                              marginBottom: '10px',
+                            }}>
+                              <UserPlus size={13} style={{ color: colors.primary, flexShrink: 0 }} />
+                              <span style={{
+                                fontSize: isMobile ? '11px' : '12px',
+                                fontWeight: '600',
+                                color: colors.primary,
+                              }}>
+                                {text}
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         {/* Avatar stack + spots */}
                         <div style={{

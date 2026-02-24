@@ -1882,21 +1882,62 @@ function MainApp({ currentUser, onSignOut }) {
         }
       })
 
-      return [...filteredMeetups, ...normalizedChats].sort((a, b) => {
-        const getDate = (item) => {
-          if (item._scheduledDate) return item._scheduledDate
-          try {
-            const d = new Date(item.date)
-            if (item.time) {
-              const [h, m] = item.time.split(':').map(Number)
-              d.setHours(h, m, 0, 0)
-            }
-            return d
-          } catch { return new Date() }
+      const getDate = (item) => {
+        if (item._scheduledDate) return item._scheduledDate
+        try {
+          const d = new Date(item.date)
+          if (item.time) {
+            const [h, m] = item.time.split(':').map(Number)
+            d.setHours(h, m, 0, 0)
+          }
+          return d
+        } catch { return new Date() }
+      }
+
+      const scoreEvent = (item) => {
+        let score = 0
+
+        // Coffee chats: always top priority
+        if (item._isCoffeeChat) score += 100
+
+        // User already signed up
+        if (item._isCoffeeChat || userSignups.includes(item.id)) score += 90
+
+        // Currently live (within duration window)
+        const itemDate = getDate(item)
+        const endTime = new Date(itemDate.getTime() + (item.duration || 60) * 60000)
+        if (now >= itemDate && now <= endTime) score += 80
+
+        // Host is a connection
+        if (item.host && connections.some(c => c.id === item.host.id)) score += 30
+
+        // Attendees include connections (5 per connection, max 25)
+        const meetupSignups = signups[item.id] || []
+        const connectionAttendees = meetupSignups.filter(s => connections.some(c => c.id === s.user_id)).length
+        score += Math.min(connectionAttendees * 5, 25)
+
+        // User's circle meetup
+        if (item.circle_id) score += 20
+
+        // Time proximity: within 24 hours
+        const hoursAway = (itemDate - now) / (1000 * 60 * 60)
+        if (hoursAway >= 0 && hoursAway <= 24) score += 15
+
+        // Capacity
+        if (item.participant_limit) {
+          if (meetupSignups.length >= item.participant_limit) score -= 10
+          else score += 5
         }
+
+        return score
+      }
+
+      return [...filteredMeetups, ...normalizedChats].sort((a, b) => {
+        const scoreDiff = scoreEvent(b) - scoreEvent(a)
+        if (scoreDiff !== 0) return scoreDiff
         return getDate(a) - getDate(b)
       })
-    }, [meetups, upcomingCoffeeChats, currentUser.id])
+    }, [meetups, upcomingCoffeeChats, currentUser.id, userSignups, connections, signups])
 
     // Get time-based greeting
     const { greeting, emoji } = getTimeBasedGreeting()
@@ -2363,10 +2404,11 @@ function MainApp({ currentUser, onSignOut }) {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {connectionRequests.slice(0, 3).map(request => {
-                    const user = request.user
-                    const requestDate = new Date(request.requested_at)
-                    const daysAgo = Math.floor((Date.now() - requestDate) / (1000 * 60 * 60 * 24))
-                    const timeAgo = daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`
+                    const user = request.user || request
+                    const rawDate = request.requested_at || request.created_at
+                    const requestDate = rawDate ? new Date(rawDate) : null
+                    const daysAgo = requestDate ? Math.floor((Date.now() - requestDate) / (1000 * 60 * 60 * 24)) : null
+                    const timeAgo = daysAgo === null ? 'new' : daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : `${daysAgo} days ago`
 
                     return (
                       <div
@@ -2921,7 +2963,8 @@ function MainApp({ currentUser, onSignOut }) {
                       alert('Link copied to clipboard!')
                     }
                   },
-                  badge: null
+                  badge: null,
+                  thumbnail: '/thumbnails/invite-friends.svg'
                 },
                 {
                   id: 'connections',

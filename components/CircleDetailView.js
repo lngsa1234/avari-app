@@ -106,6 +106,8 @@ export default function CircleDetailView({
   const [deletingCircleMeetupId, setDeletingCircleMeetupId] = useState(null);
   const [showDeleteCircleMeetupConfirm, setShowDeleteCircleMeetupConfirm] = useState(false);
   const [deleteAllFuture, setDeleteAllFuture] = useState(false);
+  const [showJoinConfirm, setShowJoinConfirm] = useState(false);
+  const [joinSuccess, setJoinSuccess] = useState(false);
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -405,7 +407,7 @@ export default function CircleDetailView({
       // Check if already a member
       const existing = members.find(m => m.user_id === currentUser.id);
       if (existing) {
-        alert('You already have a pending request or are a member.');
+        setShowJoinConfirm(false);
         return;
       }
 
@@ -420,11 +422,12 @@ export default function CircleDetailView({
 
       if (error) throw error;
 
-      alert(`Request sent! ${host?.name || 'The host'} will review your request.`);
+      setShowJoinConfirm(false);
+      setJoinSuccess(true);
       await loadCircleDetails();
     } catch (error) {
       console.error('Error requesting to join:', error);
-      alert('Error sending request: ' + error.message);
+      setShowJoinConfirm(false);
     } finally {
       setActionLoading(false);
     }
@@ -1031,10 +1034,10 @@ export default function CircleDetailView({
               ...(isFull ? styles.waitlistButton : {}),
               ...(actionLoading ? styles.buttonDisabled : {}),
             }}
-            onClick={handleRequestToJoin}
+            onClick={() => setShowJoinConfirm(true)}
             disabled={actionLoading}
           >
-            {actionLoading ? 'Sending...' : isFull ? 'Join Waitlist' : 'Request to Join'}
+            {isFull ? 'Join Waitlist' : 'Request to Join'}
           </button>
         )}
 
@@ -1082,6 +1085,93 @@ export default function CircleDetailView({
                 disabled={actionLoading}
               >
                 {actionLoading ? 'Leaving...' : 'Leave Circle'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Join Confirmation Modal */}
+      {showJoinConfirm && (
+        <div style={styles.modalOverlay} onClick={() => setShowJoinConfirm(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                background: `linear-gradient(135deg, ${colors.primary}20, ${colors.primary}40)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+              }}>
+                <Users size={22} style={{ color: colors.primary }} />
+              </div>
+              <h3 style={{ ...styles.modalTitle, margin: '0 0 8px' }}>
+                {isFull ? 'Join Waitlist?' : 'Join this Circle?'}
+              </h3>
+            </div>
+            <p style={styles.modalText}>
+              {isFull
+                ? `This circle is currently full. You'll be added to the waitlist and notified when a spot opens up.`
+                : `Your request will be sent to ${host?.name || 'the host'} for approval. You'll be notified once accepted.`
+              }
+            </p>
+            <div style={styles.modalActions}>
+              <button
+                style={styles.cancelButton}
+                onClick={() => setShowJoinConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                style={{
+                  ...styles.cancelButton,
+                  backgroundColor: colors.primary,
+                  color: 'white',
+                }}
+                onClick={handleRequestToJoin}
+                disabled={actionLoading}
+              >
+                {actionLoading ? 'Sending...' : isFull ? 'Join Waitlist' : 'Send Request'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Join Success Modal */}
+      {joinSuccess && (
+        <div style={styles.modalOverlay} onClick={() => setJoinSuccess(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #E8F5E9, #C8E6C9)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 14px',
+              }}>
+                <Check size={26} style={{ color: '#4CAF50' }} />
+              </div>
+              <h3 style={{ ...styles.modalTitle, margin: '0 0 8px' }}>Request Sent!</h3>
+              <p style={{ ...styles.modalText, margin: '0 0 20px' }}>
+                {host?.name || 'The host'} will review your request. You'll be notified once accepted.
+              </p>
+              <button
+                style={{
+                  ...styles.cancelButton,
+                  backgroundColor: colors.primary,
+                  color: 'white',
+                  width: '100%',
+                }}
+                onClick={() => setJoinSuccess(false)}
+              >
+                Got it
               </button>
             </div>
           </div>
