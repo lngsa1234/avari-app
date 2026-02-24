@@ -11,6 +11,33 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Mark messages as read when opening a chat
+  const markMessagesAsRead = useCallback(async (conversation) => {
+    if (!conversation || conversation.isGroup || conversation.unread === 0) return
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .update({ read: true })
+        .eq('sender_id', conversation.oderId)
+        .eq('receiver_id', currentUser.id)
+        .eq('read', false)
+      if (error) console.error('Error marking messages as read:', error)
+    } catch (err) {
+      console.error('Error marking messages as read:', err)
+    }
+  }, [currentUser.id, supabase])
+
+  const handleSelectChat = useCallback((conversation) => {
+    setActiveChat(conversation)
+    if (conversation.unread > 0) {
+      markMessagesAsRead(conversation)
+      // Update local unread count
+      setConversations(prev => prev.map(c =>
+        c.id === conversation.id ? { ...c, unread: 0 } : c
+      ))
+    }
+  }, [markMessagesAsRead])
+
   // Load conversations on mount
   useEffect(() => {
     loadConversations();
@@ -25,7 +52,7 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
         (initialChatType === 'user' && !c.isGroup && c.oderId === initialChatId)
       );
       if (chat) {
-        setActiveChat(chat);
+        handleSelectChat(chat);
       }
     }
   }, [initialChatId, initialChatType, conversations]);
@@ -425,7 +452,7 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           totalUnread={totalUnread}
-          onSelectChat={setActiveChat}
+          onSelectChat={handleSelectChat}
           onCompose={() => setShowCompose(true)}
           previousView={previousView}
           onNavigate={onNavigate}
