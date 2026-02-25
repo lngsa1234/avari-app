@@ -658,11 +658,11 @@ export default function UnifiedCallPage() {
     // Collect remote tracks — ontrack fires once per track (audio + video)
     const remoteTracks = { video: null, audio: null };
     pc.ontrack = (event) => {
-      console.log('[WebRTC] ontrack fired, track kind:', event.track.kind);
+      console.log('[WebRTC] ontrack fired, track kind:', event.track.kind, 'readyState:', event.track.readyState, 'enabled:', event.track.enabled);
+      // Always create dedicated MediaStream per track for clean attachment
       if (event.track.kind === 'video') {
-        remoteTracks.video = event.streams[0] || new MediaStream([event.track]);
+        remoteTracks.video = new MediaStream([event.track]);
       } else if (event.track.kind === 'audio') {
-        // Always create a dedicated audio stream so it attaches to the <audio> element
         remoteTracks.audio = new MediaStream([event.track]);
       }
       setRemoteParticipants([{
