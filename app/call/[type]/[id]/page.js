@@ -867,9 +867,19 @@ export default function UnifiedCallPage() {
 
     // Event handlers
     client.on('user-published', async (remoteUser, mediaType) => {
-      console.log('[Agora] user-published:', remoteUser.uid, mediaType);
+      const uid = String(remoteUser.uid);
+      const isScreenClient = uid.endsWith('_screen');
+      const isOwnScreenClient = uid === `${agoraUid}_screen`;
+      console.log('[Agora] user-published:', uid, mediaType, isScreenClient ? '(screen)' : '');
+
+      // Skip subscribing to our own screen share client
+      if (isOwnScreenClient) {
+        console.log('[Agora] Skipping own screen client');
+        return;
+      }
+
       await client.subscribe(remoteUser, mediaType);
-      console.log('[Agora] Subscribed to:', remoteUser.uid, 'videoTrack:', !!remoteUser.videoTrack);
+      console.log('[Agora] Subscribed to:', uid, 'videoTrack:', !!remoteUser.videoTrack);
       updateAgoraParticipants(client);
     });
 
