@@ -120,6 +120,14 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
     setShowScheduleModal(true);
   };
 
+  const notifyEmail = (type, chatId) => {
+    fetch('/api/notifications/coffee-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationType: type, chatId }),
+    }).catch(err => console.error('[Email] notify failed:', err));
+  };
+
   const handleSubmitRequest = async () => {
     if (!scheduledDate || !scheduledTime) {
       alert('Please select date and time');
@@ -128,12 +136,14 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
 
     try {
       const dateTime = new Date(`${scheduledDate}T${scheduledTime}`);
-      
-      await requestCoffeeChat(supabase, {
+
+      const data = await requestCoffeeChat(supabase, {
         recipientId: selectedConnection.connected_user_id || selectedConnection.id,
         scheduledTime: dateTime,
         notes: notes
       });
+
+      if (data?.id) notifyEmail('new_request', data.id);
 
       alert(`✅ Video chat requested with ${selectedConnection.connected_user?.name || selectedConnection.name}!`);
       
@@ -154,6 +164,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
   const handleAccept = async (chatId) => {
     try {
       await acceptCoffeeChat(supabase, chatId);
+      notifyEmail('accepted', chatId);
       alert('✅ Video chat accepted! Video room created.');
       await loadCoffeeChats();
       await loadPendingRequests();
@@ -168,9 +179,10 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
 
   const handleDecline = async (chatId) => {
     if (!confirm('Decline this video chat request?')) return;
-    
+
     try {
       await declineCoffeeChat(supabase, chatId);
+      notifyEmail('declined', chatId);
       loadPendingRequests();
     } catch (error) {
       alert('Error: ' + error.message);

@@ -31,53 +31,31 @@ export default function AIInsightsPage() {
           .eq('id', user.id)
           .single();
 
-        // Fetch connections (without profile join - profiles fetched separately if needed)
-        const { data: connectionsAsUser } = await supabase
-          .from('connections')
-          .select('id, created_at, connected_user_id')
-          .eq('user_id', user.id)
-          .eq('status', 'accepted');
+        // Fetch connections via mutual matches RPC
+        const { data: matches } = await supabase
+          .rpc('get_mutual_matches', { for_user_id: user.id });
 
-        const { data: connectionsAsConnected } = await supabase
-          .from('connections')
-          .select('id, created_at, user_id')
-          .eq('connected_user_id', user.id)
-          .eq('status', 'accepted');
+        const matchedUserIds = (matches || []).map(m => m.matched_user_id).filter(Boolean);
 
-        // Fetch profile details for connected users
-        const connectedUserIds = [
-          ...(connectionsAsUser || []).map(c => c.connected_user_id),
-          ...(connectionsAsConnected || []).map(c => c.user_id)
-        ].filter(Boolean);
-
-        const { data: connectedProfiles } = connectedUserIds.length > 0
-          ? await supabase.from('profiles').select('id, name, profile_picture, career').in('id', connectedUserIds)
+        const { data: connectedProfiles } = matchedUserIds.length > 0
+          ? await supabase.from('profiles').select('id, name, profile_picture, career').in('id', matchedUserIds)
           : { data: [] };
 
         const profileMap = Object.fromEntries((connectedProfiles || []).map(p => [p.id, p]));
 
-        // Combine connections from both directions
-        const connections = [
-          ...(connectionsAsUser || []).map(c => ({
-            id: c.id,
-            created_at: c.created_at,
-            profile: profileMap[c.connected_user_id] || null,
-            other_user_id: c.connected_user_id,
-          })),
-          ...(connectionsAsConnected || []).map(c => ({
-            id: c.id,
-            created_at: c.created_at,
-            profile: profileMap[c.user_id] || null,
-            other_user_id: c.user_id,
-          })),
-        ];
+        const connections = (matches || []).map(m => ({
+          id: m.matched_user_id,
+          created_at: m.matched_at,
+          profile: profileMap[m.matched_user_id] || null,
+          other_user_id: m.matched_user_id,
+        }));
 
         // Fetch coffee chats/meetings
         const { data: meetings } = await supabase
-          .from('agora_rooms')
-          .select('*, meetup:meetups(*)')
-          .or(`created_by.eq.${user.id},participants.cs.{${user.id}}`)
-          .not('ended_at', 'is', null)
+          .from('coffee_chats')
+          .select('*')
+          .or(`requester_id.eq.${user.id},recipient_id.eq.${user.id}`)
+          .eq('status', 'completed')
           .order('created_at', { ascending: false })
           .limit(20);
 
@@ -534,10 +512,10 @@ function generateMemorableMoments(meetings, signups, circles) {
     const meeting = meetings[0];
     moments.push({
       type: "meeting",
-      title: meeting.meetup?.topic || "Video meeting",
+      title: "Coffee chat",
       description: "A great conversation with your network",
       emoji: "☕",
-      date: new Date(meeting.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      date: new Date(meeting.scheduled_time || meeting.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     });
   }
 
