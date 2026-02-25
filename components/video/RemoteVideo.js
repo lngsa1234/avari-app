@@ -91,12 +91,21 @@ const RemoteVideo = memo(function RemoteVideo({
       const videoEl = videoElement.querySelector('video');
       if (videoEl) {
         videoEl.style.setProperty('transform', 'none', 'important');
-        // Check if the video element needs a user gesture to play (mobile Safari)
-        if (videoEl.paused) {
-          videoEl.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
-        } else {
-          setNeedsPlay(false);
-        }
+        // Try to autoplay with retries — the stream may not be ready immediately
+        const tryPlay = (attempts = 0) => {
+          if (!videoEl.paused) { setNeedsPlay(false); return; }
+          videoEl.play()
+            .then(() => setNeedsPlay(false))
+            .catch(() => {
+              if (attempts < 3) {
+                setTimeout(() => tryPlay(attempts + 1), 500);
+              } else {
+                setNeedsPlay(true);
+              }
+            });
+        };
+        // Defer first attempt to let the stream settle
+        setTimeout(() => tryPlay(), 200);
       } else {
         setNeedsPlay(false);
       }
