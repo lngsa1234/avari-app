@@ -663,6 +663,19 @@ export default function UnifiedCallPage() {
 
     pc.onconnectionstatechange = () => {
       console.log('[WebRTC] Connection state:', pc.connectionState);
+      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+        setRemoteParticipants(prev => prev.map(p => ({
+          ...p,
+          isDisconnected: true,
+          _lastUpdate: Date.now(),
+        })));
+      } else if (pc.connectionState === 'connected') {
+        setRemoteParticipants(prev => prev.map(p => ({
+          ...p,
+          isDisconnected: false,
+          _lastUpdate: Date.now(),
+        })));
+      }
     };
 
     pc.oniceconnectionstatechange = () => {

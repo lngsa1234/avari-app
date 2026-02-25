@@ -184,24 +184,24 @@ const RemoteVideo = memo(function RemoteVideo({
       {/* Video layer */}
       <div
         ref={videoRef}
-        className={`absolute inset-0 overflow-hidden rounded-lg ${providerType === 'agora' ? 'agora-video-player' : ''}`}
+        className={`absolute inset-0 overflow-hidden rounded-lg remote-video-container ${providerType === 'agora' ? 'agora-video-player' : ''}`}
         style={{
           backgroundColor: '#292524',
-          zIndex: hasVideo ? 10 : 1
+          zIndex: hasVideo && !participant.isDisconnected ? 10 : 1
         }}
       />
 
-      {/* Placeholder when no video */}
+      {/* Placeholder when no video or disconnected */}
       <div
-        className="absolute inset-0 bg-stone-700 flex items-center justify-center overflow-hidden rounded-lg"
-        style={{ zIndex: hasVideo ? 1 : 10 }}
+        className={`absolute inset-0 flex items-center justify-center overflow-hidden rounded-lg ${participant.isDisconnected ? 'bg-stone-900' : 'bg-stone-700'}`}
+        style={{ zIndex: hasVideo && !participant.isDisconnected ? 1 : 10 }}
       >
         <VideoAvatar
           name={displayName}
           size={size}
           accentColor="mocha"
           showName={size !== 'thumbnail'}
-          subtitle={size !== 'thumbnail' ? 'Camera off' : undefined}
+          subtitle={size !== 'thumbnail' ? (participant.isDisconnected ? 'Disconnected' : 'Camera off') : undefined}
         />
       </div>
 
@@ -245,6 +245,7 @@ const RemoteVideo = memo(function RemoteVideo({
     prevProps.participant.videoTrack === nextProps.participant.videoTrack &&
     prevProps.participant.audioTrack === nextProps.participant.audioTrack &&
     prevProps.participant.connectionQuality === nextProps.participant.connectionQuality &&
+    prevProps.participant.isDisconnected === nextProps.participant.isDisconnected &&
     prevProps.participant._lastUpdate === nextProps.participant._lastUpdate &&
     prevProps.size === nextProps.size &&
     prevProps.providerType === nextProps.providerType
