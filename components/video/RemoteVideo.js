@@ -27,6 +27,7 @@ const RemoteVideo = memo(function RemoteVideo({
   const attachedAudioRef = useRef(null);
   const lastEnabledRef = useRef(true);
   const [hasVideo, setHasVideo] = useState(false);
+  const [needsPlay, setNeedsPlay] = useState(false);
 
   // Get track based on provider type
   const getTrack = (trackType) => {
@@ -86,6 +87,13 @@ const RemoteVideo = memo(function RemoteVideo({
     try {
       attachTrack(track, videoElement, providerType, 'video');
       attachedVideoRef.current = track;
+      // Check if the video element needs a user gesture to play (mobile Safari)
+      const videoEl = videoElement.querySelector('video');
+      if (videoEl && videoEl.paused) {
+        videoEl.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
+      } else {
+        setNeedsPlay(false);
+      }
     } catch (e) {
       console.error('[RemoteVideo] Error attaching video track:', e);
     }
@@ -145,11 +153,24 @@ const RemoteVideo = memo(function RemoteVideo({
   const containerClass = VIDEO_SIZE_CLASSES[size] || VIDEO_SIZE_CLASSES.grid;
   const labelClass = LABEL_SIZE_CLASSES[size] || LABEL_SIZE_CLASSES.grid;
 
+  // Tap-to-play handler for mobile Safari autoplay restrictions
+  const handleTapToPlay = () => {
+    if (onClick) onClick();
+    const videoEl = videoRef.current?.querySelector('video');
+    if (videoEl && videoEl.paused) {
+      videoEl.play().then(() => setNeedsPlay(false)).catch(() => {});
+    }
+    const audioEl = audioRef.current;
+    if (audioEl && audioEl.paused) {
+      audioEl.play().catch(() => {});
+    }
+  };
+
   return (
     <div
       className={`bg-stone-800 rounded-lg relative ${containerClass}`}
-      onClick={onClick}
-      style={onClick ? { cursor: 'pointer' } : undefined}
+      onClick={handleTapToPlay}
+      style={{ cursor: needsPlay ? 'pointer' : (onClick ? 'pointer' : undefined) }}
     >
       {/* Hidden audio element - needed for all providers */}
       <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
@@ -185,6 +206,15 @@ const RemoteVideo = memo(function RemoteVideo({
           participant.connectionQuality === 'fair' ? 'bg-amber-500 text-black' : 'bg-amber-600 text-white'
         }`}>
           {participant.connectionQuality === 'poor' ? '📶 Poor' : '📶 Fair'}
+        </div>
+      )}
+
+      {/* Tap to play overlay for mobile autoplay restrictions */}
+      {needsPlay && hasVideo && (
+        <div className="absolute inset-0 flex items-center justify-center z-40 bg-black/30 rounded-lg">
+          <div className="text-white text-sm bg-black/60 px-4 py-2 rounded-full">
+            Tap to play video
+          </div>
         </div>
       )}
 

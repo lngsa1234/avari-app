@@ -772,7 +772,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const handleUpdateMeetup = async () => {
     if (!editingMeetup) return;
     try {
-      const { error } = await supabase
+      console.log('📝 Updating meetup:', editingMeetup.id, { date: editingMeetup.date, time: editingMeetup.time });
+      const { data, error } = await supabase
         .from('meetups')
         .update({
           topic: editingMeetup.topic,
@@ -780,7 +781,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           time: editingMeetup.time,
           location: editingMeetup.location,
         })
-        .eq('id', editingMeetup.id);
+        .eq('id', editingMeetup.id)
+        .select();
+
+      console.log('📝 Update result:', { data, error, rowsUpdated: data?.length });
 
       if (!error) {
         setGroupEvents(prev => prev.map(e =>
