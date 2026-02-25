@@ -108,6 +108,10 @@ export default function CircleDetailView({
   const [deleteAllFuture, setDeleteAllFuture] = useState(false);
   const [showJoinConfirm, setShowJoinConfirm] = useState(false);
   const [joinSuccess, setJoinSuccess] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [invitableConnections, setInvitableConnections] = useState([]);
+  const [selectedInvites, setSelectedInvites] = useState([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -196,6 +200,74 @@ export default function CircleDetailView({
       console.error('Error loading circle details:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openInviteModal = async () => {
+    try {
+      // Get current user's connections via mutual matches
+      const { data: matches, error: connError } = await supabase
+        .rpc('get_mutual_matches', { for_user_id: currentUser.id });
+
+      if (connError) throw connError;
+
+      const connectedUserIds = (matches || []).map(m => m.matched_user_id);
+
+      // Exclude users already in this circle (any status)
+      const existingMemberIds = new Set(members.map(m => m.user_id));
+      const invitableIds = connectedUserIds.filter(id => !existingMemberIds.has(id));
+
+      if (invitableIds.length === 0) {
+        setInvitableConnections([]);
+        setShowInviteModal(true);
+        return;
+      }
+
+      // Fetch profiles
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, career, profile_picture')
+        .in('id', invitableIds);
+
+      setInvitableConnections(profiles || []);
+      setSelectedInvites([]);
+      setShowInviteModal(true);
+    } catch (err) {
+      console.error('Error loading invitable connections:', err);
+    }
+  };
+
+  const handleSendInvites = async () => {
+    if (selectedInvites.length === 0) return;
+
+    // Check max members
+    if (memberCount + selectedInvites.length > maxMembers) {
+      alert(`This circle can have at most ${maxMembers} members. Only ${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left.`);
+      return;
+    }
+
+    setInviteLoading(true);
+    try {
+      const inserts = selectedInvites.map(userId => ({
+        group_id: circleId,
+        user_id: userId,
+        status: 'invited',
+      }));
+
+      const { error } = await supabase
+        .from('connection_group_members')
+        .insert(inserts);
+
+      if (error) throw error;
+
+      setShowInviteModal(false);
+      setSelectedInvites([]);
+      loadCircleDetails();
+    } catch (err) {
+      console.error('Error sending invites:', err);
+      alert('Failed to send invites. Please try again.');
+    } finally {
+      setInviteLoading(false);
     }
   };
 
@@ -849,12 +921,36 @@ export default function CircleDetailView({
         <div style={styles.section}>
           <div style={styles.sectionHeader}>
             <h3 style={styles.sectionTitle}>Members</h3>
-            <span style={styles.memberCount}>
-              {memberCount}/{maxMembers}
-              {spotsLeft > 0 && spotsLeft <= 3 && (
-                <span style={styles.spotsWarning}> · {spotsLeft} spots left</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={styles.memberCount}>
+                {memberCount}/{maxMembers}
+                {spotsLeft > 0 && spotsLeft <= 3 && (
+                  <span style={styles.spotsWarning}> · {spotsLeft} spots left</span>
+                )}
+              </span>
+              {isMember && !isFull && (
+                <button
+                  onClick={openInviteModal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '5px 12px',
+                    backgroundColor: 'transparent',
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: '100px',
+                    color: colors.primary,
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    fontFamily: fonts.sans,
+                  }}
+                >
+                  <UserPlus size={13} />
+                  Invite
+                </button>
               )}
-            </span>
+            </div>
           </div>
 
           <div style={styles.membersList}>
@@ -890,6 +986,53 @@ export default function CircleDetailView({
               <p style={styles.emptyText}>No members yet. Be the first to join!</p>
             )}
           </div>
+
+          {/* Pending Invites */}
+          {members.filter(m => m.status === 'invited').length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', fontFamily: fonts.sans }}>
+                Pending Invites
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {members.filter(m => m.status === 'invited').map(member => (
+                  <div
+                    key={member.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '10px',
+                      backgroundColor: `${colors.primary}06`,
+                      border: `1px dashed ${colors.border}`,
+                      opacity: 0.7,
+                    }}
+                  >
+                    <div style={{ ...styles.memberAvatar, width: '32px', height: '32px' }}>
+                      {member.profile?.profile_picture ? (
+                        <img src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
+                      ) : (
+                        <span style={{ ...styles.avatarText, fontSize: '12px' }}>{member.profile?.name?.charAt(0) || '?'}</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: colors.textLight, flex: 1 }}>
+                      {member.profile?.name || 'Unknown'}
+                    </span>
+                    <span style={{
+                      fontSize: '11px',
+                      color: colors.warning,
+                      fontWeight: '600',
+                      padding: '2px 8px',
+                      borderRadius: '100px',
+                      backgroundColor: `${colors.warning}15`,
+                    }}>
+                      Pending
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* What to Expect */}
@@ -1019,9 +1162,75 @@ export default function CircleDetailView({
         {isPending && (
           <div style={styles.pendingBanner}>
             <span style={styles.pendingIcon}>⏳</span>
-            <div>
-              <span style={styles.pendingTitle}>Request Pending</span>
-              <span style={styles.pendingText}>Waiting for {host?.name || 'host'} to approve</span>
+            <div style={{ flex: 1 }}>
+              <span style={styles.pendingTitle}>Invitation Pending</span>
+              <span style={styles.pendingText}>{host?.name || 'Host'} invited you to this circle</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
+              <button
+                onClick={async () => {
+                  try {
+                    setActionLoading(true)
+                    const { error } = await supabase
+                      .from('connection_group_members')
+                      .update({ status: 'declined', responded_at: new Date().toISOString() })
+                      .eq('id', membership.id)
+                      .eq('user_id', currentUser.id)
+                    if (error) throw error
+                    onNavigate?.('allCircles')
+                  } catch (err) {
+                    console.error('Error declining invitation:', err)
+                  } finally {
+                    setActionLoading(false)
+                  }
+                }}
+                disabled={actionLoading}
+                style={{
+                  padding: '6px 16px',
+                  background: 'transparent',
+                  border: '1px solid rgba(184, 160, 137, 0.4)',
+                  borderRadius: '16px',
+                  color: '#6B5647',
+                  fontFamily: '"Lora", serif',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
+              >
+                Decline
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    setActionLoading(true)
+                    const { error } = await supabase
+                      .from('connection_group_members')
+                      .update({ status: 'accepted', responded_at: new Date().toISOString() })
+                      .eq('id', membership.id)
+                      .eq('user_id', currentUser.id)
+                    if (error) throw error
+                    await loadCircleDetails()
+                  } catch (err) {
+                    console.error('Error accepting invitation:', err)
+                  } finally {
+                    setActionLoading(false)
+                  }
+                }}
+                disabled={actionLoading}
+                style={{
+                  padding: '6px 16px',
+                  background: 'rgba(103, 77, 59, 0.9)',
+                  border: 'none',
+                  borderRadius: '16px',
+                  color: '#F5EDE9',
+                  fontFamily: '"Lora", serif',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                }}
+              >
+                Accept
+              </button>
             </div>
           </div>
         )}
@@ -1371,6 +1580,131 @@ export default function CircleDetailView({
               <button style={styles.confirmLeaveButton} onClick={() => handleDeleteCircleMeetup(deletingCircleMeetupId)}>
                 {deleteAllFuture ? 'Delete All' : 'Delete'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invite Members Modal */}
+      {showInviteModal && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modal, maxWidth: '400px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={styles.modalTitle}>Invite to Circle</h3>
+              <button
+                onClick={() => { setShowInviteModal(false); setSelectedInvites([]); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: colors.textMuted, fontSize: '18px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {invitableConnections.length === 0 ? (
+              <p style={{ fontSize: '14px', color: colors.textLight, textAlign: 'center', padding: '20px 0' }}>
+                No connections available to invite. They may already be in this circle.
+              </p>
+            ) : (
+              <>
+                <p style={{ fontSize: '13px', color: colors.textMuted, marginBottom: '12px' }}>
+                  Select connections to invite ({spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} available)
+                </p>
+                <div style={{ maxHeight: '300px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {invitableConnections.map(person => {
+                    const isSelected = selectedInvites.includes(person.id);
+                    return (
+                      <div
+                        key={person.id}
+                        onClick={() => {
+                          if (isSelected) {
+                            setSelectedInvites(prev => prev.filter(id => id !== person.id));
+                          } else if (selectedInvites.length < spotsLeft) {
+                            setSelectedInvites(prev => [...prev, person.id]);
+                          }
+                        }}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '10px 12px',
+                          borderRadius: '12px',
+                          cursor: selectedInvites.length >= spotsLeft && !isSelected ? 'not-allowed' : 'pointer',
+                          backgroundColor: isSelected ? `${colors.primary}10` : 'transparent',
+                          border: `1px solid ${isSelected ? colors.primary : colors.border}`,
+                          opacity: selectedInvites.length >= spotsLeft && !isSelected ? 0.5 : 1,
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <div style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          backgroundColor: colors.cream,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                        }}>
+                          {person.profile_picture ? (
+                            <img src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <span style={{ fontSize: '14px', color: colors.primary }}>{person.name?.charAt(0)}</span>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '14px', fontWeight: '500', color: colors.text }}>{person.name}</div>
+                          {person.career && (
+                            <div style={{ fontSize: '12px', color: colors.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.career}</div>
+                          )}
+                        </div>
+                        <div style={{
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '6px',
+                          border: `1.5px solid ${isSelected ? colors.primary : colors.border}`,
+                          backgroundColor: isSelected ? colors.primary : 'transparent',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          {isSelected && <Check size={12} color="white" />}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            <div style={{ ...styles.modalActions, marginTop: '16px' }}>
+              <button
+                style={styles.cancelButton}
+                onClick={() => { setShowInviteModal(false); setSelectedInvites([]); }}
+              >
+                Cancel
+              </button>
+              {invitableConnections.length > 0 && (
+                <button
+                  onClick={handleSendInvites}
+                  disabled={selectedInvites.length === 0 || inviteLoading}
+                  style={{
+                    flex: 1,
+                    padding: '12px',
+                    backgroundColor: selectedInvites.length === 0 ? colors.border : colors.primary,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: selectedInvites.length === 0 ? 'not-allowed' : 'pointer',
+                    fontFamily: fonts.sans,
+                    opacity: inviteLoading ? 0.7 : 1,
+                  }}
+                >
+                  {inviteLoading ? 'Sending...' : `Invite ${selectedInvites.length > 0 ? `(${selectedInvites.length})` : ''}`}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -662,7 +662,8 @@ export default function UnifiedCallPage() {
       if (event.track.kind === 'video') {
         remoteTracks.video = event.streams[0] || new MediaStream([event.track]);
       } else if (event.track.kind === 'audio') {
-        remoteTracks.audio = event.streams[0] || new MediaStream([event.track]);
+        // Always create a dedicated audio stream so it attaches to the <audio> element
+        remoteTracks.audio = new MediaStream([event.track]);
       }
       setRemoteParticipants([{
         id: 'remote',

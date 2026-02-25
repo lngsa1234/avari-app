@@ -96,6 +96,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [pendingRecaps, setPendingRecaps] = useState([]) // Pending recaps checklist
   const [connectionRequests, setConnectionRequests] = useState([]) // Incoming connection requests
   const [circleJoinRequests, setCircleJoinRequests] = useState([]) // Incoming circle join requests
+  const [circleInvitations, setCircleInvitations] = useState([]) // Invitations to join circles (invitee perspective)
   const [coffeeChatRequests, setCoffeeChatRequests] = useState([]) // Incoming coffee chat requests
   const [meetupsInitialView, setMeetupsInitialView] = useState(null) // 'past' when coming from review recaps
 
@@ -237,7 +238,7 @@ function MainApp({ currentUser, onSignOut }) {
       const cutoff = cutoffDate.toISOString().split('T')[0]
 
       // === ROUND 1: Fire all independent queries in parallel ===
-      const [circlesResult, userSignupsResult, coffeeResult, unreadResult, groupsResult, coffeeCountResult, requestsResult, attendedResult, createdCirclesResult] = await Promise.all([
+      const [circlesResult, userSignupsResult, coffeeResult, unreadResult, groupsResult, coffeeCountResult, requestsResult, attendedResult, createdCirclesResult, circleInvitationsResult] = await Promise.all([
         // 1. Member circles (needed for meetups query)
         supabase
           .from('connection_group_members')
@@ -290,6 +291,12 @@ function MainApp({ currentUser, onSignOut }) {
           .select('id, name')
           .eq('creator_id', currentUser.id)
           .eq('is_active', true),
+        // 10. Circles the current user has been invited to (invitee perspective)
+        supabase
+          .from('connection_group_members')
+          .select('id, group_id, invited_at, connection_groups(id, name, creator_id)')
+          .eq('user_id', currentUser.id)
+          .eq('status', 'invited'),
       ])
 
       // Set simple counts immediately (batch these state updates)
@@ -435,6 +442,40 @@ function MainApp({ currentUser, onSignOut }) {
         }
       } else {
         setCircleJoinRequests([])
+      }
+
+      // Process circle invitations (invitee perspective)
+      const invitations = circleInvitationsResult.data || []
+      if (invitations.length > 0) {
+        const creatorIds = [...new Set(invitations.map(inv => inv.connection_groups?.creator_id).filter(Boolean))]
+        if (creatorIds.length > 0) {
+          const { data: creatorProfiles } = await supabase
+            .from('profiles')
+            .select('id, name, career, city, state, profile_picture')
+            .in('id', creatorIds)
+
+          const creatorProfileMap = {}
+          ;(creatorProfiles || []).forEach(p => { creatorProfileMap[p.id] = p })
+
+          const invitationItems = invitations
+            .filter(inv => inv.connection_groups)
+            .map(inv => ({
+              id: inv.id,
+              group_id: inv.group_id,
+              user: creatorProfileMap[inv.connection_groups.creator_id] || null,
+              circleName: inv.connection_groups.name,
+              requested_at: inv.invited_at,
+              type: 'circle_invitation',
+            }))
+            .filter(inv => inv.user)
+
+          invitationItems.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
+          setCircleInvitations(invitationItems)
+        } else {
+          setCircleInvitations([])
+        }
+      } else {
+        setCircleInvitations([])
       }
 
       console.log(`⏱️ Round 2 done in ${Date.now() - t0}ms`)
@@ -815,6 +856,39 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [supabase])
 
+  // Accept a circle invitation (invitee perspective)
+  const handleAcceptCircleInvitation = useCallback(async (membershipId) => {
+    try {
+      const { error } = await supabase
+        .from('connection_group_members')
+        .update({ status: 'accepted', responded_at: new Date().toISOString() })
+        .eq('id', membershipId)
+
+      if (error) throw error
+      setCircleInvitations(prev => prev.filter(r => r.id !== membershipId))
+      console.log('✅ Accepted circle invitation:', membershipId)
+    } catch (err) {
+      console.error('💥 Error accepting circle invitation:', err)
+    }
+  }, [supabase])
+
+  // Decline a circle invitation (invitee perspective — uses update, not delete, due to RLS)
+  const handleDeclineCircleInvitation = useCallback(async (membershipId) => {
+    try {
+      const { error } = await supabase
+        .from('connection_group_members')
+        .update({ status: 'declined', responded_at: new Date().toISOString() })
+        .eq('id', membershipId)
+        .eq('user_id', currentUser.id)
+
+      if (error) throw error
+      setCircleInvitations(prev => prev.filter(r => r.id !== membershipId))
+      console.log('✅ Declined circle invitation:', membershipId)
+    } catch (err) {
+      console.error('💥 Error declining circle invitation:', err)
+    }
+  }, [supabase, currentUser.id])
+
   // Load pending coffee chat requests
   const loadCoffeeChatRequests = useCallback(async () => {
     try {
@@ -826,10 +900,19 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [supabase])
 
+  const notifyEmail = (type, chatId) => {
+    fetch('/api/notifications/coffee-chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationType: type, chatId }),
+    }).catch(err => console.error('[Email] notify failed:', err))
+  }
+
   // Accept a coffee chat request
   const handleAcceptCoffeeChat = useCallback(async (chatId) => {
     try {
       await acceptCoffeeChat(supabase, chatId)
+      notifyEmail('accepted', chatId)
       setCoffeeChatRequests(prev => prev.filter(r => r.id !== chatId))
     } catch (err) {
       console.error('Error accepting coffee chat:', err)
@@ -840,6 +923,7 @@ function MainApp({ currentUser, onSignOut }) {
   const handleDeclineCoffeeChat = useCallback(async (chatId) => {
     try {
       await declineCoffeeChat(supabase, chatId)
+      notifyEmail('declined', chatId)
       setCoffeeChatRequests(prev => prev.filter(r => r.id !== chatId))
     } catch (err) {
       console.error('Error declining coffee chat:', err)
@@ -2502,10 +2586,11 @@ function MainApp({ currentUser, onSignOut }) {
         {/* Main Content */}
         <div style={homeStyles.contentGrid}>
           {/* Connection & Circle Join Requests Section */}
-            {(connectionRequests.length > 0 || circleJoinRequests.length > 0 || coffeeChatRequests.length > 0) && (() => {
+            {(connectionRequests.length > 0 || circleJoinRequests.length > 0 || coffeeChatRequests.length > 0 || circleInvitations.length > 0) && (() => {
               const allRequests = [
                 ...connectionRequests.map(r => ({ ...r, type: r.type || 'connection_request' })),
                 ...circleJoinRequests,
+                ...circleInvitations,
                 ...coffeeChatRequests.map(r => ({ ...r, type: 'coffee_chat_request' })),
               ].sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0))
 
@@ -2526,6 +2611,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {allRequests.slice(0, 5).map(request => {
                     const isCircleJoin = request.type === 'circle_join_request'
+                    const isCircleInvitation = request.type === 'circle_invitation'
                     const isCoffeeChatRequest = request.type === 'coffee_chat_request'
                     const user = isCoffeeChatRequest ? (request.requester || {}) : (request.user || request)
                     const rawDate = request.requested_at || request.created_at
@@ -2585,13 +2671,17 @@ function MainApp({ currentUser, onSignOut }) {
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
                                 wants to join <strong>{request.circleName}</strong>
                               </p>
+                            ) : isCircleInvitation ? (
+                              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
+                                invited you to <strong>{request.circleName}</strong>
+                              </p>
                             ) : (
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>{user.career || 'Professional'}</p>
                             )}
-                            {!isCircleJoin && !isCoffeeChatRequest && user.city && (
+                            {!isCircleJoin && !isCircleInvitation && !isCoffeeChatRequest && user.city && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
                             )}
-                            {isCircleJoin && user.career && (
+                            {(isCircleJoin || isCircleInvitation) && user.career && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.career}</p>
                             )}
                           </div>
@@ -2688,6 +2778,49 @@ function MainApp({ currentUser, onSignOut }) {
                               >
                                 <Users style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
                                 Accept
+                              </button>
+                            </>
+                          ) : isCircleInvitation ? (
+                            <>
+                              <button
+                                onClick={() => handleDeclineCircleInvitation(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 14px' : '9px 18px',
+                                  background: 'transparent',
+                                  border: '1px solid rgba(184, 160, 137, 0.4)',
+                                  borderRadius: '18px',
+                                  color: '#6B5647',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                Decline
+                              </button>
+                              <button
+                                onClick={() => handleAcceptCircleInvitation(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 16px' : '9px 20px',
+                                  background: 'rgba(103, 77, 59, 0.9)',
+                                  border: 'none',
+                                  borderRadius: '18px',
+                                  color: '#F5EDE9',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                <Users style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
+                                Join
                               </button>
                             </>
                           ) : (

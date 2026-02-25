@@ -115,11 +115,8 @@ const RemoteVideo = memo(function RemoteVideo({
   }, [videoTrack, isVideoEnabled, providerType, participant.uid, participant._lastUpdate]);
 
   // Handle audio track attachment
-  // WebRTC: audio plays from the <video> element (not muted), skip separate attachment
-  // LiveKit & Agora: need manual attachment to hidden <audio> element
+  // All providers (including WebRTC) attach audio to hidden <audio> element
   useEffect(() => {
-    if (providerType === 'webrtc') return;
-
     const audioElement = audioRef.current;
     const track = audioTrack;
 
