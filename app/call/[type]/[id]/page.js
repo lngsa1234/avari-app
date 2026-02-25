@@ -692,52 +692,72 @@ export default function UnifiedCallPage() {
       }
     };
 
-    // Setup signaling channel with presence to determine polite/impolite peer
+    // Setup signaling channel — role (polite/impolite) is deterministic based on user IDs
+    // so simultaneous joins don't deadlock (both ignoring each other's offers)
     const channel = supabase.channel(`meeting:${roomId}`, {
       config: { broadcast: { self: false }, presence: { key: user?.id || 'anon' } }
     });
 
-    let isPolite = false; // impolite by default; second joiner becomes polite
+    let remotePeerId = null;
+    // Lower user ID = impolite (offerer); higher user ID = polite (answerer)
+    const amIPolite = (remoteId) => (user?.id || '') > remoteId;
 
     channel
       .on('broadcast', { event: 'signal' }, ({ payload }) => {
-        handleWebRTCSignal(payload, pc, isPolite);
+        handleWebRTCSignal(payload, pc, remotePeerId ? amIPolite(remotePeerId) : false);
       })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        // Filter out our own join event
         const otherJoins = (newPresences || []).filter(p => p.user_id !== user?.id);
         if (otherJoins.length === 0) return;
 
-        console.log('[WebRTC] Peer joined, creating offer');
-        // Reset to stable if we have a stale local offer from a previous attempt
-        if (pc.signalingState === 'have-local-offer') {
-          pc.setLocalDescription({ type: 'rollback' }).then(() => {
+        remotePeerId = otherJoins[0].user_id;
+        const polite = amIPolite(remotePeerId);
+        console.log('[WebRTC] Peer joined, I am', polite ? 'polite' : 'impolite');
+
+        if (!polite) {
+          // I'm the offerer — create offer (rollback stale one if needed)
+          if (pc.signalingState === 'have-local-offer') {
+            pc.setLocalDescription({ type: 'rollback' }).then(() => {
+              createWebRTCOffer(pc);
+            }).catch(() => {
+              createWebRTCOffer(pc);
+            });
+          } else {
             createWebRTCOffer(pc);
-          }).catch(() => {
-            createWebRTCOffer(pc);
-          });
+          }
         } else {
-          createWebRTCOffer(pc);
+          // I'm polite — wait for their offer, with fallback
+          setTimeout(() => {
+            if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+              console.log('[WebRTC] No offer received, creating our own as fallback');
+              createWebRTCOffer(pc);
+            }
+          }, 2000);
         }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          // Track presence
           await channel.track({ user_id: user?.id, joined_at: Date.now() });
-          // Check if someone else is already here
           const presenceState = channel.presenceState();
           const otherPeers = Object.keys(presenceState).filter(k => k !== (user?.id || 'anon'));
           if (otherPeers.length > 0) {
-            // We're the second joiner — be polite and wait for their offer
-            isPolite = true;
-            console.log('[WebRTC] Peer already present, waiting as polite peer');
-            // Nudge the first peer to send an offer in case they missed our join event
-            setTimeout(() => {
-              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
-                console.log('[WebRTC] No offer received, creating our own');
-                createWebRTCOffer(pc);
-              }
-            }, 2000);
+            // Get remote peer ID from presence state
+            const otherKey = otherPeers[0];
+            const otherPresence = presenceState[otherKey];
+            remotePeerId = otherPresence?.[0]?.user_id || otherKey;
+            const polite = amIPolite(remotePeerId);
+            console.log('[WebRTC] Peer already present, I am', polite ? 'polite' : 'impolite');
+
+            if (!polite) {
+              createWebRTCOffer(pc);
+            } else {
+              setTimeout(() => {
+                if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+                  console.log('[WebRTC] No offer received, creating our own as fallback');
+                  createWebRTCOffer(pc);
+                }
+              }, 2000);
+            }
           } else {
             console.log('[WebRTC] First in room, waiting for peer to join');
           }
