@@ -183,6 +183,26 @@ export default function UnifiedCallPage() {
   // Track last auto-finalized text to skip duplicate from browser's final event
   const lastAutoFinalizedRef = useRef('');
 
+  // Save transcript entry to database with fresh auth session
+  const saveTranscriptToDb = useCallback(async (entry) => {
+    if (!roomId) return;
+    // Get fresh session to ensure valid JWT and correct user_id
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      console.warn('[Transcript] No auth session, skipping save');
+      return;
+    }
+    const { error } = await supabase.from('call_transcripts').insert({
+      channel_name: roomId,
+      user_id: session.user.id,
+      speaker_name: entry.speakerName,
+      text: entry.text,
+      timestamp: entry.timestamp,
+      is_final: true
+    });
+    if (error) console.error('Failed to save transcript:', error);
+  }, [roomId]);
+
   // Auto-finalize interim text after pause
   const finalizeInterim = useCallback(() => {
     if (lastInterimRef.current.trim()) {
@@ -203,19 +223,7 @@ export default function UnifiedCallPage() {
       setInterimText('');
       lastInterimRef.current = '';
 
-      // Save to database
-      if (roomId) {
-        supabase.from('call_transcripts').insert({
-          channel_name: roomId,
-          user_id: user?.id,
-          speaker_name: entry.speakerName,
-          text: entry.text,
-          timestamp: entry.timestamp,
-          is_final: true
-        }).then(({ error }) => {
-          if (error) console.error('Failed to save transcript:', error);
-        });
-      }
+      saveTranscriptToDb(entry);
 
       // Restart recognition to clear browser's accumulated buffer
       if (restartListeningRef.current) {
@@ -223,7 +231,7 @@ export default function UnifiedCallPage() {
         restartListeningRef.current();
       }
     }
-  }, [user, roomId]);
+  }, [user, roomId, saveTranscriptToDb]);
 
   // Transcription handler
   const handleTranscript = useCallback(({ text, isFinal, timestamp }) => {
@@ -260,19 +268,7 @@ export default function UnifiedCallPage() {
       };
       setTranscript(prev => [...prev, entry]);
 
-      // Save to database for shared access
-      if (roomId) {
-        supabase.from('call_transcripts').insert({
-          channel_name: roomId,
-          user_id: user?.id,
-          speaker_name: entry.speakerName,
-          text: entry.text,
-          timestamp: entry.timestamp,
-          is_final: true
-        }).then(({ error }) => {
-          if (error) console.error('Failed to save transcript:', error);
-        });
-      }
+      saveTranscriptToDb(entry);
     } else if (!isFinal && text.trim()) {
       // Show interim text directly
       console.log('[Transcript] Interim:', text.trim());
@@ -284,7 +280,7 @@ export default function UnifiedCallPage() {
         finalizeInterim();
       }, 800);
     }
-  }, [user, roomId, finalizeInterim]);
+  }, [user, roomId, finalizeInterim, saveTranscriptToDb]);
 
   const {
     isListening: isSpeechListening,
