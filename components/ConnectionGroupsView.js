@@ -1354,6 +1354,31 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               })
             )}
           </div>
+
+          <button
+            onClick={handleCreateClick}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              width: '100%',
+              padding: '12px',
+              marginTop: '12px',
+              backgroundColor: 'transparent',
+              border: '1.5px dashed rgba(139, 111, 92, 0.25)',
+              borderRadius: '12px',
+              color: '#8B6F5C',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              fontFamily: '"Lora", serif',
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <UserPlus size={16} />
+            Create a Circle
+          </button>
         </section>
 
 
