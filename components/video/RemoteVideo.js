@@ -90,7 +90,7 @@ const RemoteVideo = memo(function RemoteVideo({
       // Ensure remote video is never mirrored
       const videoEl = videoElement.querySelector('video');
       if (videoEl) {
-        videoEl.style.transform = 'none';
+        videoEl.style.setProperty('transform', 'none', 'important');
         // Check if the video element needs a user gesture to play (mobile Safari)
         if (videoEl.paused) {
           videoEl.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
