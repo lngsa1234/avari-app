@@ -56,6 +56,8 @@ const RemoteVideo = memo(function RemoteVideo({
     const wasEnabled = lastEnabledRef.current;
     const justUnmuted = !wasEnabled && isVideoEnabled;
 
+    console.log('[RemoteVideo] video effect:', { hasTrack: !!track, hasElement: !!videoElement, isVideoEnabled, providerType, alreadyAttached: attachedVideoRef.current === track });
+
     lastEnabledRef.current = isVideoEnabled;
     setHasVideo(!!track && isVideoEnabled);
 
@@ -89,6 +91,7 @@ const RemoteVideo = memo(function RemoteVideo({
       attachedVideoRef.current = track;
       // Ensure remote video is never mirrored
       const videoEl = videoElement.querySelector('video');
+      console.log('[RemoteVideo] attached video track, videoEl:', !!videoEl, 'srcObject:', !!videoEl?.srcObject, 'videoEl dimensions:', videoEl?.videoWidth, 'x', videoEl?.videoHeight);
       if (videoEl) {
         videoEl.style.setProperty('transform', 'none', 'important');
         // Try to autoplay with retries — the stream may not be ready immediately
