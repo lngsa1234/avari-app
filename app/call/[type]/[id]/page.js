@@ -1400,14 +1400,38 @@ export default function UnifiedCallPage() {
 
         setIsScreenSharing(true);
 
-        // Handle user stopping via browser UI
-        screenVideoTrack.onended = () => {
-          handleToggleScreenShare();
+        // Handle user stopping via browser UI (e.g. clicking "Stop sharing" in the browser)
+        screenVideoTrack.onended = async () => {
+          console.log('[UnifiedCall] Screen share ended via browser UI');
+          // Clean up directly instead of toggling (avoids stale closure issues)
+          if (config.provider === 'agora' && agoraScreenClientRef.current) {
+            try {
+              if (screenTrackRef.current) {
+                try { await agoraScreenClientRef.current.unpublish([screenTrackRef.current]); } catch (e) { /* already ended */ }
+                try { screenTrackRef.current.close(); } catch (e) { /* already closed */ }
+                screenTrackRef.current = null;
+              }
+              await agoraScreenClientRef.current.leave();
+            } catch (e) {
+              console.log('[UnifiedCall] Screen client cleanup:', e.message);
+            }
+            agoraScreenClientRef.current = null;
+          } else if (config.provider === 'livekit' && screenTrackRef.current) {
+            try {
+              await roomRef.current?.localParticipant.unpublishTrack(screenTrackRef.current);
+              screenTrackRef.current.stop();
+            } catch (e) { /* already ended */ }
+            screenTrackRef.current = null;
+          }
+          setIsScreenSharing(false);
+          setLocalScreenTrack(null);
         };
       }
     } catch (error) {
       console.error('[UnifiedCall] Screen share error:', error);
-      alert('Failed to share screen: ' + error.message);
+      if (!error.message?.includes('Permission denied') && !error.message?.includes('cancelled')) {
+        alert('Failed to share screen: ' + error.message);
+      }
     }
   };
 
