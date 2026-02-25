@@ -195,7 +195,7 @@ const LocalVideo = forwardRef(function LocalVideo({
 
       {/* Name label - positioned outside overflow-hidden area */}
       <div className={`absolute bg-black/80 text-white rounded z-50 ${labelClass}`}>
-        {userName && userName !== 'You' ? userName : 'You'}
+        Me
       </div>
     </div>
   );
