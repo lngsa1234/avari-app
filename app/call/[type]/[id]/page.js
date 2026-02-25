@@ -691,9 +691,21 @@ export default function UnifiedCallPage() {
         handleWebRTCSignal(payload, pc, isPolite);
       })
       .on('presence', { event: 'join' }, ({ newPresences }) => {
-        // Someone else joined — they'll be polite, we create the offer
+        // Filter out our own join event
+        const otherJoins = (newPresences || []).filter(p => p.user_id !== user?.id);
+        if (otherJoins.length === 0) return;
+
         console.log('[WebRTC] Peer joined, creating offer');
-        createWebRTCOffer(pc);
+        // Reset to stable if we have a stale local offer from a previous attempt
+        if (pc.signalingState === 'have-local-offer') {
+          pc.setLocalDescription({ type: 'rollback' }).then(() => {
+            createWebRTCOffer(pc);
+          }).catch(() => {
+            createWebRTCOffer(pc);
+          });
+        } else {
+          createWebRTCOffer(pc);
+        }
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
@@ -706,6 +718,13 @@ export default function UnifiedCallPage() {
             // We're the second joiner — be polite and wait for their offer
             isPolite = true;
             console.log('[WebRTC] Peer already present, waiting as polite peer');
+            // Nudge the first peer to send an offer in case they missed our join event
+            setTimeout(() => {
+              if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
+                console.log('[WebRTC] No offer received, creating our own');
+                createWebRTCOffer(pc);
+              }
+            }, 2000);
           } else {
             console.log('[WebRTC] First in room, waiting for peer to join');
           }
@@ -1502,27 +1521,8 @@ export default function UnifiedCallPage() {
     // Small delay to ensure video cleanup is complete
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Step 3.5: Mark meetup/coffee chat as completed (non-blocking)
-    try {
-      if (callType === 'coffee' && relatedData?.id) {
-        await supabase
-          .from('coffee_chats')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('id', relatedData.id);
-      } else if (callType === 'meetup' && relatedData?.id) {
-        await supabase
-          .from('meetups')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('id', relatedData.id);
-      } else if (callType === 'circle' && relatedData?.meetupId) {
-        await supabase
-          .from('meetups')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('id', relatedData.meetupId);
-      }
-    } catch (err) {
-      console.error('[UnifiedCall] Error marking as completed (non-blocking):', err);
-    }
+    // Note: meetups/coffee chats are NOT marked completed on call end.
+    // They naturally filter out of "upcoming" once their scheduled time passes.
 
     // Step 4: Prepare recap data
     let allParticipants = [];
