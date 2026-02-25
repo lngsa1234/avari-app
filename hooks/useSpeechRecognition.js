@@ -178,8 +178,10 @@ export default function useSpeechRecognition({
         case 'network':
           errorCountRef.current += 1;
           lastErrorRef.current = event.error;
-          if (errorCountRef.current >= MAX_CONSECUTIVE_ERRORS) {
-            setError('Network connection issues.');
+          if (errorCountRef.current >= 2) {
+            setError('Speech recognition unavailable. Your browser or network may not support this feature. Try Chrome instead.');
+            isListeningRef.current = false;
+            errorCountRef.current = MAX_CONSECUTIVE_ERRORS;
           }
           break;
         default:
