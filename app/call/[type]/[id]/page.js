@@ -186,10 +186,10 @@ export default function UnifiedCallPage() {
   // Save transcript entry to database with fresh auth session
   const saveTranscriptToDb = useCallback(async (entry) => {
     if (!roomId) return;
-    // Get fresh session to ensure valid JWT and correct user_id
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.warn('[Transcript] No auth session, skipping save');
+    // Force a token refresh to ensure a valid JWT before saving
+    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !session) {
+      console.warn('[Transcript] Auth refresh failed, skipping save:', refreshError?.message || 'no session');
       return;
     }
     const { error } = await supabase.from('call_transcripts').insert({
