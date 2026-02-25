@@ -1367,6 +1367,14 @@ export default function UnifiedCallPage() {
           const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
           const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
 
+          // Clean up any leftover screen client from a previous session
+          if (agoraScreenClientRef.current) {
+            try {
+              await agoraScreenClientRef.current.leave();
+            } catch (e) { /* ignore */ }
+            agoraScreenClientRef.current = null;
+          }
+
           // Create a separate client for screen sharing
           const screenClient = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
           agoraScreenClientRef.current = screenClient;
