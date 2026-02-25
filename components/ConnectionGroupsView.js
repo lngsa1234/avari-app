@@ -46,6 +46,9 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const [sentRequests, setSentRequests] = useState(new Set());
   const [sentRequestProfiles, setSentRequestProfiles] = useState([]);
 
+  // Unread DM counts per sender
+  const [unreadCounts, setUnreadCounts] = useState({});
+
   // Update connections when prop changes
   useEffect(() => {
     if (connectionsProp && connectionsProp.length > 0) {
@@ -56,6 +59,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
         return {
           id: conn.id || user.id,
+          userId: user.id,
           name: user.name || 'Unknown',
           avatar: user.profile_picture,
           career: user.career || '',
@@ -89,8 +93,41 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       )
       .subscribe();
 
+    const dmChannel = supabase
+      .channel('circles-unread-dm')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${currentUser.id}`
+        },
+        (payload) => {
+          const senderId = payload.new.sender_id;
+          setUnreadCounts(prev => ({
+            ...prev,
+            [senderId]: (prev[senderId] || 0) + 1
+          }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${currentUser.id}`
+        },
+        () => {
+          loadUnreadCounts();
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(invitesChannel);
+      supabase.removeChannel(dmChannel);
     };
   }, [currentUser.id]);
 
@@ -118,13 +155,34 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     };
   }, [selectedGroup]);
 
+  const loadUnreadCounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('sender_id')
+        .eq('receiver_id', currentUser.id)
+        .eq('read', false);
+
+      if (error) return;
+
+      const counts = {};
+      (data || []).forEach(msg => {
+        counts[msg.sender_id] = (counts[msg.sender_id] || 0) + 1;
+      });
+      setUnreadCounts(counts);
+    } catch (err) {
+      // silently fail
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     await Promise.all([
       loadConnectionGroups(),
       loadGroupInvites(),
       loadPeerSuggestions(),
-      loadSentRequests()
+      loadSentRequests(),
+      loadUnreadCounts()
     ]);
     setLoading(false);
   };
@@ -577,6 +635,52 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           <h1 style={styles.pageTitle} className="circles-page-title">Circles</h1>
           <p style={styles.tagline}>Where meaningful connections grow deeper</p>
         </div>
+        <button
+          onClick={() => onNavigate?.('messages')}
+          style={{
+            position: 'relative',
+            background: 'rgba(139, 111, 92, 0.08)',
+            border: '1px solid rgba(139, 111, 92, 0.15)',
+            borderRadius: '50%',
+            width: 40,
+            height: 40,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: '#5C4033',
+            transition: 'all 0.2s ease',
+            flexShrink: 0,
+          }}
+          title="Messages"
+        >
+          <MessageCircle size={20} />
+          {Object.values(unreadCounts).reduce((a, b) => a + b, 0) > 0 && (
+            <span style={{
+              position: 'absolute',
+              top: -3,
+              right: -3,
+              backgroundColor: '#ef4444',
+              color: '#fff',
+              fontSize: 10,
+              fontWeight: 700,
+              minWidth: 18,
+              height: 18,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1,
+              padding: '0 4px',
+              border: '2px solid #FDF8F3',
+            }}>
+              {(() => {
+                const total = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+                return total > 9 ? '9+' : total;
+              })()}
+            </span>
+          )}
+        </button>
       </section>
 
       {/* Pending Invitations Alert */}
@@ -670,12 +774,34 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 <span style={styles.slideRole}>{user.career}</span>
                 <div style={styles.slideActions} onClick={(e) => e.stopPropagation()}>
                   <button
-                    style={styles.slideActionBtn}
+                    style={{ ...styles.slideActionBtn, position: 'relative' }}
                     className="slide-action-btn"
                     onClick={() => onNavigate?.('messages', { chatId: user.id, chatType: 'user' })}
                     title="Message"
                   >
                     <MessageCircle size={13} />
+                    {unreadCounts[user.userId] > 0 && (
+                      <span style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        backgroundColor: '#ef4444',
+                        color: '#fff',
+                        fontSize: 9,
+                        fontWeight: 700,
+                        minWidth: 15,
+                        height: 15,
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        lineHeight: 1,
+                        padding: '0 3px',
+                        border: '1.5px solid #FDF8F3',
+                      }}>
+                        {unreadCounts[user.userId] > 9 ? '9+' : unreadCounts[user.userId]}
+                      </span>
+                    )}
                   </button>
                   <button
                     style={styles.slideActionBtn}
