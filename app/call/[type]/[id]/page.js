@@ -603,7 +603,7 @@ export default function UnifiedCallPage() {
       await startRoom();
 
       // Auto-start transcription for supported providers
-      if (config.features.transcription && isSpeechSupported && !isSafari) {
+      if (config.features.transcription && isSpeechSupported) {
         const started = startListening();
         if (started) setIsTranscribing(true);
       }
