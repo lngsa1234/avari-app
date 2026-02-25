@@ -126,6 +126,8 @@ export default function UnifiedCallPage() {
   const userIdRef = useRef(null);
   // Ref to store latest roomParticipants for use in event handler closures
   const roomParticipantsRef = useRef([]);
+  // Ref to store latest relatedData for use in ontrack closure
+  const relatedDataRef = useRef(null);
 
   // Provider-specific refs
   const roomRef = useRef(null); // LiveKit room
@@ -531,6 +533,7 @@ export default function UnifiedCallPage() {
   // Also re-update remote participant names when roomParticipants loads
   useEffect(() => {
     roomParticipantsRef.current = roomParticipants || [];
+    relatedDataRef.current = relatedData;
 
     // If we have remote participants and roomParticipants just loaded, refresh names
     if (roomParticipants?.length > 0 && remoteParticipants.length > 0) {
@@ -667,7 +670,7 @@ export default function UnifiedCallPage() {
       }
       setRemoteParticipants([{
         id: 'remote',
-        name: relatedData?.partner_name || 'Partner',
+        name: relatedDataRef.current?.partner_name || relatedData?.partner_name || 'Partner',
         videoTrack: remoteTracks.video,
         audioTrack: remoteTracks.audio,
         hasVideo: !!remoteTracks.video,
