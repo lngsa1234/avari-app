@@ -70,7 +70,7 @@ export default function UnifiedCallPage() {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [gridView, setGridView] = useState(true);
+  const [gridView, setGridView] = useState(callType !== 'coffee');
   const [isLocalMain, setIsLocalMain] = useState(false);
   const [isVideoDeviceSwitching, setIsVideoDeviceSwitching] = useState(false);
   const [isAudioDeviceSwitching, setIsAudioDeviceSwitching] = useState(false);

@@ -87,10 +87,16 @@ const RemoteVideo = memo(function RemoteVideo({
     try {
       attachTrack(track, videoElement, providerType, 'video');
       attachedVideoRef.current = track;
-      // Check if the video element needs a user gesture to play (mobile Safari)
+      // Ensure remote video is never mirrored
       const videoEl = videoElement.querySelector('video');
-      if (videoEl && videoEl.paused) {
-        videoEl.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
+      if (videoEl) {
+        videoEl.style.transform = 'none';
+        // Check if the video element needs a user gesture to play (mobile Safari)
+        if (videoEl.paused) {
+          videoEl.play().then(() => setNeedsPlay(false)).catch(() => setNeedsPlay(true));
+        } else {
+          setNeedsPlay(false);
+        }
       } else {
         setNeedsPlay(false);
       }
