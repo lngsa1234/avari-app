@@ -798,7 +798,10 @@ export default function UnifiedCallPage() {
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
       },
-      webAudioMix: window.__avariAudioContext ? { audioContext: window.__avariAudioContext } : false,
+      // Don't use webAudioMix — Chrome aggressively suspends AudioContexts
+      // before remote audio arrives, causing silence. Instead, remote audio
+      // is played via manual track.attach() on <audio> elements in RemoteVideo.
+      webAudioMix: false,
     });
 
     roomRef.current = room;
