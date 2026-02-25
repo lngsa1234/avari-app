@@ -44,6 +44,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   // Connect with People
   const [peerSuggestions, setPeerSuggestions] = useState([]);
   const [sentRequests, setSentRequests] = useState(new Set());
+  const [sentRequestProfiles, setSentRequestProfiles] = useState([]);
 
   // Update connections when prop changes
   useEffect(() => {
@@ -122,7 +123,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     await Promise.all([
       loadConnectionGroups(),
       loadGroupInvites(),
-      loadPeerSuggestions()
+      loadPeerSuggestions(),
+      loadSentRequests()
     ]);
     setLoading(false);
   };
@@ -221,6 +223,65 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     }
   };
 
+  const loadSentRequests = async () => {
+    try {
+      const connectedIds = new Set((connectionsProp || []).map(c => (c.connected_user || c).id));
+
+      const [interestsResult, mutualResult] = await Promise.all([
+        supabase
+          .from('user_interests')
+          .select('interested_in_user_id, created_at')
+          .eq('user_id', currentUser.id),
+        supabase
+          .rpc('get_mutual_matches', { for_user_id: currentUser.id }),
+      ]);
+
+      if (interestsResult.error) {
+        setSentRequestProfiles([]);
+        return;
+      }
+
+      const mutualIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
+
+      // Pending = I sent interest but they haven't matched back, and not already connected
+      const pendingInterests = (interestsResult.data || []).filter(i =>
+        !mutualIds.has(i.interested_in_user_id) && !connectedIds.has(i.interested_in_user_id)
+      );
+
+      if (pendingInterests.length === 0) {
+        setSentRequestProfiles([]);
+        return;
+      }
+
+      const pendingIds = pendingInterests.map(i => i.interested_in_user_id);
+      const createdAtMap = {};
+      pendingInterests.forEach(i => { createdAtMap[i.interested_in_user_id] = i.created_at; });
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, name, career, city, state, profile_picture')
+        .in('id', pendingIds);
+
+      if (profilesError) {
+        setSentRequestProfiles([]);
+        return;
+      }
+
+      const enriched = (profiles || []).map(p => ({
+        ...p,
+        requested_at: createdAtMap[p.id],
+      }));
+
+      // Sort by most recent first
+      enriched.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at));
+
+      setSentRequestProfiles(enriched);
+    } catch (error) {
+      console.error('Error loading sent requests:', error);
+      setSentRequestProfiles([]);
+    }
+  };
+
   const handleConnect = async (personId) => {
     if (!currentUser?.id || sentRequests.has(personId)) return;
     setSentRequests(prev => new Set(prev).add(personId));
@@ -232,6 +293,19 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           interested_in_user_id: personId,
         });
       if (error && !error.message?.includes('duplicate')) throw error;
+      // Add to pending requests list
+      const person = peerSuggestions.find(p => p.id === personId);
+      if (person) {
+        setSentRequestProfiles(prev => [{
+          id: person.id,
+          name: person.name,
+          career: person.career,
+          city: person.city,
+          state: person.state,
+          profile_picture: person.profile_picture,
+          requested_at: new Date().toISOString(),
+        }, ...prev]);
+      }
     } catch (error) {
       console.error('Error sending connection request:', error);
       setSentRequests(prev => {
@@ -239,6 +313,26 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         next.delete(personId);
         return next;
       });
+    }
+  };
+
+  const handleWithdrawRequest = async (personId) => {
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .delete()
+        .eq('user_id', currentUser.id)
+        .eq('interested_in_user_id', personId);
+      if (error) throw error;
+      setSentRequestProfiles(prev => prev.filter(p => p.id !== personId));
+      // Also remove from sentRequests set so the "Connect" button reappears in suggestions
+      setSentRequests(prev => {
+        const next = new Set(prev);
+        next.delete(personId);
+        return next;
+      });
+    } catch (error) {
+      console.error('Error withdrawing request:', error);
     }
   };
 
@@ -609,6 +703,124 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               <span style={styles.addConnectionText}>Add</span>
             </div>
           </div>
+
+          {/* Pending Requests */}
+          {sentRequestProfiles.length > 0 && (
+            <div style={{ marginTop: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <h2 style={styles.cardTitle}>
+                  Pending Requests
+                </h2>
+                <span style={{
+                  fontSize: '11px',
+                  color: '#FFF8F0',
+                  backgroundColor: '#8B6F5C',
+                  borderRadius: '10px',
+                  padding: '2px 8px',
+                  fontWeight: '600',
+                }}>
+                  {sentRequestProfiles.length}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {sentRequestProfiles.map((person) => (
+                  <div
+                    key={person.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      backgroundColor: 'rgba(139, 111, 92, 0.06)',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(139, 111, 92, 0.1)',
+                    }}
+                  >
+                    {/* Avatar */}
+                    <div
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        backgroundColor: '#8B6F5C',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '16px',
+                        color: 'white',
+                        fontWeight: '600',
+                        flexShrink: 0,
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
+                    >
+                      {person.profile_picture ? (
+                        <img
+                          src={person.profile_picture}
+                          alt={person.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        (person.name?.[0] || '?').toUpperCase()
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#3E2723',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {person.name}
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#8B7355',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {person.career || 'Professional'}
+                      </div>
+                    </div>
+
+                    {/* Time ago */}
+                    <span style={{
+                      fontSize: '11px',
+                      color: '#A89080',
+                      flexShrink: 0,
+                    }}>
+                      {formatTimeAgo(person.requested_at)}
+                    </span>
+
+                    {/* Withdraw button */}
+                    <button
+                      onClick={() => handleWithdrawRequest(person.id)}
+                      style={{
+                        padding: '5px 12px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        color: '#8B6F5C',
+                        backgroundColor: 'transparent',
+                        border: '1.5px solid rgba(139, 111, 92, 0.3)',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                    >
+                      Withdraw
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* People you may know */}
           {peerSuggestions.length > 0 && (
