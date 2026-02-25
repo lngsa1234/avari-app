@@ -402,6 +402,21 @@ export default function UnifiedCallPage() {
     };
   }, [user, config]);
 
+  // Update remote participant name when relatedData finishes loading
+  // (ontrack handler captures stale relatedData from its closure)
+  useEffect(() => {
+    if (relatedData?.partner_name && config?.provider === 'webrtc') {
+      setRemoteParticipants(prev => {
+        if (prev.length === 0) return prev;
+        return prev.map(p => ({
+          ...p,
+          name: relatedData.partner_name,
+          _lastUpdate: Date.now(),
+        }));
+      });
+    }
+  }, [relatedData?.partner_name, config?.provider]);
+
   // Load messages
   useEffect(() => {
     if (!roomId) return;
