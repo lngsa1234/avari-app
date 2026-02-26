@@ -819,15 +819,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               </div>
             ))}
 
-            {/* Add Connection Button */}
-            <div
-              style={styles.addConnectionCard}
-              className="circles-add-card"
-              onClick={() => onNavigate && onNavigate('discover')}
-            >
-              <div style={styles.addConnectionIcon} className="circles-add-icon">+</div>
-              <span style={styles.addConnectionText}>Add</span>
-            </div>
           </div>
 
           {/* Pending Requests */}
@@ -1786,10 +1777,7 @@ const styles = {
     fontFamily: '"Lora", serif',
     fontSize: '15px',
     fontWeight: '500',
-    background: 'linear-gradient(89.8deg, #7E654D 27.14%, #B9A594 72.64%, #ECDDD2 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
+    color: '#7E654D',
     margin: 0,
   },
   quickStats: {

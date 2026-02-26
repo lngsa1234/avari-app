@@ -20,6 +20,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     circleInvites: 0
   });
   const [actionMenuOpen, setActionMenuOpen] = useState(null);
+  const [activeCardId, setActiveCardId] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingMeetup, setEditingMeetup] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -27,13 +28,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const [showCancelChatConfirm, setShowCancelChatConfirm] = useState(false);
   const [cancellingChatId, setCancellingChatId] = useState(null);
 
-  // Close action menu when clicking outside
+  // Close action menu and active card when clicking outside
   useEffect(() => {
-    if (!actionMenuOpen) return;
-    const handleClick = () => setActionMenuOpen(null);
+    if (!actionMenuOpen && !activeCardId) return;
+    const handleClick = () => { setActionMenuOpen(null); setActiveCardId(null); };
     document.addEventListener('click', handleClick);
     return () => document.removeEventListener('click', handleClick);
-  }, [actionMenuOpen]);
+  }, [actionMenuOpen, activeCardId]);
 
   // Responsive
   const [isMobile, setIsMobile] = useState(() => {
@@ -303,8 +304,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const upcomingEvents = upcomingFiltered.map(meetup => {
         const isCircleMeetup = !!meetup.circle_id;
         const circleName = meetup.connection_groups?.name;
-        const attendeeProfiles = attendeesByMeetup[meetup.id] || [];
+        const signupProfiles = attendeesByMeetup[meetup.id] || [];
         const hostProfile = hostProfileMap[meetup.created_by];
+        // Always include host in attendee list if not already there
+        const hostAlreadyIncluded = signupProfiles.some(p => p.id === meetup.created_by);
+        const attendeeProfiles = (hostProfile && !hostAlreadyIncluded)
+          ? [hostProfile, ...signupProfiles]
+          : signupProfiles;
 
         // Calculate session number for circle meetups
         let sessionNumber = null;
@@ -940,217 +946,68 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             </div>
           ) : (
             filteredItems.map((item, index) => (
-              item.type === 'coffee' ? (
-                // Coffee Chat Card
-                <div key={item.id} style={{
-                  ...styles.meetupCard,
-                  ...(item.isPending ? styles.pendingCoffeeCard : {}),
-                  ...(item.isInviteReceived ? { borderLeft: '3px solid #C4956A' } : {}),
-                  flexDirection: isMobile ? 'column' : 'row',
-                  gap: isMobile ? '12px' : '20px',
-                  padding: isMobile ? '14px' : '20px',
-                  animationDelay: `${index * 0.1}s`
-                }}>
-                  <div style={{...styles.cardLeft, flexDirection: isMobile ? 'row' : undefined, gap: isMobile ? '12px' : undefined}}>
-                    {(() => {
-                      const today = new Date(); today.setHours(0,0,0,0);
-                      const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-                      const itemDate = item.rawDate ? new Date(item.rawDate) : null;
-                      if (itemDate) itemDate.setHours(0,0,0,0);
-                      const isHighlighted = itemDate && (itemDate.getTime() === today.getTime() || itemDate.getTime() === tomorrow.getTime());
-                      const isToday = itemDate && itemDate.getTime() === today.getTime();
-                      const isTomorrow = itemDate && itemDate.getTime() === tomorrow.getTime();
-                      return (
-                        <div style={{
-                          ...styles.dateBadge,
-                          ...(item.isPending ? styles.dateBadgePending : {}),
-                          ...(isHighlighted ? { backgroundColor: '#5C4033' } : {}),
-                        }}>
-                          <span style={{
-                            ...styles.dateBadgeWeekday,
-                            fontSize: isHighlighted ? '11px' : '10px',
-                            fontWeight: '700',
-                            letterSpacing: '0.5px',
-                            ...(isHighlighted ? { color: '#fff' } : {}),
-                          }}>
-                            {isToday ? 'TODAY' : isTomorrow ? 'TMRW' : item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : ''}
-                          </span>
-                          <span style={{
-                            ...styles.dateBadgeDay,
-                            ...(isHighlighted ? { color: '#fff' } : {}),
-                          }}>
-                            {item.rawDate ? item.rawDate.getDate() : '—'}
-                          </span>
-                          <span style={{
-                            ...styles.dateBadgeMonth,
-                            ...(isHighlighted ? { color: 'rgba(255,255,255,0.7)' } : {}),
-                          }}>
-                            {item.rawDate ? item.rawDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—'}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </div>
+              (() => {
+                const today = new Date(); today.setHours(0,0,0,0);
+                const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
+                const itemDate = item.rawDate ? new Date(item.rawDate) : null;
+                if (itemDate) itemDate.setHours(0,0,0,0);
+                const isHighlighted = itemDate && (itemDate.getTime() === today.getTime() || itemDate.getTime() === tomorrow.getTime());
+                const isToday = itemDate && itemDate.getTime() === today.getTime();
+                const isTomorrow = itemDate && itemDate.getTime() === tomorrow.getTime();
+                const cardMonth = item.rawDate ? item.rawDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—';
+                const cardDay = item.rawDate ? item.rawDate.getDate() : '—';
+                const cardWeekday = isToday ? 'TODAY' : isTomorrow ? 'TMRW' : item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
 
-                  <div style={styles.cardContent}>
-                    <div style={styles.personRow}>
-                      {item.avatar ? (
-                        <img src={item.avatar} alt={item.with} style={styles.personAvatarImg} />
-                      ) : (
-                        <span style={styles.personAvatar}>👤</span>
-                      )}
-                      <div style={{...styles.personInfo, flex: 1}}>
-                        <span style={styles.personName}>{item.with}</span>
-                        <span style={styles.personRole}>{item.role}</span>
-                      </div>
-                      {item.time && item.time !== 'TBD' && (
-                        <span style={styles.cardTime}>{item.time}</span>
-                      )}
-                    </div>
+                const isCoffee = item.type === 'coffee';
+                const title = isCoffee ? `Coffee Chat with ${item.with}` : (item.title || 'Community Event');
+                const time = item.time && item.time !== 'TBD' ? item.time : null;
 
-                    {item.isPending && (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        marginBottom: '8px',
-                      }}>
-                        <div style={{
-                          fontSize: '11px',
-                          fontWeight: '600',
-                          padding: '3px 10px',
-                          borderRadius: '100px',
-                          backgroundColor: item.isInviteReceived ? 'rgba(196, 149, 106, 0.25)' : 'rgba(139, 111, 92, 0.1)',
-                          color: item.isInviteReceived ? '#8B6F5C' : '#7A6855',
-                        }}>
-                          {item.isInviteReceived
-                            ? `${item.with} invited you for coffee`
-                            : `Awaiting response`
-                          }
-                        </div>
-                      </div>
-                    )}
+                // Attendee avatars for group events
+                const attendees = isCoffee ? [] : (item.attendeeProfiles || []);
+                // For coffee chats, show the other person as a single attendee
+                const coffeeAvatar = isCoffee ? { name: item.with, profile_picture: item.avatar } : null;
 
-                    {item.topic && (
-                      <div style={styles.topicRow}>
-                        <span style={styles.topicText}>{item.topic}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{
-                    ...styles.cardRight,
-                    alignItems: isMobile ? 'stretch' : 'flex-end',
-                    minWidth: isMobile ? '100%' : '140px',
+                return (
+                  <div key={item.id} onClick={(e) => {
+                    // Don't toggle if clicking a button or menu
+                    if (e.target.closest('button') || e.target.closest('[data-menu]')) return;
+                    setActiveCardId(activeCardId === item.id ? null : item.id);
+                  }} style={{
+                    ...styles.meetupCard,
+                    animationDelay: `${index * 0.1}s`,
+                    cursor: 'pointer',
                   }}>
-                    <div style={styles.locationBlock}>
-                      <span style={styles.locationIcon}>{item.location?.includes('Zoom') || item.location?.includes('Virtual') ? '💻' : '📍'}</span>
-                      <span style={styles.locationText}>{item.location || 'Virtual'}</span>
+                    {/* Date column */}
+                    <div style={{
+                      ...styles.dateBadge,
+                      ...(isHighlighted ? { backgroundColor: '#5C4033' } : {}),
+                    }}>
+                      <span style={{
+                        ...styles.dateBadgeMonth,
+                        ...(isHighlighted ? { color: 'rgba(255,255,255,0.7)' } : {}),
+                      }}>{cardMonth}</span>
+                      <span style={{
+                        ...styles.dateBadgeDay,
+                        ...(isHighlighted ? { color: '#fff' } : {}),
+                      }}>{cardDay}</span>
+                      <span style={{
+                        ...styles.dateBadgeWeekday,
+                        ...(isHighlighted ? { color: '#fff' } : {}),
+                      }}>{cardWeekday}</span>
                     </div>
-                    <div style={{...styles.cardActions, flexDirection: isMobile ? 'row' : 'column', width: isMobile ? '100%' : undefined}}>
-                      {item.isInviteReceived ? (
-                        <>
-                          <button style={{...styles.actionBtnAccept, flex: isMobile ? 1 : undefined}} onClick={() => handleAcceptChat(item)}>
-                            Accept
-                          </button>
-                          <button style={{...styles.actionBtnDecline, flex: isMobile ? 1 : undefined}} onClick={() => handleDeclineChat(item)}>
-                            Decline
-                          </button>
-                        </>
-                      ) : item.isPending ? (
-                        <>
-                          <button style={{...styles.actionBtnWaiting, width: isMobile ? '100%' : undefined}} disabled>
-                            <Clock size={14} style={{ marginRight: 6 }} />
-                            Awaiting
-                          </button>
-                          {item.requester_id === currentUser.id && (
-                            <button
-                              style={{...styles.cancelChatBtn, width: isMobile ? '100%' : undefined}}
-                              onClick={() => { setCancellingChatId(item.id); setShowCancelChatConfirm(true); }}
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <button style={{...styles.actionBtnPrimary, width: isMobile ? '100%' : undefined}} onClick={() => handleJoinCall(item)}>
-                            <Video size={14} style={{ marginRight: 6 }} />
-                            Join
-                          </button>
-                          {item.requester_id === currentUser.id && (
-                            <button
-                              style={{...styles.cancelChatBtn, width: isMobile ? '100%' : undefined}}
-                              onClick={() => { setCancellingChatId(item.id); setShowCancelChatConfirm(true); }}
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                // Group Event Card (Circle or Public)
-                <div key={item.id} style={{
-                  ...styles.meetupCard,
-                  ...styles.groupCard,
-                  ...(item.isCircleMeetup ? styles.circleCard : styles.publicCard),
-                  flexDirection: isMobile ? 'column' : 'row',
-                  gap: isMobile ? '12px' : '20px',
-                  padding: isMobile ? '14px' : '20px',
-                  animationDelay: `${index * 0.1}s`
-                }}>
-                  <div style={{...styles.cardLeft, flexDirection: isMobile ? 'row' : undefined, gap: isMobile ? '12px' : undefined}}>
-                    {(() => {
-                      const today = new Date(); today.setHours(0,0,0,0);
-                      const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-                      const itemDate = item.rawDate ? new Date(item.rawDate) : null;
-                      if (itemDate) itemDate.setHours(0,0,0,0);
-                      const isHighlighted = itemDate && (itemDate.getTime() === today.getTime() || itemDate.getTime() === tomorrow.getTime());
-                      const isToday = itemDate && itemDate.getTime() === today.getTime();
-                      const isTomorrow = itemDate && itemDate.getTime() === tomorrow.getTime();
-                      return (
-                        <div style={{
-                          ...styles.dateBadge,
-                          ...(isHighlighted ? { backgroundColor: '#5C4033' } : {}),
-                        }}>
-                          <span style={{
-                            ...styles.dateBadgeWeekday,
-                            fontSize: isHighlighted ? '11px' : '10px',
-                            fontWeight: '700',
-                            letterSpacing: '0.5px',
-                            ...(isHighlighted ? { color: '#fff' } : {}),
-                          }}>
-                            {isToday ? 'TODAY' : isTomorrow ? 'TMRW' : item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : ''}
-                          </span>
-                          <span style={{
-                            ...styles.dateBadgeDay,
-                            ...(isHighlighted ? { color: '#fff' } : {}),
-                          }}>
-                            {item.rawDate ? item.rawDate.getDate() : '—'}
-                          </span>
-                          <span style={{
-                            ...styles.dateBadgeMonth,
-                            ...(isHighlighted ? { color: 'rgba(255,255,255,0.7)' } : {}),
-                          }}>
-                            {item.rawDate ? item.rawDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—'}
-                          </span>
-                        </div>
-                      );
-                    })()}
-                  </div>
 
-                  <div style={styles.cardContent}>
-                    <div style={{display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '8px'}}>
-                      <h3 style={{...styles.eventTitle, margin: 0}}>{item.title}</h3>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                        {item.time && item.time !== 'TBD' && (
-                          <span style={styles.cardTime}>{item.time}</span>
-                        )}
-                        {item.created_by === currentUser.id && (
-                          <div style={{ position: 'relative' }}>
+                    {/* Content area */}
+                    <div style={{ flex: 1, padding: '14px 14px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
+                        <h4 style={{
+                          fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '600',
+                          color: '#2C1810', margin: 0, lineHeight: 1.3, letterSpacing: '-0.2px',
+                        }}>
+                          {title}
+                        </h4>
+                        {/* Edit/Delete menu for owned items — shown only when card is tapped */}
+                        {activeCardId === item.id && ((!isCoffee && item.created_by === currentUser.id) || (isCoffee && item.requester_id === currentUser.id)) && (
+                          <div style={{ position: 'relative', flexShrink: 0 }}>
                             <button
                               onClick={(e) => { e.stopPropagation(); setActionMenuOpen(actionMenuOpen === item.id ? null : item.id); }}
                               style={styles.moreBtn}
@@ -1159,95 +1016,168 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                             </button>
                             {actionMenuOpen === item.id && (
                               <div style={styles.actionMenu}>
-                                <button style={styles.actionMenuItem} onClick={(e) => { e.stopPropagation(); handleEditMeetup(item); }}>
-                                  <Edit3 size={14} /> Edit
-                                </button>
-                                <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setDeletingMeetupId(item.id); setShowDeleteConfirm(true); setActionMenuOpen(null); }}>
-                                  <Trash2 size={14} /> Delete
-                                </button>
+                                {!isCoffee && (
+                                  <button style={styles.actionMenuItem} onClick={(e) => { e.stopPropagation(); handleEditMeetup(item); }}>
+                                    <Edit3 size={14} /> Edit
+                                  </button>
+                                )}
+                                {isCoffee ? (
+                                  <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setCancellingChatId(item.id); setShowCancelChatConfirm(true); setActionMenuOpen(null); }}>
+                                    <Trash2 size={14} /> Cancel
+                                  </button>
+                                ) : (
+                                  <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setDeletingMeetupId(item.id); setShowDeleteConfirm(true); setActionMenuOpen(null); }}>
+                                    <Trash2 size={14} /> Delete
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
                         )}
                       </div>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 0 4px 0' }}>
-                      {item.hostProfile?.profile_picture ? (
-                        <img src={item.hostProfile.profile_picture} alt={item.host} style={{
-                          width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover',
-                        }} />
-                      ) : (
-                        <div style={{
-                          width: '22px', height: '22px', borderRadius: '50%', backgroundColor: '#E8D5C0',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '10px', color: '#8B6F5C',
-                        }}>
-                          {item.host?.charAt(0)?.toUpperCase()}
-                        </div>
-                      )}
-                      <span style={{ fontSize: '13px', color: '#5C4033' }}>Hosted by {item.host}</span>
-                    </div>
-                    <p style={styles.eventDesc}>
-                      {item.description}
-                      {item.sessionNumber && ` · Session #${item.sessionNumber}`}
-                    </p>
-                    {item.attendeeProfiles && item.attendeeProfiles.length > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '10px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', marginRight: '6px' }}>
-                          {item.attendeeProfiles.slice(0, 5).map((p, idx) => (
-                            <div key={p.id} style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '50%',
-                              border: '2px solid #FDF8F2',
-                              marginLeft: idx === 0 ? 0 : '-8px',
-                              overflow: 'hidden',
-                              backgroundColor: '#E8D5C0',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              zIndex: 5 - idx,
-                              position: 'relative',
-                            }}>
-                              {p.profile_picture ? (
-                                <img src={p.profile_picture} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              ) : (
-                                <span style={{ fontSize: '11px', color: '#8B6F5C' }}>{p.name?.charAt(0)?.toUpperCase()}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        <span style={{ fontSize: '12px', color: '#7A6855' }}>
-                          {item.attendeeProfiles.length} attending
-                        </span>
-                      </div>
-                    )}
-                  </div>
 
-                  <div style={{
-                    ...styles.cardRight,
-                    alignItems: isMobile ? 'stretch' : 'flex-end',
-                    minWidth: isMobile ? '100%' : '140px',
-                  }}>
-                    <div style={styles.locationBlock}>
-                      <span style={styles.locationIcon}>{item.location?.includes('Zoom') || item.location === 'Virtual' ? '💻' : '📍'}</span>
-                      <span style={styles.locationText}>{item.location}</span>
+                      {time && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50' }}>
+                          <svg width="14" height="14" fill="none" stroke="#C4A07C" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                          <span style={{ fontWeight: '600', color: '#5C3A24' }}>{time}</span>
+                        </div>
+                      )}
+
+                      {isCoffee && item.isPending && (
+                        <div style={{
+                          fontSize: '11px', fontWeight: '600', padding: '3px 10px',
+                          borderRadius: '100px', display: 'inline-block', width: 'fit-content',
+                          backgroundColor: item.isInviteReceived ? 'rgba(196, 149, 106, 0.25)' : 'rgba(139, 111, 92, 0.1)',
+                          color: item.isInviteReceived ? '#8B6F5C' : '#7A6855',
+                        }}>
+                          {item.isInviteReceived ? 'Invited you' : 'Awaiting response'}
+                        </div>
+                      )}
+
+                      {/* Attendee avatars */}
+                      {isCoffee ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{
+                            width: '24px', height: '24px', borderRadius: '50%',
+                            overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
+                            color: coffeeAvatar.profile_picture ? undefined : 'white',
+                            background: coffeeAvatar.profile_picture ? undefined : '#8B6347',
+                          }}>
+                            {coffeeAvatar.profile_picture ? (
+                              <img src={coffeeAvatar.profile_picture} alt={coffeeAvatar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              (coffeeAvatar.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)
+                            )}
+                          </div>
+                          <span style={{ fontSize: '12px', color: '#9B8A7E' }}>
+                            <span style={{ fontWeight: '600', color: '#6B5B50' }}>{item.with}</span> · {item.role}
+                          </span>
+                        </div>
+                      ) : attendees.length > 0 ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            {attendees.slice(0, 3).map((p, idx) => (
+                              <div key={p.id} style={{
+                                width: '24px', height: '24px', borderRadius: '50%',
+                                border: '2px solid #FFFCF8', marginLeft: idx === 0 ? 0 : '-7px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
+                                overflow: 'hidden',
+                                color: p.profile_picture ? undefined : 'white',
+                                background: p.profile_picture ? undefined : ['#8B6347', '#A67B5B', '#C4A07C'][idx % 3],
+                                zIndex: 3 - idx, position: 'relative',
+                              }}>
+                                {p.profile_picture ? (
+                                  <img src={p.profile_picture} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  (p.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)
+                                )}
+                              </div>
+                            ))}
+                            {attendees.length > 3 && (
+                              <div style={{
+                                width: '24px', height: '24px', borderRadius: '50%',
+                                border: '2px solid #FFFCF8', marginLeft: '-7px',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
+                                color: '#6B4632', background: '#E8D5BE',
+                                zIndex: 0, position: 'relative',
+                              }}>
+                                +{attendees.length - 3}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ fontSize: '12px', color: '#9B8A7E' }}>
+                            <span style={{ fontWeight: '600', color: '#6B5B50' }}>{attendees.length}</span> attendees
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
-                    <div style={{...styles.cardActions, width: isMobile ? '100%' : undefined}}>
-                      {(item.status === 'going' || item.isCircleMeetup) ? (
-                        <button style={{...styles.actionBtnGoing, width: isMobile ? '100%' : undefined}} onClick={() => handleJoinCall(item)}>
-                          <Video size={14} style={{ marginRight: 6 }} />
-                          Join Room
-                        </button>
+
+                    {/* Action button - right column */}
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px 0 0', flexShrink: 0 }}>
+                      {isCoffee ? (
+                        item.isInviteReceived ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <button onClick={() => handleAcceptChat(item)} style={{
+                              background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                              padding: '9px 16px', borderRadius: '10px',
+                              fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}>Accept</button>
+                            <button onClick={() => handleDeclineChat(item)} style={{
+                              background: 'none', color: '#9B8A7E', border: '1px solid rgba(139,111,92,0.2)',
+                              padding: '7px 14px', borderRadius: '10px',
+                              fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
+                              cursor: 'pointer', whiteSpace: 'nowrap',
+                            }}>Decline</button>
+                          </div>
+                        ) : item.isPending ? (
+                          <span style={{
+                            fontSize: '12px', fontWeight: '600', color: '#9B8A7E',
+                            fontFamily: '"DM Sans", sans-serif',
+                          }}>Pending</span>
+                        ) : (
+                          <button onClick={() => handleJoinCall(item)} style={{
+                            background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                            padding: '9px 16px', borderRadius: '10px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                            gap: '6px', whiteSpace: 'nowrap',
+                          }}>
+                            <Video size={15} />
+                            Join &gt;
+                          </button>
+                        )
                       ) : (
-                        <button style={{...styles.actionBtnPrimary, width: isMobile ? '100%' : undefined}} onClick={() => handleRsvpMeetup(item)}>
-                          RSVP
-                        </button>
+                        (item.status === 'going' || item.isCircleMeetup) ? (
+                          <button onClick={() => handleJoinCall(item)} style={{
+                            background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                            padding: '9px 16px', borderRadius: '10px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                            gap: '6px', whiteSpace: 'nowrap',
+                          }}>
+                            <Video size={15} />
+                            Join &gt;
+                          </button>
+                        ) : (
+                          <button onClick={() => handleRsvpMeetup(item)} style={{
+                            background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                            padding: '9px 14px', borderRadius: '10px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                            gap: '5px', whiteSpace: 'nowrap',
+                          }}>
+                            Reserve spot &gt;
+                          </button>
+                        )
                       )}
                     </div>
                   </div>
-                </div>
-              )
+                );
+              })()
             ))
           )}
         </div>
@@ -1526,20 +1456,9 @@ const styles = {
     minHeight: '100%',
     fontFamily: '"DM Sans", sans-serif',
     position: 'relative',
-    background: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
   },
   ambientBg: {
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    background: `
-      radial-gradient(ellipse at 20% 20%, rgba(139, 111, 92, 0.06) 0%, transparent 50%),
-      radial-gradient(ellipse at 80% 80%, rgba(166, 123, 91, 0.04) 0%, transparent 50%)
-    `,
-    pointerEvents: 'none',
-    zIndex: -1,
+    display: 'none',
   },
   loadingContainer: {
     display: 'flex',
@@ -1830,14 +1749,16 @@ const styles = {
   },
   meetupCard: {
     display: 'flex',
-    gap: '20px',
-    padding: '20px',
-    background: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
-    borderRadius: '20px',
-    border: '1px solid rgba(139, 111, 92, 0.12)',
+    gap: '0',
+    padding: '0',
+    background: 'transparent',
+    borderRadius: '16px',
+    boxShadow: '0 1px 3px rgba(59,35,20,0.06)',
+    border: '1px solid rgba(59,35,20,0.05)',
     animation: 'fadeInUp 0.5s ease-out forwards',
     opacity: 0,
-    flexWrap: 'wrap',
+    alignItems: 'stretch',
+    position: 'relative',
   },
   groupCard: {
   },
@@ -1850,35 +1771,39 @@ const styles = {
     alignItems: 'flex-start',
   },
   dateBadge: {
-    width: '52px',
-    borderRadius: '14px',
-    backgroundColor: 'rgba(189, 173, 162, 0.65)',
+    minWidth: '68px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '8px 4px',
+    padding: '16px 0',
+    background: '#F3EAE0',
+    borderRight: '1px solid rgba(59,35,20,0.06)',
+    borderRadius: '16px 0 0 16px',
     flexShrink: 0,
   },
   dateBadgeMonth: {
-    fontSize: '10px',
-    fontWeight: '700',
-    color: '#605045',
-    letterSpacing: '0.5px',
-    lineHeight: '1',
+    fontFamily: '"DM Sans", sans-serif',
+    fontSize: '11px',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: '1.2px',
+    color: '#8B6347',
+    marginBottom: '2px',
   },
   dateBadgeDay: {
-    fontSize: '22px',
-    fontWeight: '600',
-    color: '#3F1906',
-    lineHeight: '1.2',
     fontFamily: '"Lora", serif',
+    fontSize: '26px',
+    fontWeight: '600',
+    color: '#3B2314',
+    lineHeight: 1,
   },
   dateBadgeWeekday: {
-    fontSize: '10px',
-    fontWeight: '600',
-    color: '#605045',
-    lineHeight: '1',
+    fontFamily: '"DM Sans", sans-serif',
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#9B8A7E',
+    marginTop: '3px',
   },
   dateBadgeTime: {
     fontSize: '9px',
@@ -1934,6 +1859,10 @@ const styles = {
   cardContent: {
     flex: 1,
     minWidth: '200px',
+    padding: '14px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
   },
   cardHeader: {
     display: 'flex',
@@ -2056,8 +1985,10 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-end',
+    justifyContent: 'center',
     gap: '10px',
-    minWidth: '140px',
+    padding: '0 14px 0 0',
+    flexShrink: 0,
   },
   dateBlock: {
     display: 'flex',
@@ -2231,9 +2162,10 @@ const styles = {
     flexDirection: 'column',
     gap: '14px',
     padding: '20px',
-    background: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
-    borderRadius: '20px',
-    border: '1px solid rgba(139, 111, 92, 0.12)',
+    background: 'transparent',
+    borderRadius: '16px',
+    boxShadow: '0 1px 3px rgba(59,35,20,0.06)',
+    border: '1px solid rgba(59,35,20,0.05)',
     animation: 'fadeInUp 0.5s ease-out forwards',
     opacity: 0,
   },
@@ -2380,9 +2312,10 @@ const styles = {
     justifyContent: 'space-between',
     gap: '12px',
     padding: '14px 18px',
-    background: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
-    borderRadius: '14px',
-    border: '1px solid rgba(139, 111, 92, 0.12)',
+    background: 'transparent',
+    borderRadius: '16px',
+    boxShadow: '0 1px 3px rgba(59,35,20,0.06)',
+    border: '1px solid rgba(59,35,20,0.05)',
     animation: 'fadeInUp 0.5s ease-out forwards',
     opacity: 0,
   },

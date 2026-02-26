@@ -135,7 +135,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   // Shared styles
   const pageStyle = {
     minHeight: '100vh',
-    background: colors.gradient,
+    background: colors.cream,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -145,9 +145,9 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   const cardStyle = {
     maxWidth: 420,
     width: '100%',
-    background: colors.warmWhite,
+    background: colors.cream,
     borderRadius: 24,
-    boxShadow: '0 16px 48px rgba(139, 111, 92, 0.12)',
+    boxShadow: 'none',
     padding: isMobile ? '28px 24px' : '36px 32px',
   }
 

@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@deepgram/sdk": "^4.11.3",
     "@livekit/components-react": "^2.9.17",
     "@livekit/track-processors": "^0.7.0",
     "@mediapipe/camera_utils": "^0.3.1675466862",

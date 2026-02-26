@@ -3787,7 +3787,7 @@ function MainApp({ currentUser, onSignOut }) {
   )
 
   return (
-    <div className="min-h-screen pb-28" style={{ background: currentView === 'discover' ? 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)' : '#F4EEE6' }}>
+    <div className="min-h-screen pb-28" style={{ background: '#FDF8F3' }}>
       {/* Onboarding for new users */}
       {showOnboarding && (
         <Onboarding
@@ -3823,7 +3823,7 @@ function MainApp({ currentUser, onSignOut }) {
         <div className="max-w-4xl mx-auto px-4 pt-4 pb-2 md:px-6">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#3D2B1A]" style={{ fontFamily: '"Playfair Display", serif', letterSpacing: '-0.3px' }}>
+            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#5E4530]" style={{ fontFamily: '"Playfair Display", serif', letterSpacing: '-0.3px' }}>
               <svg width="44" height="44" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-12 md:h-12">
                 <circle
                   cx="50"
@@ -3944,10 +3944,7 @@ function MainApp({ currentUser, onSignOut }) {
 
       {/* Main Content */}
       <div
-        className={`max-w-4xl mx-auto p-4 md:p-6 ${['home', 'allCircles'].includes(currentView) ? 'md:rounded-3xl md:mt-2' : ''}`}
-        style={['home', 'allCircles'].includes(currentView) ? {
-          background: 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)',
-        } : undefined}
+        className={`max-w-4xl mx-auto p-4 md:p-6`}
       >
         {currentView === 'home' && <HomeView />}
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={handleNavigate} initialView={meetupsInitialView} />}
