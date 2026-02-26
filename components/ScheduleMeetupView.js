@@ -39,6 +39,8 @@ export default function ScheduleMeetupView({
   initialCircleName = null,
   initialConnectionId = null,
   initialConnectionName = null,
+  initialTopic = '',
+  initialDescription = '',
 }) {
   const [meetupType, setMeetupType] = useState(initialType || null);
   const [selectedConnection, setSelectedConnection] = useState(
@@ -49,8 +51,8 @@ export default function ScheduleMeetupView({
   );
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
-  const [topic, setTopic] = useState('');
-  const [notes, setNotes] = useState('');
+  const [topic, setTopic] = useState(initialTopic || '');
+  const [notes, setNotes] = useState(initialDescription || '');
   const [location, setLocation] = useState('Virtual');
   const [participantLimit, setParticipantLimit] = useState(20);
   const [isRepeating, setIsRepeating] = useState(false);

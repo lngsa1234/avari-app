@@ -3951,14 +3951,12 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={(requestData) => {
-            if (requestData?.topic) {
-              setNewMeetup(prev => ({
-                ...prev,
-                topic: requestData.topic,
-                description: requestData.description || '',
-              }));
-            }
-            setShowCreateMeetup(true);
+            setScheduleMeetupContext({
+              type: 'community',
+              topic: requestData?.topic || '',
+              description: requestData?.description || '',
+            });
+            setCurrentView('scheduleMeetup');
           }} />}
         {currentView === 'messages' && <MessagesPageView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} initialChatId={selectedChatId} initialChatType={selectedChatType} previousView={previousView} />}
         {currentView === 'callHistory' && <CallHistoryView currentUser={currentUser} supabase={supabase} />}
@@ -4006,6 +4004,8 @@ function MainApp({ currentUser, onSignOut }) {
             initialCircleName={scheduleMeetupContext.circleName}
             initialConnectionId={scheduleMeetupContext.connectionId}
             initialConnectionName={scheduleMeetupContext.connectionName}
+            initialTopic={scheduleMeetupContext.topic}
+            initialDescription={scheduleMeetupContext.description}
           />
         )}
       </div>
