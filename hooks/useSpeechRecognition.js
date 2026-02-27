@@ -9,7 +9,8 @@ export default function useSpeechRecognition({
   onTranscript,
   language = 'en-US',
   continuous = true,
-  interimResults = true
+  interimResults = true,
+  enabled = true,
 } = {}) {
   const [isListening, setIsListening] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
@@ -49,14 +50,15 @@ export default function useSpeechRecognition({
     interimResultsRef.current = interimResults;
   }, [interimResults]);
 
-  // Check browser support
+  // Check browser support (skip when disabled, e.g. Deepgram is active)
   useEffect(() => {
+    if (!enabled) return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     setIsSafari(isSafariBrowser);
     setIsSupported(!!SpeechRecognition);
     console.log('[SpeechRecognition] Supported:', !!SpeechRecognition, 'Safari:', isSafariBrowser);
-  }, []);
+  }, [enabled]);
 
   // Create a new recognition instance (does NOT start it)
   const createRecognition = useCallback(() => {

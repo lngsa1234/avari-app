@@ -22,7 +22,7 @@ export default function useTranscription(options = {}) {
   const useDeepgram = process.env.NEXT_PUBLIC_USE_DEEPGRAM !== 'false';
 
   const deepgram = useDeepgramTranscription(useDeepgram ? resolvedOptions : {});
-  const speechApi = useSpeechRecognition(!useDeepgram ? resolvedOptions : {});
+  const speechApi = useSpeechRecognition(!useDeepgram ? resolvedOptions : { enabled: false });
 
   return useDeepgram ? deepgram : speechApi;
 }

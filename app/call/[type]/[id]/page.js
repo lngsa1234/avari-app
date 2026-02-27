@@ -224,12 +224,6 @@ export default function UnifiedCallPage() {
       lastInterimRef.current = '';
 
       saveTranscriptToDb(entry);
-
-      // Restart recognition to clear browser's accumulated buffer
-      if (restartListeningRef.current) {
-        console.log('[Transcript] Restarting recognition to clear buffer');
-        restartListeningRef.current();
-      }
     }
   }, [user, roomId, saveTranscriptToDb]);
 
@@ -1594,8 +1588,9 @@ export default function UnifiedCallPage() {
     // Step 1: Show "Ending call..." transition immediately
     setIsLeaving(true);
 
-    // Capture participant IDs before cleanup
-    const participantIds = [user?.id, ...remoteParticipants.map(p => p.id)].filter(Boolean);
+    // Capture participant IDs before cleanup (filter out non-UUID placeholders like 'remote')
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const participantIds = [user?.id, ...remoteParticipants.map(p => p.id)].filter(id => id && uuidRegex.test(id));
     const currentTranscript = [...transcript];
     const currentMessages = [...messages];
     const startTime = callStartTimeRef.current || callStartTime;
@@ -1648,7 +1643,28 @@ export default function UnifiedCallPage() {
     setIsLeaving(false);
     setShowRecap(true);
 
-    // Step 6: Generate AI summary in background
+    // Step 6: Generate AI summary in background (only if there's content)
+    if (currentTranscript.length === 0 && currentMessages.length === 0) {
+      // Save recap without AI summary
+      try {
+        await saveCallRecap({
+          channelName: roomId,
+          callType: config.internalType,
+          provider: config.provider,
+          startedAt: startTime,
+          endedAt: endTime,
+          participants: allParticipants,
+          transcript: [],
+          aiSummary: null,
+          metrics: {},
+          userId: user?.id
+        });
+        console.log('[UnifiedCall] Recap saved (no transcript/messages)');
+      } catch (saveErr) {
+        console.error('[UnifiedCall] Failed to save recap:', saveErr);
+      }
+      setLoadingSummary(false);
+    } else {
     setLoadingSummary(true);
     try {
       const duration = startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0;
@@ -1729,6 +1745,7 @@ export default function UnifiedCallPage() {
     } finally {
       setLoadingSummary(false);
     }
+    } // end else (has content to summarize)
   };
 
   const handleRecapClose = () => {
