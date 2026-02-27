@@ -67,16 +67,24 @@ export async function POST(request) {
     const openaiKey = process.env.OPENAI_API_KEY;
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
+    console.log('[Generate Recap Summary] Provider check — OpenAI:', !!openaiKey, 'Anthropic:', !!anthropicKey);
+    console.log('[Generate Recap Summary] Content length:', contentToSummarize.length, 'Transcript entries:', transcript?.length, 'Messages:', messages?.length);
+
     let result = generateSimpleSummary(transcript, messages, participantNames, durationMinutes, meetingTitle);
 
     if (openaiKey) {
       // Use OpenAI
+      console.log('[Generate Recap Summary] Using OpenAI');
       result = await generateWithOpenAI(openaiKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
     } else if (anthropicKey) {
       // Use Anthropic Claude
+      console.log('[Generate Recap Summary] Using Anthropic');
       result = await generateWithAnthropic(anthropicKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
+    } else {
+      console.log('[Generate Recap Summary] No AI provider configured, using simple summary');
     }
 
+    console.log('[Generate Recap Summary] Result summary:', result?.summary?.substring(0, 100));
     return NextResponse.json(result);
   } catch (error) {
     console.error('[Generate Recap Summary] Error:', error);
@@ -215,6 +223,7 @@ ${content}`
     if (response.ok) {
       const data = await response.json();
       const responseText = data.content[0]?.text;
+      console.log('[Anthropic] Response received, length:', responseText?.length);
 
       try {
         // Try to extract JSON from the response (handle markdown code blocks)
@@ -225,16 +234,21 @@ ${content}`
         }
 
         const parsed = JSON.parse(jsonStr);
+        console.log('[Anthropic] Parsed successfully, summary:', parsed.summary?.substring(0, 80));
         return normalizeResponse(parsed, participants, duration, meetingTitle);
       } catch (parseError) {
-        console.error('Failed to parse Anthropic JSON response:', parseError);
+        console.error('[Anthropic] Failed to parse JSON response:', parseError, 'Raw:', responseText?.substring(0, 200));
         return generateSimpleSummary(null, null, participants, duration, meetingTitle);
       }
+    } else {
+      const errBody = await response.text();
+      console.error('[Anthropic] API error:', response.status, errBody.substring(0, 300));
     }
   } catch (e) {
-    console.error('Anthropic error:', e);
+    console.error('[Anthropic] Fetch error:', e);
   }
 
+  console.log('[Anthropic] Falling back to simple summary');
   return generateSimpleSummary(null, null, participants, duration, meetingTitle);
 }
 
