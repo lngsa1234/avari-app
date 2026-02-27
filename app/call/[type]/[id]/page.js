@@ -665,9 +665,14 @@ export default function UnifiedCallPage() {
       } else if (event.track.kind === 'audio') {
         remoteTracks.audio = new MediaStream([event.track]);
       }
+      // Derive the partner's real user ID from relatedData (coffee chat has requester_id/recipient_id)
+      const rd = relatedDataRef.current || relatedData;
+      const partnerId = rd && user?.id
+        ? (rd.requester_id === user.id ? rd.recipient_id : rd.requester_id) || 'remote'
+        : 'remote';
       setRemoteParticipants([{
-        id: 'remote',
-        name: relatedDataRef.current?.partner_name || relatedData?.partner_name || 'Partner',
+        id: partnerId,
+        name: rd?.partner_name || 'Partner',
         videoTrack: remoteTracks.video,
         audioTrack: remoteTracks.audio,
         hasVideo: !!remoteTracks.video,

@@ -226,11 +226,15 @@ export default function NetworkDiscoverView({
     new Set(connections.map(c => c.id)), [connections]);
 
   const scoredAvailableCircles = useMemo(() => {
+    console.log('[Circles] connectionGroups:', connectionGroups.length, 'currentUser:', currentUser?.id);
     const filtered = connectionGroups.filter(group => {
       const isMember = group.members?.some(m => m.user_id === currentUser.id);
       const memberCount = group.members?.length || 0;
+      if (isMember) console.log('[Circles] Filtered out (member):', group.name);
+      if (memberCount >= 10) console.log('[Circles] Filtered out (full):', group.name);
       return !isMember && memberCount < 10;
     });
+    console.log('[Circles] After filter:', filtered.length);
     return filtered
       .map(circle => ({
         ...circle,
@@ -408,6 +412,8 @@ export default function NetworkDiscoverView({
         .order('created_at', { ascending: false })
         .limit(30);
 
+      console.log('[Circles] Fetched groups:', groups?.length, 'error:', error);
+
       if (error) {
         console.error('Error fetching connection groups:', error);
         setConnectionGroups([]);
@@ -415,6 +421,7 @@ export default function NetworkDiscoverView({
       }
 
       if (!groups || groups.length === 0) {
+        console.log('[Circles] No active groups found');
         setConnectionGroups([]);
         return;
       }
@@ -426,6 +433,7 @@ export default function NetworkDiscoverView({
         .in('group_id', groupIds)
         .eq('status', 'accepted');
 
+      console.log('[Circles] Members fetched:', allMembers?.length, 'error:', membersError);
       if (membersError) {
         console.error('Error fetching group members:', membersError);
       }
@@ -455,10 +463,7 @@ export default function NetworkDiscoverView({
           }))
       }));
 
-      if (selectedVibe) {
-        enrichedGroups = enrichedGroups.filter(g => g.vibe_category === selectedVibe || !g.vibe_category);
-      }
-
+      console.log('[Circles] Setting state:', enrichedGroups.length);
       setConnectionGroups(enrichedGroups);
     } catch (error) {
       console.error('Error loading connection groups:', error);
