@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { io } from 'socket.io-client';
 
 /**
- * Custom hook for real-time transcription using Deepgram WebSocket API.
- * Drop-in replacement for useSpeechRecognition with the same return API.
+ * Custom hook for real-time transcription using Deepgram via Socket.IO backend proxy.
+ * Audio is captured in the browser and streamed to the backend over Socket.IO,
+ * which forwards it to Deepgram and relays transcription results back.
  */
 export default function useDeepgramTranscription({
   onTranscript,
@@ -16,12 +18,12 @@ export default function useDeepgramTranscription({
   const [error, setError] = useState(null);
 
   const isListeningRef = useRef(false);
-  const wsRef = useRef(null);
+  const socketRef = useRef(null);
   const audioContextRef = useRef(null);
   const processorRef = useRef(null);
   const streamRef = useRef(null);
-  const keepaliveRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
   const isCleaningUpRef = useRef(false);
 
   // Stable refs for callback and options
@@ -53,24 +55,15 @@ export default function useDeepgramTranscription({
     }
   }, []);
 
-  // Clean up WebSocket and keepalive
-  const cleanupWebSocket = useCallback(() => {
-    if (keepaliveRef.current) {
-      clearInterval(keepaliveRef.current);
-      keepaliveRef.current = null;
-    }
-    if (wsRef.current) {
+  // Clean up Socket.IO connection
+  const cleanupSocket = useCallback(() => {
+    if (socketRef.current) {
       try {
-        // Remove onclose to prevent reconnect during intentional close
-        wsRef.current.onclose = null;
-        wsRef.current.onerror = null;
-        wsRef.current.onmessage = null;
-        if (wsRef.current.readyState === WebSocket.OPEN ||
-            wsRef.current.readyState === WebSocket.CONNECTING) {
-          wsRef.current.close();
-        }
+        socketRef.current.emit('transcription:stop');
+        socketRef.current.removeAllListeners();
+        socketRef.current.disconnect();
       } catch (e) { /* ignore */ }
-      wsRef.current = null;
+      socketRef.current = null;
     }
   }, []);
 
@@ -84,18 +77,18 @@ export default function useDeepgramTranscription({
       reconnectTimeoutRef.current = null;
     }
 
-    cleanupWebSocket();
+    cleanupSocket();
     cleanupAudio();
 
     setIsListening(false);
     isCleaningUpRef.current = false;
-  }, [cleanupWebSocket, cleanupAudio]);
+  }, [cleanupSocket, cleanupAudio]);
 
   const startListening = useCallback(async () => {
     console.log('[Deepgram] startListening called');
 
     // Clean up any previous session
-    cleanupWebSocket();
+    cleanupSocket();
     cleanupAudio();
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -105,23 +98,7 @@ export default function useDeepgramTranscription({
     setError(null);
     isCleaningUpRef.current = false;
 
-    // 1. Fetch temporary Deepgram key
-    let apiKey;
-    try {
-      const res = await fetch('/api/deepgram-token', { method: 'POST' });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `Token request failed (${res.status})`);
-      }
-      const data = await res.json();
-      apiKey = data.key;
-    } catch (e) {
-      console.error('[Deepgram] Token fetch error:', e);
-      setError('Failed to initialize transcription: ' + e.message);
-      return false;
-    }
-
-    // 2. Get microphone stream
+    // 1. Get microphone stream
     let stream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -136,7 +113,7 @@ export default function useDeepgramTranscription({
       return false;
     }
 
-    // 3. Set up AudioContext to resample to 16kHz mono linear16
+    // 2. Set up AudioContext to resample to 16kHz mono linear16
     let audioContext;
     try {
       audioContext = new (window.AudioContext || window.webkitAudioContext)({
@@ -157,8 +134,9 @@ export default function useDeepgramTranscription({
     const nativeSampleRate = audioContext.sampleRate;
     const targetSampleRate = 16000;
 
+    let audioSendCount = 0;
     processor.onaudioprocess = (e) => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      if (!isListeningRef.current || !socketRef.current?.connected) return;
 
       const inputData = e.inputBuffer.getChannelData(0);
 
@@ -170,96 +148,105 @@ export default function useDeepgramTranscription({
         pcm16 = float32ToInt16(resampled);
       }
 
-      wsRef.current.send(pcm16.buffer);
+      socketRef.current.emit('audio-chunk', pcm16.buffer);
+      audioSendCount++;
+      if (audioSendCount <= 3 || audioSendCount % 100 === 0) {
+        console.log(`[Deepgram] Audio sent #${audioSendCount}, bytes: ${pcm16.buffer.byteLength}, sampleRate: ${nativeSampleRate}`);
+      }
     };
 
     source.connect(processor);
     processor.connect(audioContext.destination);
 
-    // 4. Open WebSocket to Deepgram
+    // 3. Connect to Socket.IO backend and start transcription
+    const serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'http://localhost:3001';
     const lang = languageRef.current || 'en-US';
-    const wsUrl = `wss://api.deepgram.com/v1/listen?model=nova-2&language=${lang}&punctuate=true&interim_results=true&smart_format=true&encoding=linear16&sample_rate=16000&channels=1`;
 
     try {
-      const ws = new WebSocket(wsUrl, ['token', apiKey]);
-      wsRef.current = ws;
+      const socket = io(serverUrl, {
+        transports: ['websocket', 'polling'],
+        reconnection: false, // We handle reconnection ourselves
+        path: '/socket.io/',
+      });
+      socketRef.current = socket;
 
-      ws.onopen = () => {
-        console.log('[Deepgram] WebSocket connected');
+      socket.on('connect', () => {
+        console.log('[Deepgram] Socket.IO connected, requesting transcription');
+        socket.emit('transcription:start', { language: lang });
+      });
+
+      socket.on('transcription:ready', () => {
+        console.log('[Deepgram] Transcription ready — streaming audio');
+        reconnectAttemptsRef.current = 0;
         isListeningRef.current = true;
         setIsListening(true);
         setError(null);
+      });
 
-        // Keepalive: send empty buffer every 8s to prevent timeout
-        keepaliveRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(new ArrayBuffer(0));
-          }
-        }, 8000);
-      };
+      socket.on('transcription:result', ({ text, isFinal, timestamp }) => {
+        if (!text) return;
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          const transcript = data?.channel?.alternatives?.[0]?.transcript;
-          if (!transcript) return;
-
-          const isFinal = data.is_final === true;
-          const speechFinal = data.speech_final === true;
-
-          if (isFinal && onTranscriptRef.current) {
-            console.log('[Deepgram] Final:', transcript);
-            onTranscriptRef.current({
-              text: transcript,
-              isFinal: true,
-              timestamp: Date.now(),
-            });
-          } else if (!isFinal && interimResultsRef.current && onTranscriptRef.current) {
-            onTranscriptRef.current({
-              text: transcript,
-              isFinal: false,
-              timestamp: Date.now(),
-            });
-          }
-        } catch (e) {
-          console.warn('[Deepgram] Failed to parse message:', e);
+        if (isFinal && onTranscriptRef.current) {
+          console.log('[Deepgram] Final:', text);
+          onTranscriptRef.current({ text, isFinal: true, timestamp });
+        } else if (!isFinal && interimResultsRef.current && onTranscriptRef.current) {
+          onTranscriptRef.current({ text, isFinal: false, timestamp });
         }
-      };
+      });
 
-      ws.onclose = (event) => {
-        console.log('[Deepgram] WebSocket closed, code:', event.code, 'reason:', event.reason);
+      socket.on('transcription:closed', ({ code, reason }) => {
+        console.log('[Deepgram] Transcription closed, code:', code, 'reason:', reason);
 
-        if (keepaliveRef.current) {
-          clearInterval(keepaliveRef.current);
-          keepaliveRef.current = null;
-        }
-
-        // Auto-reconnect if we should still be listening and this wasn't intentional
+        // Auto-reconnect with exponential backoff
         if (isListeningRef.current && !isCleaningUpRef.current) {
-          console.log('[Deepgram] Unexpected close, reconnecting in 1s...');
+          const attempt = reconnectAttemptsRef.current++;
+          const delay = Math.min(1000 * Math.pow(2, attempt), 15000);
+          console.log(`[Deepgram] Reconnecting in ${delay}ms (attempt ${attempt + 1})...`);
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isListeningRef.current) {
-              // Clean up current resources before reconnecting
-              cleanupWebSocket();
+              cleanupSocket();
               cleanupAudio();
               startListening();
             }
-          }, 1000);
+          }, delay);
         }
-      };
+      });
 
-      ws.onerror = (event) => {
-        console.error('[Deepgram] WebSocket error:', event);
-      };
+      socket.on('transcription:error', ({ message }) => {
+        console.error('[Deepgram] Server error:', message);
+        setError('Transcription error: ' + message);
+      });
+
+      socket.on('connect_error', (err) => {
+        console.error('[Deepgram] Socket.IO connection error:', err.message);
+        setError('Failed to connect to transcription server');
+      });
+
+      socket.on('disconnect', (reason) => {
+        console.log('[Deepgram] Socket.IO disconnected:', reason);
+
+        if (isListeningRef.current && !isCleaningUpRef.current) {
+          const attempt = reconnectAttemptsRef.current++;
+          const delay = Math.min(1000 * Math.pow(2, attempt), 15000);
+          console.log(`[Deepgram] Socket disconnected, reconnecting in ${delay}ms...`);
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isListeningRef.current) {
+              cleanupSocket();
+              cleanupAudio();
+              startListening();
+            }
+          }, delay);
+        }
+      });
 
       return true;
     } catch (e) {
-      console.error('[Deepgram] WebSocket creation error:', e);
+      console.error('[Deepgram] Socket.IO creation error:', e);
       cleanupAudio();
       setError('Failed to connect to transcription service');
       return false;
     }
-  }, [cleanupWebSocket, cleanupAudio]);
+  }, [cleanupSocket, cleanupAudio]);
 
   const restartListening = useCallback(() => {
     console.log('[Deepgram] restartListening called');
@@ -277,13 +264,11 @@ export default function useDeepgramTranscription({
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (keepaliveRef.current) {
-        clearInterval(keepaliveRef.current);
-      }
-      if (wsRef.current) {
+      if (socketRef.current) {
         try {
-          wsRef.current.onclose = null;
-          wsRef.current.close();
+          socketRef.current.emit('transcription:stop');
+          socketRef.current.removeAllListeners();
+          socketRef.current.disconnect();
         } catch (e) { /* ignore */ }
       }
       if (processorRef.current) {
@@ -300,8 +285,8 @@ export default function useDeepgramTranscription({
 
   return {
     isListening,
-    isSupported: true, // Deepgram only needs getUserMedia + WebSocket
-    isSafari: false,   // No Safari-specific workarounds needed
+    isSupported: true,
+    isSafari: false,
     error,
     startListening,
     stopListening,
