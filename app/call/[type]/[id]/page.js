@@ -183,14 +183,21 @@ export default function UnifiedCallPage() {
   // Track last auto-finalized text to skip duplicate from browser's final event
   const lastAutoFinalizedRef = useRef('');
 
-  // Save transcript entry to database with fresh auth session
+  // Save transcript entry to database
   const saveTranscriptToDb = useCallback(async (entry) => {
     if (!roomId) return;
-    // Force a token refresh to ensure a valid JWT before saving
-    const { data: { session }, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError || !session) {
-      console.warn('[Transcript] Auth refresh failed, skipping save:', refreshError?.message || 'no session');
-      return;
+    // Try getSession first (no network call), fall back to refreshSession
+    let session;
+    const { data: { session: existing } } = await supabase.auth.getSession();
+    if (existing) {
+      session = existing;
+    } else {
+      const { data: { session: refreshed }, error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError || !refreshed) {
+        console.warn('[Transcript] Auth failed, skipping save:', refreshError?.message || 'no session');
+        return;
+      }
+      session = refreshed;
     }
     const { error } = await supabase.from('call_transcripts').insert({
       channel_name: roomId,
@@ -238,17 +245,40 @@ export default function UnifiedCallPage() {
     if (isFinal && text.trim()) {
       const finalText = text.trim();
 
-      // Skip if this is a duplicate of what we just auto-finalized
-      // (happens when browser sends final event during restart)
+      // If we auto-finalized a partial and Deepgram now sends the full final,
+      // replace the partial with the complete version
       if (lastAutoFinalizedRef.current && finalText.includes(lastAutoFinalizedRef.current)) {
-        console.log('[Transcript] Skipping duplicate final:', finalText);
+        console.log('[Transcript] Replacing auto-finalized partial with full final:', finalText);
+        setTranscript(prev => {
+          // Remove the last entry that matches the auto-finalized partial
+          const updated = [...prev];
+          for (let i = updated.length - 1; i >= 0; i--) {
+            if (updated[i].text === lastAutoFinalizedRef.current) {
+              updated.splice(i, 1);
+              break;
+            }
+          }
+          return [...updated, {
+            speakerId: user?.id || 'local',
+            speakerName: user?.name || 'You',
+            text: finalText,
+            timestamp,
+            isFinal: true
+          }];
+        });
         lastAutoFinalizedRef.current = '';
         setInterimText('');
         lastInterimRef.current = '';
+        saveTranscriptToDb({
+          speakerId: user?.id || 'local',
+          speakerName: user?.name || 'You',
+          text: finalText,
+          timestamp,
+          isFinal: true
+        });
         return;
       }
 
-      // Browser marked it final
       setInterimText('');
       lastInterimRef.current = '';
       lastAutoFinalizedRef.current = '';
@@ -269,10 +299,13 @@ export default function UnifiedCallPage() {
       setInterimText(text.trim());
       lastInterimRef.current = text.trim();
 
-      // Auto-finalize after 800ms of no new input
+      // Auto-finalize after pause — Deepgram sends its own finals so use longer
+      // timeout as safety net only; Web Speech API needs shorter timeout
+      const useDeepgram = process.env.NEXT_PUBLIC_USE_DEEPGRAM !== 'false';
+      const autoFinalizeDelay = useDeepgram ? 3000 : 800;
       interimTimeoutRef.current = setTimeout(() => {
         finalizeInterim();
-      }, 800);
+      }, autoFinalizeDelay);
     }
   }, [user, roomId, finalizeInterim, saveTranscriptToDb]);
 
