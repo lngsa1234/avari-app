@@ -160,7 +160,8 @@ export default function useDeepgramTranscription({
 
     // 3. Connect to Socket.IO backend and start transcription
     const serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'http://localhost:3001';
-    const lang = languageRef.current || 'en-US';
+    // Use Deepgram's multi-language auto-detection
+    const lang = 'multi';
 
     try {
       const socket = io(serverUrl, {
