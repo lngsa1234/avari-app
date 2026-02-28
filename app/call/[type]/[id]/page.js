@@ -1684,8 +1684,35 @@ export default function UnifiedCallPage() {
     setIsLeaving(false);
     setShowRecap(true);
 
-    // Step 6: Generate AI summary in background (only if there's content)
-    if (currentTranscript.length === 0 && currentMessages.length === 0) {
+    // Step 6: Fetch combined transcript from all participants in the room
+    let combinedTranscript = currentTranscript;
+    try {
+      const { data: dbTranscripts } = await supabase
+        .from('call_transcripts')
+        .select('speaker_name, text, timestamp, user_id')
+        .eq('channel_name', roomId)
+        .order('timestamp', { ascending: true });
+
+      if (dbTranscripts && dbTranscripts.length > 0) {
+        combinedTranscript = dbTranscripts.map(t => ({
+          speakerName: t.speaker_name || 'Speaker',
+          text: t.text,
+          timestamp: t.timestamp,
+          speakerId: t.user_id
+        }));
+        console.log('[UnifiedCall] Using combined transcript from all participants:', combinedTranscript.length, 'entries');
+      }
+    } catch (fetchErr) {
+      console.warn('[UnifiedCall] Failed to fetch combined transcript, using local:', fetchErr);
+    }
+
+    // Update recap data with combined transcript for UI display
+    if (combinedTranscript !== currentTranscript) {
+      setRecapData(prev => prev ? { ...prev, transcript: combinedTranscript } : prev);
+    }
+
+    // Generate AI summary in background (only if there's content)
+    if (combinedTranscript.length === 0 && currentMessages.length === 0) {
       // Save recap without AI summary
       try {
         await saveCallRecap({
@@ -1713,7 +1740,7 @@ export default function UnifiedCallPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          transcript: currentTranscript,
+          transcript: combinedTranscript,
           messages: currentMessages,
           participants: allParticipants.map(p => p.name || p.email?.split('@')[0]),
           duration,
@@ -1753,7 +1780,7 @@ export default function UnifiedCallPage() {
             startedAt: startTime,
             endedAt: endTime,
             participants: allParticipants,
-            transcript: currentTranscript,
+            transcript: combinedTranscript,
             aiSummary: fullSummaryText.trim(),
             metrics: {},
             userId: user?.id
@@ -1774,7 +1801,7 @@ export default function UnifiedCallPage() {
           startedAt: startTime,
           endedAt: endTime,
           participants: allParticipants,
-          transcript: currentTranscript,
+          transcript: combinedTranscript,
           aiSummary: null,
           metrics: {},
           userId: user?.id
