@@ -94,13 +94,26 @@ const RemoteVideo = memo(function RemoteVideo({
       console.log('[RemoteVideo] attached video track, videoEl:', !!videoEl, 'srcObject:', !!videoEl?.srcObject, 'videoEl dimensions:', videoEl?.videoWidth, 'x', videoEl?.videoHeight);
       if (videoEl) {
         videoEl.style.setProperty('transform', 'none', 'important');
+
+        // Log when video actually starts rendering
+        videoEl.onloadedmetadata = () => {
+          console.log('[RemoteVideo] metadata loaded, dimensions:', videoEl.videoWidth, 'x', videoEl.videoHeight);
+        };
+        videoEl.onplaying = () => {
+          console.log('[RemoteVideo] video playing, dimensions:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'paused:', videoEl.paused);
+        };
+
         // Try to autoplay with retries — the stream may not be ready immediately
         const tryPlay = (attempts = 0) => {
           if (!videoEl.paused) { setNeedsPlay(false); return; }
           videoEl.play()
-            .then(() => setNeedsPlay(false))
-            .catch(() => {
-              if (attempts < 3) {
+            .then(() => {
+              console.log('[RemoteVideo] play() succeeded, paused:', videoEl.paused);
+              setNeedsPlay(false);
+            })
+            .catch((err) => {
+              console.log('[RemoteVideo] play() failed attempt', attempts, ':', err.name, err.message);
+              if (attempts < 5) {
                 setTimeout(() => tryPlay(attempts + 1), 500);
               } else {
                 setNeedsPlay(true);
