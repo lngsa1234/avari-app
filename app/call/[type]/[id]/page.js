@@ -518,6 +518,7 @@ export default function UnifiedCallPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           meetupId: roomId,
+          callType,
           title: relatedData?.topic || relatedData?.name || (callType === 'coffee' ? '1:1 Coffee Chat' : 'Networking Meetup'),
           description: relatedData?.description || '',
           attendees: roomParticipants?.map(p => ({

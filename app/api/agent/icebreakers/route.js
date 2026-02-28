@@ -10,7 +10,7 @@ import { logAgentExecution, callAI, parseJSONFromAI } from '@/lib/agentHelpers';
  */
 export async function POST(request) {
   try {
-    const { meetupId, title, description, attendees } = await request.json();
+    const { meetupId, callType, title, description, attendees } = await request.json();
 
     if (!meetupId) {
       return NextResponse.json({ error: 'meetupId is required' }, { status: 400 });
@@ -21,19 +21,21 @@ export async function POST(request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     );
 
-    // Check cache first
-    const { data: cached } = await supabase
-      .from('meetup_icebreakers')
-      .select('icebreakers, generation_type')
-      .eq('meetup_id', meetupId)
-      .single();
+    // Check cache first (only for meetups — coffee/circle IDs aren't in this table)
+    if (callType === 'meetup' || !callType) {
+      const { data: cached } = await supabase
+        .from('meetup_icebreakers')
+        .select('icebreakers, generation_type')
+        .eq('meetup_id', meetupId)
+        .single();
 
-    if (cached) {
-      return NextResponse.json({
-        icebreakers: cached.icebreakers,
-        cached: true,
-        tier: cached.generation_type
-      });
+      if (cached) {
+        return NextResponse.json({
+          icebreakers: cached.icebreakers,
+          cached: true,
+          tier: cached.generation_type
+        });
+      }
     }
 
     // Decide tier based on context richness
@@ -53,17 +55,19 @@ export async function POST(request) {
       tier = aiResult.tier;
     }
 
-    // Cache result
-    const { error: cacheError } = await supabase.from('meetup_icebreakers').upsert({
-      meetup_id: meetupId,
-      icebreakers,
-      generation_type: tier
-    }, {
-      onConflict: 'meetup_id'
-    });
+    // Cache result (only for meetups — coffee/circle IDs would violate FK constraint)
+    if (callType === 'meetup' || !callType) {
+      const { error: cacheError } = await supabase.from('meetup_icebreakers').upsert({
+        meetup_id: meetupId,
+        icebreakers,
+        generation_type: tier
+      }, {
+        onConflict: 'meetup_id'
+      });
 
-    if (cacheError) {
-      console.error('[Icebreakers] Cache error:', cacheError);
+      if (cacheError) {
+        console.error('[Icebreakers] Cache error:', cacheError);
+      }
     }
 
     // Log execution for cost tracking
