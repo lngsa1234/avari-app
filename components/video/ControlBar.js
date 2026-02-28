@@ -427,7 +427,7 @@ export default function ControlBar({
         )}
         {isTranscribing && (
           <div className="flex flex-col items-center gap-1">
-            <span className="text-stone-400 text-[11px]">Select your language for better recognition:</span>
+            <span className="text-stone-400 text-[11px]">Transcript enabled for recap. Select your language for better recognition:</span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => onLanguageChange?.('en-US')}
