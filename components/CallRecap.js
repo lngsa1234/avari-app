@@ -159,14 +159,24 @@ export default function CallRecap({
       if (!currentUserId) return;
 
       try {
-        const { data, error } = await supabase
+        // Check mutual connections (both users expressed interest)
+        const { data: mutualMatches, error: matchError } = await supabase
+          .rpc('get_mutual_matches', { for_user_id: currentUserId });
+
+        // Also check one-way interests sent by current user
+        const { data: myInterests, error: interestError } = await supabase
           .from('user_interests')
           .select('interested_in_user_id')
           .eq('user_id', currentUserId);
 
-        if (!error && data) {
-          setConnectedUserIds(new Set(data.map(c => c.interested_in_user_id)));
+        const ids = new Set();
+        if (!matchError && mutualMatches) {
+          mutualMatches.forEach(m => ids.add(m.matched_user_id));
         }
+        if (!interestError && myInterests) {
+          myInterests.forEach(c => ids.add(c.interested_in_user_id));
+        }
+        setConnectedUserIds(ids);
       } catch (err) {
         console.error('Error loading existing connections:', err);
       }
