@@ -231,6 +231,13 @@ export default function UnifiedCallPage() {
       lastInterimRef.current = '';
 
       saveTranscriptToDb(entry);
+
+      // Restart recognition to clear browser's accumulated buffer (Web Speech API only)
+      const useDeepgram = process.env.NEXT_PUBLIC_USE_DEEPGRAM === 'true';
+      if (!useDeepgram && restartListeningRef.current) {
+        console.log('[Transcript] Restarting recognition to clear buffer');
+        restartListeningRef.current();
+      }
     }
   }, [user, roomId, saveTranscriptToDb]);
 
@@ -301,8 +308,8 @@ export default function UnifiedCallPage() {
 
       // Auto-finalize after pause — Deepgram sends its own finals so use longer
       // timeout as safety net only; Web Speech API needs shorter timeout
-      const useDeepgram = process.env.NEXT_PUBLIC_USE_DEEPGRAM !== 'false';
-      const autoFinalizeDelay = useDeepgram ? 3000 : 800;
+      const forceDeepgram = process.env.NEXT_PUBLIC_USE_DEEPGRAM === 'true';
+      const autoFinalizeDelay = forceDeepgram ? 3000 : 800;
       interimTimeoutRef.current = setTimeout(() => {
         finalizeInterim();
       }, autoFinalizeDelay);
