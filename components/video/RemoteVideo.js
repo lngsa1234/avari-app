@@ -56,8 +56,6 @@ const RemoteVideo = memo(function RemoteVideo({
     const wasEnabled = lastEnabledRef.current;
     const justUnmuted = !wasEnabled && isVideoEnabled;
 
-    console.log('[RemoteVideo] video effect:', { hasTrack: !!track, hasElement: !!videoElement, isVideoEnabled, providerType, alreadyAttached: attachedVideoRef.current === track });
-
     lastEnabledRef.current = isVideoEnabled;
     setHasVideo(!!track && isVideoEnabled);
 
@@ -89,30 +87,17 @@ const RemoteVideo = memo(function RemoteVideo({
     try {
       attachTrack(track, videoElement, providerType, 'video');
       attachedVideoRef.current = track;
-      // Ensure remote video is never mirrored
       const videoEl = videoElement.querySelector('video');
-      console.log('[RemoteVideo] attached video track, videoEl:', !!videoEl, 'srcObject:', !!videoEl?.srcObject, 'videoEl dimensions:', videoEl?.videoWidth, 'x', videoEl?.videoHeight);
       if (videoEl) {
+        // Ensure remote video is never mirrored
         videoEl.style.setProperty('transform', 'none', 'important');
-
-        // Log when video actually starts rendering
-        videoEl.onloadedmetadata = () => {
-          console.log('[RemoteVideo] metadata loaded, dimensions:', videoEl.videoWidth, 'x', videoEl.videoHeight);
-        };
-        videoEl.onplaying = () => {
-          console.log('[RemoteVideo] video playing, dimensions:', videoEl.videoWidth, 'x', videoEl.videoHeight, 'paused:', videoEl.paused);
-        };
 
         // Try to autoplay with retries — the stream may not be ready immediately
         const tryPlay = (attempts = 0) => {
           if (!videoEl.paused) { setNeedsPlay(false); return; }
           videoEl.play()
-            .then(() => {
-              console.log('[RemoteVideo] play() succeeded, paused:', videoEl.paused);
-              setNeedsPlay(false);
-            })
-            .catch((err) => {
-              console.log('[RemoteVideo] play() failed attempt', attempts, ':', err.name, err.message);
+            .then(() => setNeedsPlay(false))
+            .catch(() => {
               if (attempts < 5) {
                 setTimeout(() => tryPlay(attempts + 1), 500);
               } else {
