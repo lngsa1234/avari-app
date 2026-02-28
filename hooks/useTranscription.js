@@ -51,5 +51,6 @@ export default function useTranscription(options = {}) {
 
   const deepgram = useDeepgramTranscription(!useWebSpeech ? resolvedOptions : {});
 
-  return useWebSpeech ? speechApi : deepgram;
+  const active = useWebSpeech ? speechApi : deepgram;
+  return { ...active, provider: useWebSpeech ? 'webspeech' : 'deepgram' };
 }

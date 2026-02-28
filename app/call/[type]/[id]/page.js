@@ -180,6 +180,8 @@ export default function UnifiedCallPage() {
   const lastInterimRef = useRef('');
   // Ref to store restart function (set after hook is called)
   const restartListeningRef = useRef(null);
+  // Ref to track active transcription provider ('webspeech' or 'deepgram')
+  const transcriptionProviderRef = useRef('webspeech');
   // Track last auto-finalized text to skip duplicate from browser's final event
   const lastAutoFinalizedRef = useRef('');
 
@@ -233,8 +235,7 @@ export default function UnifiedCallPage() {
       saveTranscriptToDb(entry);
 
       // Restart recognition to clear browser's accumulated buffer (Web Speech API only)
-      const useDeepgram = process.env.NEXT_PUBLIC_USE_DEEPGRAM === 'true';
-      if (!useDeepgram && restartListeningRef.current) {
+      if (transcriptionProviderRef.current === 'webspeech' && restartListeningRef.current) {
         console.log('[Transcript] Restarting recognition to clear buffer');
         restartListeningRef.current();
       }
@@ -308,8 +309,7 @@ export default function UnifiedCallPage() {
 
       // Auto-finalize after pause — Deepgram sends its own finals so use longer
       // timeout as safety net only; Web Speech API needs shorter timeout
-      const forceDeepgram = process.env.NEXT_PUBLIC_USE_DEEPGRAM === 'true';
-      const autoFinalizeDelay = forceDeepgram ? 3000 : 800;
+      const autoFinalizeDelay = transcriptionProviderRef.current === 'deepgram' ? 3000 : 800;
       interimTimeoutRef.current = setTimeout(() => {
         finalizeInterim();
       }, autoFinalizeDelay);
@@ -323,7 +323,8 @@ export default function UnifiedCallPage() {
     error: speechError,
     startListening,
     stopListening,
-    restartListening
+    restartListening,
+    provider: transcriptionProvider
   } = useTranscription({
     onTranscript: handleTranscript,
     language: transcriptionLanguage,
@@ -331,10 +332,11 @@ export default function UnifiedCallPage() {
     interimResults: true
   });
 
-  // Store restartListening in ref so finalizeInterim can access it
+  // Store restartListening and provider in refs so callbacks can access them
   useEffect(() => {
     restartListeningRef.current = restartListening;
-  }, [restartListening]);
+    transcriptionProviderRef.current = transcriptionProvider;
+  }, [restartListening, transcriptionProvider]);
 
   // Calculate derived state
   const showSidebar = showChat || showTopics || showParticipants;
