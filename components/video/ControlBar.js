@@ -426,17 +426,31 @@ export default function ControlBar({
           </div>
         )}
         {isTranscribing && (
-          <button
-            onClick={() => onLanguageChange?.(transcriptionLanguage === 'en-US' ? 'zh-CN' : 'en-US')}
-            className="flex items-center gap-1.5 bg-stone-700/60 hover:bg-stone-600/70 px-3 py-1 rounded-full cursor-pointer border border-stone-600/40 transition-all"
-            title="Tap to switch language"
-          >
-            <CaptionIcon />
-            <span className="text-stone-200 text-xs font-semibold">
-              {transcriptionLanguage === 'zh-CN' ? '中文' : 'EN'}
-            </span>
-            <span className="text-stone-400 text-[10px]">▸ {transcriptionLanguage === 'zh-CN' ? 'EN' : '中文'}</span>
-          </button>
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-stone-400 text-[11px]">Transcript enabled for recap. Select your language:</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => onLanguageChange?.('en-US')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                  transcriptionLanguage === 'en-US'
+                    ? 'bg-amber-600/30 text-amber-300 border-amber-500/50'
+                    : 'bg-stone-700/60 text-stone-300 border-stone-600/40 hover:bg-stone-600/70'
+                }`}
+              >
+                English
+              </button>
+              <button
+                onClick={() => onLanguageChange?.('zh-CN')}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                  transcriptionLanguage === 'zh-CN'
+                    ? 'bg-amber-600/30 text-amber-300 border-amber-500/50'
+                    : 'bg-stone-700/60 text-stone-300 border-stone-600/40 hover:bg-stone-600/70'
+                }`}
+              >
+                中文
+              </button>
+            </div>
+          </div>
         )}
         {!isTranscribing && features.transcription && isSpeechSupported && (
           <div className="flex items-center gap-1.5 text-stone-500 text-xs">
