@@ -416,7 +416,7 @@ export default function ControlBar({
   return (
     <div className="flex flex-col items-center gap-2 py-3 px-4 relative z-50">
       {/* Status indicators row */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         {isRecording && (
           <div className="flex items-center gap-1.5 bg-red-500/15 px-3 py-1 rounded-full">
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -426,9 +426,22 @@ export default function ControlBar({
           </div>
         )}
         {isTranscribing && (
-          <div className="flex items-center gap-1.5 text-stone-400 text-xs font-medium">
+          <button
+            onClick={() => onLanguageChange?.(transcriptionLanguage === 'en-US' ? 'zh-CN' : 'en-US')}
+            className="flex items-center gap-1.5 bg-stone-700/60 hover:bg-stone-600/70 px-3 py-1 rounded-full cursor-pointer border border-stone-600/40 transition-all"
+            title="Tap to switch language"
+          >
             <CaptionIcon />
-            <span>CC</span>
+            <span className="text-stone-200 text-xs font-semibold">
+              {transcriptionLanguage === 'zh-CN' ? '中文' : 'EN'}
+            </span>
+            <span className="text-stone-400 text-[10px]">▸ {transcriptionLanguage === 'zh-CN' ? 'EN' : '中文'}</span>
+          </button>
+        )}
+        {!isTranscribing && features.transcription && isSpeechSupported && (
+          <div className="flex items-center gap-1.5 text-stone-500 text-xs">
+            <CaptionIcon />
+            <span>Captions off</span>
           </div>
         )}
       </div>
