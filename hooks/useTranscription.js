@@ -43,6 +43,12 @@ export default function useTranscription(options = {}) {
 
   // Both hooks must always be called (React rules), but only one is active
   const speechApi = useSpeechRecognition(useWebSpeech ? resolvedOptions : { enabled: false });
+
+  // Safari has webkitSpeechRecognition but it's unreliable — fall back to Deepgram
+  if (useWebSpeech && speechApi.isSafari && envOverride !== 'false') {
+    useWebSpeech = false;
+  }
+
   const deepgram = useDeepgramTranscription(!useWebSpeech ? resolvedOptions : {});
 
   return useWebSpeech ? speechApi : deepgram;
