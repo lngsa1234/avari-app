@@ -16,6 +16,8 @@ export default function useSpeechRecognition({
   const [isSupported, setIsSupported] = useState(false);
   const [error, setError] = useState(null);
   const [isSafari, setIsSafari] = useState(false);
+  const [isEdge, setIsEdge] = useState(false);
+  const [networkFailed, setNetworkFailed] = useState(false);
 
   const recognitionRef = useRef(null);
   const isListeningRef = useRef(false);
@@ -55,9 +57,11 @@ export default function useSpeechRecognition({
     if (!enabled) return;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const isSafariBrowser = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isEdgeBrowser = /\bEdg\//i.test(navigator.userAgent);
     setIsSafari(isSafariBrowser);
+    setIsEdge(isEdgeBrowser);
     setIsSupported(!!SpeechRecognition);
-    console.log('[SpeechRecognition] Supported:', !!SpeechRecognition, 'Safari:', isSafariBrowser);
+    console.log('[SpeechRecognition] Supported:', !!SpeechRecognition, 'Safari:', isSafariBrowser, 'Edge:', isEdgeBrowser);
   }, [enabled]);
 
   // Create a new recognition instance (does NOT start it)
@@ -181,9 +185,11 @@ export default function useSpeechRecognition({
           errorCountRef.current += 1;
           lastErrorRef.current = event.error;
           if (errorCountRef.current >= 2) {
-            setError('Speech recognition unavailable. Your browser or network may not support this feature. Try Chrome instead.');
+            setError('Speech recognition unavailable. Your browser or network may not support this feature.');
             isListeningRef.current = false;
             errorCountRef.current = MAX_CONSECUTIVE_ERRORS;
+            // Persistent flag — prevents restart loops from external callers
+            setNetworkFailed(true);
           }
           break;
         default:
@@ -242,6 +248,12 @@ export default function useSpeechRecognition({
       return false;
     }
 
+    // Don't retry after persistent network failures (e.g. Edge browser)
+    if (networkFailed) {
+      console.log('[SpeechRecognition] Skipping start — network previously failed');
+      return false;
+    }
+
     console.log('[SpeechRecognition] startListening called');
 
     // Clear any pending restart
@@ -287,7 +299,7 @@ export default function useSpeechRecognition({
 
     isListeningRef.current = false;
     return false;
-  }, [isSupported, createRecognition]);
+  }, [isSupported, networkFailed, createRecognition]);
 
   // Stop listening
   const stopListening = useCallback(() => {
@@ -382,6 +394,8 @@ export default function useSpeechRecognition({
     isListening,
     isSupported,
     isSafari,
+    isEdge,
+    networkFailed,
     error,
     startListening,
     stopListening,

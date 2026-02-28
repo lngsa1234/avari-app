@@ -49,6 +49,11 @@ export default function useTranscription(options = {}) {
     useWebSpeech = false;
   }
 
+  // Edge uses Microsoft speech services which hit persistent network errors — fall back to Deepgram
+  if (useWebSpeech && speechApi.isEdge && envOverride !== 'false') {
+    useWebSpeech = false;
+  }
+
   const deepgram = useDeepgramTranscription(!useWebSpeech ? resolvedOptions : {});
 
   const active = useWebSpeech ? speechApi : deepgram;
