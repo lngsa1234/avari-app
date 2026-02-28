@@ -383,25 +383,6 @@ export default function ControlBar({
     });
   }
 
-  if (features.transcription && isSpeechSupported) {
-    moreMenuItems.push({
-      icon: <CaptionIcon />,
-      label: 'Captions',
-      active: isTranscribing,
-      onClick: onToggleTranscription,
-    });
-  }
-
-  if (features.transcription && isSpeechSupported) {
-    moreMenuItems.push({
-      icon: <LanguageIcon />,
-      label: 'Language',
-      rightLabel: transcriptionLanguage === 'zh-CN' ? '中文' : 'EN',
-      onClick: () => onLanguageChange?.(transcriptionLanguage === 'en-US' ? 'zh-CN' : 'en-US'),
-      keepOpen: true,
-    });
-  }
-
   if (features.topics || features.icebreakers) {
     moreMenuItems.push({
       icon: <TopicsIcon />,
