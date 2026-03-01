@@ -749,7 +749,7 @@ export default function NetworkDiscoverView({
 
       await Promise.all(
         featuredMeetups.map(async (meetup, index) => {
-          if (meetupImages[meetup.id]) return; // Already cached
+          if (meetup.image_url || meetupImages[meetup.id]) return; // Has uploaded photo or already cached
           try {
             // Authentic, candid community-focused backgrounds
             const bgQueries = [
@@ -1159,9 +1159,10 @@ export default function NetworkDiscoverView({
               const signups = meetupSignups[meetup.id] || [];
               const signupCount = signups.length;
               const spotsLeft = Math.max(0, (meetup.participant_limit || meetup.max_attendees || 8) - signupCount);
-              const bgImage = meetupImages[meetup.id];
+              const hasUploadedImage = !!meetup.image_url;
+              const bgImage = meetup.image_url || meetupImages[meetup.id];
               const brightness = imageBrightness[meetup.id];
-              const isLightImage = bgImage && brightness !== undefined && brightness > 140;
+              const isLightImage = !hasUploadedImage && bgImage && brightness !== undefined && brightness > 140;
               const textColor = isLightImage ? '#3E2C1E' : 'white';
               const textColorMuted = isLightImage ? 'rgba(62,44,30,0.7)' : 'rgba(255,255,255,0.8)';
               const textColorFaint = isLightImage ? 'rgba(62,44,30,0.4)' : 'rgba(255,255,255,0.4)';
@@ -1180,14 +1181,16 @@ export default function NetworkDiscoverView({
               return (
                 <div
                   key={meetup.id}
+                  onClick={() => onNavigate?.('eventDetail', { meetupId: meetup.id })}
                   style={{
-                    minWidth: isMobile ? '220px' : '250px',
-                    height: isMobile ? '260px' : '290px',
+                    minWidth: isMobile ? '280px' : '310px',
+                    height: isMobile ? '200px' : '220px',
                     borderRadius: isMobile ? '14px' : '16px',
                     overflow: 'hidden',
                     boxShadow: '0 3px 14px rgba(0, 0, 0, 0.18)',
                     flexShrink: 0,
                     position: 'relative',
+                    cursor: 'pointer',
                   }}>
                   {/* Gradient background (always present as base/fallback) */}
                   <div style={{
@@ -1214,11 +1217,13 @@ export default function NetworkDiscoverView({
                   <div style={{
                     position: 'absolute',
                     inset: 0,
-                    background: bgImage
-                      ? isLightImage
-                        ? 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 35%, rgba(255,255,255,0.2) 60%, rgba(253,248,243,0.75) 100%)'
-                        : 'linear-gradient(180deg, rgba(107,66,38,0.1) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.2) 60%, rgba(30,20,12,0.75) 100%)'
-                      : 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.4) 100%)',
+                    background: hasUploadedImage
+                      ? 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.65) 100%)'
+                      : bgImage
+                        ? isLightImage
+                          ? 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 35%, rgba(255,255,255,0.2) 60%, rgba(253,248,243,0.75) 100%)'
+                          : 'linear-gradient(180deg, rgba(107,66,38,0.1) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.2) 60%, rgba(30,20,12,0.75) 100%)'
+                        : 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.4) 100%)',
                   }} />
 
                   {/* Top row: date + spots */}
@@ -1375,7 +1380,7 @@ export default function NetworkDiscoverView({
                     </div>
                     {userRsvps.has(meetup.id) ? (
                       <button
-                        onClick={() => handleRsvp(meetup.id)}
+                        onClick={(e) => { e.stopPropagation(); handleRsvp(meetup.id); }}
                         disabled={rsvpLoading[meetup.id]}
                         style={{
                           padding: isMobile ? '7px 14px' : '8px 18px',
@@ -1394,7 +1399,7 @@ export default function NetworkDiscoverView({
                       </button>
                     ) : (
                       <button
-                        onClick={() => handleRsvp(meetup.id)}
+                        onClick={(e) => { e.stopPropagation(); handleRsvp(meetup.id); }}
                         disabled={rsvpLoading[meetup.id]}
                         style={{
                           padding: isMobile ? '7px 16px' : '8px 20px',

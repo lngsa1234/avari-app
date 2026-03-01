@@ -5,7 +5,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal } from 'lucide-react';
+import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null }) {
@@ -770,6 +770,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       date: item.originalDate || '',
       time: item.rawTime || '',
       location: item.location || '',
+      image_url: item.image_url || null,
+      newImageFile: null,
+      newImagePreview: null,
     });
     setShowEditModal(true);
     setActionMenuOpen(null);
@@ -778,7 +781,21 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const handleUpdateMeetup = async () => {
     if (!editingMeetup) return;
     try {
-      console.log('📝 Updating meetup:', editingMeetup.id, { date: editingMeetup.date, time: editingMeetup.time });
+      // Upload new image if selected
+      let imageUrl = editingMeetup.image_url;
+      if (editingMeetup.newImageFile) {
+        const fileExt = editingMeetup.newImageFile.name.split('.').pop();
+        const fileName = `profile-photos/${currentUser.id}-meetup-${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, editingMeetup.newImageFile, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(fileName);
+        imageUrl = publicUrl;
+      }
+
       const { data, error } = await supabase
         .from('meetups')
         .update({
@@ -786,11 +803,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           date: editingMeetup.date,
           time: editingMeetup.time,
           location: editingMeetup.location,
+          image_url: imageUrl,
         })
         .eq('id', editingMeetup.id)
         .select();
-
-      console.log('📝 Update result:', { data, error, rowsUpdated: data?.length });
 
       if (!error) {
         setGroupEvents(prev => prev.map(e =>
@@ -804,6 +820,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             rawTime: editingMeetup.time,
             time: formatTime(editingMeetup.time),
             location: editingMeetup.location,
+            image_url: imageUrl,
           } : e
         ));
         setShowEditModal(false);
@@ -1385,6 +1402,57 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   style={styles.formInput}
                   placeholder="Virtual, city name, or venue"
                 />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Event Photo</label>
+                {(editingMeetup.newImagePreview || editingMeetup.image_url) ? (
+                  <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden' }}>
+                    <img
+                      src={editingMeetup.newImagePreview || editingMeetup.image_url}
+                      alt="Event"
+                      style={{ width: '100%', height: '120px', objectFit: 'cover', display: 'block', borderRadius: '10px' }}
+                    />
+                    <button
+                      onClick={() => setEditingMeetup({ ...editingMeetup, image_url: null, newImageFile: null, newImagePreview: null })}
+                      style={{
+                        position: 'absolute', top: '6px', right: '6px',
+                        width: '24px', height: '24px', borderRadius: '50%',
+                        backgroundColor: 'rgba(0,0,0,0.5)', border: 'none',
+                        color: 'white', display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', cursor: 'pointer',
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <label style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: '10px 14px', borderRadius: '10px',
+                    border: '1.5px dashed rgba(139, 111, 92, 0.2)',
+                    backgroundColor: 'white', cursor: 'pointer',
+                    fontSize: '13px', color: '#A89080',
+                  }}>
+                    <ImagePlus size={18} />
+                    Add a cover photo
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!file.type.startsWith('image/')) { alert('Please select an image file'); return; }
+                        if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); return; }
+                        setEditingMeetup({
+                          ...editingMeetup,
+                          newImageFile: file,
+                          newImagePreview: URL.createObjectURL(file),
+                        });
+                      }}
+                    />
+                  </label>
+                )}
               </div>
             </div>
             <div style={styles.editModalFooter}>

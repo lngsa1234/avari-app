@@ -380,14 +380,27 @@ export default function AllEventsView({
               >
                 <div style={{
                   height: '90px',
-                  background: gradients[index % 4],
+                  background: meetup.image_url ? 'none' : gradients[index % 4],
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: '36px',
                   position: 'relative',
+                  overflow: 'hidden',
                 }}>
-                  {emojis[index % 8]}
+                  {meetup.image_url ? (
+                    <img
+                      src={meetup.image_url}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                      }}
+                    />
+                  ) : emojis[index % 8]}
                   <span style={{
                     position: 'absolute',
                     top: '10px',

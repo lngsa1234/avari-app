@@ -18,6 +18,8 @@ import {
   Quote,
   UserCheck,
   XCircle,
+  ImagePlus,
+  X,
 } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 
@@ -167,10 +169,60 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('details');
   const [completedActions, setCompletedActions] = useState(new Set());
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  const isHost = meetup?.created_by === currentUser.id;
 
   const handleBack = () => {
     onNavigate?.(previousView || 'home');
   };
+
+  async function handlePhotoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Please select an image file'); return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); return; }
+
+    setUploadingPhoto(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `profile-photos/${currentUser.id}-meetup-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await sb.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = sb.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      const { error: updateError } = await sb
+        .from('meetups')
+        .update({ image_url: publicUrl })
+        .eq('id', meetupId);
+      if (updateError) throw updateError;
+
+      setMeetup(prev => ({ ...prev, image_url: publicUrl }));
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Failed to upload photo: ' + err.message);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
+  async function handleRemovePhoto() {
+    try {
+      const { error } = await sb
+        .from('meetups')
+        .update({ image_url: null })
+        .eq('id', meetupId);
+      if (error) throw error;
+      setMeetup(prev => ({ ...prev, image_url: null }));
+    } catch (err) {
+      alert('Failed to remove photo: ' + err.message);
+    }
+  }
 
   useEffect(() => {
     if (meetupId) loadEventDetails();
@@ -193,9 +245,9 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       setHost(meetupData.host);
 
       // Fetch attendees and check signup in parallel
-      const [attendeesResult, signupResult] = await Promise.all([
+      const [signupsResult, signupResult] = await Promise.all([
         sb.from('meetup_signups')
-          .select('user_id, profiles(id, name, profile_picture, career)')
+          .select('user_id')
           .eq('meetup_id', meetupId),
         sb.from('meetup_signups')
           .select('id')
@@ -204,7 +256,22 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
           .maybeSingle(),
       ]);
 
-      setAttendees(attendeesResult.data || []);
+      // Fetch profiles for attendees
+      const signups = signupsResult.data || [];
+      const userIds = signups.map(s => s.user_id);
+      let attendeesData = [];
+      if (userIds.length > 0) {
+        const { data: profiles } = await sb
+          .from('profiles')
+          .select('id, name, profile_picture, career')
+          .in('id', userIds);
+        attendeesData = signups.map(s => ({
+          user_id: s.user_id,
+          profiles: (profiles || []).find(p => p.id === s.user_id) || null,
+        }));
+      }
+
+      setAttendees(attendeesData);
       setIsSignedUp(!!signupResult.data);
 
       // Check if past event and load recap
@@ -255,16 +322,32 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       } else {
         setIsSignedUp(true);
         // Reload attendees
-        const { data } = await sb
-          .from('meetup_signups')
-          .select('user_id, profiles(id, name, profile_picture, career)')
-          .eq('meetup_id', meetupId);
-        setAttendees(data || []);
+        await reloadAttendees();
       }
     } catch (err) {
       alert('Error: ' + err.message);
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  async function reloadAttendees() {
+    const { data: signups } = await sb
+      .from('meetup_signups')
+      .select('user_id')
+      .eq('meetup_id', meetupId);
+    const ids = (signups || []).map(s => s.user_id);
+    if (ids.length > 0) {
+      const { data: profiles } = await sb
+        .from('profiles')
+        .select('id, name, profile_picture, career')
+        .in('id', ids);
+      setAttendees((signups || []).map(s => ({
+        user_id: s.user_id,
+        profiles: (profiles || []).find(p => p.id === s.user_id) || null,
+      })));
+    } else {
+      setAttendees([]);
     }
   }
 
@@ -282,11 +365,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
         alert('Error canceling: ' + error.message);
       } else {
         setIsSignedUp(false);
-        const { data } = await sb
-          .from('meetup_signups')
-          .select('user_id, profiles(id, name, profile_picture, career)')
-          .eq('meetup_id', meetupId);
-        setAttendees(data || []);
+        await reloadAttendees();
       }
     } catch (err) {
       alert('Error: ' + err.message);
@@ -416,6 +495,76 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
           margin: 0,
         }}>Event Details</h2>
       </div>
+
+      {/* Hero Image / Upload */}
+      {meetup.image_url ? (
+        <div style={{
+          borderRadius: '14px',
+          overflow: 'hidden',
+          marginBottom: '8px',
+          position: 'relative',
+        }}>
+          <img
+            src={meetup.image_url}
+            alt={meetup.topic || 'Event'}
+            style={{
+              width: '100%',
+              height: '200px',
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+          {isHost && !isPast && (
+            <div style={{
+              position: 'absolute', top: '8px', right: '8px',
+              display: 'flex', gap: '6px',
+            }}>
+              <label style={{
+                width: '32px', height: '32px', borderRadius: '50%',
+                backgroundColor: 'rgba(0,0,0,0.5)', border: 'none',
+                color: 'white', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', cursor: 'pointer',
+              }}>
+                <ImagePlus size={16} />
+                <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+              </label>
+              <button
+                onClick={handleRemovePhoto}
+                style={{
+                  width: '32px', height: '32px', borderRadius: '50%',
+                  backgroundColor: 'rgba(0,0,0,0.5)', border: 'none',
+                  color: 'white', display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', cursor: 'pointer',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+      ) : isHost && !isPast ? (
+        <label style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '6px',
+          padding: '20px',
+          borderRadius: '14px',
+          border: `2px dashed ${colors.border}`,
+          backgroundColor: 'rgba(139, 111, 92, 0.03)',
+          cursor: uploadingPhoto ? 'wait' : 'pointer',
+          marginBottom: '8px',
+          opacity: uploadingPhoto ? 0.6 : 1,
+        }}>
+          <ImagePlus size={24} color={colors.textSoft} />
+          <span style={{ fontSize: '13px', color: colors.textMuted, fontWeight: '500' }}>
+            {uploadingPhoto ? 'Uploading...' : 'Add event photo'}
+          </span>
+          {!uploadingPhoto && (
+            <input type="file" accept="image/*" onChange={handlePhotoUpload} style={{ display: 'none' }} />
+          )}
+        </label>
+      ) : null}
 
       {/* Hero Header */}
       <div style={{

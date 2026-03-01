@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat } from 'lucide-react';
+import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat, ImagePlus, X } from 'lucide-react';
 import { reconcileCircleMeetups } from '@/lib/circleMeetupHelpers';
 
 
@@ -57,6 +57,9 @@ export default function ScheduleMeetupView({
   const [participantLimit, setParticipantLimit] = useState(20);
   const [isRepeating, setIsRepeating] = useState(false);
   const [repeatCadence, setRepeatCadence] = useState('Weekly');
+
+  const [eventImage, setEventImage] = useState(null);
+  const [eventImageFile, setEventImageFile] = useState(null);
 
   const [availableCircles, setAvailableCircles] = useState([]);
   const [availableConnections, setAvailableConnections] = useState([]);
@@ -183,6 +186,21 @@ export default function ScheduleMeetupView({
       console.error('Error loading circles:', error);
       setAvailableCircles([]);
     }
+  };
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+    setEventImageFile(file);
+    setEventImage(URL.createObjectURL(file));
   };
 
   const handleSubmit = async () => {
@@ -354,6 +372,21 @@ export default function ScheduleMeetupView({
 
     const formattedTime = scheduledTime.includes(':') ? scheduledTime : `${scheduledTime}:00`;
 
+    // Upload event image if selected
+    let imageUrl = null;
+    if (eventImageFile) {
+      const fileExt = eventImageFile.name.split('.').pop();
+      const fileName = `profile-photos/${authUser.id}-meetup-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, eventImageFile, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+      imageUrl = publicUrl;
+    }
+
     const { data: meetupData, error } = await supabase
       .from('meetups')
       .insert({
@@ -366,6 +399,7 @@ export default function ScheduleMeetupView({
         location: location,
         created_by: authUser.id,
         participant_limit: participantLimit,
+        ...(imageUrl && { image_url: imageUrl }),
       })
       .select('id')
       .single();
@@ -671,6 +705,75 @@ export default function ScheduleMeetupView({
               rows={3}
             />
           </div>
+
+          {/* Event Photo - Community events only */}
+          {meetupType === 'community' && (
+            <div style={styles.section}>
+              <label style={styles.label}>Event Photo (optional)</label>
+              {eventImage ? (
+                <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden' }}>
+                  <img
+                    src={eventImage}
+                    alt="Event preview"
+                    style={{
+                      width: '100%',
+                      height: '180px',
+                      objectFit: 'cover',
+                      display: 'block',
+                      borderRadius: '12px',
+                    }}
+                  />
+                  <button
+                    onClick={() => { setEventImage(null); setEventImageFile(null); }}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(0,0,0,0.5)',
+                      border: 'none',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <label style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '24px',
+                  borderRadius: '12px',
+                  border: `2px dashed ${colors.border}`,
+                  backgroundColor: colors.warmWhite,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}>
+                  <ImagePlus size={28} color={colors.textMuted} />
+                  <span style={{ fontSize: '14px', color: colors.textMuted, fontWeight: '500' }}>
+                    Add a cover photo
+                  </span>
+                  <span style={{ fontSize: '12px', color: colors.textMuted }}>
+                    Max 5MB
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Submit Button */}
           <button
