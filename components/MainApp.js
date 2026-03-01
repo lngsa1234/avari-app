@@ -2897,7 +2897,7 @@ function MainApp({ currentUser, onSignOut }) {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '12px' : '4px' }}>
                   {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
-                    const isSignedUp = meetup._isCoffeeChat || userSignups.includes(meetup.id)
+                    const isSignedUp = meetup._isCoffeeChat || userSignups.includes(meetup.id) || meetup.created_by === currentUser.id
                     // Ensure host is always included in signups list
                     const rawSignups = signups[meetup.id] || []
                     const hostIncluded = meetup.host && !rawSignups.some(s => s.user_id === meetup.host.id)
