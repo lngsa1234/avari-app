@@ -214,7 +214,6 @@ export default function NetworkDiscoverView({
   });
 
   const [imageBrightness, setImageBrightness] = useState({});
-  const [loadedImages, setLoadedImages] = useState({});
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -1160,7 +1159,6 @@ export default function NetworkDiscoverView({
             {featuredMeetups.map((meetup, index) => {
               const signups = meetupSignups[meetup.id] || [];
               const signupCount = signups.length;
-              const spotsLeft = Math.max(0, (meetup.participant_limit || meetup.max_attendees || 8) - signupCount);
               const hasUploadedImage = !!meetup.image_url;
               const bgImage = meetup.image_url || meetupImages[meetup.id];
               const brightness = imageBrightness[meetup.id];
@@ -1169,7 +1167,6 @@ export default function NetworkDiscoverView({
               const textColorMuted = isLightImage ? 'rgba(62,44,30,0.7)' : 'rgba(255,255,255,0.8)';
               const textColorFaint = isLightImage ? 'rgba(62,44,30,0.4)' : 'rgba(255,255,255,0.4)';
               const badgeBg = isLightImage ? 'rgba(62,44,30,0.12)' : 'rgba(255,255,255,0.2)';
-              const spotsBg = spotsLeft <= 2 ? 'rgba(212, 85, 58, 0.85)' : (isLightImage ? 'rgba(62,44,30,0.75)' : 'rgba(139, 94, 60, 0.85)');
               const textShadow = isLightImage ? 'none' : '0 1px 4px rgba(0,0,0,0.4)';
               const fallbackGradient = [
                 'linear-gradient(160deg, #6B4226 0%, #A0714F 50%, #C49A6C 100%)',
@@ -1194,20 +1191,19 @@ export default function NetworkDiscoverView({
                     position: 'relative',
                     cursor: 'pointer',
                   }}>
-                  {/* Gradient background (hidden once uploaded image loads) */}
-                  {!(hasUploadedImage && loadedImages[meetup.id]) && (
-                    <div style={{
-                      position: 'absolute',
-                      inset: 0,
-                      background: fallbackGradient,
-                    }} />
-                  )}
-                  {/* Image overlay (on top of gradient) */}
-                  {bgImage && (
+                  {/* Background: uploaded image as CSS bg, or Unsplash img, or gradient fallback */}
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: hasUploadedImage
+                      ? `url(${meetup.image_url}) center/cover no-repeat`
+                      : fallbackGradient,
+                  }} />
+                  {/* Unsplash image overlay (only for non-uploaded images) */}
+                  {!hasUploadedImage && bgImage && (
                     <img
                       src={bgImage}
                       alt=""
-                      onLoad={hasUploadedImage ? () => setLoadedImages(prev => ({ ...prev, [meetup.id]: true })) : undefined}
                       style={{
                         position: 'absolute',
                         inset: 0,
@@ -1258,18 +1254,6 @@ export default function NetworkDiscoverView({
                     }}>
                       <Calendar size={isMobile ? 11 : 12} />
                       {parseLocalDate(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </span>
-                    <span style={{
-                      padding: isMobile ? '3px 8px' : '4px 10px',
-                      backgroundColor: spotsBg,
-                      backdropFilter: 'blur(6px)',
-                      WebkitBackdropFilter: 'blur(6px)',
-                      borderRadius: '8px',
-                      fontSize: isMobile ? '10px' : '11px',
-                      fontWeight: '600',
-                      color: spotsLeft <= 2 ? 'white' : textColor,
-                    }}>
-                      {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
                     </span>
                   </div>
 
