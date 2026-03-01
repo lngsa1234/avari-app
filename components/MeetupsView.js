@@ -770,6 +770,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       date: item.originalDate || '',
       time: item.rawTime || '',
       location: item.location || '',
+      meeting_format: item.meeting_format || 'virtual',
       image_url: item.image_url || null,
       newImageFile: null,
       newImagePreview: null,
@@ -802,7 +803,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           topic: editingMeetup.topic,
           date: editingMeetup.date,
           time: editingMeetup.time,
-          location: editingMeetup.location,
+          location: editingMeetup.meeting_format === 'virtual' ? 'Virtual' : editingMeetup.location,
+          meeting_format: editingMeetup.meeting_format,
           image_url: imageUrl,
         })
         .eq('id', editingMeetup.id)
@@ -819,7 +821,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             date: formatDate(editingMeetup.date),
             rawTime: editingMeetup.time,
             time: formatTime(editingMeetup.time),
-            location: editingMeetup.location,
+            location: editingMeetup.meeting_format === 'virtual' ? 'Virtual' : editingMeetup.location,
+            meeting_format: editingMeetup.meeting_format,
             image_url: imageUrl,
           } : e
         ));
@@ -1021,12 +1024,25 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                     {/* Content area */}
                     <div style={{ flex: 1, padding: '14px 14px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-                        <h4 style={{
-                          fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '600',
-                          color: '#2C1810', margin: 0, lineHeight: 1.3, letterSpacing: '-0.2px',
-                        }}>
-                          {title}
-                        </h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <h4 style={{
+                            fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '600',
+                            color: '#2C1810', margin: 0, lineHeight: 1.3, letterSpacing: '-0.2px',
+                          }}>
+                            {title}
+                          </h4>
+                          {!isCoffee && item.meeting_format && item.meeting_format !== 'virtual' && (
+                            <span style={{
+                              fontSize: '10px', fontWeight: '600', padding: '2px 8px',
+                              borderRadius: '100px',
+                              backgroundColor: item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4',
+                              color: item.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {item.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
+                            </span>
+                          )}
+                        </div>
                         {/* Edit/Delete menu for owned items — shown only when card is tapped */}
                         {activeCardId === item.id && ((!isCoffee && item.created_by === currentUser.id) || (isCoffee && item.requester_id === currentUser.id)) && (
                           <div style={{ position: 'relative', flexShrink: 0 }}>
@@ -1174,16 +1190,25 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         )
                       ) : (
                         (item.status === 'going' || item.isCircleMeetup) ? (
-                          <button onClick={() => handleJoinCall(item)} style={{
-                            background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
-                            padding: '9px 16px', borderRadius: '10px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
-                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                            gap: '6px', whiteSpace: 'nowrap',
-                          }}>
-                            <Video size={15} />
-                            Join &gt;
-                          </button>
+                          item.meeting_format === 'in_person' ? (
+                            <span style={{
+                              fontSize: '12px', fontWeight: '600', color: '#4E6B46',
+                              fontFamily: '"DM Sans", sans-serif',
+                              padding: '6px 12px', borderRadius: '10px',
+                              backgroundColor: '#E8F0E4',
+                            }}>Going</span>
+                          ) : (
+                            <button onClick={() => handleJoinCall(item)} style={{
+                              background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                              padding: '9px 16px', borderRadius: '10px',
+                              fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                              cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                              gap: '6px', whiteSpace: 'nowrap',
+                            }}>
+                              <Video size={15} />
+                              Join &gt;
+                            </button>
+                          )
                         ) : (
                           <button onClick={() => handleRsvpMeetup(item)} style={{
                             background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
@@ -1394,15 +1419,67 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                 />
               </div>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Location</label>
-                <input
-                  type="text"
-                  value={editingMeetup.location}
-                  onChange={(e) => setEditingMeetup({ ...editingMeetup, location: e.target.value })}
-                  style={styles.formInput}
-                  placeholder="Virtual, city name, or venue"
-                />
+                <label style={styles.formLabel}>Meeting Format</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {[
+                    { value: 'virtual', label: 'Virtual' },
+                    { value: 'in_person', label: 'In-Person' },
+                    { value: 'hybrid', label: 'Hybrid' },
+                  ].map(option => (
+                    <button
+                      key={option.value}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '10px',
+                        border: editingMeetup.meeting_format === option.value
+                          ? '1.5px solid #8B6F5C'
+                          : '1.5px solid rgba(139, 111, 92, 0.2)',
+                        backgroundColor: editingMeetup.meeting_format === option.value
+                          ? 'rgba(139, 111, 92, 0.08)'
+                          : 'white',
+                        color: editingMeetup.meeting_format === option.value
+                          ? '#8B6F5C'
+                          : '#6B5344',
+                        fontSize: '13px',
+                        fontWeight: editingMeetup.meeting_format === option.value ? '600' : '500',
+                        cursor: 'pointer',
+                        fontFamily: '"DM Sans", sans-serif',
+                      }}
+                      onClick={() => {
+                        const newFormat = option.value;
+                        setEditingMeetup({
+                          ...editingMeetup,
+                          meeting_format: newFormat,
+                          location: newFormat === 'virtual' ? 'Virtual'
+                            : editingMeetup.location === 'Virtual' ? '' : editingMeetup.location,
+                        });
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+              {editingMeetup.meeting_format !== 'virtual' && (
+                <div style={styles.formGroup}>
+                  <label style={styles.formLabel}>
+                    {editingMeetup.meeting_format === 'hybrid' ? 'Physical Location' : 'Location'}
+                  </label>
+                  <input
+                    type="text"
+                    value={editingMeetup.location}
+                    onChange={(e) => setEditingMeetup({ ...editingMeetup, location: e.target.value })}
+                    style={styles.formInput}
+                    placeholder="City name or venue"
+                  />
+                  {editingMeetup.meeting_format === 'hybrid' && (
+                    <p style={{ fontSize: '11px', color: '#A89080', margin: '6px 0 0', fontStyle: 'italic' }}>
+                      Virtual call link will also be available
+                    </p>
+                  )}
+                </div>
+              )}
               <div style={styles.formGroup}>
                 <label style={styles.formLabel}>Event Photo</label>
                 {(editingMeetup.newImagePreview || editingMeetup.image_url) ? (

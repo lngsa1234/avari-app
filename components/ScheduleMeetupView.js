@@ -53,6 +53,7 @@ export default function ScheduleMeetupView({
   const [scheduledTime, setScheduledTime] = useState('');
   const [topic, setTopic] = useState(initialTopic || '');
   const [notes, setNotes] = useState(initialDescription || '');
+  const [meetingFormat, setMeetingFormat] = useState('virtual');
   const [location, setLocation] = useState('Virtual');
   const [participantLimit, setParticipantLimit] = useState(20);
   const [isRepeating, setIsRepeating] = useState(false);
@@ -234,7 +235,7 @@ export default function ScheduleMeetupView({
       return;
     }
 
-    if (!location.trim()) {
+    if (meetingFormat !== 'virtual' && !location.trim()) {
       alert('Please enter a location');
       return;
     }
@@ -342,7 +343,8 @@ export default function ScheduleMeetupView({
             topic: topic.trim(),
             description: notes || `Meetup for ${selectedCircle.name}`,
             duration: 60,
-            location: location,
+            location: meetingFormat === 'virtual' ? 'Virtual' : location,
+            meeting_format: meetingFormat,
             created_by: authUser.id,
             participant_limit: 10,
           })
@@ -396,7 +398,8 @@ export default function ScheduleMeetupView({
         topic: topic.trim(),
         description: notes || 'Community event',
         duration: 60,
-        location: location,
+        location: meetingFormat === 'virtual' ? 'Virtual' : location,
+        meeting_format: meetingFormat,
         created_by: authUser.id,
         participant_limit: participantLimit,
         ...(imageUrl && { image_url: imageUrl }),
@@ -661,20 +664,61 @@ export default function ScheduleMeetupView({
             </div>
           )}
 
-          {/* Location */}
-          <div style={styles.section}>
-            <label style={styles.label}>Location *</label>
-            <div style={styles.inputGroup}>
-              <MapPin size={18} style={styles.inputIcon} />
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g., Blue Bottle Coffee, 123 Main St"
-                style={styles.input}
-              />
+          {/* Meeting Format - for circle and community events */}
+          {(meetupType === 'community' || meetupType === 'circle') && (
+            <div style={styles.section}>
+              <label style={styles.label}>Meeting Format</label>
+              <div style={styles.cadenceButtons}>
+                {[
+                  { value: 'virtual', label: 'Virtual' },
+                  { value: 'in_person', label: 'In-Person' },
+                  { value: 'hybrid', label: 'Hybrid' },
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    style={{
+                      ...styles.cadenceBtn,
+                      ...(meetingFormat === option.value ? styles.cadenceBtnActive : {}),
+                    }}
+                    onClick={() => {
+                      setMeetingFormat(option.value);
+                      if (option.value === 'virtual') {
+                        setLocation('Virtual');
+                      } else if (location === 'Virtual') {
+                        setLocation('');
+                      }
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Location - hidden for virtual */}
+          {meetingFormat !== 'virtual' && (
+            <div style={styles.section}>
+              <label style={styles.label}>
+                {meetingFormat === 'hybrid' ? 'Physical Location *' : 'Location *'}
+              </label>
+              <div style={styles.inputGroup}>
+                <MapPin size={18} style={styles.inputIcon} />
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="e.g., Blue Bottle Coffee, 123 Main St"
+                  style={styles.input}
+                />
+              </div>
+              {meetingFormat === 'hybrid' && (
+                <p style={{ fontSize: '12px', color: colors.textMuted, margin: '8px 0 0', fontStyle: 'italic' }}>
+                  Virtual call link will also be available
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Topic */}
           <div style={styles.section}>

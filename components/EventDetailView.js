@@ -163,6 +163,9 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   const [host, setHost] = useState(null);
   const [attendees, setAttendees] = useState([]);
   const [isSignedUp, setIsSignedUp] = useState(false);
+  const [userSignupType, setUserSignupType] = useState(null);
+  const [showFormatPicker, setShowFormatPicker] = useState(false);
+  const [attendeeCounts, setAttendeeCounts] = useState({ in_person: 0, video: 0 });
   const [recap, setRecap] = useState(null);
   const [parsed, setParsed] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -244,13 +247,13 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       setMeetup(meetupData);
       setHost(meetupData.host);
 
-      // Fetch attendees and check signup in parallel
+      // Fetch attendees (with signup_type) and check signup in parallel
       const [signupsResult, signupResult] = await Promise.all([
         sb.from('meetup_signups')
-          .select('user_id')
+          .select('user_id, signup_type')
           .eq('meetup_id', meetupId),
         sb.from('meetup_signups')
-          .select('id')
+          .select('id, signup_type')
           .eq('meetup_id', meetupId)
           .eq('user_id', currentUser.id)
           .maybeSingle(),
@@ -267,12 +270,24 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
           .in('id', userIds);
         attendeesData = signups.map(s => ({
           user_id: s.user_id,
+          signup_type: s.signup_type || 'video',
           profiles: (profiles || []).find(p => p.id === s.user_id) || null,
         }));
       }
 
+      // Calculate attendee counts by type
+      const counts = { in_person: 0, video: 0 };
+      signups.forEach(s => {
+        if (s.signup_type === 'in_person') counts.in_person++;
+        else counts.video++;
+      });
+      setAttendeeCounts(counts);
+
       setAttendees(attendeesData);
       setIsSignedUp(!!signupResult.data);
+      if (signupResult.data) {
+        setUserSignupType(signupResult.data.signup_type || 'video');
+      }
 
       // Check if past event and load recap
       const eventDate = parseLocalDate(meetupData.date);
@@ -306,12 +321,25 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
     }
   }
 
-  async function handleRsvp() {
+  async function handleRsvp(signupType) {
+    // For hybrid events, show format picker first
+    const format = meetup?.meeting_format;
+    if (format === 'hybrid' && !signupType) {
+      setShowFormatPicker(true);
+      return;
+    }
+
+    // Determine signup_type based on meeting format
+    let type = signupType || 'video';
+    if (format === 'in_person') type = 'in_person';
+    else if (format === 'virtual') type = 'video';
+
     try {
       setActionLoading(true);
+      setShowFormatPicker(false);
       const { error } = await sb
         .from('meetup_signups')
-        .insert([{ meetup_id: meetupId, user_id: currentUser.id }]);
+        .insert([{ meetup_id: meetupId, user_id: currentUser.id, signup_type: type }]);
 
       if (error) {
         if (error.code === '23505') {
@@ -321,7 +349,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
         }
       } else {
         setIsSignedUp(true);
-        // Reload attendees
+        setUserSignupType(type);
         await reloadAttendees();
       }
     } catch (err) {
@@ -334,9 +362,18 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   async function reloadAttendees() {
     const { data: signups } = await sb
       .from('meetup_signups')
-      .select('user_id')
+      .select('user_id, signup_type')
       .eq('meetup_id', meetupId);
     const ids = (signups || []).map(s => s.user_id);
+
+    // Recalculate counts
+    const counts = { in_person: 0, video: 0 };
+    (signups || []).forEach(s => {
+      if (s.signup_type === 'in_person') counts.in_person++;
+      else counts.video++;
+    });
+    setAttendeeCounts(counts);
+
     if (ids.length > 0) {
       const { data: profiles } = await sb
         .from('profiles')
@@ -344,6 +381,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
         .in('id', ids);
       setAttendees((signups || []).map(s => ({
         user_id: s.user_id,
+        signup_type: s.signup_type || 'video',
         profiles: (profiles || []).find(p => p.id === s.user_id) || null,
       })));
     } else {
@@ -647,6 +685,16 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                 Completed
               </span>
             )}
+            {meetup.meeting_format && meetup.meeting_format !== 'virtual' && (
+              <span style={{
+                fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                letterSpacing: '0.8px', padding: '3px 10px', borderRadius: '100px',
+                background: meetup.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4',
+                color: meetup.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46',
+              }}>
+                {meetup.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
+              </span>
+            )}
             {meetup.connection_groups?.name && (
               <span style={{
                 fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
@@ -682,10 +730,20 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
             flexWrap: 'wrap',
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-              <MapPin size={isMobile ? 12 : 14} /> {meetup.location || 'Virtual'}
+              <MapPin size={isMobile ? 12 : 14} /> {
+                meetup.meeting_format === 'hybrid'
+                  ? `${meetup.location} + Virtual`
+                  : meetup.meeting_format === 'in_person'
+                    ? meetup.location
+                    : 'Virtual'
+              }
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-              <Users size={isMobile ? 12 : 14} /> {attendees.length} attendee{attendees.length !== 1 ? 's' : ''}
+              <Users size={isMobile ? 12 : 14} /> {
+                meetup.meeting_format === 'hybrid'
+                  ? `${attendeeCounts.in_person} in-person, ${attendeeCounts.video} virtual`
+                  : `${attendees.length} attendee${attendees.length !== 1 ? 's' : ''}`
+              }
             </span>
           </div>
         </div>
@@ -737,55 +795,102 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
             {!isPast && (
               <div style={{
                 display: 'flex',
+                flexDirection: 'column',
                 gap: '10px',
-                flexWrap: 'wrap',
               }}>
-                {isSignedUp ? (
-                  <>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {isSignedUp ? (
+                    <>
+                      {meetup.meeting_format !== 'in_person' && (
+                        <button
+                          onClick={handleJoinCall}
+                          style={{
+                            flex: 1,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                            padding: '12px 20px', borderRadius: '14px',
+                            backgroundColor: colors.primaryDark, color: 'white',
+                            border: 'none', fontSize: '15px', fontWeight: '600',
+                            cursor: 'pointer', fontFamily: fonts.sans,
+                          }}
+                        >
+                          <Video size={18} /> Join Call
+                        </button>
+                      )}
+                      <button
+                        onClick={handleCancelRsvp}
+                        disabled={actionLoading}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          padding: '12px 16px', borderRadius: '14px',
+                          backgroundColor: 'transparent', color: colors.textMuted,
+                          border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
+                          cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
+                          opacity: actionLoading ? 0.6 : 1,
+                          flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
+                        }}
+                      >
+                        <XCircle size={16} /> Cancel RSVP
+                      </button>
+                    </>
+                  ) : (
                     <button
-                      onClick={handleJoinCall}
+                      onClick={() => handleRsvp()}
+                      disabled={actionLoading}
                       style={{
                         flex: 1,
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                         padding: '12px 20px', borderRadius: '14px',
                         backgroundColor: colors.primaryDark, color: 'white',
                         border: 'none', fontSize: '15px', fontWeight: '600',
-                        cursor: 'pointer', fontFamily: fonts.sans,
-                      }}
-                    >
-                      <Video size={18} /> Join Call
-                    </button>
-                    <button
-                      onClick={handleCancelRsvp}
-                      disabled={actionLoading}
-                      style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                        padding: '12px 16px', borderRadius: '14px',
-                        backgroundColor: 'transparent', color: colors.textMuted,
-                        border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
                         cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
                         opacity: actionLoading ? 0.6 : 1,
                       }}
                     >
-                      <XCircle size={16} /> Cancel
+                      <UserCheck size={18} /> RSVP
                     </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={handleRsvp}
-                    disabled={actionLoading}
-                    style={{
-                      flex: 1,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                      padding: '12px 20px', borderRadius: '14px',
-                      backgroundColor: colors.primaryDark, color: 'white',
-                      border: 'none', fontSize: '15px', fontWeight: '600',
-                      cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
-                      opacity: actionLoading ? 0.6 : 1,
-                    }}
-                  >
-                    <UserCheck size={18} /> RSVP
-                  </button>
+                  )}
+                </div>
+
+                {/* Hybrid format picker */}
+                {showFormatPicker && (
+                  <div style={{
+                    display: 'flex',
+                    gap: '10px',
+                    padding: '14px',
+                    backgroundColor: 'rgba(139, 111, 92, 0.06)',
+                    borderRadius: '14px',
+                    border: `1px solid ${colors.border}`,
+                  }}>
+                    <span style={{ fontSize: '13px', color: colors.textLight, alignSelf: 'center', fontWeight: '500' }}>
+                      How will you attend?
+                    </span>
+                    <button
+                      onClick={() => handleRsvp('in_person')}
+                      disabled={actionLoading}
+                      style={{
+                        flex: 1,
+                        padding: '10px 14px', borderRadius: '10px',
+                        backgroundColor: 'white', color: colors.text,
+                        border: `1.5px solid ${colors.border}`, fontSize: '13px', fontWeight: '600',
+                        cursor: 'pointer', fontFamily: fonts.sans,
+                      }}
+                    >
+                      In-Person
+                    </button>
+                    <button
+                      onClick={() => handleRsvp('video')}
+                      disabled={actionLoading}
+                      style={{
+                        flex: 1,
+                        padding: '10px 14px', borderRadius: '10px',
+                        backgroundColor: 'white', color: colors.text,
+                        border: `1.5px solid ${colors.border}`, fontSize: '13px', fontWeight: '600',
+                        cursor: 'pointer', fontFamily: fonts.sans,
+                      }}
+                    >
+                      Virtual
+                    </button>
+                  </div>
                 )}
               </div>
             )}

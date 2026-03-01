@@ -365,12 +365,13 @@ export default function NetworkDiscoverView({
           return newSet;
         });
       } else {
-        // Add RSVP
+        // Add RSVP (defaults to video; user can change from EventDetailView for hybrid events)
         const { error } = await supabase
           .from('meetup_signups')
           .insert({
             meetup_id: meetupId,
-            user_id: currentUser.id
+            user_id: currentUser.id,
+            signup_type: 'video',
           });
 
         if (error) throw error;
@@ -1309,7 +1310,13 @@ export default function NetworkDiscoverView({
                       </span>
                       <span style={{ color: textColorFaint }}>|</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <MapPin size={isMobile ? 10 : 11} /> {meetup.location || 'Virtual'}
+                        <MapPin size={isMobile ? 10 : 11} /> {
+                          meetup.meeting_format === 'hybrid'
+                            ? `${meetup.location} + Virtual`
+                            : meetup.meeting_format === 'in_person'
+                              ? meetup.location
+                              : 'Virtual'
+                        }
                       </span>
                     </div>
                   </div>

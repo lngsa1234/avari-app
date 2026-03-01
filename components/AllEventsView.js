@@ -401,19 +401,36 @@ export default function AllEventsView({
                       }}
                     />
                   ) : emojis[index % 8]}
-                  <span style={{
+                  <div style={{
                     position: 'absolute',
                     top: '10px',
                     right: '10px',
-                    padding: '4px 8px',
-                    backgroundColor: isPast ? colors.textMuted : colors.primary,
-                    borderRadius: '6px',
-                    fontSize: '10px',
-                    fontWeight: '600',
-                    color: 'white',
+                    display: 'flex',
+                    gap: '6px',
                   }}>
-                    {isPast ? 'Past' : `${spotsLeft} spots left`}
-                  </span>
+                    {meetup.meeting_format && meetup.meeting_format !== 'virtual' && (
+                      <span style={{
+                        padding: '4px 8px',
+                        backgroundColor: meetup.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4',
+                        borderRadius: '6px',
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        color: meetup.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46',
+                      }}>
+                        {meetup.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
+                      </span>
+                    )}
+                    <span style={{
+                      padding: '4px 8px',
+                      backgroundColor: isPast ? colors.textMuted : colors.primary,
+                      borderRadius: '6px',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      color: 'white',
+                    }}>
+                      {isPast ? 'Past' : `${spotsLeft} spots left`}
+                    </span>
+                  </div>
                 </div>
                 <div style={{ padding: '14px 16px' }}>
                   <h4 style={{
@@ -455,7 +472,13 @@ export default function AllEventsView({
                       <Clock size={11} /> {meetup.time}
                     </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <MapPin size={11} /> {meetup.location || 'Virtual'}
+                      <MapPin size={11} /> {
+                        meetup.meeting_format === 'hybrid'
+                          ? `${meetup.location} + Virtual`
+                          : meetup.meeting_format === 'in_person'
+                            ? meetup.location
+                            : 'Virtual'
+                      }
                     </span>
                   </div>
                   <div style={{
