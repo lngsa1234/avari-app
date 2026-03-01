@@ -20,6 +20,8 @@ import {
   XCircle,
   ImagePlus,
   X,
+  Pencil,
+  Check,
 } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 
@@ -173,6 +175,9 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   const [activeTab, setActiveTab] = useState('details');
   const [completedActions, setCompletedActions] = useState(new Set());
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [editing, setEditing] = useState(null); // 'time' | 'location' | 'description' | null
+  const [editValues, setEditValues] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const isHost = meetup?.created_by === currentUser.id;
 
@@ -429,6 +434,63 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       alert('Error: ' + err.message);
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  function startEdit(field) {
+    setEditing(field);
+    if (field === 'time') {
+      setEditValues({ date: meetup.date, time: meetup.time || '' });
+    } else if (field === 'location') {
+      setEditValues({ location: meetup.location || '' });
+    } else if (field === 'description') {
+      setEditValues({ description: meetup.description || '' });
+    }
+  }
+
+  async function saveEdit() {
+    setSaving(true);
+    try {
+      const updates = { updated_at: new Date().toISOString() };
+      if (editing === 'time') {
+        updates.date = editValues.date;
+        updates.time = editValues.time;
+      } else if (editing === 'location') {
+        updates.location = editValues.location;
+      } else if (editing === 'description') {
+        updates.description = editValues.description;
+      }
+      const { error } = await sb.from('meetups').update(updates).eq('id', meetupId);
+      if (error) {
+        alert('Error saving: ' + error.message);
+      } else {
+        setMeetup(prev => ({ ...prev, ...updates }));
+        setEditing(null);
+        onMeetupChanged?.();
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleFormatChange(newFormat) {
+    setSaving(true);
+    try {
+      const updates = { meeting_format: newFormat, updated_at: new Date().toISOString() };
+      if (newFormat === 'virtual') updates.location = 'Virtual';
+      const { error } = await sb.from('meetups').update(updates).eq('id', meetupId);
+      if (error) {
+        alert('Error saving: ' + error.message);
+      } else {
+        setMeetup(prev => ({ ...prev, ...updates }));
+        onMeetupChanged?.();
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -705,7 +767,33 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                 Completed
               </span>
             )}
-            {meetup.meeting_format && meetup.meeting_format !== 'virtual' && (
+            {isHost && !isPast ? (
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {['virtual', 'in_person', 'hybrid'].map(fmt => {
+                  const active = (meetup.meeting_format || 'virtual') === fmt;
+                  const label = fmt === 'virtual' ? 'Virtual' : fmt === 'in_person' ? 'In-Person' : 'Hybrid';
+                  return (
+                    <button key={fmt} onClick={() => !active && handleFormatChange(fmt)} disabled={saving}
+                      style={{
+                        fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                        letterSpacing: '0.8px', padding: '3px 10px', borderRadius: '100px',
+                        border: active ? 'none' : `1px solid ${colors.border}`,
+                        background: active
+                          ? (fmt === 'hybrid' ? '#E8EDF0' : fmt === 'in_person' ? '#E8F0E4' : '#F0E8D8')
+                          : 'transparent',
+                        color: active
+                          ? (fmt === 'hybrid' ? '#4A6572' : fmt === 'in_person' ? '#4E6B46' : '#6B5832')
+                          : colors.textMuted,
+                        cursor: active ? 'default' : 'pointer',
+                        opacity: saving ? 0.6 : 1,
+                        fontFamily: fonts.sans,
+                      }}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : meetup.meeting_format && meetup.meeting_format !== 'virtual' ? (
               <span style={{
                 fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
                 letterSpacing: '0.8px', padding: '3px 10px', borderRadius: '100px',
@@ -714,7 +802,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
               }}>
                 {meetup.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
               </span>
-            )}
+            ) : null}
             {meetup.connection_groups?.name && (
               <span style={{
                 fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
@@ -727,45 +815,76 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
           </div>
 
           {/* Meta info */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: isMobile ? '8px' : '14px',
-            flexWrap: 'wrap',
-            marginBottom: '4px',
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-              <Calendar size={isMobile ? 12 : 14} /> {dateDisplay}
-            </span>
-            {meetup.time && (
+          {editing === 'time' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+              <input type="date" value={editValues.date || ''} onChange={e => setEditValues(v => ({ ...v, date: e.target.value }))}
+                style={{ padding: '4px 8px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: metaFontSize, fontFamily: fonts.sans, color: colors.text }} />
+              <input type="time" value={editValues.time || ''} onChange={e => setEditValues(v => ({ ...v, time: e.target.value }))}
+                style={{ padding: '4px 8px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: metaFontSize, fontFamily: fonts.sans, color: colors.text }} />
+              <button onClick={saveEdit} disabled={saving} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#5C7A4E' }}><Check size={16} /></button>
+              <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: colors.textMuted }}><X size={16} /></button>
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: isMobile ? '8px' : '14px',
+              flexWrap: 'wrap',
+              marginBottom: '4px',
+            }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-                <Clock size={isMobile ? 12 : 14} /> {formatTime(meetup.time)}
+                <Calendar size={isMobile ? 12 : 14} /> {dateDisplay}
               </span>
-            )}
-          </div>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: isMobile ? '8px' : '14px',
-            flexWrap: 'wrap',
-          }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-              <MapPin size={isMobile ? 12 : 14} /> {
-                meetup.meeting_format === 'hybrid'
-                  ? `${meetup.location} + Virtual`
-                  : meetup.meeting_format === 'in_person'
-                    ? meetup.location
-                    : 'Virtual'
-              }
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-              <Users size={isMobile ? 12 : 14} /> {
-                meetup.meeting_format === 'hybrid'
-                  ? `${attendeeCounts.in_person} in-person, ${attendeeCounts.video} virtual`
-                  : `${attendees.length} attendee${attendees.length !== 1 ? 's' : ''}`
-              }
-            </span>
-          </div>
+              {meetup.time && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
+                  <Clock size={isMobile ? 12 : 14} /> {formatTime(meetup.time)}
+                </span>
+              )}
+              {isHost && !isPast && (
+                <button onClick={() => startEdit('time')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: colors.textMuted }}>
+                  <Pencil size={12} />
+                </button>
+              )}
+            </div>
+          )}
+          {editing === 'location' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <input type="text" value={editValues.location || ''} onChange={e => setEditValues(v => ({ ...v, location: e.target.value }))}
+                placeholder="Enter location"
+                style={{ padding: '4px 8px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: metaFontSize, fontFamily: fonts.sans, color: colors.text, flex: 1, minWidth: '120px' }} />
+              <button onClick={saveEdit} disabled={saving} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#5C7A4E' }}><Check size={16} /></button>
+              <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: colors.textMuted }}><X size={16} /></button>
+            </div>
+          ) : (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: isMobile ? '8px' : '14px',
+              flexWrap: 'wrap',
+            }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
+                <MapPin size={isMobile ? 12 : 14} /> {
+                  meetup.meeting_format === 'hybrid'
+                    ? `${meetup.location} + Virtual`
+                    : meetup.meeting_format === 'in_person'
+                      ? meetup.location
+                      : 'Virtual'
+                }
+              </span>
+              {isHost && !isPast && meetup.meeting_format !== 'virtual' && (
+                <button onClick={() => startEdit('location')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: colors.textMuted }}>
+                  <Pencil size={12} />
+                </button>
+              )}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
+                <Users size={isMobile ? 12 : 14} /> {
+                  meetup.meeting_format === 'hybrid'
+                    ? `${attendeeCounts.in_person} in-person, ${attendeeCounts.video} virtual`
+                    : `${attendees.length} attendee${attendees.length !== 1 ? 's' : ''}`
+                }
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -934,21 +1053,56 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
             )}
 
             {/* Description */}
-            {meetup.description && (
+            {(meetup.description || (isHost && !isPast)) && (
               <div style={{ ...styles.card, padding: cardPadding, borderRadius: cardRadius }}>
-                <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize }}>
-                  <FileText size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
-                  About This Event
+                <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize, justifyContent: 'space-between' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
+                    About This Event
+                  </span>
+                  {isHost && !isPast && editing !== 'description' && (
+                    <button onClick={() => startEdit('description')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: colors.textMuted }}>
+                      <Pencil size={13} />
+                    </button>
+                  )}
                 </h3>
-                <p style={{
-                  fontSize: bodyFontSize,
-                  color: colors.textLight,
-                  lineHeight: '1.6',
-                  margin: 0,
-                  whiteSpace: 'pre-wrap',
-                }}>
-                  {meetup.description}
-                </p>
+                {editing === 'description' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <textarea
+                      value={editValues.description || ''}
+                      onChange={e => setEditValues(v => ({ ...v, description: e.target.value }))}
+                      placeholder="Describe your event..."
+                      rows={4}
+                      style={{
+                        width: '100%', padding: '10px 12px', borderRadius: '10px',
+                        border: `1px solid ${colors.border}`, fontSize: bodyFontSize,
+                        fontFamily: fonts.sans, color: colors.text, lineHeight: '1.6',
+                        resize: 'vertical', boxSizing: 'border-box',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                      <button onClick={() => setEditing(null)} style={{
+                        padding: '6px 14px', borderRadius: '8px', border: `1px solid ${colors.border}`,
+                        background: 'white', fontSize: '13px', fontWeight: '500', cursor: 'pointer', color: colors.textMuted, fontFamily: fonts.sans,
+                      }}>Cancel</button>
+                      <button onClick={saveEdit} disabled={saving} style={{
+                        padding: '6px 14px', borderRadius: '8px', border: 'none',
+                        background: colors.primary, color: 'white', fontSize: '13px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans,
+                        opacity: saving ? 0.6 : 1,
+                      }}>{saving ? 'Saving...' : 'Save'}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{
+                    fontSize: bodyFontSize,
+                    color: colors.textLight,
+                    lineHeight: '1.6',
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                  }}>
+                    {meetup.description || (isHost ? 'Tap the pencil to add a description.' : '')}
+                  </p>
+                )}
               </div>
             )}
 
@@ -1327,7 +1481,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
 
 const styles = {
   card: {
-    background: colors.gradient,
+    background: 'white',
     borderRadius: '16px',
     boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
     border: '1px solid rgba(139, 111, 92, 0.08)',
