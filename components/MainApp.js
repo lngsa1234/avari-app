@@ -2104,8 +2104,8 @@ function MainApp({ currentUser, onSignOut }) {
         // Coffee chats: always top priority
         if (item._isCoffeeChat) score += 100
 
-        // User already signed up
-        if (item._isCoffeeChat || userSignups.includes(item.id)) score += 90
+        // User already signed up or is the creator
+        if (item._isCoffeeChat || userSignups.includes(item.id) || item.created_by === currentUser.id) score += 90
 
         // Currently live (within duration window)
         const itemDate = getDate(item)

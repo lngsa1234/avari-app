@@ -354,9 +354,10 @@ export default function ScheduleMeetupView({
         if (error) throw error;
 
         if (meetupData?.id) {
-          await supabase
+          const { error: signupError } = await supabase
             .from('meetup_signups')
-            .insert({ meetup_id: meetupData.id, user_id: authUser.id });
+            .insert({ meetup_id: meetupData.id, user_id: authUser.id, signup_type: 'video' });
+          if (signupError) console.error('Auto-RSVP failed:', signupError);
         }
       }
     }
@@ -414,9 +415,10 @@ export default function ScheduleMeetupView({
 
     // Auto-RSVP the creator
     if (meetupData?.id) {
-      await supabase
+      const { error: signupError } = await supabase
         .from('meetup_signups')
-        .insert({ meetup_id: meetupData.id, user_id: authUser.id });
+        .insert({ meetup_id: meetupData.id, user_id: authUser.id, signup_type: 'video' });
+      if (signupError) console.error('Auto-RSVP failed:', signupError);
     }
 
     alert('Community event created!');
