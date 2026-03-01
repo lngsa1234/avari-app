@@ -500,18 +500,33 @@ export default function NetworkDiscoverView({
         }, {});
 
         const requestIds = data.map(r => r.id);
-        const { data: supporters } = await supabase
+        const { data: allSupporters } = await supabase
           .from('meetup_request_supporters')
           .select('request_id, user_id')
-          .in('request_id', requestIds)
-          .eq('user_id', currentUser.id);
+          .in('request_id', requestIds);
 
-        const supportedSet = new Set((supporters || []).map(s => s.request_id));
+        // Fetch supporter profiles for avatars
+        const supporterUserIds = [...new Set((allSupporters || []).map(s => s.user_id))];
+        let supporterProfileMap = {};
+        if (supporterUserIds.length > 0) {
+          const { data: supporterProfiles } = await supabase
+            .from('profiles')
+            .select('id, name, profile_picture')
+            .in('id', supporterUserIds);
+          supporterProfileMap = (supporterProfiles || []).reduce((acc, p) => { acc[p.id] = p; return acc; }, {});
+        }
+
+        // Group supporters by request
+        const supportersByRequest = {};
+        (allSupporters || []).forEach(s => {
+          if (!supportersByRequest[s.request_id]) supportersByRequest[s.request_id] = [];
+          supportersByRequest[s.request_id].push({ ...s, profile: supporterProfileMap[s.user_id] || null });
+        });
 
         let requests = data.map(r => ({
           ...r,
           user: profileMap[r.user_id] || null,
-          supporters: supportedSet.has(r.id) ? [{ user_id: currentUser.id }] : []
+          supporters: supportersByRequest[r.id] || [],
         }));
 
         setMeetupRequests(requests);
@@ -1451,153 +1466,165 @@ export default function NetworkDiscoverView({
             {meetupRequests.slice(0, 6).map((request) => {
               const vibeInfo = VIBE_CATEGORIES.find(v => v.id === request.vibe_category);
               const hasSupported = request.supporters?.some(s => s.user_id === currentUser?.id);
-              const isOwner = request.user_id === currentUser?.id;
+              const supporterCount = request.supporter_count || 0;
+              const displaySupporters = request.supporters?.slice(0, 5) || [];
 
               return (
                 <div
                   key={request.id}
                   style={{
-                    minWidth: isMobile ? '240px' : '270px',
-                    maxWidth: isMobile ? '240px' : '270px',
-                    padding: isMobile ? '16px' : '20px',
-                    backgroundColor: '#FFFCF8',
-                    borderRadius: '16px',
-                    border: '1px solid #DDD2C2',
+                    minWidth: isMobile ? '270px' : '300px',
+                    maxWidth: isMobile ? '270px' : '300px',
+                    padding: isMobile ? '20px' : '24px',
+                    background: '#FFFBF5',
+                    borderRadius: '20px',
+                    border: '1px solid rgba(180, 140, 100, 0.12)',
+                    boxShadow: '0 2px 16px rgba(120, 80, 40, 0.08)',
                     flexShrink: 0,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: isMobile ? '12px' : '14px',
-                    transition: 'box-shadow 0.2s ease',
+                    position: 'relative',
+                    overflow: 'hidden',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,111,71,0.12)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
                 >
-                  {/* Vote badge + Category tag */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  {/* Top accent bar */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0,
+                    height: '3px',
+                    background: 'linear-gradient(90deg, #8B6914, #C4956A, #8B6914)',
+                    borderRadius: '20px 20px 0 0',
+                  }} />
+
+                  {/* Category tag */}
+                  {vibeInfo && (
                     <div style={{
                       display: 'inline-flex',
                       alignItems: 'center',
+                      alignSelf: 'flex-start',
                       gap: '6px',
-                      padding: isMobile ? '5px 12px' : '6px 14px',
+                      background: 'rgba(139, 105, 20, 0.08)',
+                      color: '#8B6914',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      padding: '5px 12px',
                       borderRadius: '20px',
-                      backgroundColor: '#FDF8F2',
+                      letterSpacing: '0.3px',
+                      textTransform: 'uppercase',
+                      marginBottom: '14px',
                     }}>
-                      <span style={{
-                        fontSize: isMobile ? '16px' : '18px',
-                        fontWeight: '700',
-                        color: '#8B6F47',
-                        fontFamily: "'DM Serif Display', Georgia, serif",
-                        lineHeight: '1',
-                      }}>
-                        {request.supporter_count || 0}
-                      </span>
-                      <span style={{
-                        fontSize: isMobile ? '9px' : '10px',
-                        color: '#7A6B5D',
-                        fontWeight: '700',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        fontFamily: "'Nunito Sans', sans-serif",
-                      }}>
-                        VOTES
-                      </span>
+                      <span>{vibeInfo.emoji}</span>
+                      <span>{vibeInfo.label}</span>
                     </div>
-                    {vibeInfo && (
-                      <div style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        padding: isMobile ? '4px 10px' : '5px 12px',
-                        borderRadius: '20px',
-                        backgroundColor: '#F8F0E4',
-                        fontSize: isMobile ? '11px' : '12px',
-                        color: '#7A6B5D',
-                        fontWeight: '600',
-                        fontFamily: "'Nunito Sans', sans-serif",
-                      }}>
-                        {vibeInfo.emoji} {vibeInfo.label}
-                      </div>
-                    )}
-                  </div>
+                  )}
 
-                  {/* Topic title */}
-                  <p style={{
-                    fontSize: isMobile ? '16px' : '18px',
-                    fontWeight: '700',
-                    color: '#3D2E1F',
-                    margin: 0,
-                    fontFamily: "'DM Serif Display', Georgia, serif",
+                  {/* Title */}
+                  <h3 style={{
+                    fontSize: isMobile ? '18px' : '20px',
+                    fontWeight: 700,
+                    color: '#3D2B1F',
+                    lineHeight: 1.35,
+                    margin: '0 0 16px 0',
+                    fontFamily: fonts.sans,
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
                     overflow: 'hidden',
-                    lineHeight: '1.3',
                     flex: 1,
                   }}>
                     {request.topic}
-                  </p>
+                  </h3>
 
-                  {/* Support button + Host this */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                    {hasSupported ? (
-                      <button
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: isMobile ? '7px 14px' : '8px 16px',
-                          backgroundColor: '#E8D9C6',
-                          color: '#8B6F47',
-                          border: 'none',
-                          borderRadius: '20px',
-                          fontSize: isMobile ? '12px' : '13px',
-                          fontWeight: '700',
-                          cursor: 'default',
-                          fontFamily: "'Nunito Sans', sans-serif",
-                        }}
-                      >
-                        👍 Supported
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleSupportRequest(request.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: isMobile ? '7px 14px' : '8px 16px',
-                          backgroundColor: '#8B6F47',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '20px',
-                          fontSize: isMobile ? '12px' : '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          fontFamily: "'Nunito Sans', sans-serif",
-                          transition: 'opacity 0.2s ease',
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
-                      >
-                        👍 Support
-                      </button>
-                    )}
+                  {/* Interested avatars */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    marginBottom: '18px',
+                    paddingBottom: '18px',
+                    borderBottom: '1px solid rgba(180, 140, 100, 0.15)',
+                  }}>
+                    <div style={{ display: 'flex' }}>
+                      {displaySupporters.map((s, i) => {
+                        const isYou = s.user_id === currentUser?.id;
+                        const avatarColors = ['#C4956A', '#8B6914', '#D4B896', '#A67C2E', '#BFA27E'];
+                        return (
+                          <div key={i} style={{
+                            width: '28px', height: '28px', borderRadius: '50%',
+                            border: '2px solid #FFFBF5',
+                            marginLeft: i > 0 ? '-8px' : 0,
+                            zIndex: displaySupporters.length - i,
+                            position: 'relative',
+                            overflow: 'hidden',
+                            background: isYou ? '#6B4F1D' : avatarColors[i % 5],
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: isYou ? '9px' : '11px',
+                            color: 'white', fontWeight: 700,
+                          }}>
+                            {s.profile?.profile_picture ? (
+                              <img src={s.profile.profile_picture} alt="" style={{
+                                width: '100%', height: '100%', objectFit: 'cover',
+                              }} />
+                            ) : isYou ? 'You' : (s.profile?.name || '?')[0].toUpperCase()}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <span style={{ color: '#8C7B6B', fontSize: '13px', fontWeight: 500 }}>
+                      {supporterCount} interested
+                    </span>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={() => !hasSupported && handleSupportRequest(request.id)}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        background: hasSupported
+                          ? 'transparent'
+                          : 'linear-gradient(135deg, #6B4F1D, #8B6914)',
+                        color: hasSupported ? '#8B6914' : '#FFF',
+                        border: hasSupported ? '1.5px solid #8B6914' : 'none',
+                        borderRadius: '14px',
+                        padding: isMobile ? '11px 16px' : '13px 20px',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: hasSupported ? 'default' : 'pointer',
+                        boxShadow: hasSupported ? 'none' : '0 2px 8px rgba(139, 105, 20, 0.25)',
+                        letterSpacing: '0.2px',
+                        fontFamily: fonts.sans,
+                      }}
+                    >
+                      <span>{hasSupported ? '✓' : '🙋‍♀️'}</span>
+                      <span>{hasSupported ? "I'm in!" : 'I want this'}</span>
+                    </button>
+
                     <button
                       onClick={() => handleHostRequest(request)}
                       style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#8B6F47',
-                        fontSize: isMobile ? '11px' : '12px',
-                        fontWeight: '700',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        background: 'transparent',
+                        color: '#6B4F1D',
+                        border: '1.5px solid rgba(139, 105, 20, 0.25)',
+                        borderRadius: '14px',
+                        padding: isMobile ? '11px 16px' : '13px 20px',
+                        fontSize: '14px',
+                        fontWeight: 600,
                         cursor: 'pointer',
-                        padding: 0,
-                        fontFamily: "'Nunito Sans', sans-serif",
                         letterSpacing: '0.2px',
-                        flexShrink: 0,
+                        fontFamily: fonts.sans,
                       }}
                     >
-                      Host this
+                      <span>🎙️</span>
+                      <span>Host</span>
                     </button>
                   </div>
                 </div>
