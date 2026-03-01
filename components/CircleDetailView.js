@@ -510,12 +510,15 @@ export default function CircleDetailView({
     setActionLoading(true);
 
     try {
-      const { error } = await supabase
+      // Delete by group_id + user_id to satisfy RLS policies
+      const { error, count } = await supabase
         .from('connection_group_members')
-        .delete()
-        .eq('id', membership.id);
+        .delete({ count: 'exact' })
+        .eq('group_id', circleId)
+        .eq('user_id', currentUser.id);
 
       if (error) throw error;
+      if (count === 0) throw new Error('Could not remove membership. Please try again.');
 
       setShowLeaveConfirm(false);
       alert('You have left the circle.');
