@@ -27,6 +27,7 @@ import CoffeeChatsView from './CoffeeChatsView'
 import UserProfileView from './UserProfileView'
 import ScheduleMeetupView from './ScheduleMeetupView'
 import SessionRecapDetailView from './SessionRecapDetailView'
+import EventDetailView from './EventDetailView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/coffeeChatHelpers'
 import NudgeBanner from './NudgeBanner'
@@ -69,6 +70,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [selectedChatType, setSelectedChatType] = useState(null) // 'user' or 'circle'
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [selectedRecapId, setSelectedRecapId] = useState(null)
+  const [selectedMeetupId, setSelectedMeetupId] = useState(null)
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -126,6 +128,9 @@ function MainApp({ currentUser, onSignOut }) {
     }
     if (data.recapId) {
       setSelectedRecapId(data.recapId)
+    }
+    if (data.meetupId) {
+      setSelectedMeetupId(data.meetupId)
     }
     // Handle meetups initial view (e.g., 'past' for review recaps)
     if (view === 'meetups' && data.initialView) {
@@ -2945,6 +2950,7 @@ function MainApp({ currentUser, onSignOut }) {
                     if (isMobile) return (
                       <div
                         key={meetup.id}
+                        onClick={() => !meetup._isCoffeeChat && handleNavigate('eventDetail', { meetupId: meetup.id })}
                         style={{
                           background: 'transparent',
                           borderRadius: '16px',
@@ -3080,6 +3086,7 @@ function MainApp({ currentUser, onSignOut }) {
                           <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.25)', margin: '0 8px' }} />
                         )}
                       <div
+                        onClick={() => !meetup._isCoffeeChat && handleNavigate('eventDetail', { meetupId: meetup.id })}
                         style={{
                           display: 'flex',
                           gap: '16px',
@@ -3977,7 +3984,16 @@ function MainApp({ currentUser, onSignOut }) {
         )}
         {currentView === 'admin' && currentUser.role === 'admin' && <AdminDashboard />}
         {currentView === 'adminFeedback' && currentUser.role === 'admin' && <AdminFeedbackView currentUser={currentUser} supabase={supabase} />}
-        {currentView === 'allEvents' && <AllEventsView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
+        {currentView === 'allEvents' && <AllEventsView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
+        {currentView === 'eventDetail' && (
+          <EventDetailView
+            currentUser={currentUser}
+            supabase={supabase}
+            onNavigate={handleNavigate}
+            meetupId={selectedMeetupId}
+            previousView={previousView}
+          />
+        )}
         {currentView === 'allPeople' && <AllPeopleView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} previousView={previousView} />}
         {currentView === 'allCircles' && <AllCirclesView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
         {currentView === 'createCircle' && <CreateCircleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}

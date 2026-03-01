@@ -368,12 +368,14 @@ export default function AllEventsView({
             return (
               <div
                 key={meetup.id}
+                onClick={() => onNavigate?.('eventDetail', { meetupId: meetup.id })}
                 style={{
                   backgroundColor: colors.warmWhite,
                   borderRadius: '16px',
                   overflow: 'hidden',
                   boxShadow: '0 2px 12px rgba(139, 111, 92, 0.1)',
                   opacity: isPast ? 0.7 : 1,
+                  cursor: 'pointer',
                 }}
               >
                 <div style={{
@@ -474,7 +476,7 @@ export default function AllEventsView({
                     </div>
                     {!isPast && (
                       <button
-                        onClick={() => onNavigate?.('home')}
+                        onClick={(e) => { e.stopPropagation(); onNavigate?.('eventDetail', { meetupId: meetup.id }); }}
                         style={{
                           padding: '6px 12px',
                           backgroundColor: colors.primary,

@@ -971,6 +971,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   <div key={item.id} onClick={(e) => {
                     // Don't toggle if clicking a button or menu
                     if (e.target.closest('button') || e.target.closest('[data-menu]')) return;
+                    // Navigate to event detail for group events
+                    if (!isCoffee && onNavigate) {
+                      onNavigate('eventDetail', { meetupId: item.id });
+                      return;
+                    }
                     setActiveCardId(activeCardId === item.id ? null : item.id);
                   }} style={{
                     ...styles.meetupCard,
@@ -1236,10 +1241,15 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               const isUnreviewed = item.hasRecap && item.recapId && !reviewedRecaps.includes(item.recapId);
 
               return (
-                <div key={item.id} style={{
+                <div key={item.id} onClick={() => {
+                  if (item.type !== 'coffee' && item.sourceId && onNavigate) {
+                    onNavigate('eventDetail', { meetupId: item.sourceId });
+                  }
+                }} style={{
                   ...styles.pastCardCompact,
                   alignItems: 'flex-start',
                   animationDelay: `${index * 0.1}s`,
+                  cursor: item.type !== 'coffee' ? 'pointer' : 'default',
                 }}>
                   <div style={styles.pastCardCompactLeft}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1299,7 +1309,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       ...styles.viewRecapBtnCompact,
                       ...(isUnreviewed ? styles.viewRecapBtnUnreviewed : {}),
                     }}
-                    onClick={() => handleViewRecap(item)}
+                    onClick={(e) => { e.stopPropagation(); handleViewRecap(item); }}
                   >
                     <Sparkles size={13} />
                     Recap
