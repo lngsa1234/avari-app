@@ -519,7 +519,7 @@ export default function CircleDetailView({
 
       setShowLeaveConfirm(false);
       alert('You have left the circle.');
-      onNavigate?.('allCircles');
+      onNavigate?.(previousView || 'allCircles');
     } catch (error) {
       console.error('Error leaving circle:', error);
       alert('Error leaving circle: ' + error.message);
@@ -1177,7 +1177,7 @@ export default function CircleDetailView({
                       .eq('id', membership.id)
                       .eq('user_id', currentUser.id)
                     if (error) throw error
-                    onNavigate?.('allCircles')
+                    onNavigate?.(previousView || 'allCircles')
                   } catch (err) {
                     console.error('Error declining invitation:', err)
                   } finally {
