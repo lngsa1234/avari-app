@@ -799,7 +799,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                 gap: '10px',
               }}>
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {isSignedUp ? (
+                  {(isSignedUp || isHost) ? (
                     <>
                       {meetup.meeting_format !== 'in_person' && (
                         <button
