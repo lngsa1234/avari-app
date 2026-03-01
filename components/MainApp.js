@@ -235,7 +235,7 @@ function MainApp({ currentUser, onSignOut }) {
 
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - 1)
-      const cutoff = cutoffDate.toISOString().split('T')[0]
+      const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
 
       // === ROUND 1: Fire all independent queries in parallel ===
       const [circlesResult, userSignupsResult, coffeeResult, unreadResult, groupsResult, coffeeCountResult, requestsResult, attendedResult, createdCirclesResult, circleInvitationsResult] = await Promise.all([
@@ -332,6 +332,7 @@ function MainApp({ currentUser, onSignOut }) {
         .from('meetups')
         .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
         .gte('date', cutoff)
+        .not('status', 'eq', 'cancelled')
         .order('date', { ascending: true })
         .order('time', { ascending: true })
 
@@ -375,10 +376,10 @@ function MainApp({ currentUser, onSignOut }) {
         const coffeeProfiles = round2Results[1]?.data || []
         const profileMap = {}
         coffeeProfiles.forEach(p => { profileMap[p.id] = p })
-        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
         const upcoming = chats.filter(chat => {
-          if (!chat.scheduled_time) return true
-          return new Date(chat.scheduled_time) > sevenDaysAgo
+          if (!chat.scheduled_time) return true // Pending chats without a time are still active
+          return new Date(chat.scheduled_time) > gracePeriod
         }).map(chat => {
           const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
           return { ...chat, _otherPerson: profileMap[otherId] || null }
@@ -566,7 +567,7 @@ function MainApp({ currentUser, onSignOut }) {
       // Only fetch meetups from yesterday onwards (grace period for recently ended ones)
       const cutoffDate = new Date()
       cutoffDate.setDate(cutoffDate.getDate() - 1)
-      const cutoff = cutoffDate.toISOString().split('T')[0]
+      const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
 
       // Get circles where user is a member
       const { data: memberCircles, error: circleError } = await supabase
@@ -1009,10 +1010,10 @@ function MainApp({ currentUser, onSignOut }) {
       ;(profiles || []).forEach(p => { profileMap[p.id] = p })
 
       const now = new Date()
-      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
       const upcoming = chats.filter(chat => {
-        if (!chat.scheduled_time) return true // Show even without scheduled time
-        return new Date(chat.scheduled_time) > sevenDaysAgo
+        if (!chat.scheduled_time) return true // Pending chats without a time are still active
+        return new Date(chat.scheduled_time) > gracePeriod
       }).map(chat => {
         const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
         return { ...chat, _otherPerson: profileMap[otherId] || null }
@@ -2043,7 +2044,7 @@ function MainApp({ currentUser, onSignOut }) {
             meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
           }
 
-          if (isNaN(meetupDate.getTime())) return true
+          if (isNaN(meetupDate.getTime())) return false
 
           if (meetup.time) {
             const [hours, minutes] = meetup.time.split(':').map(Number)
@@ -2053,7 +2054,7 @@ function MainApp({ currentUser, onSignOut }) {
           const gracePeriodEnd = new Date(meetupDate.getTime() + (GRACE_PERIOD_HOURS * 60 * 60 * 1000))
           return now < gracePeriodEnd
         } catch (err) {
-          return true
+          return false
         }
       })
 
