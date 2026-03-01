@@ -153,7 +153,7 @@ function formatDuration(seconds) {
   return `${mins}m`;
 }
 
-export default function EventDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, previousView }) {
+export default function EventDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, previousView, onMeetupChanged }) {
   const sb = supabaseProp || supabase;
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 640;
@@ -416,12 +416,13 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
     if (!confirm('Are you sure you want to cancel this event? This will remove it for all attendees.')) return;
     try {
       setActionLoading(true);
-      // Delete signups first, then the meetup
-      await sb.from('meetup_signups').delete().eq('meetup_id', meetupId);
-      const { error } = await sb.from('meetups').delete().eq('id', meetupId);
+      const { error } = await sb.from('meetups')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', meetupId);
       if (error) {
         alert('Error canceling event: ' + error.message);
       } else {
+        await onMeetupChanged?.();
         onNavigate?.(previousView || 'meetups');
       }
     } catch (err) {

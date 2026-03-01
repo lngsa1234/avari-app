@@ -2104,11 +2104,18 @@ function MainApp({ currentUser, onSignOut }) {
         // Coffee chats: always top priority
         if (item._isCoffeeChat) score += 100
 
-        // User already signed up or is the creator
-        if (item._isCoffeeChat || userSignups.includes(item.id) || item.created_by === currentUser.id) score += 90
+        const itemDate = getDate(item)
+        const isUserEvent = item._isCoffeeChat || userSignups.includes(item.id) || item.created_by === currentUser.id
+
+        // Events the user is attending/hosting: high base score + sooner = higher
+        if (isUserEvent) {
+          score += 200
+          // Sooner events rank higher: subtract hours away (capped at 168 = 1 week)
+          const hoursAway = Math.max(0, (itemDate - now) / (1000 * 60 * 60))
+          score -= Math.min(hoursAway, 168)
+        }
 
         // Currently live (within duration window)
-        const itemDate = getDate(item)
         const endTime = new Date(itemDate.getTime() + (item.duration || 60) * 60000)
         if (now >= itemDate && now <= endTime) score += 80
 
@@ -2122,10 +2129,6 @@ function MainApp({ currentUser, onSignOut }) {
 
         // User's circle meetup
         if (item.circle_id) score += 20
-
-        // Time proximity: within 24 hours
-        const hoursAway = (itemDate - now) / (1000 * 60 * 60)
-        if (hoursAway >= 0 && hoursAway <= 24) score += 15
 
         // Capacity
         if (item.participant_limit) {
@@ -3992,6 +3995,7 @@ function MainApp({ currentUser, onSignOut }) {
             onNavigate={handleNavigate}
             meetupId={selectedMeetupId}
             previousView={previousView}
+            onMeetupChanged={loadMeetupsFromDatabase}
           />
         )}
         {currentView === 'allPeople' && <AllPeopleView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} previousView={previousView} />}

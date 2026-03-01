@@ -380,7 +380,7 @@ export default function AllEventsView({
               >
                 <div style={{
                   height: '90px',
-                  background: meetup.image_url ? 'none' : gradients[index % 4],
+                  background: gradients[index % 4],
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

@@ -214,6 +214,7 @@ export default function NetworkDiscoverView({
   });
 
   const [imageBrightness, setImageBrightness] = useState({});
+  const [loadedImages, setLoadedImages] = useState({});
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -1193,17 +1194,20 @@ export default function NetworkDiscoverView({
                     position: 'relative',
                     cursor: 'pointer',
                   }}>
-                  {/* Gradient background (always present as base/fallback) */}
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: fallbackGradient,
-                  }} />
-                  {/* Unsplash image overlay (on top of gradient) */}
+                  {/* Gradient background (hidden once uploaded image loads) */}
+                  {!(hasUploadedImage && loadedImages[meetup.id]) && (
+                    <div style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: fallbackGradient,
+                    }} />
+                  )}
+                  {/* Image overlay (on top of gradient) */}
                   {bgImage && (
                     <img
                       src={bgImage}
                       alt=""
+                      onLoad={hasUploadedImage ? () => setLoadedImages(prev => ({ ...prev, [meetup.id]: true })) : undefined}
                       style={{
                         position: 'absolute',
                         inset: 0,
