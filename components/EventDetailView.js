@@ -412,6 +412,25 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
     }
   }
 
+  async function handleCancelEvent() {
+    if (!confirm('Are you sure you want to cancel this event? This will remove it for all attendees.')) return;
+    try {
+      setActionLoading(true);
+      // Delete signups first, then the meetup
+      await sb.from('meetup_signups').delete().eq('meetup_id', meetupId);
+      const { error } = await sb.from('meetups').delete().eq('id', meetupId);
+      if (error) {
+        alert('Error canceling event: ' + error.message);
+      } else {
+        onNavigate?.(previousView || 'meetups');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   function handleJoinCall() {
     if (!meetup) return;
     if (meetup.circle_id) {
@@ -816,21 +835,39 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                           <Video size={18} /> Join Call
                         </button>
                       )}
-                      <button
-                        onClick={handleCancelRsvp}
-                        disabled={actionLoading}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                          padding: '12px 16px', borderRadius: '14px',
-                          backgroundColor: 'transparent', color: colors.textMuted,
-                          border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
-                          cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
-                          opacity: actionLoading ? 0.6 : 1,
-                          flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
-                        }}
-                      >
-                        <XCircle size={16} /> Cancel RSVP
-                      </button>
+                      {isHost ? (
+                        <button
+                          onClick={handleCancelEvent}
+                          disabled={actionLoading}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                            padding: '12px 16px', borderRadius: '14px',
+                            backgroundColor: 'transparent', color: '#D45B3E',
+                            border: '1px solid rgba(212, 91, 62, 0.3)', fontSize: '14px', fontWeight: '500',
+                            cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
+                            opacity: actionLoading ? 0.6 : 1,
+                            flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
+                          }}
+                        >
+                          <XCircle size={16} /> Cancel Event
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleCancelRsvp}
+                          disabled={actionLoading}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                            padding: '12px 16px', borderRadius: '14px',
+                            backgroundColor: 'transparent', color: colors.textMuted,
+                            border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
+                            cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
+                            opacity: actionLoading ? 0.6 : 1,
+                            flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
+                          }}
+                        >
+                          <XCircle size={16} /> Cancel RSVP
+                        </button>
+                      )}
                     </>
                   ) : (
                     <button
