@@ -97,7 +97,7 @@ export default function AllCirclesView({
       // Fetch all active circles
       const { data: groupsData, error } = await supabase
         .from('connection_groups')
-        .select('id, name, creator_id, is_active, vibe_category, created_at')
+        .select('id, name, creator_id, is_active, vibe_category, created_at, image_url')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
@@ -730,16 +730,18 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
         backdropFilter: 'blur(2px)',
       }}
     >
-      {/* Header with Emoji */}
+      {/* Header with Emoji or Image */}
       <div style={{
         height: isMobile ? '90px' : '100px',
-        background: circle.gradient,
+        background: circle.image_url
+          ? `url(${circle.image_url}) center/cover no-repeat`
+          : '#5E472F',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
       }}>
-        <span style={{ fontSize: isMobile ? '36px' : '44px' }}>{circle.emoji}</span>
+        {!circle.image_url && <img src="/tutorial-logo.png" alt="" style={{ width: '50%', maxWidth: '60px', height: 'auto', objectFit: 'contain' }} />}
 
         {/* Spots/Member Badge */}
         <span style={{
@@ -937,16 +939,18 @@ function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, o
           <X size={20} style={{ color: colors.textLight }} />
         </button>
 
-        {/* Header with Emoji */}
+        {/* Header with Emoji or Image */}
         <div style={{
           height: '140px',
-          background: circle.gradient,
+          background: circle.image_url
+            ? `url(${circle.image_url}) center/cover no-repeat`
+            : '#5E472F',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
         }}>
-          <span style={{ fontSize: '64px' }}>{circle.emoji}</span>
+          {!circle.image_url && <img src="/tutorial-logo.png" alt="" style={{ width: '40%', maxWidth: '80px', height: 'auto', objectFit: 'contain' }} />}
           <span style={{
             position: 'absolute',
             bottom: '12px',

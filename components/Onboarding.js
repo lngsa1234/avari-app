@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Coffee, Users, Calendar, Video, MessageCircle, Sparkles, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Sparkles, Compass, Users } from 'lucide-react';
 
 /**
  * Onboarding - Step-by-step introduction for new users
@@ -13,52 +13,38 @@ export default function Onboarding({ onComplete, userName }) {
 
   const steps = [
     {
-      icon: <Sparkles className="w-16 h-16 text-stone-400" />,
       title: "Welcome to CircleW!",
       subtitle: userName ? `Hey ${userName}, great to have you!` : "Great to have you!",
       description: "Find your circle. Move forward. Let's show you around.",
-      color: "from-stone-500 to-stone-600"
+      isWelcome: true,
     },
     {
-      icon: <Coffee className="w-16 h-16 text-amber-400" />,
+      title: "Discover",
+      subtitle: "Browse what's happening",
+      description: "Explore events, circles, and trending topics curated for your interests. There's always something new to check out.",
+      icon: Compass,
+      tips: ["Swipe through upcoming events", "See what's trending near you", "Find circles that match your vibe"],
+    },
+    {
+      title: "Circles",
+      subtitle: "Find your people",
+      description: "Join intimate groups around shared interests. Stay connected through group chats, scheduled meetups, and collaborative activities.",
+      icon: Users,
+      tips: ["Browse circles by topic", "Create your own circle", "Invite people you meet"],
+    },
+    {
       title: "Coffee Chats",
       subtitle: "Meet someone new",
-      description: "Get matched with interesting people for 1-on-1 video chats. It's like a virtual coffee date - casual, friendly, and a great way to expand your network.",
+      description: "Get matched with interesting people for 1-on-1 video chats. It's like a virtual coffee date — casual, friendly, and a great way to expand your network.",
+      thumbnail: "/thumbnails/start-coffee-chat.svg",
       tips: ["Matches refresh regularly", "Video calls are just a tap away", "Express interest to connect"],
-      color: "from-amber-500 to-orange-500"
     },
     {
-      icon: <Calendar className="w-16 h-16 text-purple-400" />,
-      title: "Meetups",
-      subtitle: "Join group gatherings",
-      description: "Sign up for scheduled meetups to join group video calls. Meet multiple people at once in a relaxed, structured setting.",
-      tips: ["Browse upcoming meetups", "Sign up with one tap", "Get reminders before they start"],
-      color: "from-purple-500 to-indigo-500"
-    },
-    {
-      icon: <Users className="w-16 h-16 text-blue-400" />,
-      title: "Connection Groups",
-      subtitle: "Build your community",
-      description: "Form or join groups with people who share your interests. Stay connected with your cohort through group chats and calls.",
-      tips: ["Create groups around topics you love", "Invite people you meet", "Schedule group video calls"],
-      color: "from-blue-500 to-cyan-500"
-    },
-    {
-      icon: <Video className="w-16 h-16 text-green-400" />,
-      title: "Video Calls",
-      subtitle: "Connect face-to-face",
-      description: "All connections happen through video. After each call, you'll get an AI-powered recap with conversation highlights and connection suggestions.",
-      tips: ["HD video with screen sharing", "In-call messaging", "AI summaries after calls"],
-      color: "from-green-500 to-emerald-500"
-    },
-    {
-      icon: <MessageCircle className="w-16 h-16 text-rose-400" />,
       title: "You're All Set!",
       subtitle: "Start connecting",
-      description: "Your profile is ready. Explore Coffee Chats to meet someone new, or check out upcoming Meetups. The community is waiting for you!",
-      color: "from-rose-500 to-pink-500",
-      isFinal: true
-    }
+      description: "Your profile is ready. Explore Coffee Chats to meet someone new, or check out upcoming events. The community is waiting for you!",
+      isFinal: true,
+    },
   ];
 
   const currentStepData = steps[currentStep];
@@ -83,46 +69,286 @@ export default function Onboarding({ onComplete, userName }) {
     onComplete();
   };
 
-  return (
-    <div className="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl">
-        {/* Progress bar */}
-        <div className="h-1 bg-gray-700">
-          <div
-            className={`h-full bg-gradient-to-r ${currentStepData.color} transition-all duration-500`}
-            style={{ width: `${((currentStep + 1) / steps.length) * 100}%` }}
-          />
-        </div>
+  // Step dots (shared across all steps)
+  const stepDots = (
+    <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+      {steps.map((_, idx) => (
+        <button
+          key={idx}
+          onClick={() => setCurrentStep(idx)}
+          style={{
+            width: idx === currentStep ? '24px' : '8px',
+            height: '8px',
+            borderRadius: '4px',
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: idx === currentStep ? '#5E472F' : 'rgba(94, 71, 47, 0.25)',
+            transition: 'all 0.3s ease',
+            padding: 0,
+          }}
+        />
+      ))}
+    </div>
+  );
 
-        {/* Header with gradient */}
-        <div className={`bg-gradient-to-br ${currentStepData.color} p-8 text-center`}>
-          <div className="flex justify-center mb-4">
-            <div className="bg-white/20 backdrop-blur-sm rounded-full p-4">
-              {currentStepData.icon}
+  // --- Welcome step (step 0) ---
+  if (currentStepData.isWelcome) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', backgroundColor: 'rgba(0,0,0,0.85)',
+      }}>
+        <div style={{
+          maxWidth: '420px', width: '100%', borderRadius: '35px',
+          overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
+          display: 'flex', flexDirection: 'column', minHeight: '580px',
+        }}>
+          {/* Top - dark brown with logo */}
+          <div style={{
+            background: '#5E472F',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center',
+            padding: '32px 32px 24px',
+            minHeight: '220px',
+          }}>
+            <img
+              src="/tutorial-logo.png"
+              alt="CircleW"
+              style={{
+                width: '60%', maxWidth: '250px', height: 'auto',
+                objectFit: 'contain', marginBottom: '20px',
+              }}
+            />
+            <h2 style={{
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontSize: '28px', fontWeight: '700', color: '#FFFBF5',
+              margin: '0 0 8px', textAlign: 'center',
+            }}>
+              {currentStepData.title}
+            </h2>
+            <p style={{
+              fontSize: '16px', color: 'rgba(255, 251, 245, 0.75)',
+              margin: 0, textAlign: 'center', fontWeight: '500',
+            }}>
+              {currentStepData.subtitle}
+            </p>
+          </div>
+
+          {/* Bottom - warm gradient */}
+          <div style={{
+            background: 'linear-gradient(179.91deg, rgba(240, 225, 213, 0.98) -13.08%, rgba(197, 172, 150, 0.78) 99.92%)',
+            padding: '28px 32px 32px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            flex: 1, justifyContent: 'center',
+          }}>
+            <p style={{
+              fontSize: '14px', color: '#8C7B6B',
+              margin: '0 0 32px', textAlign: 'center', lineHeight: '1.5',
+            }}>
+              {currentStepData.description}
+            </p>
+
+            {stepDots}
+
+            <button onClick={handleNext} style={{
+              width: '100%', padding: '16px', borderRadius: '16px', border: 'none',
+              background: 'linear-gradient(135deg, #5E472F, #7A5C3E)',
+              color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              boxShadow: '0 4px 12px rgba(94, 71, 47, 0.3)', letterSpacing: '0.3px',
+            }}>
+              Get Started
+              <ChevronRight size={20} />
+            </button>
+
+            <button onClick={handleSkip} style={{
+              marginTop: '12px', background: 'none', border: 'none',
+              color: '#8C7B6B', fontSize: '14px', cursor: 'pointer', padding: '4px',
+            }}>
+              Skip intro
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Final step ---
+  if (currentStepData.isFinal) {
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 50,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', backgroundColor: 'rgba(0,0,0,0.85)',
+      }}>
+        <div style={{
+          maxWidth: '420px', width: '100%', borderRadius: '35px',
+          overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
+          display: 'flex', flexDirection: 'column', minHeight: '580px',
+        }}>
+          {/* Top - dark brown with sparkle icon */}
+          <div style={{
+            background: '#5E472F',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center',
+            padding: '32px 32px 24px',
+            minHeight: '220px',
+          }}>
+            <img
+              src="/tutorial-logo.png"
+              alt="CircleW"
+              style={{
+                width: '60%', maxWidth: '250px', height: 'auto',
+                objectFit: 'contain', marginBottom: '20px',
+              }}
+            />
+            <h2 style={{
+              fontFamily: "'DM Serif Display', Georgia, serif",
+              fontSize: '28px', fontWeight: '700', color: '#FFFBF5',
+              margin: '0 0 8px', textAlign: 'center',
+            }}>
+              {currentStepData.title}
+            </h2>
+            <p style={{
+              fontSize: '16px', color: 'rgba(255, 251, 245, 0.75)',
+              margin: 0, textAlign: 'center', fontWeight: '500',
+            }}>
+              {currentStepData.subtitle}
+            </p>
+          </div>
+
+          {/* Bottom - warm gradient */}
+          <div style={{
+            background: 'linear-gradient(179.91deg, rgba(240, 225, 213, 0.98) -13.08%, rgba(197, 172, 150, 0.78) 99.92%)',
+            padding: '28px 32px 32px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            flex: 1, justifyContent: 'center',
+          }}>
+            <p style={{
+              fontSize: '14px', color: '#8C7B6B',
+              margin: '0 0 32px', textAlign: 'center', lineHeight: '1.5',
+            }}>
+              {currentStepData.description}
+            </p>
+
+            {stepDots}
+
+            <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+              <button onClick={handlePrev} style={{
+                flex: 1, padding: '16px', borderRadius: '16px',
+                border: '1.5px solid rgba(94, 71, 47, 0.3)',
+                background: 'transparent', color: '#5E472F',
+                fontSize: '16px', fontWeight: '600', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              }}>
+                <ChevronLeft size={20} />
+                Back
+              </button>
+
+              <button onClick={handleNext} style={{
+                flex: 1, padding: '16px', borderRadius: '16px', border: 'none',
+                background: 'linear-gradient(135deg, #5E472F, #7A5C3E)',
+                color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                boxShadow: '0 4px 12px rgba(94, 71, 47, 0.3)', letterSpacing: '0.3px',
+              }}>
+                Let's Go!
+              </button>
             </div>
           </div>
-          <h2 className="text-white text-2xl font-bold mb-1">
+        </div>
+      </div>
+    );
+  }
+
+  // --- Feature steps (1-3): icon or thumbnail + tips ---
+  const IconComponent = currentStepData.icon;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px', backgroundColor: 'rgba(0,0,0,0.85)',
+    }}>
+      <div style={{
+        maxWidth: '420px', width: '100%', borderRadius: '35px',
+        overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.4)',
+        display: 'flex', flexDirection: 'column', minHeight: '580px',
+      }}>
+        {/* Top - dark brown with icon or background image, title, subtitle */}
+        <div style={{
+          background: currentStepData.thumbnail
+            ? `url(${currentStepData.thumbnail}) center top / cover no-repeat, #5E472F`
+            : '#5E472F',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center',
+          padding: '32px 32px 24px',
+          minHeight: '220px',
+        }}>
+          {!currentStepData.thumbnail && (
+            <div style={{
+              width: '80px', height: '80px', borderRadius: '50%',
+              background: 'rgba(255,255,255,0.15)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              marginBottom: '24px',
+            }}>
+              <IconComponent size={40} color="#FFFBF5" />
+            </div>
+          )}
+          <h2 style={{
+            fontFamily: "'DM Serif Display', Georgia, serif",
+            fontSize: '28px', fontWeight: '700', color: '#FFFBF5',
+            margin: '0 0 8px', textAlign: 'center',
+          }}>
             {currentStepData.title}
           </h2>
-          <p className="text-white/80 text-sm">
+          <p style={{
+            fontSize: '16px', color: 'rgba(255, 251, 245, 0.75)',
+            margin: 0, textAlign: 'center', fontWeight: '500',
+          }}>
             {currentStepData.subtitle}
           </p>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
-          <p className="text-gray-300 text-center mb-6 leading-relaxed">
+        {/* Bottom - warm gradient with title, description, tips, nav */}
+        <div style={{
+          background: 'linear-gradient(179.91deg, rgba(240, 225, 213, 0.98) -13.08%, rgba(197, 172, 150, 0.78) 99.92%)',
+          padding: '28px 32px 32px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          flex: 1,
+        }}>
+          <p style={{
+            fontSize: '14px', color: '#8C7B6B',
+            margin: '0 0 20px', textAlign: 'center', lineHeight: '1.5',
+          }}>
             {currentStepData.description}
           </p>
 
           {/* Tips */}
           {currentStepData.tips && (
-            <div className="bg-gray-700/50 rounded-xl p-4 mb-6">
-              <p className="text-gray-400 text-xs uppercase tracking-wide mb-3">Quick Tips</p>
-              <ul className="space-y-2">
+            <div style={{
+              width: '100%',
+              background: 'rgba(94, 71, 47, 0.07)',
+              borderRadius: '14px',
+              padding: '14px 18px',
+              marginBottom: '24px',
+            }}>
+              <p style={{
+                fontSize: '11px', color: '#8C7B6B',
+                textTransform: 'uppercase', letterSpacing: '0.8px',
+                margin: '0 0 10px', fontWeight: '600',
+              }}>
+                Quick Tips
+              </p>
+              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                 {currentStepData.tips.map((tip, idx) => (
-                  <li key={idx} className="flex items-center gap-2 text-gray-300 text-sm">
-                    <span className="text-green-400">&#10003;</span>
+                  <li key={idx} style={{
+                    display: 'flex', alignItems: 'center', gap: '10px',
+                    fontSize: '13px', color: '#5E472F',
+                    marginBottom: idx < currentStepData.tips.length - 1 ? '8px' : 0,
+                  }}>
+                    <span style={{ color: '#5E472F', fontSize: '13px', flexShrink: 0 }}>&#10003;</span>
                     {tip}
                   </li>
                 ))}
@@ -130,53 +356,40 @@ export default function Onboarding({ onComplete, userName }) {
             </div>
           )}
 
-          {/* Step indicators */}
-          <div className="flex justify-center gap-2 mb-6">
-            {steps.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={() => setCurrentStep(idx)}
-                className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                  idx === currentStep
-                    ? 'w-6 bg-white'
-                    : idx < currentStep
-                      ? 'bg-gray-500'
-                      : 'bg-gray-600'
-                }`}
-              />
-            ))}
-          </div>
+          {stepDots}
 
-          {/* Navigation buttons */}
-          <div className="flex gap-3">
-            {!isFirstStep && (
-              <button
-                onClick={handlePrev}
-                className="flex-1 flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-3 rounded-xl font-medium transition"
-              >
-                <ChevronLeft className="w-5 h-5" />
-                Back
-              </button>
-            )}
+          {/* Navigation */}
+          <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+            <button onClick={handlePrev} style={{
+              flex: 1, padding: '16px', borderRadius: '16px',
+              border: '1.5px solid rgba(94, 71, 47, 0.3)',
+              background: 'transparent', color: '#5E472F',
+              fontSize: '16px', fontWeight: '600', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+            }}>
+              <ChevronLeft size={20} />
+              Back
+            </button>
 
-            <button
-              onClick={handleNext}
-              className={`flex-1 flex items-center justify-center gap-2 bg-gradient-to-r ${currentStepData.color} hover:opacity-90 text-white py-3 rounded-xl font-semibold transition`}
-            >
-              {isLastStep ? "Let's Go!" : "Next"}
-              {!isLastStep && <ChevronRight className="w-5 h-5" />}
+            <button onClick={handleNext} style={{
+              flex: 1, padding: '16px', borderRadius: '16px', border: 'none',
+              background: 'linear-gradient(135deg, #5E472F, #7A5C3E)',
+              color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              boxShadow: '0 4px 12px rgba(94, 71, 47, 0.3)', letterSpacing: '0.3px',
+            }}>
+              Next
+              <ChevronRight size={20} />
             </button>
           </div>
 
-          {/* Skip button */}
-          {!isLastStep && (
-            <button
-              onClick={handleSkip}
-              className="w-full mt-3 text-gray-500 hover:text-gray-400 text-sm transition"
-            >
-              Skip intro
-            </button>
-          )}
+          {/* Skip */}
+          <button onClick={handleSkip} style={{
+            marginTop: '12px', background: 'none', border: 'none',
+            color: '#8C7B6B', fontSize: '14px', cursor: 'pointer', padding: '4px',
+          }}>
+            Skip intro
+          </button>
         </div>
       </div>
     </div>

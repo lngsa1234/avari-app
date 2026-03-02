@@ -1151,15 +1151,20 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     }}
                   >
                     {/* Main layout: horizontal on desktop, vertical on mobile */}
-                    <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'stretch', gap: '14px' }}>
 
-                      {/* Left: Icon */}
+                      {/* Left: Icon or Image */}
                       <div style={{
                         ...styles.circleEmoji,
-                        background: `linear-gradient(135deg, ${theme.color}22, ${theme.color}44)`,
+                        height: 'auto',
+                        background: group.image_url
+                          ? `url(${group.image_url}) center/cover no-repeat`
+                          : '#5E472F',
                         position: 'relative',
                       }} className="circles-circle-emoji">
-                        {theme.emoji}
+                        {!group.image_url && (
+                          <img src="/tutorial-logo.png" alt="" style={{ width: '110%', height: 'auto', objectFit: 'contain' }} />
+                        )}
                         {sessionCount > 0 && (
                           <div className="sparkline-container" style={{
                             position: 'absolute',
@@ -1312,11 +1317,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       </div>
 
                       {/* Right: Action buttons */}
-                      <div className="circle-card-actions" style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                      <div className="circle-card-actions" style={{ display: 'flex', gap: '6px', flexShrink: 0, alignSelf: 'center' }}>
                         <button
                           style={{
                             ...styles.enterBtn,
-                            padding: '8px 14px',
+                            padding: '7px 14px',
                             fontSize: '12px',
                           }}
                           onClick={() => onNavigate?.('messages', { chatId: group.id, chatType: 'circle' })}
@@ -1326,7 +1331,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         <button
                           style={{
                             ...styles.enterBtn,
-                            padding: '8px 14px',
+                            padding: '7px 14px',
                             fontSize: '12px',
                             backgroundColor: hasUpcoming ? `${theme.color}12` : hasNoActivity ? '#8B6F5C' : `${theme.color}08`,
                             color: hasNoActivity ? 'white' : '#6B5344',
@@ -2385,14 +2390,14 @@ const styles = {
     transition: 'all 0.3s ease',
   },
   circleEmoji: {
-    width: '44px',
-    height: '44px',
-    borderRadius: '12px',
+    width: '64px',
+    minHeight: '64px',
+    borderRadius: '14px',
     background: 'linear-gradient(135deg, rgba(139, 111, 92, 0.15), rgba(139, 111, 92, 0.25))',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '20px',
+    fontSize: '24px',
     flexShrink: 0,
   },
   circleInfo: {

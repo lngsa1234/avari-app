@@ -1525,7 +1525,7 @@ export default function NetworkDiscoverView({
                     color: '#3D2B1F',
                     lineHeight: 1.35,
                     margin: '0 0 16px 0',
-                    fontFamily: fonts.sans,
+                    fontFamily: fonts.serif,
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
                     WebkitBoxOrient: 'vertical',
@@ -1870,7 +1870,7 @@ export default function NetworkDiscoverView({
                   : 'Connect & grow together');
 
                 const cardWidth = isMobile ? 200 : 230;
-                const collapsedHeight = isMobile ? 220 : 250;
+                const collapsedHeight = isMobile ? 140 : 160;
                 return (
                   <div
                     key={circle.id}
@@ -1896,12 +1896,21 @@ export default function NetworkDiscoverView({
                       width: '100%',
                       height: `${collapsedHeight}px`,
                     }}>
-                      {/* Gradient background */}
+                      {/* Image or default logo background */}
                       <div style={{
                         position: 'absolute',
                         inset: 0,
-                        background: circleGradients[index % circleGradients.length],
-                      }} />
+                        background: circle.image_url
+                          ? `url(${circle.image_url}) center/cover no-repeat`
+                          : '#5E472F',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        {!circle.image_url && (
+                          <img src="/tutorial-logo.png" alt="" style={{ width: '40%', height: 'auto', objectFit: 'contain' }} />
+                        )}
+                      </div>
 
                       {/* Top-left: Open/Invite Only pill */}
                       <span style={{
@@ -1921,30 +1930,6 @@ export default function NetworkDiscoverView({
                       }}>
                         {isInviteOnly ? 'Invite Only' : 'Open'}
                       </span>
-
-                      {/* Recommendation reason badge */}
-                      {circle._scoring?.reason && (
-                        <span style={{
-                          position: 'absolute',
-                          top: '10px',
-                          left: isInviteOnly ? '100px' : '68px',
-                          padding: '3px 10px',
-                          borderRadius: '999px',
-                          fontSize: isMobile ? '9px' : '10px',
-                          fontWeight: '600',
-                          backgroundColor: 'rgba(255,255,255,0.22)',
-                          backdropFilter: 'blur(4px)',
-                          WebkitBackdropFilter: 'blur(4px)',
-                          color: 'white',
-                          zIndex: 2,
-                          maxWidth: '130px',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {circle._scoring.reason}
-                        </span>
-                      )}
 
                       {/* Top-right: member count */}
                       <span style={{
@@ -2014,36 +1999,6 @@ export default function NetworkDiscoverView({
                         }}>
                           {description}
                         </p>
-
-                        {/* Connection social proof */}
-                        {(() => {
-                          const connInCircle = (circle.members || []).filter(m => connectionIds.has(m.user_id));
-                          if (connInCircle.length === 0) return null;
-                          const names = connInCircle.map(m => m.user?.name?.split(' ')[0]).filter(Boolean);
-                          const text = names.length === 1
-                            ? `${names[0]} is here`
-                            : `${names.length} of your connections are here`;
-                          return (
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              padding: '6px 10px',
-                              borderRadius: '8px',
-                              backgroundColor: `${colors.primary}12`,
-                              marginBottom: '10px',
-                            }}>
-                              <UserPlus size={13} style={{ color: colors.primary, flexShrink: 0 }} />
-                              <span style={{
-                                fontSize: isMobile ? '11px' : '12px',
-                                fontWeight: '600',
-                                color: colors.primary,
-                              }}>
-                                {text}
-                              </span>
-                            </div>
-                          );
-                        })()}
 
                         {/* Avatar stack + spots */}
                         <div style={{

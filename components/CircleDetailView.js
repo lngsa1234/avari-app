@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Trash2, Check, UserPlus, Plus, FileText } from 'lucide-react';
+import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Trash2, Check, UserPlus, Plus, FileText, Camera } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 import {
   getOrCreateCircleMeetups,
@@ -112,6 +112,7 @@ export default function CircleDetailView({
   const [invitableConnections, setInvitableConnections] = useState([]);
   const [selectedInvites, setSelectedInvites] = useState([]);
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -614,6 +615,41 @@ export default function CircleDetailView({
     }
   };
 
+  // Handle circle cover photo upload
+  async function handleCirclePhotoUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { alert('Please select an image file'); return; }
+    if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); return; }
+
+    setUploadingPhoto(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `profile-photos/${currentUser.id}-circle-${circleId}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      const { error: updateError } = await supabase
+        .from('connection_groups')
+        .update({ image_url: publicUrl })
+        .eq('id', circleId);
+      if (updateError) throw updateError;
+
+      setCircle(prev => ({ ...prev, image_url: publicUrl }));
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Failed to upload photo: ' + err.message);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   // Get visual elements based on circle index
   const circleIndex = circle?.name?.charCodeAt(0) % 8 || 0;
   const emoji = CIRCLE_EMOJIS[circleIndex];
@@ -649,22 +685,49 @@ export default function CircleDetailView({
 
   return (
     <div style={styles.container}>
-      {/* Header with gradient */}
-      <div style={{ ...styles.header, background: gradient }}>
+      {/* Header with gradient or image */}
+      <div style={{
+        ...styles.header,
+        background: circle.image_url
+          ? `url(${circle.image_url}) center/cover no-repeat`
+          : gradient,
+      }}>
         <button
           style={styles.backButton}
           onClick={() => onNavigate?.(previousView || 'allCircles')}
         >
-          <ChevronLeft size={24} color={colors.text} />
+          <ChevronLeft size={24} color={circle.image_url ? '#fff' : colors.text} />
         </button>
 
+        {isHost && (
+          <label style={{
+            position: 'absolute', top: '16px', right: '16px',
+            width: '40px', height: '40px', borderRadius: '50%',
+            backgroundColor: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', zIndex: 2,
+          }}>
+            {uploadingPhoto ? (
+              <div style={{ width: '20px', height: '20px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <Camera size={20} color="#fff" />
+            )}
+            <input type="file" accept="image/*" onChange={handleCirclePhotoUpload} style={{ display: 'none' }} />
+          </label>
+        )}
+
         <div style={styles.headerContent}>
-          <div style={styles.emojiContainer}>
-            <span style={styles.emoji}>{emoji}</span>
-          </div>
+          {!circle.image_url && (
+            <div style={styles.emojiContainer}>
+              <span style={styles.emoji}>{emoji}</span>
+            </div>
+          )}
 
           {categoryInfo && (
-            <span style={styles.categoryBadge}>
+            <span style={{
+              ...styles.categoryBadge,
+              ...(circle.image_url ? { backgroundColor: 'rgba(0,0,0,0.4)', color: '#fff' } : {}),
+            }}>
               {categoryInfo.emoji} {categoryInfo.label}
             </span>
           )}
