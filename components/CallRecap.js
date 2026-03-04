@@ -247,9 +247,13 @@ export default function CallRecap({
 
     if (data.topicsDiscussed && data.topicsDiscussed.length > 0) {
       summary += '\nTopics Discussed:\n';
-      data.topicsDiscussed.forEach(t => {
+      data.topicsDiscussed.forEach((t, idx) => {
         const topic = typeof t === 'string' ? t : (t.topic || t);
-        summary += `• ${topic}\n`;
+        summary += `${idx + 1}. ${topic}\n`;
+        const details = Array.isArray(t.details) ? t.details : [];
+        details.forEach(d => {
+          summary += `   - ${d}\n`;
+        });
       });
     }
 
@@ -499,15 +503,29 @@ export default function CallRecap({
                     <span className="text-xl">&#128172;</span>
                     <p className="text-gray-400 text-sm">Topics Discussed</p>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {topicsDiscussed.map((topic, index) => (
-                      <span
-                        key={index}
-                        className="bg-purple-600/30 text-purple-300 px-3 py-1.5 rounded-full text-sm"
-                      >
-                        {topic}
-                      </span>
-                    ))}
+                  <div className="space-y-3">
+                    {topicsDiscussed.map((topic, index) => {
+                      const topicName = typeof topic === 'string' ? topic : (topic.topic || topic);
+                      const details = (typeof topic === 'object' && Array.isArray(topic.details)) ? topic.details : [];
+                      return (
+                        <div key={index}>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-purple-400 font-semibold text-sm">{index + 1}.</span>
+                            <span className="text-white text-sm font-medium">{topicName}</span>
+                          </div>
+                          {details.length > 0 && (
+                            <div className="ml-5 mt-1 space-y-1">
+                              {details.map((detail, di) => (
+                                <div key={di} className="flex items-start gap-2">
+                                  <span className="text-purple-400/60 mt-1">-</span>
+                                  <span className="text-gray-300 text-sm">{detail}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

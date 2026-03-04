@@ -262,12 +262,24 @@ export default function PostMeetingSummary({
               <MessageCircle size={18} color={colors.textMuted} />
               Topics Discussed
             </h2>
-            <div style={styles.topicsList}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {summary.topicsDiscussed.map((topic, index) => (
-                <span key={index} style={styles.topicTag}>
-                  {topic.topic}
-                  <span style={styles.topicCount}>{topic.mentions}</span>
-                </span>
+                <div key={index}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ color: colors.primary, fontWeight: '600', fontSize: '14px', flexShrink: 0 }}>{index + 1}.</span>
+                    <span style={{ fontSize: '14px', color: colors.text, fontWeight: '500' }}>{topic.topic}</span>
+                  </div>
+                  {topic.details && topic.details.length > 0 && (
+                    <div style={{ marginLeft: '22px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      {topic.details.map((detail, di) => (
+                        <div key={di} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                          <span style={{ color: colors.textMuted, marginTop: '1px' }}>-</span>
+                          <span style={{ fontSize: '13px', color: colors.textMuted, lineHeight: '1.4' }}>{detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </div>

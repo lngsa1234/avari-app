@@ -73,7 +73,11 @@ function parseAISummary(summary) {
       summary: parsed.summary || '',
       sentiment: parsed.sentiment || null,
       keyTakeaways: (parsed.keyTakeaways || []).map(t => typeof t === 'string' ? t : t.text || ''),
-      topicsDiscussed: parsed.topicsDiscussed || [],
+      topicsDiscussed: (parsed.topicsDiscussed || []).map(t => ({
+        topic: typeof t === 'string' ? t : (t.topic || ''),
+        details: Array.isArray(t.details) ? t.details.slice(0, 2) : [],
+        mentions: t.mentions || 1,
+      })),
       memorableQuotes: parsed.memorableQuotes || [],
       actionItems: (parsed.actionItems || []).map(a => typeof a === 'string' ? a : a.text || ''),
       suggestedFollowUps: parsed.suggestedFollowUps || [],
@@ -83,11 +87,14 @@ function parseAISummary(summary) {
   }
 
   const result = { ...emptyResult };
-  const lines = summary.split('\n').filter(l => l.trim());
+  const lines = summary.split('\n');
   let currentSection = 'summary';
 
   for (const line of lines) {
-    const lowerLine = line.toLowerCase();
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const lowerLine = trimmed.toLowerCase();
     if (lowerLine.includes('key takeaway') || lowerLine.includes('takeaways:') || lowerLine.includes('highlights:')) {
       currentSection = 'takeaways'; continue;
     }
@@ -101,7 +108,19 @@ function parseAISummary(summary) {
       currentSection = 'quotes'; continue;
     }
 
-    const cleanLine = line.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '').trim();
+    // Detect indented detail bullets for topics (e.g. "   - Detail text")
+    if (currentSection === 'topics' && /^\s{2,}-\s/.test(line)) {
+      const detailText = line.replace(/^\s*-\s*/, '').trim();
+      if (detailText && result.topicsDiscussed.length > 0) {
+        const lastTopic = result.topicsDiscussed[result.topicsDiscussed.length - 1];
+        if (lastTopic.details.length < 2) {
+          lastTopic.details.push(detailText);
+        }
+      }
+      continue;
+    }
+
+    const cleanLine = trimmed.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '').trim();
     if (cleanLine) {
       if (currentSection === 'summary') {
         result.summary += (result.summary ? ' ' : '') + cleanLine;
@@ -110,7 +129,7 @@ function parseAISummary(summary) {
       } else if (currentSection === 'actions' && cleanLine.length > 5) {
         result.actionItems.push(cleanLine);
       } else if (currentSection === 'topics' && cleanLine.length > 3) {
-        result.topicsDiscussed.push({ topic: cleanLine, mentions: 1 });
+        result.topicsDiscussed.push({ topic: cleanLine, details: [] });
       } else if (currentSection === 'quotes' && cleanLine.length > 10) {
         result.memorableQuotes.push({ quote: cleanLine, author: '' });
       }
@@ -586,29 +605,24 @@ export default function RecapDetailPage() {
               <MessageSquare size={isMobile ? 14 : 16} style={{ color: '#6B8E7A' }} />
               Topics Discussed
             </h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '10px' : '12px' }}>
               {parsed.topicsDiscussed.map((t, i) => (
-                <span key={i} style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: isMobile ? '5px 10px' : '6px 12px',
-                  backgroundColor: 'rgba(107, 142, 122, 0.1)',
-                  borderRadius: '16px',
-                  fontSize: isMobile ? '12px' : '13px',
-                  color: colors.textLight,
-                }}>
-                  {t.topic || t}
-                  {t.mentions && t.mentions > 1 && (
-                    <span style={{
-                      backgroundColor: '#6B8E7A',
-                      color: 'white',
-                      fontSize: '10px',
-                      padding: '2px 6px',
-                      borderRadius: '10px',
-                    }}>{t.mentions}x</span>
+                <div key={i}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ color: '#6B8E7A', fontWeight: '600', fontSize: isMobile ? '13px' : '14px', flexShrink: 0 }}>{i + 1}.</span>
+                    <span style={{ fontSize: isMobile ? '13px' : '14px', color: colors.textLight, fontWeight: '500' }}>{t.topic || t}</span>
+                  </div>
+                  {t.details && t.details.length > 0 && (
+                    <div style={{ marginLeft: isMobile ? '20px' : '22px', marginTop: '4px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                      {t.details.map((detail, di) => (
+                        <div key={di} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                          <span style={{ color: 'rgba(107, 142, 122, 0.5)', marginTop: '1px' }}>-</span>
+                          <span style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textMuted, lineHeight: '1.4' }}>{detail}</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </span>
+                </div>
               ))}
             </div>
           </div>

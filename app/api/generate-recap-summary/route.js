@@ -116,7 +116,7 @@ Return a JSON object with this structure:
     { "emoji": "💡", "text": "Key point or insight from the discussion" }
   ],
   "topicsDiscussed": [
-    { "topic": "Topic name", "mentions": 1 }
+    { "topic": "Topic name", "details": ["Discussed specific aspect of the topic", "Explored another angle or conclusion"] }
   ],
   "memorableQuotes": [
     { "quote": "Notable quote from transcript", "author": "Speaker Name" }
@@ -130,7 +130,7 @@ Return a JSON object with this structure:
 Guidelines:
 - summary: Provide a warm, natural summary of the conversation. Mention what was discussed and the general vibe.
 - keyTakeaways: Extract actual insights or decisions from the conversation
-- topicsDiscussed: List the main topics that came up
+- topicsDiscussed: List 3-5 topics with exactly 2 bullet-point descriptions each. Each detail should start with a past-tense verb (e.g. "Discussed...", "Explored...", "Identified...", "Shared...")
 - actionItems: Only include if specific action items were mentioned
 - If transcript is minimal (just greetings), keep arrays short but still describe what happened
 
@@ -270,9 +270,10 @@ function normalizeResponse(parsed, participants, duration, meetingTitle) {
     topicsDiscussed: Array.isArray(parsed.topicsDiscussed)
       ? parsed.topicsDiscussed.map(t => ({
           topic: typeof t === 'string' ? t : (t.topic || ''),
+          details: Array.isArray(t.details) ? t.details.slice(0, 2) : [],
           mentions: t.mentions || 1
         }))
-      : [{ topic: 'General conversation', mentions: 1 }],
+      : [{ topic: 'General conversation', details: [], mentions: 1 }],
     memorableQuotes: Array.isArray(parsed.memorableQuotes) ? parsed.memorableQuotes : [],
     actionItems: Array.isArray(parsed.actionItems)
       ? parsed.actionItems.map(a => ({
@@ -361,7 +362,7 @@ function generateSimpleSummary(transcript, messages, participants, duration, mee
   for (const [topic, keywords] of Object.entries(topicKeywords)) {
     const mentions = keywords.filter(k => allText.includes(k)).length;
     if (mentions > 0) {
-      topicsDiscussed.push({ topic, mentions: mentions * 2 });
+      topicsDiscussed.push({ topic, details: [], mentions: mentions * 2 });
     }
   }
 
