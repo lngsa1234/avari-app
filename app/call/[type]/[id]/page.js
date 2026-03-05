@@ -324,7 +324,8 @@ export default function UnifiedCallPage() {
     startListening,
     stopListening,
     restartListening,
-    provider: transcriptionProvider
+    provider: transcriptionProvider,
+    setRemoteSpeaking,
   } = useTranscription({
     onTranscript: handleTranscript,
     language: transcriptionLanguage,
@@ -332,11 +333,13 @@ export default function UnifiedCallPage() {
     interimResults: true
   });
 
-  // Store restartListening and provider in refs so callbacks can access them
+  // Store restartListening, provider, and echo suppression in refs so callbacks can access them
+  const setRemoteSpeakingRef = useRef(null);
   useEffect(() => {
     restartListeningRef.current = restartListening;
     transcriptionProviderRef.current = transcriptionProvider;
-  }, [restartListening, transcriptionProvider]);
+    setRemoteSpeakingRef.current = setRemoteSpeaking;
+  }, [restartListening, transcriptionProvider, setRemoteSpeaking]);
 
   // Calculate derived state
   const showSidebar = showChat || showTopics || showParticipants;
@@ -935,6 +938,10 @@ export default function UnifiedCallPage() {
     });
     client.on('user-left', (remoteUser) => {
       console.log('[Agora] user-left:', remoteUser.uid);
+      // Clear speaking state for echo suppression
+      if (setRemoteSpeakingRef.current) {
+        setRemoteSpeakingRef.current(String(remoteUser.uid), false);
+      }
       updateAgoraParticipants(client);
     });
 
@@ -960,6 +967,20 @@ export default function UnifiedCallPage() {
     if (localVideoRef.current) {
       videoTrack.play(localVideoRef.current);
     }
+
+    // Enable volume indicator for echo suppression — mutes mic→Deepgram when
+    // remote users are speaking to prevent speaker audio from being transcribed
+    client.enableAudioVolumeIndicator();
+    client.on('volume-indicator', (volumes) => {
+      if (!setRemoteSpeakingRef.current) return;
+      for (const { uid, level } of volumes) {
+        const uidStr = String(uid);
+        // Skip local user (uid 0 or our own UID)
+        if (uid === 0 || uidStr === String(agoraUid)) continue;
+        // level > 5 means the remote user is actively speaking
+        setRemoteSpeakingRef.current(uidStr, level > 5);
+      }
+    });
 
     // Pre-load blur processor in background so it's instant when user clicks
     preloadAgoraBlur();

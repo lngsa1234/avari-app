@@ -7,6 +7,10 @@ import { io } from 'socket.io-client';
  * Custom hook for real-time transcription using Deepgram via Socket.IO backend proxy.
  * Audio is captured in the browser and streamed to the backend over Socket.IO,
  * which forwards it to Deepgram and relays transcription results back.
+ *
+ * Supports echo suppression: when remote participants are speaking (e.g. their
+ * audio plays through speakers), the mic gain is muted to prevent garbled echo
+ * from being transcribed as local speech.
  */
 export default function useDeepgramTranscription({
   onTranscript,
@@ -26,6 +30,13 @@ export default function useDeepgramTranscription({
   const reconnectAttemptsRef = useRef(0);
   const isCleaningUpRef = useRef(false);
 
+  // Echo suppression: mic gain node controlled by remote speaking state
+  const micGainRef = useRef(null);
+  // Track which remote users are currently speaking
+  const remoteSpeakingRef = useRef(new Set());
+  // Delay restoring mic gain after remote stops speaking (avoid cutting off overlap)
+  const unmutTimeoutRef = useRef(null);
+
   // Stable refs for callback and options
   const onTranscriptRef = useRef(onTranscript);
   const languageRef = useRef(language);
@@ -35,8 +46,49 @@ export default function useDeepgramTranscription({
   useEffect(() => { languageRef.current = language; }, [language]);
   useEffect(() => { interimResultsRef.current = interimResults; }, [interimResults]);
 
+  /**
+   * Notify that a remote user started speaking (echo suppression).
+   * Mutes mic → Deepgram to prevent transcribing speaker output as local speech.
+   * @param {string} uid - Remote user ID
+   */
+  const setRemoteSpeaking = useCallback((uid, isSpeaking) => {
+    if (isSpeaking) {
+      remoteSpeakingRef.current.add(uid);
+    } else {
+      remoteSpeakingRef.current.delete(uid);
+    }
+
+    if (unmutTimeoutRef.current) {
+      clearTimeout(unmutTimeoutRef.current);
+      unmutTimeoutRef.current = null;
+    }
+
+    const anyRemoteSpeaking = remoteSpeakingRef.current.size > 0;
+
+    if (anyRemoteSpeaking) {
+      // Immediately mute mic when remote starts speaking
+      if (micGainRef.current) {
+        micGainRef.current.gain.value = 0;
+      }
+    } else {
+      // Delay restoring mic to avoid clipping overlap
+      unmutTimeoutRef.current = setTimeout(() => {
+        if (micGainRef.current) {
+          micGainRef.current.gain.value = 1.0;
+        }
+      }, 300);
+    }
+  }, []);
+
   // Clean up audio resources (mic stream, AudioContext, processor)
   const cleanupAudio = useCallback(() => {
+    remoteSpeakingRef.current.clear();
+    if (unmutTimeoutRef.current) {
+      clearTimeout(unmutTimeoutRef.current);
+      unmutTimeoutRef.current = null;
+    }
+    micGainRef.current = null;
+
     if (processorRef.current) {
       try {
         processorRef.current.disconnect();
@@ -137,6 +189,13 @@ export default function useDeepgramTranscription({
     const processor = audioContext.createScriptProcessor(4096, 1, 1);
     processorRef.current = processor;
 
+    // Route mic through a gain node for echo suppression
+    const micGain = audioContext.createGain();
+    micGain.gain.value = 1.0;
+    micGainRef.current = micGain;
+    source.connect(micGain);
+    micGain.connect(processor);
+
     const nativeSampleRate = audioContext.sampleRate;
     const targetSampleRate = 16000;
 
@@ -161,13 +220,13 @@ export default function useDeepgramTranscription({
       }
     };
 
-    source.connect(processor);
     processor.connect(audioContext.destination);
 
     // 3. Connect to Socket.IO backend and start transcription
     const serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'http://localhost:3001';
-    // Use Deepgram's multi-language auto-detection
-    const lang = 'multi';
+    // Map BCP-47 language codes to Deepgram language codes
+    const langMap = { 'en-US': 'en', 'zh-CN': 'zh' };
+    const lang = langMap[languageRef.current] || languageRef.current;
 
     try {
       const socket = io(serverUrl, {
@@ -271,6 +330,10 @@ export default function useDeepgramTranscription({
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (unmutTimeoutRef.current) {
+        clearTimeout(unmutTimeoutRef.current);
+      }
+      remoteSpeakingRef.current.clear();
       if (socketRef.current) {
         try {
           socketRef.current.emit('transcription:stop');
@@ -298,6 +361,7 @@ export default function useDeepgramTranscription({
     startListening,
     stopListening,
     restartListening,
+    setRemoteSpeaking,
   };
 }
 

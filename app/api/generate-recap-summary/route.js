@@ -52,10 +52,9 @@ export async function POST(request) {
     let contentToSummarize = '';
 
     if (transcript && transcript.length > 0) {
-      // Use transcript for richer summary
-      contentToSummarize = transcript
-        .map(t => `${t.speakerName || 'Speaker'}: ${t.text}`)
-        .join('\n');
+      // Clean, deduplicate, and merge transcript entries
+      const cleaned = cleanTranscript(transcript);
+      contentToSummarize = cleaned;
     } else if (messages && messages.length > 0) {
       // Fall back to chat messages
       contentToSummarize = messages
@@ -68,7 +67,10 @@ export async function POST(request) {
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
     console.log('[Generate Recap Summary] Provider check — OpenAI:', !!openaiKey, 'Anthropic:', !!anthropicKey);
-    console.log('[Generate Recap Summary] Content length:', contentToSummarize.length, 'Transcript entries:', transcript?.length, 'Messages:', messages?.length);
+    console.log('[Generate Recap Summary] Content length:', contentToSummarize.length, 'chars. Transcript entries (raw):', transcript?.length, 'Messages:', messages?.length);
+    if (contentToSummarize.length > 200) {
+      console.log('[Generate Recap Summary] Content preview:', contentToSummarize.substring(0, 200), '...');
+    }
 
     let result = generateSimpleSummary(transcript, messages, participantNames, durationMinutes, meetingTitle);
 
@@ -93,6 +95,96 @@ export async function POST(request) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Clean, deduplicate, and merge transcript entries into readable conversation text.
+ * - Removes near-duplicate entries (from auto-finalize + final overlap)
+ * - Merges consecutive entries from the same speaker
+ * - Intelligently truncates very long transcripts (samples beginning, middle, end)
+ */
+function cleanTranscript(transcript) {
+  if (!transcript || transcript.length === 0) return '';
+
+  // Step 1: Sort by timestamp
+  const sorted = [...transcript].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  // Step 2: Remove near-duplicate entries (auto-finalize creates overlapping entries)
+  const deduped = [];
+  for (const entry of sorted) {
+    const text = (entry.text || '').trim();
+    if (!text) continue;
+
+    // Skip if this text is a substring of the previous entry or vice versa
+    const prev = deduped[deduped.length - 1];
+    if (prev) {
+      const prevText = prev.text;
+      if (prevText.includes(text)) continue; // Previous already contains this
+      if (text.includes(prevText) && prev.speakerName === (entry.speakerName || 'Speaker')) {
+        // This entry is a more complete version — replace previous
+        deduped[deduped.length - 1] = { speakerName: entry.speakerName || 'Speaker', text };
+        continue;
+      }
+    }
+    deduped.push({ speakerName: entry.speakerName || 'Speaker', text });
+  }
+
+  // Step 3: Merge consecutive entries from the same speaker
+  const merged = [];
+  for (const entry of deduped) {
+    const prev = merged[merged.length - 1];
+    if (prev && prev.speakerName === entry.speakerName) {
+      prev.text += ' ' + entry.text;
+    } else {
+      merged.push({ ...entry });
+    }
+  }
+
+  // Step 4: Format as conversation
+  const formatted = merged.map(e => `${e.speakerName}: ${e.text}`);
+
+  // Step 5: Truncate if too long (target ~12,000 chars to stay well within context limits)
+  const MAX_CHARS = 12000;
+  const full = formatted.join('\n');
+  if (full.length <= MAX_CHARS) return full;
+
+  // Sample from beginning, middle, and end to preserve conversation arc
+  const sectionSize = Math.floor(MAX_CHARS / 3);
+  const beginning = [];
+  const middle = [];
+  const end = [];
+
+  let charCount = 0;
+  const midStart = Math.floor(formatted.length * 0.35);
+  const endStart = Math.floor(formatted.length * 0.75);
+
+  // Beginning section
+  for (let i = 0; i < midStart && charCount < sectionSize; i++) {
+    beginning.push(formatted[i]);
+    charCount += formatted[i].length + 1;
+  }
+
+  // Middle section
+  charCount = 0;
+  for (let i = midStart; i < endStart && charCount < sectionSize; i++) {
+    middle.push(formatted[i]);
+    charCount += formatted[i].length + 1;
+  }
+
+  // End section
+  charCount = 0;
+  for (let i = endStart; i < formatted.length && charCount < sectionSize; i++) {
+    end.push(formatted[i]);
+    charCount += formatted[i].length + 1;
+  }
+
+  return [
+    ...beginning,
+    '\n[... earlier part of conversation ...]\n',
+    ...middle,
+    '\n[... later part of conversation ...]\n',
+    ...end,
+  ].join('\n');
 }
 
 const ENHANCED_SYSTEM_PROMPT = `You are a helpful assistant that summarizes video call transcripts. The transcript may be in any language (English, Chinese, etc.) and may contain speech recognition errors — do your best to understand the intent.
@@ -156,10 +248,10 @@ async function generateWithOpenAI(apiKey, content, participants, duration, meeti
           },
           {
             role: 'user',
-            content: `Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}:\n\n${content}`
+            content: `Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}.\n\nNote: The transcript may be sampled from a longer conversation (beginning, middle, and end sections). Sections marked with "[...]" indicate omitted portions. Synthesize across all sections for a complete summary.\n\nTranscript:\n${content}`
           }
         ],
-        max_tokens: 1500,
+        max_tokens: 2000,
         temperature: 0.7
       })
     });
@@ -204,14 +296,17 @@ async function generateWithAnthropic(apiKey, content, participants, duration, me
       },
       body: JSON.stringify({
         model: 'claude-3-haiku-20240307',
-        max_tokens: 1500,
+        max_tokens: 2000,
         messages: [
           {
             role: 'user',
             content: `${ENHANCED_SYSTEM_PROMPT}
 
-Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}:
+Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}.
 
+Note: The transcript may be sampled from a longer conversation (beginning, middle, and end sections). Sections marked with "[...]" indicate omitted portions. Synthesize across all sections for a complete summary.
+
+Transcript:
 ${content}`
           }
         ]
