@@ -134,17 +134,10 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const handleRemoveConnection = async () => {
     setRemoving(true);
     try {
-      await supabase
-        .from('user_interests')
-        .delete()
-        .eq('user_id', currentUser.id)
-        .eq('interested_in_user_id', userId);
+      const { error } = await supabase
+        .rpc('remove_mutual_connection', { other_user_id: userId });
 
-      await supabase
-        .from('user_interests')
-        .delete()
-        .eq('user_id', userId)
-        .eq('interested_in_user_id', currentUser.id);
+      if (error) throw error;
 
       setIsConnected(false);
       setShowConfirm(false);

@@ -49,7 +49,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   // Unread DM counts per sender
   const [unreadCounts, setUnreadCounts] = useState({});
 
-  // Update connections when prop changes
+  // Update connections when prop changes (only if prop has more data than local state)
   useEffect(() => {
     if (connectionsProp && connectionsProp.length > 0) {
       const connectionsWithStatus = connectionsProp.map(conn => {
@@ -69,9 +69,40 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           status: userIsActive ? 'online' : 'away'
         };
       });
-      setConnections(connectionsWithStatus);
+      setConnections(prev => connectionsWithStatus.length >= prev.length ? connectionsWithStatus : prev);
     }
   }, [connectionsProp]);
+
+  // Load connections directly from DB (avoids stale prop from MainApp)
+  const loadConnectionsDirect = async () => {
+    try {
+      const { data: matches, error } = await supabase
+        .rpc('get_mutual_matches', { for_user_id: currentUser.id });
+      if (error || !matches || matches.length === 0) return;
+
+      const matchedUserIds = matches.map(m => m.matched_user_id);
+      const { data: profiles, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, name, career, city, state, profile_picture, last_active')
+        .in('id', matchedUserIds);
+      if (profileError || !profiles) return;
+
+      const connectionsWithStatus = profiles.map(user => ({
+        id: user.id,
+        userId: user.id,
+        name: user.name || 'Unknown',
+        avatar: user.profile_picture,
+        career: user.career || '',
+        city: user.city,
+        state: user.state,
+        last_active: user.last_active,
+        status: isUserActive(user.last_active, 10) ? 'online' : 'away',
+      }));
+      setConnections(connectionsWithStatus);
+    } catch (err) {
+      console.error('Error loading connections directly:', err);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -182,7 +213,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       loadGroupInvites(),
       loadPeerSuggestions(),
       loadSentRequests(),
-      loadUnreadCounts()
+      loadUnreadCounts(),
+      loadConnectionsDirect(),
     ]);
     setLoading(false);
   };
@@ -192,7 +224,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       // Parallel: fetch profiles, my matches, and my interests at the same time
       const connectedIds = new Set((connectionsProp || []).map(c => (c.connected_user || c).id));
 
-      const [profilesResult, mutualResult, interestsResult] = await Promise.all([
+      const [profilesResult, mutualResult, interestsResult, incomingInterestsResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
@@ -205,6 +237,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           .from('user_interests')
           .select('interested_in_user_id')
           .eq('user_id', currentUser.id),
+        supabase
+          .from('user_interests')
+          .select('user_id')
+          .eq('interested_in_user_id', currentUser.id),
       ]);
 
       if (profilesResult.error) {
@@ -214,10 +250,18 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
       const myMatchIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
       const myInterestIds = new Set((interestsResult.data || []).map(i => i.interested_in_user_id));
+      const interestedInMeIds = new Set((incomingInterestsResult.data || []).map(i => i.user_id));
 
       const suggestions = (profilesResult.data || []).filter(u =>
         !connectedIds.has(u.id) && !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
       );
+
+      // Prioritize people who expressed interest in the current user
+      suggestions.sort((a, b) => {
+        const aInterested = interestedInMeIds.has(a.id) ? 1 : 0;
+        const bInterested = interestedInMeIds.has(b.id) ? 1 : 0;
+        return bInterested - aInterested;
+      });
 
       // Only enrich the final 4 we'll actually show
       const finalSuggestions = suggestions.slice(0, 4);
@@ -351,18 +395,41 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           interested_in_user_id: personId,
         });
       if (error && !error.message?.includes('duplicate')) throw error;
-      // Add to pending requests list
-      const person = peerSuggestions.find(p => p.id === personId);
-      if (person) {
-        setSentRequestProfiles(prev => [{
-          id: person.id,
-          name: person.name,
-          career: person.career,
-          city: person.city,
-          state: person.state,
-          profile_picture: person.profile_picture,
-          requested_at: new Date().toISOString(),
-        }, ...prev]);
+
+      // Check if this creates a mutual match
+      const { data: isMutual } = await supabase
+        .rpc('check_mutual_interest', { user_a: currentUser.id, user_b: personId });
+
+      if (isMutual) {
+        // Mutual match: add to connections and remove from suggestions
+        const person = peerSuggestions.find(p => p.id === personId);
+        if (person) {
+          setConnections(prev => [...prev, {
+            id: person.id,
+            userId: person.id,
+            name: person.name,
+            avatar: person.profile_picture,
+            career: person.career || '',
+            city: person.city,
+            state: person.state,
+            status: 'away',
+          }]);
+          setPeerSuggestions(prev => prev.filter(p => p.id !== personId));
+        }
+      } else {
+        // Add to pending requests list
+        const person = peerSuggestions.find(p => p.id === personId);
+        if (person) {
+          setSentRequestProfiles(prev => [{
+            id: person.id,
+            name: person.name,
+            career: person.career,
+            city: person.city,
+            state: person.state,
+            profile_picture: person.profile_picture,
+            requested_at: new Date().toISOString(),
+          }, ...prev]);
+        }
       }
     } catch (error) {
       console.error('Error sending connection request:', error);
