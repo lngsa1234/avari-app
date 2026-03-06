@@ -10,6 +10,7 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
   const [showCompose, setShowCompose] = useState(false);
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const initialChatHandled = useRef(false);
 
   // Mark messages as read when opening a chat
   const markMessagesAsRead = useCallback(async (conversation) => {
@@ -46,16 +47,46 @@ export default function MessagesPageView({ currentUser, supabase, onNavigate, in
 
   // Handle initial chat selection (when navigating from another page)
   useEffect(() => {
-    if (initialChatId && conversations.length > 0) {
-      const chat = conversations.find(c =>
-        (initialChatType === 'circle' && c.isGroup && c.circleId === initialChatId) ||
-        (initialChatType === 'user' && !c.isGroup && c.oderId === initialChatId)
-      );
-      if (chat) {
-        handleSelectChat(chat);
-      }
+    if (!initialChatId || initialChatHandled.current || loading) return;
+
+    const chat = conversations.find(c =>
+      (initialChatType === 'circle' && c.isGroup && c.circleId === initialChatId) ||
+      (initialChatType === 'user' && !c.isGroup && c.oderId === initialChatId)
+    );
+    if (chat) {
+      initialChatHandled.current = true;
+      handleSelectChat(chat);
+    } else if (initialChatType === 'user') {
+      // No existing conversation — create a placeholder so the chat window opens
+      initialChatHandled.current = true;
+      (async () => {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, name, profile_picture, career')
+          .eq('id', initialChatId)
+          .single();
+        if (!profile) return;
+        const placeholder = {
+          id: `user-${profile.id}`,
+          oderId: profile.id,
+          name: profile.name || 'Unknown',
+          emoji: getInitialEmoji(profile.name),
+          avatar: profile.profile_picture,
+          subtitle: profile.career || '',
+          bg: 'bg-[#E6DCD4]',
+          isGroup: false,
+          lastMessage: null,
+          unread: 0,
+          messages: [],
+        };
+        setConversations(prev => {
+          if (prev.some(c => c.oderId === profile.id)) return prev;
+          return [placeholder, ...prev];
+        });
+        setActiveChat(placeholder);
+      })();
     }
-  }, [initialChatId, initialChatType, conversations]);
+  }, [initialChatId, initialChatType, conversations, loading]);
 
   const loadConversations = async () => {
     setLoading(true);
