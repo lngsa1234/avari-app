@@ -93,6 +93,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           recipient_id,
           status,
           scheduled_time,
+          topic,
           notes,
           room_url,
           created_at
@@ -424,7 +425,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             type: 'coffee',
             with: profile?.name || 'Unknown',
             withProfile: profile,
-            title: `☕ Coffee with ${profile?.name || 'Unknown'}`,
+            title: chat.topic ? `${chat.topic} — with ${profile?.name || 'Unknown'}` : `☕ Coffee with ${profile?.name || 'Unknown'}`,
             emoji: '☕',
             date: formatDate(chat.scheduled_time || chat.created_at),
             rawDate: new Date(chat.scheduled_time || chat.created_at),
@@ -979,7 +980,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                 const cardWeekday = isToday ? 'TODAY' : isTomorrow ? 'TMRW' : item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
 
                 const isCoffee = item.type === 'coffee';
-                const title = isCoffee ? `Coffee Chat with ${item.with}` : (item.title || 'Community Event');
+                const title = isCoffee ? (item.topic ? `${item.topic} — with ${item.with}` : `Coffee Chat with ${item.with}`) : (item.title || 'Community Event');
                 const time = item.time && item.time !== 'TBD' ? item.time : null;
 
                 // Attendee avatars for group events

@@ -2086,7 +2086,7 @@ function MainApp({ currentUser, onSignOut }) {
           id: chat.id,
           date: dateStr,
           time: timeStr,
-          topic: `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
+          topic: chat.topic ? `${chat.topic} — with ${otherPerson?.name || 'Someone'}` : `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
           location: null,
           duration: 30,
           participant_limit: 2,

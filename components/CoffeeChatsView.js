@@ -27,6 +27,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
   const [scheduledTime, setScheduledTime] = useState('');
   const [scheduledDate, setScheduledDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [topic, setTopic] = useState('');
 
   useEffect(() => {
     loadCoffeeChats();
@@ -140,6 +141,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
       const data = await requestCoffeeChat(supabase, {
         recipientId: selectedConnection.connected_user_id || selectedConnection.id,
         scheduledTime: dateTime,
+        topic: topic,
         notes: notes
       });
 
@@ -150,6 +152,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
       setShowScheduleModal(false);
       setScheduledDate('');
       setScheduledTime('');
+      setTopic('');
       setNotes('');
       loadCoffeeChats();
       loadSentRequests();
@@ -482,7 +485,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
                           fontFamily: '"Lora", serif', fontSize: '20px', fontWeight: '600',
                           color: '#523C2E', margin: 0, lineHeight: '20px', letterSpacing: '0.15px',
                         }}>
-                          {chat.topic || `Coffee Chat with ${partner.name}`}
+                          {chat.topic ? `${chat.topic} — with ${partner.name}` : `Coffee Chat with ${partner.name}`}
                         </h4>
 
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
@@ -727,6 +730,19 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Topic *
+                </label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g., Career advice, Catch up, Marketing strategies"
+                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Date *
                 </label>
                 <input
@@ -772,7 +788,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
               </button>
               <button
                 onClick={handleSubmitRequest}
-                disabled={!scheduledDate || !scheduledTime}
+                disabled={!scheduledDate || !scheduledTime || !topic.trim()}
                 className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-medium py-2 rounded-lg transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
                 Send Request
