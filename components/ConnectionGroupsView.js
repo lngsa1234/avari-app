@@ -49,31 +49,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   // Unread DM counts per sender
   const [unreadCounts, setUnreadCounts] = useState({});
 
-  // Update connections when prop changes (only if prop has more data than local state)
-  useEffect(() => {
-    if (connectionsProp && connectionsProp.length > 0) {
-      const connectionsWithStatus = connectionsProp.map(conn => {
-        // MainApp.js structure: { id, connected_user: { id, name, career, city, state, bio, last_active }, matched_at }
-        const user = conn.connected_user || conn;
-        const userIsActive = isUserActive(user.last_active, 10); // Active in last 10 minutes
-
-        return {
-          id: conn.id || user.id,
-          userId: user.id,
-          name: user.name || 'Unknown',
-          avatar: user.profile_picture,
-          career: user.career || '',
-          city: user.city,
-          state: user.state,
-          last_active: user.last_active,
-          status: userIsActive ? 'online' : 'away'
-        };
-      });
-      setConnections(prev => connectionsWithStatus.length >= prev.length ? connectionsWithStatus : prev);
-    }
-  }, [connectionsProp]);
-
-  // Load connections directly from DB (avoids stale prop from MainApp)
+  // Load connections directly from DB (single source of truth)
   const loadConnectionsDirect = async () => {
     try {
       const { data: matches, error } = await supabase
@@ -221,9 +197,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   const loadPeerSuggestions = async () => {
     try {
-      // Parallel: fetch profiles, my matches, and my interests at the same time
-      const connectedIds = new Set((connectionsProp || []).map(c => (c.connected_user || c).id));
-
       const [profilesResult, mutualResult, interestsResult, incomingInterestsResult] = await Promise.all([
         supabase
           .from('profiles')
@@ -253,7 +226,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       const interestedInMeIds = new Set((incomingInterestsResult.data || []).map(i => i.user_id));
 
       const suggestions = (profilesResult.data || []).filter(u =>
-        !connectedIds.has(u.id) && !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
+        !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
       );
 
       // Prioritize people who expressed interest in the current user
@@ -327,8 +300,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   const loadSentRequests = async () => {
     try {
-      const connectedIds = new Set((connectionsProp || []).map(c => (c.connected_user || c).id));
-
       const [interestsResult, mutualResult] = await Promise.all([
         supabase
           .from('user_interests')
@@ -345,9 +316,9 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
       const mutualIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
 
-      // Pending = I sent interest but they haven't matched back, and not already connected
+      // Pending = I sent interest but they haven't matched back
       const pendingInterests = (interestsResult.data || []).filter(i =>
-        !mutualIds.has(i.interested_in_user_id) && !connectedIds.has(i.interested_in_user_id)
+        !mutualIds.has(i.interested_in_user_id)
       );
 
       if (pendingInterests.length === 0) {
