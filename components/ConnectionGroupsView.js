@@ -790,21 +790,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 <span style={styles.pulsingDot}></span>
                 {onlineCount} online
               </span>
-              <button
-                onClick={() => onNavigate?.('allPeople')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  background: 'none',
-                  border: 'none',
-                  color: '#8B6F5C',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                }}>
-                See all <ChevronRight size={14} />
-              </button>
             </div>
           </div>
 
@@ -1014,9 +999,21 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   <h2 style={styles.cardTitle}>
                     Recommend to Connect
                   </h2>
-                  <span style={{ fontSize: '12px', color: '#A89080' }}>
-                    From events & circles
-                  </span>
+                  <button
+                    onClick={() => onNavigate?.('allPeople')}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      background: 'none',
+                      border: 'none',
+                      color: '#8B6F5C',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                    }}>
+                    See all <ChevronRight size={14} />
+                  </button>
                 </div>
 
                 <div style={{

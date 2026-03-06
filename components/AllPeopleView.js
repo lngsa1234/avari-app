@@ -606,6 +606,7 @@ export default function AllPeopleView({
             setConnectionRequested(false);
           }}
           onRequestConnect={() => handleRequestConnect(selectedPerson.id)}
+          onNavigate={onNavigate}
         />
       )}
 
@@ -861,7 +862,7 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
   );
 }
 
-function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, onClose, onRequestConnect }) {
+function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, onClose, onRequestConnect, onNavigate }) {
   const getInitials = (name) => {
     if (!name) return '?';
     return name.charAt(0).toUpperCase();
@@ -1146,28 +1147,53 @@ function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, 
 
           {/* Action Buttons */}
           <div style={{ marginBottom: '16px' }}>
-            <button
-              onClick={onRequestConnect}
-              style={{
-                width: '100%',
-                padding: '14px',
-                backgroundColor: colors.primary,
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                marginBottom: '10px',
-              }}
-            >
-              <MessageCircle size={18} />
-              Request to Connect
-            </button>
+            {person.isConnected ? (
+              <button
+                onClick={() => { onClose(); onNavigate?.('userProfile', { userId: person.id }); }}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  backgroundColor: colors.primary,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginBottom: '10px',
+                }}
+              >
+                <MessageCircle size={18} />
+                View Profile
+              </button>
+            ) : (
+              <button
+                onClick={onRequestConnect}
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  backgroundColor: colors.primary,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginBottom: '10px',
+                }}
+              >
+                <MessageCircle size={18} />
+                Request to Connect
+              </button>
+            )}
 
             <button
               onClick={() => {}}
