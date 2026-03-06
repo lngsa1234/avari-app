@@ -682,13 +682,24 @@ export default function UnifiedCallPage() {
       localVideoRef.current.srcObject = stream;
     }
 
-    // Setup peer connection
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ]
-    });
+    // Setup peer connection with STUN + TURN servers
+    const iceServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ];
+    const turnUser = process.env.NEXT_PUBLIC_TURN_USERNAME;
+    const turnCred = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+    if (turnUser && turnCred) {
+      iceServers.push(
+        { urls: 'stun:stun.relay.metered.ca:80' },
+        { urls: 'turn:global.relay.metered.ca:80', username: turnUser, credential: turnCred },
+        { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: turnUser, credential: turnCred },
+        { urls: 'turn:global.relay.metered.ca:443', username: turnUser, credential: turnCred },
+        { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: turnUser, credential: turnCred },
+      );
+      console.log('[WebRTC] TURN servers configured');
+    }
+    const pc = new RTCPeerConnection({ iceServers });
     peerConnectionRef.current = pc;
 
     stream.getTracks().forEach(track => {
@@ -1144,6 +1155,8 @@ export default function UnifiedCallPage() {
           const offerCollision = pc.signalingState !== 'stable';
           if (offerCollision && !isPolite) {
             console.log('[WebRTC] Impolite peer ignoring colliding offer');
+            // Clear queued ICE candidates — they belong to the ignored offer's SDP session
+            iceCandidateQueueRef.current = [];
             return;
           }
           if (offerCollision) {
