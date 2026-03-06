@@ -1026,6 +1026,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   {peerSuggestions.map((person) => (
                     <div
                       key={person.id}
+                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
                       style={{
                         minWidth: '220px',
                         background: 'linear-gradient(160deg, #3E2C1E 0%, #5C4033 50%, #7A5C42 100%)',
@@ -1033,6 +1034,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         padding: '16px',
                         boxShadow: '0 4px 16px rgba(139, 94, 60, 0.2)',
                         flexShrink: 0,
+                        cursor: 'pointer',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
