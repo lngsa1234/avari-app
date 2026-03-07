@@ -133,6 +133,8 @@ export default function UnifiedCallPage() {
   const roomRef = useRef(null); // LiveKit room
   const peerConnectionRef = useRef(null); // WebRTC
   const iceCandidateQueueRef = useRef([]); // Buffer ICE candidates until remote description is set
+  const qualityMonitorRef = useRef(null); // Adaptive bitrate stats interval
+  const prevStatsRef = useRef(null); // Previous stats snapshot for delta calculation
   const realtimeChannelRef = useRef(null); // Supabase channel
   const agoraClientRef = useRef(null); // Agora client (camera/audio)
   const agoraScreenClientRef = useRef(null); // Agora screen share client (separate to allow simultaneous camera+screen)
@@ -673,7 +675,7 @@ export default function UnifiedCallPage() {
   // WebRTC initialization (1:1 calls)
   const initializeWebRTCCall = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 1280, height: 720 },
+      video: { width: { ideal: 1280, max: 1280 }, height: { ideal: 720, max: 720 }, frameRate: { ideal: 24, max: 30 } },
       audio: { echoCancellation: true, noiseSuppression: true }
     });
 
@@ -703,7 +705,19 @@ export default function UnifiedCallPage() {
     peerConnectionRef.current = pc;
 
     stream.getTracks().forEach(track => {
-      pc.addTrack(track, stream);
+      const sender = pc.addTrack(track, stream);
+      if (track.kind === 'video') {
+        track.contentHint = 'motion';
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) {
+          params.encodings = [{}];
+        }
+        params.encodings[0].maxBitrate = 1_500_000;
+        params.encodings[0].maxFramerate = 24;
+        // Let browser reduce resolution (not framerate) when bandwidth is low
+        params.degradationPreference = 'maintain-framerate';
+        sender.setParameters(params).catch(e => console.warn('[WebRTC] Could not set video params:', e.message));
+      }
     });
 
     // Collect remote tracks — ontrack fires once per track (audio + video)
@@ -746,6 +760,21 @@ export default function UnifiedCallPage() {
           isDisconnected: false,
           _lastUpdate: Date.now(),
         })));
+        // Log connection type (relay vs direct) and start quality monitor
+        pc.getStats().then(stats => {
+          stats.forEach(report => {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+              const localId = report.localCandidateId;
+              const remoteId = report.remoteCandidateId;
+              stats.forEach(s => {
+                if (s.id === localId) console.log('[WebRTC] Local candidate:', s.candidateType, s.protocol, s.address);
+                if (s.id === remoteId) console.log('[WebRTC] Remote candidate:', s.candidateType, s.protocol, s.address);
+              });
+              console.log('[WebRTC] Round-trip time:', report.currentRoundTripTime, 's');
+            }
+          });
+        });
+        startQualityMonitor(pc);
       }
     };
 
@@ -1131,6 +1160,79 @@ export default function UnifiedCallPage() {
     setRemoteParticipants(participants);
     setRemoteScreenTrack(foundScreenTrack);
     setScreenSharerName(foundScreenSharerName);
+  };
+
+  // Adaptive bitrate quality monitor — adjusts video encoding based on network stats
+  const qualityTiers = [
+    { label: 'high',   maxBitrate: 1_500_000, scaleDown: 1,   minRtt: 0,    maxRtt: 0.15, maxLoss: 2  },
+    { label: 'medium', maxBitrate: 800_000,   scaleDown: 1.5, minRtt: 0.15, maxRtt: 0.3,  maxLoss: 5  },
+    { label: 'low',    maxBitrate: 400_000,   scaleDown: 2,   minRtt: 0.3,  maxRtt: 0.5,  maxLoss: 10 },
+    { label: 'very-low', maxBitrate: 200_000, scaleDown: 4,   minRtt: 0.5,  maxRtt: Infinity, maxLoss: Infinity },
+  ];
+
+  const startQualityMonitor = (pc) => {
+    if (qualityMonitorRef.current) clearInterval(qualityMonitorRef.current);
+    let currentTierIdx = 0;
+
+    qualityMonitorRef.current = setInterval(async () => {
+      if (!pc || pc.connectionState !== 'connected') return;
+      try {
+        const stats = await pc.getStats();
+        let rtt = null;
+        let packetLoss = null;
+
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            rtt = report.currentRoundTripTime;
+          }
+          if (report.type === 'outbound-rtp' && report.kind === 'video') {
+            const prev = prevStatsRef.current;
+            if (prev && prev.packetsSent !== undefined) {
+              const packetsSent = report.packetsSent - prev.packetsSent;
+              const nackCount = (report.nackCount || 0) - (prev.nackCount || 0);
+              if (packetsSent > 0) {
+                packetLoss = (nackCount / packetsSent) * 100;
+              }
+            }
+            prevStatsRef.current = { packetsSent: report.packetsSent, nackCount: report.nackCount || 0 };
+          }
+        });
+
+        if (rtt === null) return;
+
+        // Determine target tier based on network conditions
+        let targetIdx = 0;
+        for (let i = 0; i < qualityTiers.length; i++) {
+          if (rtt >= qualityTiers[i].minRtt || (packetLoss !== null && packetLoss > qualityTiers[i].maxLoss)) {
+            targetIdx = i;
+          }
+        }
+
+        // Only change tier if it's different (with hysteresis: go down immediately, go up after sustained improvement)
+        if (targetIdx > currentTierIdx) {
+          // Downgrade immediately
+          currentTierIdx = targetIdx;
+        } else if (targetIdx < currentTierIdx) {
+          // Upgrade one step at a time
+          currentTierIdx = currentTierIdx - 1;
+        } else {
+          return; // No change needed
+        }
+
+        const tier = qualityTiers[currentTierIdx];
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (!sender) return;
+
+        const params = sender.getParameters();
+        if (!params.encodings || params.encodings.length === 0) return;
+        params.encodings[0].maxBitrate = tier.maxBitrate;
+        params.encodings[0].scaleResolutionDownBy = tier.scaleDown;
+        await sender.setParameters(params);
+        console.log(`[WebRTC] Quality: ${tier.label} (bitrate: ${tier.maxBitrate/1000}kbps, scale: 1/${tier.scaleDown}, rtt: ${rtt?.toFixed(3)}s, loss: ${packetLoss?.toFixed(1)}%)`);
+      } catch (e) {
+        // Stats collection can fail if connection is closing
+      }
+    }, 3000);
   };
 
   // WebRTC signaling handlers
@@ -1623,6 +1725,10 @@ export default function UnifiedCallPage() {
     }
 
     // Cleanup based on provider
+    if (qualityMonitorRef.current) {
+      clearInterval(qualityMonitorRef.current);
+      qualityMonitorRef.current = null;
+    }
     if (config?.provider === 'webrtc') {
       if (localVideoTrack instanceof MediaStream) {
         localVideoTrack.getTracks().forEach(t => t.stop());

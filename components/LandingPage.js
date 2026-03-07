@@ -404,21 +404,22 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
     <div style={pageStyle}>
       <div style={cardStyle}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          {/* Logo */}
+          {/* Logo — matches home page header */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
             <svg width="72" height="72" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="45" fill="none" stroke={colors.primary} strokeWidth="4" strokeDasharray="220 60"/>
-              <text x="50" y="62" textAnchor="middle" fontFamily="Georgia, serif" fontSize="40" fontWeight="bold" fill={colors.primary}>W</text>
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#5E4530" strokeWidth="5" strokeDasharray="189 63" strokeLinecap="round" transform="rotate(-30 50 50)"/>
+              <path d="M 28 42 L 36 66 L 50 48 L 64 66 L 72 42" fill="none" stroke="#5E4530" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
           <h1 style={{
             fontSize: 36,
             fontWeight: 700,
-            fontFamily: fonts.serif,
-            color: colors.text,
+            fontFamily: '"Playfair Display", serif',
+            color: '#5E4530',
             margin: '0 0 8px',
+            letterSpacing: '-0.3px',
           }}>
-            CircleW
+            <span style={{ letterSpacing: '1.5px', transform: 'scaleY(0.92) scaleX(1.05)', transformOrigin: 'bottom', display: 'inline-block' }}>CircleW</span>
           </h1>
           <p style={{
             color: colors.textLight,
