@@ -328,6 +328,7 @@ export default function UnifiedCallPage() {
     restartListening,
     provider: transcriptionProvider,
     setRemoteSpeaking,
+    setExternalAudioTrack,
   } = useTranscription({
     onTranscript: handleTranscript,
     language: transcriptionLanguage,
@@ -1018,6 +1019,10 @@ export default function UnifiedCallPage() {
 
     setLocalVideoTrack(videoTrack);
     setLocalAudioTrack(audioTrack);
+
+    // Share Agora's mic track with Deepgram transcription so it reuses the same
+    // echo-cancelled stream instead of opening a second getUserMedia capture
+    setExternalAudioTrack(audioTrack);
 
     if (localVideoRef.current) {
       videoTrack.play(localVideoRef.current);
@@ -1713,6 +1718,9 @@ export default function UnifiedCallPage() {
   const leaveCall = async () => {
     console.log('[UnifiedCall] Leaving call...');
 
+    // Clear external audio track so Deepgram doesn't hold a stale reference
+    setExternalAudioTrack(null);
+
     if (isTranscribing) {
       stopListening();
       setIsTranscribing(false);
@@ -1815,14 +1823,21 @@ export default function UnifiedCallPage() {
     // Note: meetups/coffee chats are NOT marked completed on call end.
     // They naturally filter out of "upcoming" once their scheduled time passes.
 
-    // Step 4: Prepare recap data
+    // Step 4: Prepare recap data — fetch profiles and connection status
     let allParticipants = [];
     if (participantIds.length > 0) {
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name, email, profile_picture, career')
-        .in('id', participantIds);
-      allParticipants = profiles || [];
+      const [{ data: profiles }, { data: mutualMatches }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, name, email, profile_picture, career')
+          .in('id', participantIds),
+        supabase.rpc('get_mutual_matches', { for_user_id: user?.id }),
+      ]);
+      const connectedIds = new Set((mutualMatches || []).map(m => m.matched_user_id));
+      allParticipants = (profiles || []).map(p => ({
+        ...p,
+        connected: connectedIds.has(p.id),
+      }));
     }
 
     setRecapData({

@@ -37,6 +37,9 @@ export default function useDeepgramTranscription({
   // Delay restoring mic gain after remote stops speaking (avoid cutting off overlap)
   const unmutTimeoutRef = useRef(null);
 
+  // External audio track (e.g. from Agora) to reuse instead of opening a second mic
+  const externalTrackRef = useRef(null);
+
   // Stable refs for callback and options
   const onTranscriptRef = useRef(onTranscript);
   const languageRef = useRef(language);
@@ -45,6 +48,15 @@ export default function useDeepgramTranscription({
   useEffect(() => { onTranscriptRef.current = onTranscript; }, [onTranscript]);
   useEffect(() => { languageRef.current = language; }, [language]);
   useEffect(() => { interimResultsRef.current = interimResults; }, [interimResults]);
+
+  /**
+   * Provide an external audio track (e.g. Agora localAudioTrack) so that
+   * transcription reuses the call's mic stream instead of opening a second
+   * getUserMedia — avoids breaking browser echo cancellation.
+   */
+  const setExternalAudioTrack = useCallback((track) => {
+    externalTrackRef.current = track;
+  }, []);
 
   /**
    * Notify that a remote user started speaking (echo suppression).
@@ -150,17 +162,30 @@ export default function useDeepgramTranscription({
     setError(null);
     isCleaningUpRef.current = false;
 
-    // 1. Get microphone stream
+    // 1. Get microphone stream — reuse external track if available to avoid
+    //    opening a second mic capture which breaks browser echo cancellation
     let stream;
+    let usingExternalTrack = false;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      streamRef.current = stream;
+      const extTrack = externalTrackRef.current;
+      if (extTrack) {
+        // Agora localAudioTrack exposes getMediaStreamTrack()
+        const rawTrack = typeof extTrack.getMediaStreamTrack === 'function'
+          ? extTrack.getMediaStreamTrack()
+          : extTrack;
+        stream = new MediaStream([rawTrack]);
+        usingExternalTrack = true;
+        console.log('[Deepgram] Using external audio track (shared with call provider)');
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      }
+      streamRef.current = usingExternalTrack ? null : stream; // don't stop external track on cleanup
     } catch (e) {
       console.error('[Deepgram] getUserMedia error:', e);
       if (e.name === 'NotAllowedError') {
@@ -362,6 +387,7 @@ export default function useDeepgramTranscription({
     stopListening,
     restartListening,
     setRemoteSpeaking,
+    setExternalAudioTrack,
   };
 }
 

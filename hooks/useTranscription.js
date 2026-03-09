@@ -57,11 +57,12 @@ export default function useTranscription(options = {}) {
   const deepgram = useDeepgramTranscription(!useWebSpeech ? resolvedOptions : {});
 
   const active = useWebSpeech ? speechApi : deepgram;
-  // Always expose echo suppression method (no-op for Web Speech API)
+  // Always expose echo suppression and external track methods (no-op for Web Speech API)
   const noop = () => {};
   return {
     ...active,
     provider: useWebSpeech ? 'webspeech' : 'deepgram',
     setRemoteSpeaking: deepgram.setRemoteSpeaking || noop,
+    setExternalAudioTrack: deepgram.setExternalAudioTrack || noop,
   };
 }
