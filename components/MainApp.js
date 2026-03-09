@@ -12,6 +12,7 @@ import MessagesView from './MessagesView'
 import CallHistoryView from './CallHistoryView'
 import FeedbackButton from './FeedbackButton'
 import AdminFeedbackView from './AdminFeedbackView'
+import AdminAnalyticsView from './AdminAnalyticsView'
 import Onboarding from './Onboarding'
 import JourneyProgress from './JourneyProgress'
 import NextStepPrompt from './NextStepPrompt'
@@ -149,6 +150,12 @@ function MainApp({ currentUser, onSignOut }) {
         connectionName: data.scheduleConnectionName || null
       })
     }
+    // Lazy-load connections data on first navigate to a view that needs it
+    const viewsNeedingConnections = ['meetups', 'connectionGroups', 'discover', 'coffeeChats', 'scheduleMeetup', 'people', 'allPeople', 'profile']
+    if (viewsNeedingConnections.includes(view) && !hasLoadedConnectionsRef.current) {
+      hasLoadedConnectionsRef.current = true
+      lazyLoadConnectionsRef.current?.()
+    }
     setCurrentView(prev => {
       setPreviousView(prev)
       return view
@@ -173,6 +180,8 @@ function MainApp({ currentUser, onSignOut }) {
 
   // Guard to prevent multiple loads
   const hasLoadedRef = useRef(false)
+  const hasLoadedConnectionsRef = useRef(false) // lazy-load connections data on first navigate
+  const lazyLoadConnectionsRef = useRef(null) // set after functions are defined
 
   // DEBUGGING: Detect mount/unmount cycles
   useEffect(() => {
@@ -242,82 +251,39 @@ function MainApp({ currentUser, onSignOut }) {
       cutoffDate.setDate(cutoffDate.getDate() - 1)
       const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
 
-      // === ROUND 1: Fire all independent queries in parallel ===
-      const [circlesResult, userSignupsResult, coffeeResult, unreadResult, groupsResult, coffeeCountResult, requestsResult, attendedResult, createdCirclesResult, circleInvitationsResult] = await Promise.all([
-        // 1. Member circles (needed for meetups query)
-        supabase
-          .from('connection_group_members')
-          .select('group_id')
-          .eq('user_id', currentUser.id)
-          .eq('status', 'accepted'),
-        // 2. User's own signups
-        supabase
-          .from('meetup_signups')
-          .select('meetup_id')
-          .eq('user_id', currentUser.id),
-        // 3. Coffee chats
-        supabase
-          .from('coffee_chats')
-          .select('*')
-          .in('status', ['pending', 'accepted', 'scheduled'])
-          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
-          .order('scheduled_time', { ascending: true }),
-        // 4. Unread message count
-        supabase
-          .from('messages')
-          .select('*', { count: 'exact', head: true })
-          .eq('receiver_id', currentUser.id)
-          .eq('read', false),
-        // 5. Groups count
-        supabase
-          .from('connection_group_members')
-          .select('id', { count: 'exact', head: true })
-          .eq('user_id', currentUser.id)
-          .eq('status', 'accepted'),
-        // 6. Coffee chats completed count
-        supabase
-          .from('coffee_chats')
-          .select('id', { count: 'exact', head: true })
-          .eq('status', 'completed')
-          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`),
-        // 7. Connection requests (incoming interests)
-        supabase
-          .from('user_interests')
-          .select('user_id, created_at')
-          .eq('interested_in_user_id', currentUser.id),
-        // 8. Attended meetups count
-        supabase
-          .from('meetup_signups')
-          .select('meetup_id, meetups(date, time)')
-          .eq('user_id', currentUser.id),
-        // 9. Circles created by current user (for join requests)
-        supabase
-          .from('connection_groups')
-          .select('id, name')
-          .eq('creator_id', currentUser.id)
-          .eq('is_active', true),
-        // 10. Circles the current user has been invited to (invitee perspective)
-        supabase
-          .from('connection_group_members')
-          .select('id, group_id, invited_at, connection_groups(id, name, creator_id)')
-          .eq('user_id', currentUser.id)
-          .eq('status', 'invited'),
-      ])
+      // === SINGLE RPC: Get all home page data in one database round-trip ===
+      const { data: homeData, error: rpcError } = await supabase
+        .rpc('get_home_page_data', { p_user_id: currentUser.id, p_cutoff_date: cutoff })
 
-      // Set simple counts immediately (batch these state updates)
-      setUserSignups((userSignupsResult.data || []).map(s => s.meetup_id))
-      setUnreadMessageCount(unreadResult.count || 0)
-      setGroupsCount(groupsResult.count || 0)
-      setCoffeeChatsCount(coffeeCountResult.count || 0)
+      if (rpcError) {
+        console.error('RPC error:', rpcError)
+        throw rpcError
+      }
+
+      const now = new Date()
+
+      // Extract data from RPC result
+      const memberCircleIds = homeData.member_circle_ids || []
+      const userSignupsData = homeData.user_signups || []
+      const chats = homeData.coffee_chats || []
+      const incomingInterests = homeData.incoming_interests || []
+      const attendedSignups = homeData.attended_signups || []
+      const createdCircles = homeData.created_circles || []
+      const circleInvitationsData = homeData.circle_invitations || []
+
+      // Set simple state immediately
+      setUserSignups(userSignupsData)
+      setUnreadMessageCount(homeData.unread_count || 0)
+      setGroupsCount(homeData.groups_count || 0)
+      setCoffeeChatsCount(homeData.coffee_completed_count || 0)
 
       // Process attended count
-      const now = new Date()
-      const attendedCount = (attendedResult.data || []).filter(signup => {
+      const attendedCount = attendedSignups.filter(signup => {
         try {
-          if (!signup.meetups) return false
-          const meetupDate = parseLocalDate(signup.meetups.date)
+          if (!signup.date) return false
+          const meetupDate = parseLocalDate(signup.date)
           if (isNaN(meetupDate.getTime())) return false
-          const meetupTime = signup.meetups.time || '00:00'
+          const meetupTime = signup.time || '00:00'
           const [hours, minutes] = meetupTime.split(':').map(Number)
           meetupDate.setHours(hours, minutes, 0, 0)
           return meetupDate < now
@@ -328,57 +294,14 @@ function MainApp({ currentUser, onSignOut }) {
         currentUser.meetups_attended = attendedCount
       }
 
-      console.log(`⏱️ Round 1 done in ${Date.now() - t0}ms`)
-      // === ROUND 2: Queries that depend on Round 1 results ===
-      const memberCircleIds = (circlesResult.data || []).map(m => m.group_id)
+      console.log(`⏱️ RPC done in ${Date.now() - t0}ms`)
 
-      // Build meetups query
-      let meetupsQuery = supabase
-        .from('meetups')
-        .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
-        .gte('date', cutoff)
-        .not('status', 'eq', 'cancelled')
-        .order('date', { ascending: true })
-        .order('time', { ascending: true })
-
-      if (memberCircleIds.length > 0) {
-        meetupsQuery = meetupsQuery.or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
-      } else {
-        meetupsQuery = meetupsQuery.is('circle_id', null)
-      }
-
-      // Coffee chat profile IDs
-      const chats = coffeeResult.data || []
-      const coffeeOtherIds = [...new Set(chats.map(c =>
-        c.requester_id === currentUser.id ? c.recipient_id : c.requester_id
-      ).filter(Boolean))]
-
-      // Connection request: get user's outgoing interests to filter mutual
-      const incomingInterests = requestsResult.data || []
-      const requestUserIds = incomingInterests.map(i => i.user_id)
-
-      // Fire Round 2 queries in parallel
-      const round2Promises = [meetupsQuery]
-      if (coffeeOtherIds.length > 0) {
-        round2Promises.push(
-          supabase.from('profiles').select('id, name').in('id', coffeeOtherIds)
-        )
-      }
-      if (requestUserIds.length > 0) {
-        round2Promises.push(
-          supabase.from('user_interests').select('interested_in_user_id').eq('user_id', currentUser.id)
-        )
-      }
-
-      const round2Results = await Promise.all(round2Promises)
-
-      // Process meetups immediately
-      const meetupsData = round2Results[0].data || []
+      // Meetups and coffee profiles are now included in the RPC
+      const meetupsData = homeData.meetups || []
       setMeetups(meetupsData)
 
-      // Process coffee chats (no extra queries needed)
-      if (coffeeOtherIds.length > 0) {
-        const coffeeProfiles = round2Results[1]?.data || []
+      const coffeeProfiles = homeData.coffee_profiles || []
+      if (coffeeProfiles.length > 0) {
         const profileMap = {}
         coffeeProfiles.forEach(p => { profileMap[p.id] = p })
         const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
@@ -394,141 +317,153 @@ function MainApp({ currentUser, onSignOut }) {
         setUpcomingCoffeeChats([])
       }
 
-      // Determine what extra profile queries are needed, then fire them all in parallel
-      let pendingRequests = []
-      let pendingIds = []
-      if (requestUserIds.length > 0) {
-        const myInterestIdx = coffeeOtherIds.length > 0 ? 2 : 1
-        const myInterestIds = new Set((round2Results[myInterestIdx]?.data || []).map(i => i.interested_in_user_id))
-        pendingRequests = incomingInterests.filter(i => !myInterestIds.has(i.user_id))
-        pendingIds = pendingRequests.map(i => i.user_id)
-      }
+      // Mark page as ready — show the home page now
+      console.log(`⏱️ Home page rendered in ${Date.now() - t0}ms`)
+      setLoadingMeetups(false)
 
-      const createdCircles = createdCirclesResult.data || []
-      const createdCircleIds = createdCircles.map(c => c.id)
-      const circleNameMap = {}
-      createdCircles.forEach(c => { circleNameMap[c.id] = c.name })
+      // === DEFERRED: Load secondary data in background (signups, requests, invitations) ===
+      const loadSecondaryData = async () => {
+        try {
+          const requestUserIds = incomingInterests.map(i => i.user_id)
 
-      const invitations = circleInvitationsResult.data || []
-      const creatorIds = [...new Set(invitations.map(inv => inv.connection_groups?.creator_id).filter(Boolean))]
+          const createdCircleIds = createdCircles.map(c => c.id)
+          const circleNameMap = {}
+          createdCircles.forEach(c => { circleNameMap[c.id] = c.name })
 
-      // Fire all remaining queries in parallel (Round 2b)
-      const round2bPromises = []
-      const round2bKeys = []
+          const invitations = circleInvitationsData
+          const creatorIds = [...new Set(invitations.map(inv => inv.creator_id).filter(Boolean))]
 
-      if (pendingIds.length > 0) {
-        round2bPromises.push(supabase.from('profiles').select('id, name, career, city, state, profile_picture').in('id', pendingIds))
-        round2bKeys.push('reqProfiles')
-      }
-      if (createdCircleIds.length > 0) {
-        round2bPromises.push(supabase.from('connection_group_members').select('id, user_id, group_id, invited_at').eq('status', 'invited').in('group_id', createdCircleIds))
-        round2bKeys.push('pendingMembers')
-      }
-      if (creatorIds.length > 0) {
-        round2bPromises.push(supabase.from('profiles').select('id, name, career, city, state, profile_picture').in('id', creatorIds))
-        round2bKeys.push('creatorProfiles')
-      }
+          // Fire all secondary queries in parallel
+          const deferredPromises = []
+          const deferredKeys = []
 
-      const round2bResults = round2bPromises.length > 0 ? await Promise.all(round2bPromises) : []
-      const round2bMap = {}
-      round2bKeys.forEach((key, i) => { round2bMap[key] = round2bResults[i]?.data || [] })
+          if (requestUserIds.length > 0) {
+            deferredPromises.push(supabase.from('user_interests').select('interested_in_user_id').eq('user_id', currentUser.id))
+            deferredKeys.push('myInterests')
+          }
+          if (requestUserIds.length > 0) {
+            const pendingIds = incomingInterests.map(i => i.user_id)
+            deferredPromises.push(supabase.from('profiles').select('id, name, career, city, state, profile_picture').in('id', pendingIds))
+            deferredKeys.push('reqProfiles')
+          }
+          if (createdCircleIds.length > 0) {
+            deferredPromises.push(supabase.from('connection_group_members').select('id, user_id, group_id, invited_at').eq('status', 'invited').in('group_id', createdCircleIds))
+            deferredKeys.push('pendingMembers')
+          }
+          if (creatorIds.length > 0) {
+            deferredPromises.push(supabase.from('profiles').select('id, name, career, city, state, profile_picture').in('id', creatorIds))
+            deferredKeys.push('creatorProfiles')
+          }
+          if (meetupsData.length > 0) {
+            const meetupIds = meetupsData.map(m => m.id)
+            deferredPromises.push(supabase.from('meetup_signups').select('*').in('meetup_id', meetupIds))
+            deferredKeys.push('signups')
+          }
 
-      // Process connection requests
-      if (pendingIds.length > 0) {
-        const timestampMap = {}
-        pendingRequests.forEach(i => { timestampMap[i.user_id] = i.created_at })
-        setConnectionRequests((round2bMap.reqProfiles || []).map(p => ({
-          ...p,
-          type: 'connection_request',
-          requested_at: timestampMap[p.id]
-        })))
-      } else {
-        setConnectionRequests([])
-      }
+          const deferredResults = deferredPromises.length > 0 ? await Promise.all(deferredPromises) : []
+          const dMap = {}
+          deferredKeys.forEach((key, i) => { dMap[key] = deferredResults[i]?.data || [] })
 
-      // Process circle join requests
-      const pendingMembers = round2bMap.pendingMembers || []
-      if (pendingMembers.length > 0) {
-        const pendingUserIds = [...new Set(pendingMembers.map(m => m.user_id))]
-        const { data: pendingProfiles } = await supabase
-          .from('profiles')
-          .select('id, name, career, city, state, profile_picture')
-          .in('id', pendingUserIds)
+          // Process connection requests
+          if (requestUserIds.length > 0) {
+            const myInterestIds = new Set((dMap.myInterests || []).map(i => i.interested_in_user_id))
+            const pendingRequests = incomingInterests.filter(i => !myInterestIds.has(i.user_id))
+            const pendingIds = pendingRequests.map(i => i.user_id)
+            if (pendingIds.length > 0) {
+              const timestampMap = {}
+              pendingRequests.forEach(i => { timestampMap[i.user_id] = i.created_at })
+              setConnectionRequests((dMap.reqProfiles || []).filter(p => pendingIds.includes(p.id)).map(p => ({
+                ...p,
+                type: 'connection_request',
+                requested_at: timestampMap[p.id]
+              })))
+            } else {
+              setConnectionRequests([])
+            }
+          } else {
+            setConnectionRequests([])
+          }
 
-        const pendingProfileMap = {}
-        ;(pendingProfiles || []).forEach(p => { pendingProfileMap[p.id] = p })
+          // Process circle join requests
+          const pendingMembers = dMap.pendingMembers || []
+          if (pendingMembers.length > 0) {
+            const pendingUserIds = [...new Set(pendingMembers.map(m => m.user_id))]
+            const { data: pendingProfiles } = await supabase
+              .from('profiles')
+              .select('id, name, career, city, state, profile_picture')
+              .in('id', pendingUserIds)
 
-        const joinRequests = pendingMembers.map(m => ({
-          id: m.id,
-          user: pendingProfileMap[m.user_id] || null,
-          circleName: circleNameMap[m.group_id],
-          requested_at: m.invited_at,
-          type: 'circle_join_request',
-        })).filter(r => r.user)
+            const pendingProfileMap = {}
+            ;(pendingProfiles || []).forEach(p => { pendingProfileMap[p.id] = p })
 
-        joinRequests.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
-        setCircleJoinRequests(joinRequests)
-      } else {
-        setCircleJoinRequests([])
-      }
+            const joinRequests = pendingMembers.map(m => ({
+              id: m.id,
+              user: pendingProfileMap[m.user_id] || null,
+              circleName: circleNameMap[m.group_id],
+              requested_at: m.invited_at,
+              type: 'circle_join_request',
+            })).filter(r => r.user)
 
-      // Process circle invitations
-      if (creatorIds.length > 0) {
-        const creatorProfileMap = {}
-        ;(round2bMap.creatorProfiles || []).forEach(p => { creatorProfileMap[p.id] = p })
+            joinRequests.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
+            setCircleJoinRequests(joinRequests)
+          } else {
+            setCircleJoinRequests([])
+          }
 
-        const invitationItems = invitations
-          .filter(inv => inv.connection_groups)
-          .map(inv => ({
-            id: inv.id,
-            group_id: inv.group_id,
-            user: creatorProfileMap[inv.connection_groups.creator_id] || null,
-            circleName: inv.connection_groups.name,
-            requested_at: inv.invited_at,
-            type: 'circle_invitation',
-          }))
-          .filter(inv => inv.user)
+          // Process circle invitations
+          if (creatorIds.length > 0) {
+            const creatorProfileMap = {}
+            ;(dMap.creatorProfiles || []).forEach(p => { creatorProfileMap[p.id] = p })
 
-        invitationItems.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
-        setCircleInvitations(invitationItems)
-      } else {
-        setCircleInvitations([])
-      }
+            const invitationItems = invitations
+              .map(inv => ({
+                id: inv.id,
+                group_id: inv.group_id,
+                user: creatorProfileMap[inv.creator_id] || null,
+                circleName: inv.circle_name,
+                requested_at: inv.invited_at,
+                type: 'circle_invitation',
+              }))
+              .filter(inv => inv.user)
 
-      console.log(`⏱️ Round 2 done in ${Date.now() - t0}ms`)
-      // === ROUND 3: Signups for the loaded meetups ===
-      if (meetupsData.length > 0) {
-        const meetupIds = meetupsData.map(m => m.id)
-        const { data: signupsData } = await supabase
-          .from('meetup_signups')
-          .select('*')
-          .in('meetup_id', meetupIds)
+            invitationItems.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at))
+            setCircleInvitations(invitationItems)
+          } else {
+            setCircleInvitations([])
+          }
 
-        if (signupsData && signupsData.length > 0) {
-          const signupUserIds = [...new Set(signupsData.map(s => s.user_id))]
-          const { data: signupProfiles } = await supabase
-            .from('profiles')
-            .select('id, name, career, city, state, profile_picture')
-            .in('id', signupUserIds)
+          // Process signups
+          const signupsData = dMap.signups || []
+          if (signupsData.length > 0) {
+            const signupUserIds = [...new Set(signupsData.map(s => s.user_id))]
+            const { data: signupProfiles } = await supabase
+              .from('profiles')
+              .select('id, name, career, city, state, profile_picture')
+              .in('id', signupUserIds)
 
-          const profilesMap = {}
-          ;(signupProfiles || []).forEach(p => { profilesMap[p.id] = p })
+            const profilesMap = {}
+            ;(signupProfiles || []).forEach(p => { profilesMap[p.id] = p })
 
-          const signupsByMeetup = {}
-          signupsData.forEach(signup => {
-            if (!signupsByMeetup[signup.meetup_id]) signupsByMeetup[signup.meetup_id] = []
-            signupsByMeetup[signup.meetup_id].push({ ...signup, profiles: profilesMap[signup.user_id] || null })
-          })
-          setSignups(signupsByMeetup)
-        } else {
-          setSignups({})
+            const signupsByMeetup = {}
+            signupsData.forEach(signup => {
+              if (!signupsByMeetup[signup.meetup_id]) signupsByMeetup[signup.meetup_id] = []
+              signupsByMeetup[signup.meetup_id].push({ ...signup, profiles: profilesMap[signup.user_id] || null })
+            })
+            setSignups(signupsByMeetup)
+          } else {
+            setSignups({})
+          }
+
+          console.log(`⏱️ Secondary data loaded in ${Date.now() - t0}ms`)
+        } catch (err) {
+          console.error('Error loading secondary data:', err)
         }
       }
+      // Fire and forget — don't block the page
+      loadSecondaryData()
 
     } catch (err) {
       console.error('Error loading home page data:', err)
-    } finally {
-      console.log(`⏱️ Home page data loaded in ${Date.now() - t0}ms`)
       setLoadingMeetups(false)
     }
   }, [supabase, currentUser.id])
@@ -543,23 +478,18 @@ function MainApp({ currentUser, onSignOut }) {
     hasLoadedRef.current = true
 
     // Fast initial load: fetch everything the home page needs in minimal round trips
-    // Note: loadHomePageData already processes connection requests in Round 2,
-    // so we don't call loadConnectionRequests() here to avoid a race condition
-    // where both functions set connectionRequests state and the slower one wins.
+    // Note: loadHomePageData already fetches unread count, groups count,
+    // coffee chats count, attended count, and connection requests —
+    // so we do NOT call the standalone versions of those here.
     loadHomePageData()
 
-    // Phase 1 deferred: secondary counts and requests (not needed for initial render)
+    // Phase 1 deferred: only data NOT already in loadHomePageData
     loadCoffeeChatRequests()
-    updateAttendedCount()
-    loadUnreadMessageCount()
-    loadGroupsCount()
-    loadCoffeeChatsCount()
 
-    // Phase 2 deferred: heavier data not needed for home page
-    loadConnections()
-    loadMyInterests()
-    loadMeetupPeople()
-    loadPotentialConnections()
+    // Phase 2 deferred: data needed for other views (connections, discover)
+    // These are lazy-loaded when the user navigates to those views.
+    // loadConnections, loadMyInterests, loadMeetupPeople, loadPotentialConnections
+    // are now called on-demand via handleNavigate instead of eagerly on mount.
     loadPendingRecaps()
   }, []) // Empty array - run once on mount
 
@@ -1457,6 +1387,14 @@ function MainApp({ currentUser, onSignOut }) {
       setPotentialConnections([])
     }
   }, [currentUser.id, supabase])
+
+  // Wire up lazy-load ref for handleNavigate (defined before these functions)
+  lazyLoadConnectionsRef.current = () => {
+    loadConnections()
+    loadMyInterests()
+    loadMeetupPeople()
+    loadPotentialConnections()
+  }
 
   const updateAttendedCount = useCallback(async () => {
     try {
@@ -3706,6 +3644,13 @@ function MainApp({ currentUser, onSignOut }) {
           <MessageCircle className="w-5 h-5 mr-2" />
           View Feedback
         </button>
+        <button
+          onClick={() => setCurrentView('adminAnalytics')}
+          className="bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
+        >
+          <Users className="w-5 h-5 mr-2" />
+          View Analytics
+        </button>
       </div>
 
       <div className="flex justify-between items-center">
@@ -4000,6 +3945,7 @@ function MainApp({ currentUser, onSignOut }) {
         )}
         {currentView === 'admin' && currentUser.role === 'admin' && <AdminDashboard />}
         {currentView === 'adminFeedback' && currentUser.role === 'admin' && <AdminFeedbackView currentUser={currentUser} supabase={supabase} />}
+        {currentView === 'adminAnalytics' && currentUser.role === 'admin' && <AdminAnalyticsView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'allEvents' && <AllEventsView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
         {currentView === 'eventDetail' && (
           <EventDetailView

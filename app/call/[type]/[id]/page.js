@@ -998,7 +998,22 @@ export default function UnifiedCallPage() {
 
     await client.join(appId, roomId, null, agoraUid);
 
-    const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks();
+    const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+      {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      {
+        encoderConfig: {
+          width: 640,
+          height: 480,
+          frameRate: 15,
+          bitrateMin: 600,
+          bitrateMax: 1000,
+        }
+      }
+    );
     await client.publish([audioTrack, videoTrack]);
 
     setLocalVideoTrack(videoTrack);
