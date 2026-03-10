@@ -50,11 +50,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const [unreadCounts, setUnreadCounts] = useState({});
 
   // Load connections directly from DB (single source of truth)
-  const loadConnectionsDirect = async () => {
+  const loadConnectionsDirect = async (sharedMatches) => {
+    const t0 = Date.now();
     try {
-      const { data: matches, error } = await supabase
-        .rpc('get_mutual_matches', { for_user_id: currentUser.id });
-      if (error || !matches || matches.length === 0) return;
+      const matches = sharedMatches || [];
+      if (matches.length === 0) return;
 
       const matchedUserIds = matches.map(m => m.matched_user_id);
       const { data: profiles, error: profileError } = await supabase
@@ -74,13 +74,17 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         last_active: user.last_active,
         status: isUserActive(user.last_active, 10) ? 'online' : 'away',
       }));
+      console.log(`⏱️ Circles: loadConnectionsDirect in ${Date.now() - t0}ms`);
       setConnections(connectionsWithStatus);
     } catch (err) {
       console.error('Error loading connections directly:', err);
     }
   };
 
+  const hasLoadedRef = useRef(false);
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     loadData();
 
     const invitesChannel = supabase
@@ -163,6 +167,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   }, [selectedGroup]);
 
   const loadUnreadCounts = async () => {
+    const t0 = Date.now();
     try {
       const { data, error } = await supabase
         .from('messages')
@@ -176,6 +181,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       (data || []).forEach(msg => {
         counts[msg.sender_id] = (counts[msg.sender_id] || 0) + 1;
       });
+      console.log(`⏱️ Circles: loadUnreadCounts in ${Date.now() - t0}ms`);
       setUnreadCounts(counts);
     } catch (err) {
       // silently fail
@@ -183,29 +189,153 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   };
 
   const loadData = async () => {
+    const t0 = Date.now();
     setLoading(true);
-    await Promise.all([
-      loadConnectionGroups(),
-      loadGroupInvites(),
-      loadPeerSuggestions(),
-      loadSentRequests(),
-      loadUnreadCounts(),
-      loadConnectionsDirect(),
+
+    // Single RPC for all circles page data + mutual matches in parallel
+    const [rpcResult, mutualResult] = await Promise.all([
+      supabase.rpc('get_circles_page_data', { p_user_id: currentUser.id }),
+      supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
     ]);
+
+    const sharedMatches = mutualResult.data || [];
+
+    if (rpcResult.error) {
+      console.error('Circles RPC error:', rpcResult.error);
+      setLoading(false);
+      return;
+    }
+
+    const d = rpcResult.data;
+
+    // Process connection groups from RPC data
+    const groups = d.groups || [];
+    const members = d.members || [];
+    const creators = d.creators || [];
+    const latestMessages = d.latest_messages || [];
+    const upcomingMeetups = d.upcoming_meetups || [];
+    const pastMeetups = d.past_meetups || [];
+
+    const creatorMap = {};
+    creators.forEach(c => { creatorMap[c.id] = c; });
+
+    const membersByGroup = {};
+    members.forEach(m => {
+      if (!membersByGroup[m.group_id]) membersByGroup[m.group_id] = [];
+      membersByGroup[m.group_id].push({
+        id: m.id, status: m.status, user_id: m.user_id, group_id: m.group_id,
+        user: { id: m.user_id, name: m.name, career: m.career, last_active: m.last_active, profile_picture: m.profile_picture }
+      });
+    });
+
+    const latestMessageByGroup = {};
+    latestMessages.forEach(msg => {
+      latestMessageByGroup[msg.group_id] = {
+        ...msg,
+        sender: { id: msg.user_id, name: msg.sender_name }
+      };
+    });
+
+    const nextMeetupByCircle = {};
+    upcomingMeetups.forEach(meetup => {
+      const existing = nextMeetupByCircle[meetup.circle_id];
+      if (!existing) {
+        nextMeetupByCircle[meetup.circle_id] = meetup;
+      } else {
+        const existingDate = new Date(existing.date).getTime();
+        const thisDate = new Date(meetup.date).getTime();
+        const daysDiff = Math.abs(thisDate - existingDate) / (24 * 60 * 60 * 1000);
+        if (daysDiff <= 3 && new Date(meetup.updated_at) > new Date(existing.updated_at)) {
+          nextMeetupByCircle[meetup.circle_id] = meetup;
+        }
+      }
+    });
+
+    const pastMeetupCountByCircle = {};
+    const lastTopicByCircle = {};
+    pastMeetups.forEach(meetup => {
+      pastMeetupCountByCircle[meetup.circle_id] = (pastMeetupCountByCircle[meetup.circle_id] || 0) + 1;
+      if (!lastTopicByCircle[meetup.circle_id] && meetup.topic) {
+        lastTopicByCircle[meetup.circle_id] = meetup.topic;
+      }
+    });
+
+    for (const group of groups) {
+      group.creator = creatorMap[group.creator_id] || null;
+      group.members = membersByGroup[group.id] || [];
+      group.lastMessage = latestMessageByGroup[group.id] || null;
+      group.nextMeetup = nextMeetupByCircle[group.id] || null;
+      group.pastSessionCount = pastMeetupCountByCircle[group.id] || 0;
+      group.lastTopic = lastTopicByCircle[group.id] || null;
+    }
+    groups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    setConnectionGroups(groups);
+
+    // Process invitations from RPC data
+    const invitations = d.invitations || [];
+    setGroupInvites(invitations.map(inv => ({
+      id: inv.id,
+      group_id: inv.group_id,
+      user_id: inv.user_id,
+      status: inv.status,
+      invited_at: inv.invited_at,
+      group: {
+        id: inv.group_id,
+        name: inv.group_name,
+        creator_id: inv.group_creator_id,
+        created_at: inv.group_created_at,
+        is_active: inv.group_is_active,
+        creator: { id: inv.group_creator_id, name: inv.creator_name }
+      }
+    })));
+
+    // Process unread counts from RPC data
+    const unreadData = d.unread_counts || [];
+    const counts = {};
+    unreadData.forEach(u => { counts[u.sender_id] = u.count; });
+    setUnreadCounts(counts);
+
+    // Process connections from shared matches
+    if (sharedMatches.length > 0) {
+      const matchedUserIds = sharedMatches.map(m => m.matched_user_id);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, career, city, state, profile_picture, last_active')
+        .in('id', matchedUserIds);
+
+      if (profiles) {
+        setConnections(profiles.map(user => ({
+          id: user.id,
+          userId: user.id,
+          name: user.name || 'Unknown',
+          avatar: user.profile_picture,
+          career: user.career || '',
+          city: user.city,
+          state: user.state,
+          last_active: user.last_active,
+          status: isUserActive(user.last_active, 10) ? 'online' : 'away',
+        })));
+      }
+    }
+
+    console.log(`⏱️ Circles page rendered in ${Date.now() - t0}ms`);
     setLoading(false);
+
+    // Deferred — peer suggestions and sent requests load in background
+    loadPeerSuggestions(sharedMatches);
+    loadSentRequests(sharedMatches);
   };
 
-  const loadPeerSuggestions = async () => {
+  const loadPeerSuggestions = async (sharedMatches) => {
+    const t0 = Date.now();
     try {
-      const [profilesResult, mutualResult, interestsResult, incomingInterestsResult] = await Promise.all([
+      const [profilesResult, interestsResult, incomingInterestsResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
           .neq('id', currentUser.id)
           .not('name', 'is', null)
           .limit(50),
-        supabase
-          .rpc('get_mutual_matches', { for_user_id: currentUser.id }),
         supabase
           .from('user_interests')
           .select('interested_in_user_id')
@@ -221,7 +351,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         return;
       }
 
-      const myMatchIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
+      const myMatchIds = new Set((sharedMatches || []).map(m => m.matched_user_id));
       const myInterestIds = new Set((interestsResult.data || []).map(i => i.interested_in_user_id));
       const interestedInMeIds = new Set((incomingInterestsResult.data || []).map(i => i.user_id));
 
@@ -245,27 +375,34 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         return;
       }
 
-      // Parallel: fetch shared circles and mutual connections for the 4 suggestions
-      const [myCirclesResult, ...matchResults] = await Promise.all([
+      // Fetch shared circles and mutual connections with simple queries (no extra RPCs)
+      const [myCirclesResult, suggestedInterestsResult] = await Promise.all([
         supabase
           .from('connection_group_members')
           .select('group_id')
           .eq('user_id', currentUser.id)
           .eq('status', 'accepted'),
-        // Batch all RPC calls in parallel instead of sequential loop
-        ...finalIds.map(personId =>
-          supabase.rpc('get_mutual_matches', { for_user_id: personId })
-        ),
+        // Count mutual connections: find interests involving both the suggestion and my matches
+        supabase
+          .from('user_interests')
+          .select('user_id, interested_in_user_id')
+          .in('user_id', finalIds)
+          .in('interested_in_user_id', Array.from(myMatchIds)),
       ]);
 
-      // Build mutual connections map from parallel results
+      // Build mutual connections: a suggested person has a mutual connection if
+      // they expressed interest in one of my matches AND that match expressed interest back
       const userMutualConnections = {};
-      finalIds.forEach((personId, i) => {
-        let count = 0;
-        (matchResults[i].data || []).forEach(m => {
-          if (myMatchIds.has(m.matched_user_id)) count++;
-        });
-        userMutualConnections[personId] = count;
+      // For simplicity, count how many of my connections each suggestion is connected to
+      // by checking bidirectional interests
+      const suggestedInterests = suggestedInterestsResult.data || [];
+      const interestsByUser = {};
+      suggestedInterests.forEach(i => {
+        if (!interestsByUser[i.user_id]) interestsByUser[i.user_id] = new Set();
+        interestsByUser[i.user_id].add(i.interested_in_user_id);
+      });
+      finalIds.forEach(id => {
+        userMutualConnections[id] = interestsByUser[id] ? interestsByUser[id].size : 0;
       });
 
       // Build shared circles map
@@ -291,6 +428,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         mutualConnections: userMutualConnections[person.id] || 0,
       }));
 
+      console.log(`⏱️ Circles: loadPeerSuggestions in ${Date.now() - t0}ms`);
       setPeerSuggestions(enriched);
     } catch (error) {
       console.error('Error loading peer suggestions:', error);
@@ -298,26 +436,23 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     }
   };
 
-  const loadSentRequests = async () => {
+  const loadSentRequests = async (sharedMatches) => {
+    const t0 = Date.now();
     try {
-      const [interestsResult, mutualResult] = await Promise.all([
-        supabase
-          .from('user_interests')
-          .select('interested_in_user_id, created_at')
-          .eq('user_id', currentUser.id),
-        supabase
-          .rpc('get_mutual_matches', { for_user_id: currentUser.id }),
-      ]);
+      const { data: interestsData, error: interestsError } = await supabase
+        .from('user_interests')
+        .select('interested_in_user_id, created_at')
+        .eq('user_id', currentUser.id);
 
-      if (interestsResult.error) {
+      if (interestsError) {
         setSentRequestProfiles([]);
         return;
       }
 
-      const mutualIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
+      const mutualIds = new Set((sharedMatches || []).map(m => m.matched_user_id));
 
       // Pending = I sent interest but they haven't matched back
-      const pendingInterests = (interestsResult.data || []).filter(i =>
+      const pendingInterests = (interestsData || []).filter(i =>
         !mutualIds.has(i.interested_in_user_id)
       );
 
@@ -348,6 +483,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       // Sort by most recent first
       enriched.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at));
 
+      console.log(`⏱️ Circles: loadSentRequests in ${Date.now() - t0}ms`);
       setSentRequestProfiles(enriched);
     } catch (error) {
       console.error('Error loading sent requests:', error);
@@ -447,8 +583,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   };
 
   const loadConnectionGroups = async () => {
+    const t0 = Date.now();
     try {
-      const groups = await getMyConnectionGroups();
+      const groups = await getMyConnectionGroups(currentUser.id);
+      console.log(`⏱️ Circles: loadConnectionGroups in ${Date.now() - t0}ms`);
       setConnectionGroups(groups);
     } catch (error) {
       console.error('Error loading groups:', error);
@@ -456,8 +594,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   };
 
   const loadGroupInvites = async () => {
+    const t0 = Date.now();
     try {
-      const invites = await getPendingGroupInvites();
+      const invites = await getPendingGroupInvites(currentUser.id);
+      console.log(`⏱️ Circles: loadGroupInvites in ${Date.now() - t0}ms`);
       setGroupInvites(invites);
     } catch (error) {
       console.error('Error loading invites:', error);

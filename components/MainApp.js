@@ -32,6 +32,7 @@ import EventDetailView from './EventDetailView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/coffeeChatHelpers'
 import NudgeBanner from './NudgeBanner'
+import { ToastContainer, useToast } from './Toast'
 import { parseLocalDate } from '@/lib/dateUtils'
 
 function MainApp({ currentUser, onSignOut }) {
@@ -44,7 +45,9 @@ function MainApp({ currentUser, onSignOut }) {
   
   // Debug: uncomment to track renders
   // console.log(`🔁 Render #${renderCountRef.current} | Age: ${Date.now() - mountTimeRef.current}ms`)
-  
+
+  const toast = useToast()
+
   // 🔥 WRAPPER for sign out with debugging
   const handleSignOut = useCallback(async () => {
     console.log('🚨 MainApp: Sign out button clicked!')
@@ -1534,9 +1537,9 @@ function MainApp({ currentUser, onSignOut }) {
 
       if (error) {
         if (error.code === '23505') { // Unique violation
-          alert('You have already signed up for this meetup!')
+          toast.info('You have already signed up for this meetup')
         } else {
-          alert('Error signing up: ' + error.message)
+          toast.error('Error signing up: ' + error.message)
         }
       } else {
         await loadUserSignups()
@@ -1555,7 +1558,7 @@ function MainApp({ currentUser, onSignOut }) {
         })
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
@@ -1572,20 +1575,20 @@ function MainApp({ currentUser, onSignOut }) {
         .eq('user_id', currentUser.id)
 
       if (error) {
-        alert('Error canceling signup: ' + error.message)
+        toast.error('Error canceling signup: ' + error.message)
       } else {
         await loadUserSignups()
         await loadMeetupsFromDatabase()
-        alert('Signup canceled successfully!')
+        toast.success('Signup canceled')
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
   const handleCreateMeetup = async () => {
     if (!newMeetup.date || !newMeetup.time || !newMeetup.topic) {
-      alert('Please fill in topic, date and time')
+      toast.error('Please fill in topic, date and time')
       return
     }
 
@@ -1607,7 +1610,7 @@ function MainApp({ currentUser, onSignOut }) {
         .select()
 
       if (error) {
-        alert('Error creating meetup: ' + error.message)
+        toast.error('Error creating meetup: ' + error.message)
       } else {
         // Auto-RSVP the creator
         if (data && data[0]?.id) {
@@ -1621,10 +1624,10 @@ function MainApp({ currentUser, onSignOut }) {
         setNewMeetup({ date: '', time: '', location: '', topic: '', duration: '60', participantLimit: '100', description: '' })
         setSelectedDate(null)
         setShowCreateMeetup(false)
-        alert('Meetup created successfully!')
+        toast.success('Meetup created!')
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
@@ -1635,7 +1638,7 @@ function MainApp({ currentUser, onSignOut }) {
 
   const handleUpdateMeetup = async () => {
     if (!editingMeetup.date || !editingMeetup.time) {
-      alert('Please fill in date and time')
+      toast.error('Please fill in date and time')
       return
     }
 
@@ -1656,16 +1659,16 @@ function MainApp({ currentUser, onSignOut }) {
         .eq('id', editingMeetup.id)
 
       if (error) {
-        alert('Error updating meetup: ' + error.message)
+        toast.error('Error updating meetup: ' + error.message)
       } else {
         // Reload meetups to get updated data
         await loadMeetupsFromDatabase()
         setShowEditMeetup(false)
         setEditingMeetup(null)
-        alert('Meetup updated successfully!')
+        toast.success('Meetup updated!')
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
@@ -1681,20 +1684,20 @@ function MainApp({ currentUser, onSignOut }) {
         .eq('id', meetupId)
 
       if (error) {
-        alert('Error cancelling meetup: ' + error.message)
+        toast.error('Error cancelling meetup: ' + error.message)
       } else {
         // Reload meetups from database
         await loadMeetupsFromDatabase()
-        alert('Meetup cancelled successfully!')
+        toast.success('Meetup cancelled')
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
   const handleSetLocation = async (meetupId, location) => {
     if (!location.trim()) {
-      alert('Please enter a location')
+      toast.error('Please enter a location')
       return
     }
 
@@ -1708,14 +1711,14 @@ function MainApp({ currentUser, onSignOut }) {
         .eq('id', meetupId)
 
       if (error) {
-        alert('Error setting location: ' + error.message)
+        toast.error('Error setting location: ' + error.message)
       } else {
         // Reload meetups from database
         await loadMeetupsFromDatabase()
-        alert('Location set successfully!')
+        toast.success('Location set!')
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
@@ -1726,13 +1729,13 @@ function MainApp({ currentUser, onSignOut }) {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file')
+      toast.error('Please select an image file')
       return
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB')
+      toast.error('Image must be less than 5MB')
       return
     }
 
@@ -1763,17 +1766,62 @@ function MainApp({ currentUser, onSignOut }) {
       console.log('Photo uploaded:', publicUrl)
     } catch (err) {
       console.error('Upload error:', err)
-      alert('Failed to upload photo: ' + err.message)
+      toast.error('Failed to upload photo: ' + err.message)
     } finally {
       setUploadingPhoto(false)
     }
   }
 
-  const handleSaveProfile = async () => {
-    if (!editedProfile.name || !editedProfile.career || !editedProfile.city || !editedProfile.state) {
-      alert('Please fill in all required fields')
-      return
+  const [profileErrors, setProfileErrors] = useState({})
+  const [detectingLocation, setDetectingLocation] = useState(false)
+
+  const detectLocation = useCallback(async () => {
+    setDetectingLocation(true)
+    try {
+      // Use browser timezone
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      setEditedProfile(prev => ({ ...prev, timezone }))
+
+      // Try geolocation → reverse geocode
+      if (navigator.geolocation) {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+        )
+        const { latitude, longitude } = pos.coords
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=en`
+        )
+        const data = await res.json()
+        const addr = data.address || {}
+        const city = addr.city || addr.town || addr.village || addr.suburb || ''
+        const state = addr.state ? (addr['ISO3166-2-lvl4']?.split('-')[1] || addr.state).slice(0, 2).toUpperCase() : ''
+        const country = addr.country || ''
+        setEditedProfile(prev => ({
+          ...prev,
+          city: city || prev.city,
+          state: state || prev.state,
+          country: country || prev.country,
+          timezone,
+        }))
+      }
+    } catch (e) {
+      console.log('Location detection failed:', e.message)
+      // Still set timezone even if geolocation fails
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      setEditedProfile(prev => ({ ...prev, timezone }))
+    } finally {
+      setDetectingLocation(false)
     }
+  }, [])
+
+  const handleSaveProfile = async () => {
+    const errors = {}
+    if (!editedProfile.name?.trim()) errors.name = true
+    if (!editedProfile.career?.trim()) errors.career = true
+    if (!editedProfile.city?.trim()) errors.city = true
+    if (!editedProfile.state?.trim()) errors.state = true
+    setProfileErrors(errors)
+    if (Object.keys(errors).length > 0) return
 
     try {
       const { error } = await supabase
@@ -1785,26 +1833,27 @@ function MainApp({ currentUser, onSignOut }) {
           vibe_category: editedProfile.vibe_category || null,
           career_stage: editedProfile.career_stage || null,
           hook: editedProfile.hook || null,
+          bio: editedProfile.hook || null,
           open_to_hosting: editedProfile.open_to_hosting || false,
           age: editedProfile.age ? parseInt(editedProfile.age) : null,
           city: editedProfile.city,
           state: editedProfile.state.toUpperCase(),
-          bio: editedProfile.bio,
+          country: editedProfile.country || null,
+          timezone: editedProfile.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           profile_picture: editedProfile.profile_picture || null
         })
         .eq('id', currentUser.id)
 
       if (error) {
-        alert('Error updating profile: ' + error.message)
+        toast.error('Error updating profile: ' + error.message)
       } else {
-        // Update local state
+        // Update local state — no reload needed, stays on current page
         Object.assign(currentUser, editedProfile)
         setShowEditProfile(false)
-        alert('Profile updated successfully!')
-        window.location.reload() // Reload to fetch updated data
+        toast.success('Profile updated!')
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
@@ -1821,10 +1870,10 @@ function MainApp({ currentUser, onSignOut }) {
 
       if (error) {
         if (error.code === '23505') {
-          alert('You already showed interest in this person')
+          toast.info('You already showed interest in this person')
         } else {
           console.error('Error inserting interest:', error)
-          alert('Error: ' + error.message)
+          toast.error('Error: ' + error.message)
         }
         return
       }
@@ -1845,9 +1894,9 @@ function MainApp({ currentUser, onSignOut }) {
         console.log('🔍 Mutual check result:', mutualCheck)
         
         if (mutualCheck) {
-          alert(`🎉 It's a match! You and ${userName} are now connected!`)
+          toast.success(`It's a match! You and ${userName} are now connected!`)
         } else {
-          alert(`✓ Interest shown in ${userName}`)
+          toast.success(`Interest shown in ${userName}`)
         }
       }
       
@@ -1860,7 +1909,7 @@ function MainApp({ currentUser, onSignOut }) {
       console.log('✅ Data reloaded')
     } catch (err) {
       console.error('💥 Error in handleShowInterest:', err)
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
@@ -1873,14 +1922,14 @@ function MainApp({ currentUser, onSignOut }) {
         .eq('interested_in_user_id', userId)
 
       if (error) {
-        alert('Error: ' + error.message)
+        toast.error('Error: ' + error.message)
       } else {
-        alert('Interest removed')
+        toast.info('Interest removed')
         loadMyInterests()
         loadMeetupPeople()
       }
     } catch (err) {
-      alert('Error: ' + err.message)
+      toast.error('Error: ' + err.message)
     }
   }
 
@@ -1909,7 +1958,7 @@ function MainApp({ currentUser, onSignOut }) {
       // Check Agora App ID is configured (for room creation)
       const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
       if (!appId) {
-        alert('❌ Video not configured\n\nPlease add NEXT_PUBLIC_AGORA_APP_ID to your .env.local file and restart the server.\n\nSee AGORA_SETUP.md for instructions.');
+        toast.error('Video not configured. Please add NEXT_PUBLIC_AGORA_APP_ID to .env.local and restart.');
         return;
       }
 
@@ -1945,13 +1994,20 @@ function MainApp({ currentUser, onSignOut }) {
         errorMsg += error.message;
       }
 
-      alert(errorMsg);
+      toast.error(errorMsg);
     }
   }
 
   const openEditProfile = () => {
-    setEditedProfile({ ...currentUser })
+    setProfileErrors({})
+    const profile = { ...currentUser }
+    setEditedProfile(profile)
     setShowEditProfile(true)
+    // Auto-detect location if city is empty
+    if (!profile.city?.trim()) {
+      // Slight delay so the modal renders first
+      setTimeout(() => detectLocation(), 300)
+    }
   }
 
   const ProgressBar = ({ current, total }) => {
@@ -3288,7 +3344,7 @@ function MainApp({ currentUser, onSignOut }) {
                       }).catch(() => {})
                     } else {
                       navigator.clipboard.writeText(window.location.origin)
-                      alert('Link copied to clipboard!')
+                      toast.success('Link copied to clipboard!')
                     }
                   },
                   badge: null,
@@ -3757,6 +3813,7 @@ function MainApp({ currentUser, onSignOut }) {
 
   return (
     <div className="min-h-screen pb-28" style={{ background: '#FDF8F3' }}>
+      <ToastContainer toasts={toast.toasts} onDismiss={toast.dismiss} />
       {/* Onboarding for new users */}
       {showOnboarding && (
         <Onboarding
@@ -4021,7 +4078,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <input
                   type="text"
                   placeholder="Type a message..."
-                  className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-rose-500"
+                  className="flex-1 border border-gray-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-[#6B4F3F]"
                 />
                 <button className="bg-rose-500 hover:bg-rose-600 text-white p-2 rounded-full transition-colors">
                   <Send className="w-5 h-5" />
@@ -4050,14 +4107,14 @@ function MainApp({ currentUser, onSignOut }) {
                   <img
                     src={editedProfile.profile_picture}
                     alt="Profile"
-                    className="w-24 h-24 rounded-full object-cover border-4 border-rose-200"
+                    className="w-24 h-24 rounded-full object-cover border-4 border-[#E6D5C3]"
                   />
                 ) : (
-                  <div className="w-24 h-24 bg-rose-200 rounded-full flex items-center justify-center text-3xl text-rose-600 font-bold border-4 border-rose-100">
+                  <div className="w-24 h-24 bg-[#F4EEE6] rounded-full flex items-center justify-center text-3xl text-[#6B4F3F] font-bold border-4 border-[#E6D5C3]">
                     {(editedProfile.name || editedProfile.email?.split('@')[0] || 'U').charAt(0).toUpperCase()}
                   </div>
                 )}
-                <label className="absolute bottom-0 right-0 bg-rose-500 hover:bg-rose-600 text-white p-2 rounded-full cursor-pointer shadow-lg transition-colors">
+                <label className="absolute bottom-0 right-0 bg-[#6B4F3F] hover:bg-[#5A4235] text-white p-2 rounded-full cursor-pointer shadow-lg transition-colors">
                   {uploadingPhoto ? (
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
@@ -4080,24 +4137,26 @@ function MainApp({ currentUser, onSignOut }) {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Name <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={editedProfile.name}
-                  onChange={(e) => setEditedProfile({ ...editedProfile, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  onChange={(e) => { setEditedProfile({ ...editedProfile, name: e.target.value }); setProfileErrors(prev => ({ ...prev, name: false })) }}
+                  className={`w-full border rounded p-2 focus:outline-none ${profileErrors.name ? 'border-red-400 bg-red-50 focus:border-red-500' : 'border-gray-300 focus:border-[#6B4F3F]'}`}
                 />
+                {profileErrors.name && <p className="text-xs text-red-500 mt-1">Name is required</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Role <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={editedProfile.career}
-                  onChange={(e) => setEditedProfile({ ...editedProfile, career: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  onChange={(e) => { setEditedProfile({ ...editedProfile, career: e.target.value }); setProfileErrors(prev => ({ ...prev, career: false })) }}
+                  className={`w-full border rounded p-2 focus:outline-none ${profileErrors.career ? 'border-red-400 bg-red-50 focus:border-red-500' : 'border-gray-300 focus:border-[#6B4F3F]'}`}
                   placeholder="e.g. Product Manager"
                 />
+                {profileErrors.career && <p className="text-xs text-red-500 mt-1">Role is required</p>}
               </div>
 
               <div>
@@ -4105,7 +4164,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <select
                   value={editedProfile.industry || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, industry: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-[#6B4F3F]"
                 >
                   <option value="">Select industry</option>
                   <option value="Fintech">Fintech</option>
@@ -4131,7 +4190,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <select
                   value={editedProfile.career_stage || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, career_stage: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-[#6B4F3F]"
                 >
                   <option value="">Select stage</option>
                   <option value="emerging">Emerging (Early Career)</option>
@@ -4146,7 +4205,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <select
                   value={editedProfile.vibe_category || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, vibe_category: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-[#6B4F3F]"
                 >
                   <option value="">Select vibe</option>
                   <option value="advice">I need advice</option>
@@ -4156,57 +4215,76 @@ function MainApp({ currentUser, onSignOut }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Ask me about (Hook)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bio</label>
+                <p className="text-xs text-gray-400 mb-2">Describe yourself. What makes you special? Don't think too hard, just have fun with it.</p>
                 <input
                   type="text"
                   value={editedProfile.hook || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, hook: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
-                  placeholder="e.g. Career transitions, leadership, work-life balance"
-                  maxLength={150}
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-[#6B4F3F]"
+                  placeholder="e.g. PM by day, plant mom by night. Let's talk career pivots over coffee."
+                  maxLength={160}
                 />
-                <p className="text-xs text-gray-400 mt-1">{(editedProfile.hook || '').length}/150</p>
+                <p className="text-xs text-gray-400 mt-1">{(editedProfile.hook || '').length}/160</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Age</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Age</label>
+                <p className="text-xs text-gray-400 mb-2">Helps us connect you with people at a similar life stage. Only used for matching, never shown publicly.</p>
                 <input
                   type="number"
                   value={editedProfile.age || ''}
                   onChange={(e) => setEditedProfile({ ...editedProfile, age: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
+                  className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-[#6B4F3F]"
+                  placeholder="e.g. 32"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
-                  <input
-                    type="text"
-                    value={editedProfile.city}
-                    onChange={(e) => setEditedProfile({ ...editedProfile, city: e.target.value })}
-                    className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
-                  <input
-                    type="text"
-                    value={editedProfile.state}
-                    onChange={(e) => setEditedProfile({ ...editedProfile, state: e.target.value.toUpperCase() })}
-                    maxLength="2"
-                    className="w-full border border-gray-300 rounded p-2 focus:outline-none focus:border-rose-500 uppercase"
-                  />
-                </div>
-              </div>
-
+              {/* Location with auto-detect */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Bio</label>
-                <textarea
-                  value={editedProfile.bio || ''}
-                  onChange={(e) => setEditedProfile({ ...editedProfile, bio: e.target.value })}
-                  className="w-full border border-gray-300 rounded p-2 h-24 resize-none focus:outline-none focus:border-rose-500"
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">Location <span className="text-red-500">*</span></label>
+                  <button
+                    type="button"
+                    onClick={detectLocation}
+                    disabled={detectingLocation}
+                    className="flex items-center text-xs text-[#6B4F3F] hover:text-[#5A4235] font-medium disabled:opacity-50"
+                  >
+                    {detectingLocation ? (
+                      <><div className="w-3 h-3 border-2 border-[#6B4F3F] border-t-transparent rounded-full animate-spin mr-1" /> Detecting...</>
+                    ) : (
+                      <><Compass className="w-3 h-3 mr-1" /> Auto-detect</>
+                    )}
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <input
+                      type="text"
+                      value={editedProfile.city}
+                      onChange={(e) => { setEditedProfile({ ...editedProfile, city: e.target.value }); setProfileErrors(prev => ({ ...prev, city: false })) }}
+                      placeholder="City"
+                      className={`w-full border rounded p-2 focus:outline-none ${profileErrors.city ? 'border-red-400 bg-red-50 focus:border-red-500' : 'border-gray-300 focus:border-[#6B4F3F]'}`}
+                    />
+                    {profileErrors.city && <p className="text-xs text-red-500 mt-1">City is required</p>}
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={editedProfile.state}
+                      onChange={(e) => { setEditedProfile({ ...editedProfile, state: e.target.value.toUpperCase() }); setProfileErrors(prev => ({ ...prev, state: false })) }}
+                      maxLength="2"
+                      placeholder="State"
+                      className={`w-full border rounded p-2 focus:outline-none uppercase ${profileErrors.state ? 'border-red-400 bg-red-50 focus:border-red-500' : 'border-gray-300 focus:border-[#6B4F3F]'}`}
+                    />
+                    {profileErrors.state && <p className="text-xs text-red-500 mt-1">State is required</p>}
+                  </div>
+                </div>
+                {(editedProfile.country || editedProfile.timezone) && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    {[editedProfile.country, editedProfile.timezone].filter(Boolean).join(' · ')}
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
@@ -4218,7 +4296,7 @@ function MainApp({ currentUser, onSignOut }) {
                   type="button"
                   onClick={() => setEditedProfile({ ...editedProfile, open_to_hosting: !editedProfile.open_to_hosting })}
                   className={`relative w-12 h-6 rounded-full transition-colors ${
-                    editedProfile.open_to_hosting ? 'bg-rose-500' : 'bg-gray-300'
+                    editedProfile.open_to_hosting ? 'bg-[#6B4F3F]' : 'bg-gray-300'
                   }`}
                 >
                   <span
@@ -4239,7 +4317,7 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={handleSaveProfile}
-                className="flex-1 bg-rose-500 hover:bg-rose-600 text-white font-medium py-2 rounded transition-colors"
+                className="flex-1 bg-[#6B4F3F] hover:bg-[#5A4235] text-white font-medium py-2 rounded transition-colors"
               >
                 Save Changes
               </button>

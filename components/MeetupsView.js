@@ -67,22 +67,29 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     });
   };
 
+  const hasLoadedRef = React.useRef(false);
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     loadData();
-  }, [currentUser.id, meetups, userSignups]);
+  }, [currentUser.id]);
 
   const loadData = async () => {
+    const t0 = Date.now();
     setLoading(true);
     await Promise.all([
       loadCoffeeChats(),
       loadGroupEvents(),
-      loadPastMeetups(),
       loadPendingRequests()
     ]);
+    console.log(`⏱️ Meetups page data loaded in ${Date.now() - t0}ms`);
     setLoading(false);
+    // Defer past meetups — only visible in the "past" tab
+    loadPastMeetups();
   };
 
   const loadCoffeeChats = useCallback(async () => {
+    const t0 = Date.now();
     try {
       // Load all coffee chats for the user
       const { data, error } = await supabase
@@ -167,6 +174,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         };
       });
 
+      console.log(`⏱️ Meetups: loadCoffeeChats in ${Date.now() - t0}ms`);
       setCoffeeChats(chatsWithProfiles);
     } catch (err) {
       console.error('Error loading coffee chats:', err);
@@ -175,22 +183,17 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   }, [currentUser.id, supabase]);
 
   const loadGroupEvents = useCallback(async () => {
+    const t0 = Date.now();
     try {
       const signedUpMeetupIds = userSignups || [];
 
-      // Get circles the user is a member of
+      // Build meetups query with memberships in parallel
       const { data: membershipData } = await supabase
         .from('connection_group_members')
         .select('group_id')
         .eq('user_id', currentUser.id)
         .eq('status', 'accepted');
       const userCircleIds = (membershipData || []).map(m => m.group_id);
-
-      // Fetch meetups user is signed up for, created, or from their circles
-      let query = supabase
-        .from('meetups')
-        .select('*, connection_groups(id, name)')
-        .order('date', { ascending: true });
 
       const orConditions = [];
       if (signedUpMeetupIds.length > 0) {
@@ -200,9 +203,12 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       if (userCircleIds.length > 0) {
         orConditions.push(`circle_id.in.(${userCircleIds.join(',')})`);
       }
-      query = query.or(orConditions.join(','));
 
-      const { data: signedUpMeetups, error } = await query;
+      const { data: signedUpMeetups, error } = await supabase
+        .from('meetups')
+        .select('*, connection_groups(id, name)')
+        .or(orConditions.join(','))
+        .order('date', { ascending: true });
 
       if (error) {
         console.error('Error fetching signed up meetups:', error);
@@ -210,35 +216,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         return;
       }
 
-      // Get total meetup count per circle (including past)
-      let circleMeetupCounts = {};
-      const circleIdsInResults = [...new Set((signedUpMeetups || []).filter(m => m.circle_id).map(m => m.circle_id))];
-      if (circleIdsInResults.length > 0) {
-        try {
-          const { data: allCircleMeetups } = await supabase
-            .from('meetups')
-            .select('id, circle_id, date')
-            .in('circle_id', circleIdsInResults)
-            .order('date', { ascending: true });
-
-          (allCircleMeetups || []).forEach(m => {
-            if (!circleMeetupCounts[m.circle_id]) circleMeetupCounts[m.circle_id] = [];
-            circleMeetupCounts[m.circle_id].push(m.id);
-          });
-        } catch (e) {
-          console.log('Could not fetch circle meetup counts:', e.message);
-        }
-      }
-
       // Filter to upcoming ones
       const now = new Date();
       const upcomingFiltered = (signedUpMeetups || []).filter(meetup => {
-        // Exclude completed meetups
         if (meetup.status === 'completed' || meetup.status === 'cancelled') return false;
         try {
           let meetupDate;
           const dateStr = meetup.date;
-
           if (dateStr?.match(/^\d{4}-\d{2}-\d{2}$/)) {
             const [year, month, day] = dateStr.split('-').map(Number);
             meetupDate = new Date(year, month - 1, day);
@@ -248,13 +232,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           } else {
             return false;
           }
-
           if (meetup.time) {
             const [hours, minutes] = meetup.time.split(':').map(Number);
             meetupDate.setHours(hours, minutes, 0, 0);
           }
-
-          // Include meetups within 4 hour grace period
           const gracePeriod = new Date(meetupDate.getTime() + (4 * 60 * 60 * 1000));
           return now < gracePeriod;
         } catch {
@@ -262,43 +243,54 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         }
       });
 
-      // Fetch attendee profiles and host profiles for upcoming meetups
+      // Fire circle counts + attendee signups in parallel
       const upcomingMeetupIds = upcomingFiltered.map(m => m.id);
       const hostIds = [...new Set(upcomingFiltered.map(m => m.created_by).filter(Boolean))];
+      const circleIdsInResults = [...new Set((signedUpMeetups || []).filter(m => m.circle_id).map(m => m.circle_id))];
+
+      const parallelQueries = [];
+      const parallelKeys = [];
+
+      if (circleIdsInResults.length > 0) {
+        parallelQueries.push(supabase.from('meetups').select('id, circle_id, date').in('circle_id', circleIdsInResults).order('date', { ascending: true }));
+        parallelKeys.push('circleMeetups');
+      }
+      if (upcomingMeetupIds.length > 0) {
+        parallelQueries.push(supabase.from('meetup_signups').select('meetup_id, user_id').in('meetup_id', upcomingMeetupIds));
+        parallelKeys.push('signups');
+      }
+
+      const parallelResults = parallelQueries.length > 0 ? await Promise.all(parallelQueries) : [];
+      const parallelMap = {};
+      parallelKeys.forEach((key, i) => { parallelMap[key] = parallelResults[i]?.data || []; });
+
+      let circleMeetupCounts = {};
+      (parallelMap.circleMeetups || []).forEach(m => {
+        if (!circleMeetupCounts[m.circle_id]) circleMeetupCounts[m.circle_id] = [];
+        circleMeetupCounts[m.circle_id].push(m.id);
+      });
+
       let attendeesByMeetup = {};
       let hostProfileMap = {};
+      const signupData = parallelMap.signups || [];
 
-      if (upcomingMeetupIds.length > 0) {
-        try {
-          const { data: signupData } = await supabase
-            .from('meetup_signups')
-            .select('meetup_id, user_id')
-            .in('meetup_id', upcomingMeetupIds);
-
-          // Combine attendee user IDs and host IDs to fetch all profiles in one query
-          const attendeeUserIds = (signupData || []).map(s => s.user_id);
-          const allUserIds = [...new Set([...attendeeUserIds, ...hostIds])];
-          let profileMap = {};
-          if (allUserIds.length > 0) {
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('id, name, profile_picture, career')
-              .in('id', allUserIds);
-            (profileData || []).forEach(p => { profileMap[p.id] = p; });
-          }
+      if (signupData.length > 0 || hostIds.length > 0) {
+        const attendeeUserIds = signupData.map(s => s.user_id);
+        const allUserIds = [...new Set([...attendeeUserIds, ...hostIds])];
+        if (allUserIds.length > 0) {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('id, name, profile_picture, career')
+            .in('id', allUserIds);
+          const profileMap = {};
+          (profileData || []).forEach(p => { profileMap[p.id] = p; });
           hostProfileMap = profileMap;
 
-          (signupData || []).forEach(signup => {
-            if (!attendeesByMeetup[signup.meetup_id]) {
-              attendeesByMeetup[signup.meetup_id] = [];
-            }
+          signupData.forEach(signup => {
+            if (!attendeesByMeetup[signup.meetup_id]) attendeesByMeetup[signup.meetup_id] = [];
             const profile = profileMap[signup.user_id];
-            if (profile) {
-              attendeesByMeetup[signup.meetup_id].push(profile);
-            }
+            if (profile) attendeesByMeetup[signup.meetup_id].push(profile);
           });
-        } catch (e) {
-          console.log('Could not fetch attendee profiles:', e.message);
         }
       }
 
@@ -344,6 +336,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         };
       });
 
+      console.log(`⏱️ Meetups: loadGroupEvents in ${Date.now() - t0}ms`);
       setGroupEvents(upcomingEvents);
     } catch (err) {
       console.error('Error loading group events:', err);
@@ -352,24 +345,40 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   }, [userSignups, supabase]);
 
   const loadPastMeetups = useCallback(async () => {
+    const t0 = Date.now();
     try {
       const now = new Date();
       const gracePeriod = new Date(now.getTime() - 60 * 60 * 1000);
       const allPastMeetups = [];
 
-      // 0. Fetch call recaps first so we can use them to identify events that actually happened
-      let recaps = [];
-      try {
-        const { data: recapData } = await supabase
+      // Round 1: Fire all independent queries in parallel
+      const [recapResult, coffeeResult, signupsResult, membershipResult] = await Promise.all([
+        supabase
           .from('call_recaps')
           .select('*')
           .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
           .order('created_at', { ascending: false })
-          .limit(50);
-        recaps = recapData || [];
-      } catch (e) {
-        console.log('Call recaps not available');
-      }
+          .limit(50),
+        supabase
+          .from('coffee_chats')
+          .select('*')
+          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+          .order('scheduled_time', { ascending: false })
+          .limit(20),
+        supabase
+          .from('meetup_signups')
+          .select('meetup_id')
+          .eq('user_id', currentUser.id),
+        supabase
+          .from('connection_group_members')
+          .select('group_id')
+          .eq('user_id', currentUser.id)
+          .eq('status', 'accepted'),
+      ]);
+
+      const recaps = recapResult.data || [];
+      const signedUpIds = (signupsResult.data || []).map(s => s.meetup_id);
+      const userCircleIds = (membershipResult.data || []).map(m => m.group_id);
 
       // Helper: check if a date has a matching recap (within 4 hours)
       const findMatchingRecap = (rawDate) => {
@@ -380,141 +389,108 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         });
       };
 
-      // 1. Load past coffee chats
-      try {
-        const { data: coffeeData } = await supabase
-          .from('coffee_chats')
-          .select('*')
-          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
-          .order('scheduled_time', { ascending: false })
-          .limit(20);
+      // Round 2: Queries that depend on Round 1 results — in parallel
+      const round2Promises = [];
+      const round2Keys = [];
 
-        const pastChats = (coffeeData || []).filter(chat => {
-          if (!chat.scheduled_time) return false;
-          if (chat.status === 'completed') return true;
-          // Also include if there's a matching recap (call actually happened)
-          if (chat.status === 'accepted') {
-            const chatTime = new Date(chat.scheduled_time);
-            return chatTime < gracePeriod && !!findMatchingRecap(chatTime);
-          }
-          return false;
-        });
-
-        // Get profile info for coffee chat partners
-        const otherUserIds = pastChats.map(chat =>
-          chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
-        ).filter(Boolean);
-
-        let profiles = [];
-        if (otherUserIds.length > 0) {
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('id, name, profile_picture, career')
-            .in('id', otherUserIds);
-          profiles = profileData || [];
+      // Coffee chat partner profiles
+      const coffeeData = coffeeResult.data || [];
+      const pastChats = coffeeData.filter(chat => {
+        if (!chat.scheduled_time) return false;
+        if (chat.status === 'completed') return true;
+        if (chat.status === 'accepted') {
+          const chatTime = new Date(chat.scheduled_time);
+          return chatTime < gracePeriod && !!findMatchingRecap(chatTime);
         }
-
-        const profileMap = new Map(profiles.map(p => [p.id, p]));
-
-        pastChats.forEach(chat => {
-          const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id;
-          const profile = profileMap.get(otherId);
-          allPastMeetups.push({
-            id: `coffee-${chat.id}`,
-            sourceId: chat.id,
-            type: 'coffee',
-            with: profile?.name || 'Unknown',
-            withProfile: profile,
-            title: chat.topic ? `${chat.topic} — with ${profile?.name || 'Unknown'}` : `☕ Coffee with ${profile?.name || 'Unknown'}`,
-            emoji: '☕',
-            date: formatDate(chat.scheduled_time || chat.created_at),
-            rawDate: new Date(chat.scheduled_time || chat.created_at),
-            topic: chat.notes || 'Coffee chat',
-            notes: null,
-            followUp: chat.status !== 'completed',
-          });
-        });
-      } catch (e) {
-        console.log('Coffee chats not available:', e.message);
+        return false;
+      });
+      const otherUserIds = pastChats.map(chat =>
+        chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
+      ).filter(Boolean);
+      if (otherUserIds.length > 0) {
+        round2Promises.push(supabase.from('profiles').select('id, name, profile_picture, career').in('id', otherUserIds));
+        round2Keys.push('coffeeProfiles');
       }
 
-      // 2. Load past meetups user attended (both circle and public)
-      try {
-        // Get meetup IDs the user signed up for
-        const { data: signups } = await supabase
-          .from('meetup_signups')
-          .select('meetup_id')
-          .eq('user_id', currentUser.id);
-
-        const signedUpIds = (signups || []).map(s => s.meetup_id);
-
-        // Also include meetups user created or from circles user belongs to
-        const { data: membershipData } = await supabase
-          .from('connection_group_members')
-          .select('group_id')
-          .eq('user_id', currentUser.id)
-          .eq('status', 'accepted');
-        const userCircleIds = (membershipData || []).map(m => m.group_id);
-
-        let meetupsQuery = supabase
-          .from('meetups')
-          .select('*, connection_groups(id, name)')
-          .order('date', { ascending: false })
-          .limit(30);
-
-        const orConditions = [];
-        if (signedUpIds.length > 0) {
-          orConditions.push(`id.in.(${signedUpIds.join(',')})`);
-        }
-        orConditions.push(`created_by.eq.${currentUser.id}`);
-        if (userCircleIds.length > 0) {
-          orConditions.push(`circle_id.in.(${userCircleIds.join(',')})`);
-        }
-        meetupsQuery = meetupsQuery.or(orConditions.join(','));
-
-        const { data: meetupsData } = await meetupsQuery;
-
-        // Filter to past meetups that actually happened
-        // (completed status OR has a matching call recap)
-        const pastMeetups = (meetupsData || []).filter(meetup => {
-          const userParticipated = signedUpIds.includes(meetup.id) || meetup.created_by === currentUser.id;
-          if (!userParticipated) return false;
-          if (meetup.status === 'completed') return true;
-          // Also include if there's a matching recap
-          const meetupDate = parseLocalDate(meetup.date);
-          if (meetup.time) {
-            const [hours, minutes] = meetup.time.split(':').map(Number);
-            meetupDate.setHours(hours, minutes, 0, 0);
-          }
-          return meetupDate < gracePeriod && !!findMatchingRecap(meetupDate);
-        });
-
-        pastMeetups.forEach(meetup => {
-          const isCircle = !!meetup.circle_id;
-          const circleName = meetup.connection_groups?.name;
-
-          allPastMeetups.push({
-            id: `meetup-${meetup.id}`,
-            sourceId: meetup.id,
-            type: isCircle ? 'circle' : 'public',
-            with: isCircle ? circleName : null,
-            title: isCircle
-              ? `🔒 ${circleName || 'Circle'} Meetup`
-              : `🎉 ${meetup.topic || 'Event'}`,
-            emoji: isCircle ? '🔒' : '🎉',
-            date: formatDate(meetup.date),
-            rawDate: (() => { const d = parseLocalDate(meetup.date); if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); d.setHours(h, m, 0, 0); } return d; })(),
-            topic: meetup.topic || meetup.description || (isCircle ? 'Circle meetup' : 'Public event'),
-            notes: meetup.description,
-            location: meetup.location,
-            followUp: false,
-            circleName: circleName,
-            circleId: meetup.circle_id,
-          });
-        });
-      } catch (e) {
-        console.log('Meetups not available:', e.message);
+      // Meetups query
+      let meetupsQuery = supabase
+        .from('meetups')
+        .select('*, connection_groups(id, name)')
+        .order('date', { ascending: false })
+        .limit(30);
+      const orConditions = [];
+      if (signedUpIds.length > 0) {
+        orConditions.push(`id.in.(${signedUpIds.join(',')})`);
       }
+      orConditions.push(`created_by.eq.${currentUser.id}`);
+      if (userCircleIds.length > 0) {
+        orConditions.push(`circle_id.in.(${userCircleIds.join(',')})`);
+      }
+      meetupsQuery = meetupsQuery.or(orConditions.join(','));
+      round2Promises.push(meetupsQuery);
+      round2Keys.push('meetups');
+
+      const round2Results = await Promise.all(round2Promises);
+      const round2Map = {};
+      round2Keys.forEach((key, i) => { round2Map[key] = round2Results[i]?.data || []; });
+
+      // Process coffee chats
+      const profileMap = new Map((round2Map.coffeeProfiles || []).map(p => [p.id, p]));
+      pastChats.forEach(chat => {
+        const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id;
+        const profile = profileMap.get(otherId);
+        allPastMeetups.push({
+          id: `coffee-${chat.id}`,
+          sourceId: chat.id,
+          type: 'coffee',
+          with: profile?.name || 'Unknown',
+          withProfile: profile,
+          title: chat.topic ? `${chat.topic} — with ${profile?.name || 'Unknown'}` : `☕ Coffee with ${profile?.name || 'Unknown'}`,
+          emoji: '☕',
+          date: formatDate(chat.scheduled_time || chat.created_at),
+          rawDate: new Date(chat.scheduled_time || chat.created_at),
+          topic: chat.notes || 'Coffee chat',
+          notes: null,
+          followUp: chat.status !== 'completed',
+        });
+      });
+
+      // Process meetups
+      const meetupsData = round2Map.meetups || [];
+      const pastMeetups = meetupsData.filter(meetup => {
+        const userParticipated = signedUpIds.includes(meetup.id) || meetup.created_by === currentUser.id;
+        if (!userParticipated) return false;
+        if (meetup.status === 'completed') return true;
+        const meetupDate = parseLocalDate(meetup.date);
+        if (meetup.time) {
+          const [hours, minutes] = meetup.time.split(':').map(Number);
+          meetupDate.setHours(hours, minutes, 0, 0);
+        }
+        return meetupDate < gracePeriod && !!findMatchingRecap(meetupDate);
+      });
+
+      pastMeetups.forEach(meetup => {
+        const isCircle = !!meetup.circle_id;
+        const circleName = meetup.connection_groups?.name;
+        allPastMeetups.push({
+          id: `meetup-${meetup.id}`,
+          sourceId: meetup.id,
+          type: isCircle ? 'circle' : 'public',
+          with: isCircle ? circleName : null,
+          title: isCircle
+            ? `🔒 ${circleName || 'Circle'} Meetup`
+            : `🎉 ${meetup.topic || 'Event'}`,
+          emoji: isCircle ? '🔒' : '🎉',
+          date: formatDate(meetup.date),
+          rawDate: (() => { const d = parseLocalDate(meetup.date); if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); d.setHours(h, m, 0, 0); } return d; })(),
+          topic: meetup.topic || meetup.description || (isCircle ? 'Circle meetup' : 'Public event'),
+          notes: meetup.description,
+          location: meetup.location,
+          followUp: false,
+          circleName: circleName,
+          circleId: meetup.circle_id,
+        });
+      });
 
       // 3. Match recaps to past meetups and extract topics
       allPastMeetups.forEach(item => {
@@ -602,6 +578,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     } catch (err) {
       console.error('Error loading past meetups:', err);
       setPastMeetups([]);
+    } finally {
+      console.log(`⏱️ Meetups: loadPastMeetups in ${Date.now() - t0}ms`);
     }
   }, [currentUser.id, supabase]);
 
@@ -614,6 +592,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   };
 
   const loadPendingRequests = useCallback(async () => {
+    const t0 = Date.now();
     try {
       // Count pending coffee chat requests (where user is recipient)
       const { count: pendingCoffee, error: coffeeError } = await supabase
@@ -636,6 +615,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     } catch (err) {
       // Silently handle errors
       setPendingRequests({ coffeeChats: 0, circleInvites: 0 });
+    } finally {
+      console.log(`⏱️ Meetups: loadPendingRequests in ${Date.now() - t0}ms`);
     }
   }, [currentUser.id, supabase]);
 

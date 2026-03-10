@@ -131,7 +131,8 @@ CREATE POLICY "Anyone can read provider metrics"
 -- ============================================================================
 
 -- View: Provider performance comparison
-CREATE OR REPLACE VIEW provider_performance_summary AS
+CREATE OR REPLACE VIEW provider_performance_summary
+WITH (security_invoker = true) AS
 SELECT
   provider,
   call_type,

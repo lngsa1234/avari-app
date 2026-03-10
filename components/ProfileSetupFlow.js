@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Heart,
   MessageCircle,
@@ -19,7 +19,9 @@ import {
   Check,
   ChevronRight,
   ChevronLeft,
-  Lock
+  Lock,
+  Loader,
+  Navigation
 } from 'lucide-react';
 
 // ============================================================
@@ -76,11 +78,108 @@ const useWindowSize = () => {
 // ============================================================
 
 const COMMON_ROLES = [
-  'Product Manager', 'Software Engineer', 'Data Scientist', 'UX Designer',
-  'Marketing Manager', 'Sales Executive', 'Operations Manager', 'HR Manager',
-  'Financial Analyst', 'Project Manager', 'Business Analyst', 'Content Strategist',
-  'Growth Manager', 'Customer Success Manager', 'Engineering Manager', 'CTO',
-  'CEO', 'Founder', 'Consultant', 'Freelancer', 'Other'
+  // Leadership & Executive
+  'CEO', 'CTO', 'CFO', 'COO', 'CMO', 'CPO', 'CIO', 'CISO',
+  'VP of Engineering', 'VP of Product', 'VP of Marketing', 'VP of Sales', 'VP of Operations',
+  'Director of Engineering', 'Director of Product', 'Director of Marketing', 'Director of Sales',
+  'Director of Operations', 'Director of Design', 'Director of Data Science',
+  'Head of Engineering', 'Head of Product', 'Head of Marketing', 'Head of Sales',
+  'Head of Design', 'Head of Growth', 'Head of People', 'Head of Data',
+  'Co-Founder', 'Founder', 'Managing Director', 'General Manager', 'Partner',
+
+  // Product
+  'Product Manager', 'Senior Product Manager', 'Lead Product Manager', 'Associate Product Manager',
+  'Product Owner', 'Product Analyst', 'Product Marketing Manager', 'Product Designer',
+  'Technical Product Manager', 'Group Product Manager',
+
+  // Engineering & Technical
+  'Software Engineer', 'Senior Software Engineer', 'Staff Software Engineer', 'Principal Engineer',
+  'Frontend Engineer', 'Backend Engineer', 'Full Stack Engineer', 'Mobile Engineer',
+  'iOS Developer', 'Android Developer', 'Web Developer', 'DevOps Engineer', 'SRE',
+  'Platform Engineer', 'Infrastructure Engineer', 'Cloud Engineer', 'Security Engineer',
+  'QA Engineer', 'QA Tester', 'Software Tester', 'Test Engineer', 'Automation Engineer', 'Engineering Manager',
+  'Senior Engineering Manager', 'Technical Lead', 'Tech Lead', 'Architect',
+  'Solutions Architect', 'Software Architect', 'Systems Engineer',
+  'Machine Learning Engineer', 'AI Engineer', 'Blockchain Developer',
+  'Embedded Systems Engineer', 'Firmware Engineer',
+
+  // Data & Analytics
+  'Data Scientist', 'Senior Data Scientist', 'Data Analyst', 'Data Engineer',
+  'Business Intelligence Analyst', 'Analytics Engineer', 'ML Engineer',
+  'Research Scientist', 'Applied Scientist', 'Quantitative Analyst',
+  'Data Architect', 'Head of Analytics',
+
+  // Design & UX
+  'UX Designer', 'Senior UX Designer', 'UI Designer', 'UX Researcher',
+  'Product Designer', 'Senior Product Designer', 'Visual Designer', 'Interaction Designer',
+  'Design Lead', 'Design Manager', 'Creative Director', 'Brand Designer',
+  'Graphic Designer', 'Motion Designer', 'Design Systems Lead',
+
+  // Marketing
+  'Marketing Manager', 'Senior Marketing Manager', 'Growth Manager', 'Growth Marketing Manager',
+  'Digital Marketing Manager', 'Content Marketing Manager', 'Brand Manager',
+  'Performance Marketing Manager', 'SEO Specialist', 'Social Media Manager',
+  'Community Manager', 'Content Strategist', 'Content Creator', 'Copywriter',
+  'Marketing Analyst', 'Demand Generation Manager', 'Marketing Director',
+  'Communications Manager', 'PR Manager', 'Event Manager',
+
+  // Sales & Business Development
+  'Sales Executive', 'Account Executive', 'Senior Account Executive',
+  'Sales Manager', 'Sales Director', 'Business Development Manager',
+  'Business Development Representative', 'Sales Development Representative',
+  'Account Manager', 'Key Account Manager', 'Enterprise Sales',
+  'Solutions Consultant', 'Sales Engineer', 'Revenue Operations Manager',
+  'Partnerships Manager', 'Channel Manager',
+
+  // Customer Success & Support
+  'Customer Success Manager', 'Senior Customer Success Manager',
+  'Customer Support Manager', 'Technical Support Engineer',
+  'Customer Experience Manager', 'Implementation Manager',
+  'Onboarding Specialist', 'Support Engineer',
+
+  // Operations & Strategy
+  'Operations Manager', 'Senior Operations Manager', 'Business Operations Manager',
+  'Strategy Manager', 'Strategy Consultant', 'Chief of Staff',
+  'Program Manager', 'Project Manager', 'Senior Project Manager',
+  'Scrum Master', 'Agile Coach', 'Delivery Manager',
+  'Supply Chain Manager', 'Logistics Manager', 'Procurement Manager',
+
+  // Finance & Legal
+  'Financial Analyst', 'Senior Financial Analyst', 'Finance Manager',
+  'Controller', 'Accountant', 'Investment Analyst', 'Investment Banker',
+  'Venture Capitalist', 'Private Equity Associate', 'Fund Manager',
+  'Tax Advisor', 'Auditor', 'Risk Analyst', 'Compliance Manager',
+  'Legal Counsel', 'General Counsel', 'Lawyer', 'Paralegal',
+
+  // HR & People
+  'HR Manager', 'Senior HR Manager', 'People Operations Manager',
+  'Recruiter', 'Senior Recruiter', 'Talent Acquisition Manager',
+  'HR Business Partner', 'Compensation & Benefits Manager',
+  'Learning & Development Manager', 'People Partner',
+
+  // Consulting & Professional Services
+  'Consultant', 'Senior Consultant', 'Management Consultant',
+  'Strategy Consultant', 'Technology Consultant', 'Principal Consultant',
+  'Business Analyst', 'Senior Business Analyst', 'Systems Analyst',
+  'Freelancer', 'Independent Consultant', 'Advisor',
+
+  // Research & Academia
+  'Researcher', 'Research Engineer', 'Research Analyst',
+  'Professor', 'Lecturer', 'Postdoctoral Researcher', 'PhD Student',
+  'Academic', 'Research Director',
+
+  // Healthcare & Biotech
+  'Physician', 'Doctor', 'Nurse', 'Pharmacist',
+  'Clinical Research Associate', 'Biotech Researcher',
+  'Healthcare Administrator', 'Medical Director',
+
+  // Creative & Media
+  'Writer', 'Editor', 'Journalist', 'Producer', 'Videographer', 'Photographer',
+  'Art Director', 'Creative Strategist', 'Film Director',
+
+  // Other
+  'Student', 'Intern', 'Career Changer', 'Entrepreneur', 'Investor', 'Angel Investor',
+  'Board Member', 'Advisor', 'Mentor', 'Coach', 'Trainer',
 ];
 
 const INDUSTRIES = [
@@ -100,6 +199,50 @@ const INDUSTRIES = [
   { id: 'government', label: 'Government', popular: false },
   { id: 'other', label: 'Other', popular: false }
 ];
+
+// Role keywords → suggested industries (ordered by relevance)
+const ROLE_INDUSTRY_MAP = [
+  { keywords: ['software', 'engineer', 'developer', 'frontend', 'backend', 'full stack', 'mobile', 'ios', 'android', 'web dev', 'devops', 'sre', 'platform', 'infrastructure', 'cloud', 'qa', 'tester', 'test', 'automation', 'architect', 'tech lead', 'technical lead'], industries: ['SaaS', 'AI / Machine Learning', 'Fintech', 'E-commerce', 'HealthTech'] },
+  { keywords: ['data scientist', 'data analyst', 'data engineer', 'ml engineer', 'machine learning', 'ai engineer', 'applied scientist', 'research scientist', 'analytics', 'quantitative'], industries: ['AI / Machine Learning', 'SaaS', 'Fintech', 'HealthTech', 'Finance & Banking'] },
+  { keywords: ['product manager', 'product owner', 'product analyst', 'technical product', 'group product'], industries: ['SaaS', 'AI / Machine Learning', 'Fintech', 'E-commerce', 'HealthTech'] },
+  { keywords: ['product designer', 'ux', 'ui', 'design', 'visual', 'interaction', 'creative director', 'brand designer', 'graphic', 'motion', 'art director'], industries: ['SaaS', 'Media & Entertainment', 'E-commerce', 'AI / Machine Learning', 'EdTech'] },
+  { keywords: ['marketing', 'growth', 'seo', 'social media', 'content', 'brand manager', 'demand gen', 'copywriter', 'communications', 'pr manager'], industries: ['SaaS', 'E-commerce', 'Media & Entertainment', 'EdTech', 'Retail'] },
+  { keywords: ['sales', 'account executive', 'business development', 'sdr', 'bdr', 'enterprise sales', 'solutions consultant', 'sales engineer', 'revenue', 'partnerships', 'channel'], industries: ['SaaS', 'Fintech', 'E-commerce', 'Consulting', 'Retail'] },
+  { keywords: ['customer success', 'customer support', 'customer experience', 'implementation', 'onboarding specialist', 'support engineer'], industries: ['SaaS', 'E-commerce', 'HealthTech', 'EdTech', 'Fintech'] },
+  { keywords: ['financial', 'finance', 'accountant', 'controller', 'investment', 'banker', 'venture', 'private equity', 'fund manager', 'tax', 'auditor', 'risk analyst'], industries: ['Finance & Banking', 'Fintech', 'Consulting', 'SaaS', 'Government'] },
+  { keywords: ['hr', 'people', 'recruiter', 'talent', 'compensation', 'learning & development'], industries: ['SaaS', 'Consulting', 'Finance & Banking', 'HealthTech', 'Retail'] },
+  { keywords: ['consultant', 'management consultant', 'strategy', 'business analyst', 'systems analyst', 'advisor'], industries: ['Consulting', 'SaaS', 'Finance & Banking', 'Fintech', 'Government'] },
+  { keywords: ['operations', 'program manager', 'project manager', 'scrum', 'agile', 'delivery', 'supply chain', 'logistics', 'procurement', 'chief of staff'], industries: ['SaaS', 'Consulting', 'Manufacturing', 'Retail', 'E-commerce'] },
+  { keywords: ['physician', 'doctor', 'nurse', 'pharmacist', 'clinical', 'biotech', 'healthcare admin', 'medical'], industries: ['Healthcare', 'HealthTech', 'Non-profit', 'Government', 'Manufacturing'] },
+  { keywords: ['writer', 'editor', 'journalist', 'producer', 'videographer', 'photographer', 'film', 'creative strategist'], industries: ['Media & Entertainment', 'E-commerce', 'EdTech', 'SaaS', 'Non-profit'] },
+  { keywords: ['professor', 'lecturer', 'postdoc', 'phd', 'academic', 'research director', 'researcher'], industries: ['EdTech', 'AI / Machine Learning', 'Healthcare', 'Non-profit', 'Government'] },
+  { keywords: ['founder', 'co-founder', 'entrepreneur', 'ceo', 'cto', 'cfo', 'coo', 'cmo', 'cpo'], industries: ['SaaS', 'AI / Machine Learning', 'Fintech', 'E-commerce', 'HealthTech'] },
+  { keywords: ['investor', 'angel', 'board member', 'mentor', 'coach'], industries: ['Finance & Banking', 'Fintech', 'SaaS', 'Consulting', 'AI / Machine Learning'] },
+  { keywords: ['security', 'ciso', 'compliance'], industries: ['SaaS', 'Finance & Banking', 'Fintech', 'Government', 'Healthcare'] },
+  { keywords: ['blockchain', 'crypto', 'web3'], industries: ['Fintech', 'SaaS', 'AI / Machine Learning', 'Finance & Banking', 'E-commerce'] },
+  { keywords: ['legal', 'counsel', 'lawyer', 'paralegal'], industries: ['Finance & Banking', 'Consulting', 'Government', 'SaaS', 'Non-profit'] },
+  { keywords: ['embedded', 'firmware', 'hardware'], industries: ['Manufacturing', 'HealthTech', 'SaaS', 'AI / Machine Learning', 'E-commerce'] },
+];
+
+function getSuggestedIndustries(role) {
+  if (!role || role.length < 2) return [];
+  const lower = role.toLowerCase();
+  // Find best matching entry
+  let bestMatch = null;
+  let bestScore = 0;
+  for (const entry of ROLE_INDUSTRY_MAP) {
+    for (const kw of entry.keywords) {
+      if (lower.includes(kw) || kw.includes(lower)) {
+        const score = Math.min(kw.length, lower.length);
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = entry;
+        }
+      }
+    }
+  }
+  return bestMatch ? bestMatch.industries : [];
+}
 
 const CAREER_STAGES = [
   {
@@ -179,6 +322,13 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
   const [roleSearch, setRoleSearch] = useState('');
   const [industrySearch, setIndustrySearch] = useState('');
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [industryManuallySet, setIndustryManuallySet] = useState(false);
+  const [showAllIndustries, setShowAllIndustries] = useState(false);
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [locationDetected, setLocationDetected] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
 
   // Profile data
   const [profile, setProfile] = useState({
@@ -188,7 +338,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     career_stage: null,
     hook: '',
     open_to_hosting: false,
-    name: session?.profile?.name || '',
+    name: '',
     city: '',
     state: '',
     country: '',
@@ -200,7 +350,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     { id: 'vibe', title: "What's your vibe today?", subtitle: 'This helps us tune your Discover feed.', required: true },
     { id: 'role', title: 'What do you do?', subtitle: 'Your role and industry help us find your circle.', required: true },
     { id: 'stage', title: 'Where are you in your journey?', subtitle: 'This helps us match you with the right peers.', required: true },
-    { id: 'hook', title: 'What can others ask you about?', subtitle: 'Share your expertise with the community.', required: false },
+    { id: 'bio', title: 'Describe yourself', subtitle: "What makes you special? Don't think too hard, just have fun with it.", required: false },
     { id: 'hosting', title: 'Would you host a meetup?', subtitle: "You'll be notified when people need your expertise.", required: true },
     { id: 'identity', title: 'Tell us about yourself', subtitle: 'How should we introduce you?', required: true },
     { id: 'photo', title: 'Add a profile picture', subtitle: 'A photo helps build trust in the community.', required: false },
@@ -217,7 +367,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
       case 'vibe': return !!profile.vibe_category;
       case 'role': return !!profile.career && !!profile.industry;
       case 'stage': return !!profile.career_stage;
-      case 'hook': return true;
+      case 'bio': return true;
       case 'hosting': return true;
       case 'identity': return !!profile.name?.trim();
       case 'photo': return true;
@@ -258,6 +408,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
           career_stage: profile.career_stage,
           vibe_category: profile.vibe_category,
           hook: profile.hook?.trim() || null,
+          bio: profile.hook?.trim() || null,
           open_to_hosting: profile.open_to_hosting,
           city: profile.city?.trim() || null,
           state: profile.state?.trim() || null,
@@ -277,6 +428,91 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const detectLocation = async () => {
+    if (!navigator.geolocation) return;
+    setDetectingLocation(true);
+    try {
+      const pos = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+      );
+      const { latitude, longitude } = pos.coords;
+      const res = await fetch(
+        `/api/detect-location?lat=${latitude}&lon=${longitude}`
+      );
+      const data = await res.json();
+      if (data?.address) {
+        const city = data.address.city || data.address.town || data.address.village || '';
+        const state = data.address.state || '';
+        const country = data.address.country || '';
+        setProfile(prev => ({ ...prev, city, state, country }));
+        setLocationDetected(true);
+      }
+    } catch (err) {
+      console.error('Location detection failed:', err);
+    } finally {
+      setDetectingLocation(false);
+    }
+  };
+
+  const openCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 640 } });
+      streamRef.current = stream;
+      setShowCamera(true);
+      // Attach stream after render
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      }, 100);
+    } catch (err) {
+      console.error('Camera access failed:', err);
+      alert('Could not access camera. Please check permissions or use Upload Photo instead.');
+    }
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    // Center-crop to square
+    const sx = (video.videoWidth - size) / 2;
+    const sy = (video.videoHeight - size) / 2;
+    ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      closeCamera();
+      // Upload the captured photo
+      const fileName = `${session.user.id}_${Date.now()}.jpg`;
+      const filePath = `avatars/${fileName}`;
+      try {
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filePath, blob, { contentType: 'image/jpeg' });
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filePath);
+        setProfile(prev => ({ ...prev, profile_picture: publicUrl }));
+      } catch (error) {
+        console.error('Error uploading captured photo:', error);
+      }
+    }, 'image/jpeg', 0.9);
+  };
+
+  const closeCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setShowCamera(false);
   };
 
   const handlePhotoUpload = async (e) => {
@@ -327,6 +563,20 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     ind.label.toLowerCase().includes(industrySearch.toLowerCase())
   );
 
+  // Suggested industries based on role
+  const suggestedIndustries = getSuggestedIndustries(profile.career);
+
+  // Auto-select #1 suggested industry when role changes (unless user manually picked one)
+  const prevRoleRef = useRef(profile.career);
+  useEffect(() => {
+    if (profile.career !== prevRoleRef.current) {
+      prevRoleRef.current = profile.career;
+      if (!industryManuallySet && suggestedIndustries.length > 0) {
+        setProfile(prev => ({ ...prev, industry: suggestedIndustries[0] }));
+      }
+    }
+  }, [profile.career, suggestedIndustries, industryManuallySet]);
+
   // Get user initials for placeholder avatar
   const getInitials = () => {
     const name = profile.name || '';
@@ -346,7 +596,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     padding: '14px 16px 14px 44px',
     border: `1px solid ${colors.border}`,
     borderRadius: 12,
-    fontSize: isMobile ? 16 : 18,
+    fontSize: isMobile ? 14 : 15,
     fontFamily: fonts.sans,
     color: colors.text,
     background: '#fff',
@@ -451,12 +701,13 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
               setRoleSearch(e.target.value);
               setShowRoleDropdown(true);
             }}
-            onFocus={() => setShowRoleDropdown(true)}
+            onFocus={() => { if (roleSearch.length > 0) setShowRoleDropdown(true); }}
             onBlur={() => setTimeout(() => setShowRoleDropdown(false), 200)}
-            placeholder="e.g. Product Manager"
+            placeholder="e.g. Product Manager, QA Tester, Data Scientist..."
+            id="role-input"
             style={inputStyle}
           />
-          {showRoleDropdown && filteredRoles.length > 0 && (
+          {showRoleDropdown && roleSearch.length > 0 && filteredRoles.length > 0 && (
             <div style={{
               position: 'absolute',
               zIndex: 10,
@@ -494,24 +745,41 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
             </div>
           )}
         </div>
+        <style>{`#role-input::placeholder { color: #B8A089; opacity: 1; font-size: 14px; }`}</style>
       </div>
 
       {/* Industry Input */}
       <div>
         <label style={labelStyle}>Your Industry</label>
 
-        {/* Popular chips */}
+        {/* Industry chips — suggested first, then expandable rest */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          {INDUSTRIES.filter(i => i.popular).map((ind) => {
-            const isSelected = profile.industry === ind.label;
+          {(suggestedIndustries.length > 0
+            ? [
+                ...suggestedIndustries.map(label => ({ label, key: label })),
+                ...(showAllIndustries
+                  ? INDUSTRIES.filter(i => !suggestedIndustries.includes(i.label)).map(i => ({ label: i.label, key: i.id }))
+                  : []),
+              ]
+            : INDUSTRIES.map(i => ({ label: i.label, key: i.id }))
+          ).map(({ label, key }) => {
+            const isSelected = profile.industry === label;
             return (
               <button
-                key={ind.id}
-                onClick={() => setProfile(prev => ({ ...prev, industry: ind.label }))}
+                key={key}
+                onClick={() => {
+                  if (isSelected) {
+                    setProfile(prev => ({ ...prev, industry: '' }));
+                    setIndustryManuallySet(false);
+                  } else {
+                    setProfile(prev => ({ ...prev, industry: label }));
+                    setIndustryManuallySet(true);
+                  }
+                }}
                 style={{
-                  padding: '8px 16px',
+                  padding: '6px 14px',
                   borderRadius: 20,
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: 500,
                   fontFamily: fonts.sans,
                   border: 'none',
@@ -519,12 +787,37 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
                   transition: 'all 0.2s',
                   background: isSelected ? colors.primary : 'rgba(139, 111, 92, 0.08)',
                   color: isSelected ? '#fff' : colors.textLight,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                {ind.label}
+                {label}
+                {isSelected && <span style={{ fontSize: 15, lineHeight: 1, marginLeft: 2 }}>×</span>}
               </button>
             );
           })}
+
+          {/* Show more / Show less toggle */}
+          {suggestedIndustries.length > 0 && (
+            <button
+              onClick={() => setShowAllIndustries(prev => !prev)}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 20,
+                fontSize: 13,
+                fontWeight: 500,
+                fontFamily: fonts.sans,
+                border: `1px dashed ${colors.borderMedium}`,
+                cursor: 'pointer',
+                background: 'none',
+                color: colors.textSoft,
+                transition: 'all 0.2s',
+              }}
+            >
+              {showAllIndustries ? 'Show less' : 'Show more industries'}
+            </button>
+          )}
         </div>
 
         <div style={{ position: 'relative' }}>
@@ -535,8 +828,9 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
             onChange={(e) => {
               setProfile(prev => ({ ...prev, industry: e.target.value }));
               setIndustrySearch(e.target.value);
+              setIndustryManuallySet(true);
             }}
-            placeholder="Search or select industry"
+            placeholder="Or type your industry"
             style={inputStyle}
           />
         </div>
@@ -609,7 +903,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     </div>
   );
 
-  const renderHookStep = () => (
+  const renderBioStep = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <p style={{
         fontSize: 14,
@@ -619,34 +913,38 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
         margin: 0,
         lineHeight: 1.5,
       }}>
-        e.g. "Fundraising for early-stage startups" or "Building high-performing teams"
+        e.g. "PM by day, plant mom by night. Let's talk career pivots over coffee."
       </p>
 
       <div>
-        <label style={labelStyle}>Ask me about:</label>
+        <label style={labelStyle}>Bio</label>
         <textarea
           value={profile.hook}
-          onChange={(e) => setProfile(prev => ({ ...prev, hook: e.target.value }))}
-          placeholder="What expertise can you share with others?"
-          maxLength={150}
+          onChange={(e) => {
+            if (e.target.value.length <= 160) {
+              setProfile(prev => ({ ...prev, hook: e.target.value }));
+            }
+          }}
+          placeholder="Tell people what you're about..."
+          maxLength={160}
           style={{
             width: '100%',
             padding: 16,
             border: `1px solid ${colors.border}`,
             borderRadius: 12,
-            fontSize: isMobile ? 16 : 18,
+            fontSize: isMobile ? 14 : 15,
             fontFamily: fonts.sans,
             color: colors.text,
             background: '#fff',
             outline: 'none',
-            height: 128,
+            height: 100,
             resize: 'none',
             transition: 'border-color 0.2s',
             boxSizing: 'border-box',
           }}
         />
-        <p style={{ textAlign: 'right', fontSize: 14, color: colors.textMuted, fontFamily: fonts.sans, marginTop: 4 }}>
-          {profile.hook?.length || 0}/150
+        <p style={{ textAlign: 'right', fontSize: 12, color: colors.textMuted, fontFamily: fonts.sans, marginTop: 4 }}>
+          {profile.hook?.length || 0}/160
         </p>
       </div>
     </div>
@@ -738,14 +1036,14 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
   const renderIdentityStep = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <label style={labelStyle}>Full Name *</label>
+        <label style={labelStyle}>Display Name *</label>
         <div style={{ position: 'relative' }}>
           <User style={inputIconStyle} />
           <input
             type="text"
             value={profile.name}
             onChange={(e) => setProfile(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Enter your full name"
+            placeholder="How should others call you?"
             style={inputStyle}
           />
         </div>
@@ -755,9 +1053,40 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
       </div>
 
       <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 20 }}>
-        <label style={labelStyle}>
-          Location <span style={{ color: colors.textSoft }}>(optional)</span>
-        </label>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <label style={{ ...labelStyle, marginBottom: 0 }}>
+            Location <span style={{ color: colors.textSoft }}>(optional)</span>
+          </label>
+          <button
+            type="button"
+            onClick={detectLocation}
+            disabled={detectingLocation}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 12px',
+              borderRadius: 20,
+              fontSize: 12,
+              fontWeight: 500,
+              fontFamily: fonts.sans,
+              border: `1px solid ${colors.borderMedium}`,
+              cursor: detectingLocation ? 'default' : 'pointer',
+              background: locationDetected ? 'rgba(76, 175, 80, 0.08)' : 'none',
+              color: locationDetected ? colors.success : colors.textSoft,
+              transition: 'all 0.2s',
+              opacity: detectingLocation ? 0.6 : 1,
+            }}
+          >
+            {detectingLocation ? (
+              <Loader style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} />
+            ) : (
+              <Navigation style={{ width: 14, height: 14 }} />
+            )}
+            {detectingLocation ? 'Detecting...' : locationDetected ? 'Detected' : 'Auto-detect'}
+          </button>
+        </div>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{
             display: 'grid',
@@ -769,7 +1098,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
               <input
                 type="text"
                 value={profile.city}
-                onChange={(e) => setProfile(prev => ({ ...prev, city: e.target.value }))}
+                onChange={(e) => { setProfile(prev => ({ ...prev, city: e.target.value })); setLocationDetected(false); }}
                 placeholder="City"
                 style={inputStyle}
               />
@@ -777,7 +1106,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
             <input
               type="text"
               value={profile.state}
-              onChange={(e) => setProfile(prev => ({ ...prev, state: e.target.value }))}
+              onChange={(e) => { setProfile(prev => ({ ...prev, state: e.target.value })); setLocationDetected(false); }}
               placeholder="State / Province"
               style={inputStyleNoIcon}
             />
@@ -785,7 +1114,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
           <input
             type="text"
             value={profile.country}
-            onChange={(e) => setProfile(prev => ({ ...prev, country: e.target.value }))}
+            onChange={(e) => { setProfile(prev => ({ ...prev, country: e.target.value })); setLocationDetected(false); }}
             placeholder="Country"
             style={inputStyleNoIcon}
           />
@@ -881,15 +1210,10 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
             </div>
           </label>
 
-          <label style={{ display: 'block', width: '100%', cursor: 'pointer' }}>
-            <input
-              type="file"
-              accept="image/*"
-              capture="user"
-              onChange={handlePhotoUpload}
-              style={{ display: 'none' }}
-            />
-            <div style={{
+          <button
+            type="button"
+            onClick={openCamera}
+            style={{
               width: '100%',
               background: 'rgba(139, 111, 92, 0.08)',
               color: colors.textLight,
@@ -902,13 +1226,85 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8,
+              border: 'none',
+              cursor: 'pointer',
               transition: 'background 0.2s',
-            }}>
-              <Camera style={{ width: 20, height: 20 }} />
-              Take Photo
-            </div>
-          </label>
+            }}
+          >
+            <Camera style={{ width: 20, height: 20 }} />
+            Take Photo
+          </button>
         </div>
+
+        {/* Camera viewfinder */}
+        {showCamera && (
+          <div style={{
+            marginTop: 16,
+            borderRadius: 16,
+            overflow: 'hidden',
+            border: `2px solid ${colors.border}`,
+            position: 'relative',
+          }}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{
+                width: '100%',
+                aspectRatio: '1',
+                objectFit: 'cover',
+                transform: 'scaleX(-1)',
+                display: 'block',
+              }}
+            />
+            <div style={{
+              display: 'flex',
+              gap: 12,
+              justifyContent: 'center',
+              padding: 12,
+              background: 'rgba(0,0,0,0.5)',
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+            }}>
+              <button
+                type="button"
+                onClick={capturePhoto}
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  border: '4px solid rgba(255,255,255,0.6)',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                }}
+              />
+              <button
+                type="button"
+                onClick={closeCamera}
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: 14,
+                  fontFamily: fonts.sans,
+                  padding: '6px 14px',
+                  borderRadius: 20,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <p style={{ fontSize: 14, color: colors.textMuted, fontFamily: fonts.sans, marginTop: 16 }}>
           A real photo increases your connection rate by 2x
@@ -991,7 +1387,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
           </p>
         )}
 
-        {/* Hook */}
+        {/* Bio */}
         {profile.hook && (
           <div style={{
             marginTop: 16,
@@ -999,8 +1395,8 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
             borderRadius: 10,
             padding: 12,
           }}>
-            <p style={{ fontSize: 14, color: colors.textLight, fontStyle: 'italic', fontFamily: fonts.sans, margin: 0 }}>
-              Ask me about: "{profile.hook}"
+            <p style={{ fontSize: 14, color: colors.textLight, fontFamily: fonts.sans, margin: 0 }}>
+              {profile.hook}
             </p>
           </div>
         )}
@@ -1032,7 +1428,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
       case 'vibe': return renderVibeStep();
       case 'role': return renderRoleStep();
       case 'stage': return renderStageStep();
-      case 'hook': return renderHookStep();
+      case 'bio': return renderBioStep();
       case 'hosting': return renderHostingStep();
       case 'identity': return renderIdentityStep();
       case 'photo': return renderPhotoStep();

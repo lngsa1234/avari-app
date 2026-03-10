@@ -2,7 +2,7 @@
 // Network discovery page with Vibe Bar, Recommended Section, and Dynamic Results Feed
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { parseLocalDate } from '../lib/dateUtils';
 import {
   Search,
@@ -179,6 +179,7 @@ export default function NetworkDiscoverView({
   const [meetupRequests, setMeetupRequests] = useState([]);
   const [peerSuggestions, setPeerSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedRef = useRef(false);
   const [socialProofStats, setSocialProofStats] = useState({ activeThisWeek: 0, meetupsThisWeek: 0 });
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestTopic, setRequestTopic] = useState('');
@@ -274,6 +275,8 @@ export default function NetworkDiscoverView({
   const hasInput = searchText.length > 0 || selectedChips.length > 0;
 
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     loadData();
   }, [selectedVibe]);
 
@@ -285,6 +288,7 @@ export default function NetworkDiscoverView({
   }, [currentUser.id]);
 
   const loadMeetupSignups = async () => {
+    const t0 = Date.now();
     try {
       const { data: signupsData, error: signupsError } = await supabase
         .from('meetup_signups')
@@ -318,6 +322,7 @@ export default function NetworkDiscoverView({
       });
       console.log('🔍 Final meetupSignups:', byMeetup);
       setMeetupSignups(byMeetup);
+      console.log(`⏱️ Discover: loadMeetupSignups in ${Date.now() - t0}ms`);
     } catch (err) {
       console.error('Error loading meetup signups:', err);
     }
@@ -328,6 +333,7 @@ export default function NetworkDiscoverView({
   }, [supabase]);
 
   const loadUserRsvps = async () => {
+    const t0 = Date.now();
     try {
       const { data, error } = await supabase
         .from('meetup_signups')
@@ -337,6 +343,7 @@ export default function NetworkDiscoverView({
       if (!error && data) {
         setUserRsvps(new Set(data.map(r => r.meetup_id)));
       }
+      console.log(`⏱️ Discover: loadUserRsvps in ${Date.now() - t0}ms`);
     } catch (err) {
       console.error('Error loading user RSVPs:', err);
     }
@@ -390,17 +397,18 @@ export default function NetworkDiscoverView({
   };
 
   const loadData = async () => {
+    const t0 = Date.now();
     setLoading(true);
     try {
       await Promise.all([
-        loadConnectionGroups(),
-        loadMeetupRequests(),
-        loadPeerSuggestions(),
-        loadSocialProofStats()
+        loadConnectionGroups().then(() => console.log(`⏱️ Discover: loadConnectionGroups in ${Date.now() - t0}ms`)),
+        loadMeetupRequests().then(() => console.log(`⏱️ Discover: loadMeetupRequests in ${Date.now() - t0}ms`)),
+        loadSocialProofStats().then(() => console.log(`⏱️ Discover: loadSocialProofStats in ${Date.now() - t0}ms`))
       ]);
     } catch (error) {
       console.error('Error loading network data:', error);
     }
+    console.log(`⏱️ Discover page data loaded in ${Date.now() - t0}ms`);
     setLoading(false);
   };
 
@@ -541,13 +549,22 @@ export default function NetworkDiscoverView({
 
   const loadPeerSuggestions = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
-        .neq('id', currentUser.id)
-        .not('name', 'is', null)
-        .limit(10);
+      // Parallel: fetch profiles, mutual matches, and my interests at the same time
+      const [profilesResult, mutualResult, interestsResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
+          .neq('id', currentUser.id)
+          .not('name', 'is', null)
+          .limit(10),
+        supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
+        supabase
+          .from('user_interests')
+          .select('interested_in_user_id')
+          .eq('user_id', currentUser.id)
+      ]);
 
+      const { data, error } = profilesResult;
       if (error) {
         console.error('Error fetching peer suggestions:', error);
         setPeerSuggestions([]);
@@ -556,17 +573,8 @@ export default function NetworkDiscoverView({
 
       // Filter out connected users (from connections prop + mutual matches)
       const connectedIds = new Set(connections.map(c => c.connected_user_id || c.id));
-
-      const { data: mutualMatches } = await supabase
-        .rpc('get_mutual_matches', { for_user_id: currentUser.id });
-      const myMatchIds = new Set((mutualMatches || []).map(m => m.matched_user_id));
-
-      // Also filter out users the current user has already sent interest to
-      const { data: myInterests } = await supabase
-        .from('user_interests')
-        .select('interested_in_user_id')
-        .eq('user_id', currentUser.id);
-      const myInterestIds = new Set((myInterests || []).map(i => i.interested_in_user_id));
+      const myMatchIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
+      const myInterestIds = new Set((interestsResult.data || []).map(i => i.interested_in_user_id));
 
       // Exclude connections, mutual matches, and already-requested users
       const suggestions = (data || []).filter(u =>
@@ -599,18 +607,37 @@ export default function NetworkDiscoverView({
         }
       }
 
-      // Get mutual connections (shared connections with current user)
+      // Get mutual connections - use user_interests to find shared connections
+      // instead of calling get_mutual_matches RPC per user in a loop
       let userMutualConnections = {};
-      if (suggestionIds.length > 0) {
-        for (const personId of suggestionIds) {
-          const { data: personMatches } = await supabase
-            .rpc('get_mutual_matches', { for_user_id: personId });
-          let count = 0;
-          (personMatches || []).forEach(m => {
-            if (myMatchIds.has(m.matched_user_id)) count++;
-          });
-          userMutualConnections[personId] = count;
-        }
+      if (suggestionIds.length > 0 && myMatchIds.size > 0) {
+        const myMatchArray = [...myMatchIds];
+        // Find which of my matches have mutual interest with each suggestion
+        const { data: theirInterests } = await supabase
+          .from('user_interests')
+          .select('user_id, interested_in_user_id')
+          .in('user_id', suggestionIds)
+          .in('interested_in_user_id', myMatchArray);
+        const { data: interestedInThem } = await supabase
+          .from('user_interests')
+          .select('user_id, interested_in_user_id')
+          .in('interested_in_user_id', suggestionIds)
+          .in('user_id', myMatchArray);
+
+        // Build bidirectional interest map for suggestions
+        const interestPairs = new Map(); // personId -> Set of myMatch ids they're mutual with
+        (theirInterests || []).forEach(i => {
+          const key = `${i.user_id}-${i.interested_in_user_id}`;
+          if (!interestPairs.has(key)) interestPairs.set(key, { from: i.user_id, to: i.interested_in_user_id });
+        });
+        (interestedInThem || []).forEach(i => {
+          const reverseKey = `${i.interested_in_user_id}-${i.user_id}`;
+          if (interestPairs.has(reverseKey)) {
+            // Mutual match found between suggestion and one of my matches
+            const personId = i.interested_in_user_id;
+            userMutualConnections[personId] = (userMutualConnections[personId] || 0) + 1;
+          }
+        });
       }
 
       const enriched = suggestions.slice(0, 4).map(person => ({

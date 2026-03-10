@@ -30,9 +30,10 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
   const [topic, setTopic] = useState('');
 
   useEffect(() => {
-    loadCoffeeChats();
-    loadPendingRequests();
-    loadSentRequests();
+    const t0 = Date.now();
+    Promise.all([loadCoffeeChats(), loadPendingRequests(), loadSentRequests()]).then(() => {
+      console.log(`⏱️ Coffee page data loaded in ${Date.now() - t0}ms`);
+    });
 
     // Real-time subscription for new coffee chat requests
     console.log('🔔 Setting up real-time subscription for coffee chats');
@@ -85,10 +86,10 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
 
   const loadCoffeeChats = async () => {
     setLoading(true);
+    const t0 = Date.now();
     try {
-      console.log('📋 Loading coffee chats...');
       const chats = await getMyCoffeeChats(supabase);
-      console.log('✅ Loaded chats:', chats);
+      console.log(`⏱️ Coffee chats loaded in ${Date.now() - t0}ms`);
       setCoffeeChats(chats);
     } catch (error) {
       console.error('❌ Error loading chats:', error);
@@ -98,8 +99,10 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
   };
 
   const loadPendingRequests = async () => {
+    const t0 = Date.now();
     try {
       const requests = await getPendingRequests(supabase);
+      console.log(`⏱️ Pending requests loaded in ${Date.now() - t0}ms`);
       setPendingRequests(requests);
     } catch (error) {
       console.error('Error loading requests:', error);
@@ -107,8 +110,10 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
   };
 
   const loadSentRequests = async () => {
+    const t0 = Date.now();
     try {
       const requests = await getSentRequests(supabase);
+      console.log(`⏱️ Sent requests loaded in ${Date.now() - t0}ms`);
       setSentRequests(requests);
     } catch (error) {
       console.error('Error loading sent requests:', error);
