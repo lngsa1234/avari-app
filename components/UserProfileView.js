@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut } from 'lucide-react';
+import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check } from 'lucide-react';
 
 const COLORS = {
   bg: '#FAF6F1',
@@ -67,6 +67,10 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [mutualCircles, setMutualCircles] = useState([]);
   const [connectionCount, setConnectionCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [reportReason, setReportReason] = useState(null);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const isOwnProfile = userId === currentUser.id;
 
@@ -528,6 +532,117 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
               )}
             </div>
           </>
+        )}
+
+        {/* ─── Report User (visitor only) ─── */}
+        {!isOwnProfile && (
+          <div style={{ marginTop: 20, ...fadeIn(0.3) }}>
+            {!showReport && !reportSubmitted && (
+              <button
+                onClick={() => setShowReport(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: 6, width: '100%', padding: 10,
+                  background: 'none', color: COLORS.brown400,
+                  border: 'none', fontFamily: FONT, fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                <Flag size={14} /> Report
+              </button>
+            )}
+
+            {showReport && !reportSubmitted && (
+              <div style={{
+                background: COLORS.bgCard, borderRadius: 14,
+                padding: 16, border: `1px solid ${COLORS.brown100}`,
+              }}>
+                <p style={{ fontFamily: FONT, fontSize: 14, fontWeight: 600, color: COLORS.brown700, margin: '0 0 12px' }}>
+                  Why are you reporting this account?
+                </p>
+                {[
+                  'Spam or fake account',
+                  'Harassment or abuse',
+                  'Inappropriate content',
+                  'Impersonation',
+                  'Other',
+                ].map((reason) => (
+                  <button
+                    key={reason}
+                    onClick={() => setReportReason(reason)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      width: '100%', padding: '10px 12px', marginBottom: 6,
+                      background: reportReason === reason ? 'rgba(139,111,92,0.1)' : COLORS.white,
+                      border: `1.5px solid ${reportReason === reason ? COLORS.accent : COLORS.brown100}`,
+                      borderRadius: 10, fontFamily: FONT, fontSize: 14,
+                      color: COLORS.brown700, cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    {reportReason === reason && <Check size={16} style={{ color: COLORS.accent }} />}
+                    {reason}
+                  </button>
+                ))}
+                <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                  <button
+                    onClick={() => { setShowReport(false); setReportReason(null); }}
+                    style={{
+                      flex: 1, padding: 10, background: 'transparent',
+                      color: COLORS.brown600, border: `1.5px solid ${COLORS.brown200}`,
+                      borderRadius: 12, fontFamily: FONT, fontSize: 14,
+                      fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={!reportReason || reportSubmitting}
+                    onClick={async () => {
+                      setReportSubmitting(true);
+                      try {
+                        await fetch('/api/feedback', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            userId: currentUser.id,
+                            category: 'report',
+                            subject: `Report: ${profile.name} (${reportReason})`,
+                            message: `Reported user: ${profile.name} (ID: ${profile.id})\nReason: ${reportReason}`,
+                            pageContext: 'user-profile',
+                          }),
+                        });
+                        setReportSubmitted(true);
+                        setShowReport(false);
+                      } catch (err) {
+                        console.error('Report failed:', err);
+                      } finally {
+                        setReportSubmitting(false);
+                      }
+                    }}
+                    style={{
+                      flex: 1, padding: 10, background: reportReason ? COLORS.red : COLORS.brown200,
+                      color: COLORS.white, border: 'none',
+                      borderRadius: 12, fontFamily: FONT, fontSize: 14,
+                      fontWeight: 600, cursor: reportReason ? 'pointer' : 'default',
+                      opacity: reportSubmitting ? 0.6 : 1,
+                    }}
+                  >
+                    {reportSubmitting ? 'Submitting...' : 'Submit'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {reportSubmitted && (
+              <p style={{
+                textAlign: 'center', fontFamily: FONT, fontSize: 13,
+                color: COLORS.green, padding: 10,
+              }}>
+                <Check size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                Thanks for reporting. We'll review this.
+              </p>
+            )}
+          </div>
         )}
 
         {/* ─── Own Profile Footer ─── */}

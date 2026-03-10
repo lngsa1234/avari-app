@@ -24,7 +24,7 @@ export async function POST(request) {
     if (!userId) {
       return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
     }
-    if (!category || !['bug', 'feature', 'improvement', 'other'].includes(category)) {
+    if (!category || !['bug', 'feature', 'improvement', 'other', 'report'].includes(category)) {
       return NextResponse.json({ error: 'Valid category is required' }, { status: 400 });
     }
     if (!subject || subject.length < 3 || subject.length > 200) {

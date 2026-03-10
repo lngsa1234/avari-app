@@ -21,7 +21,10 @@ import {
   ChevronLeft,
   Lock,
   Loader,
-  Navigation
+  Navigation,
+  Shield,
+  Users,
+  HeartHandshake
 } from 'lucide-react';
 
 // ============================================================
@@ -345,8 +348,11 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
     profile_picture: null
   });
 
+  const [communityAgreed, setCommunityAgreed] = useState(false);
+
   // Steps configuration
   const steps = [
+    { id: 'community', title: 'Welcome to CircleW', subtitle: 'A safe space for women to connect and grow.', required: true },
     { id: 'vibe', title: "What's your vibe today?", subtitle: 'This helps us tune your Discover feed.', required: true },
     { id: 'role', title: 'What do you do?', subtitle: 'Your role and industry help us find your circle.', required: true },
     { id: 'stage', title: 'Where are you in your journey?', subtitle: 'This helps us match you with the right peers.', required: true },
@@ -364,6 +370,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
   // Validation for each step
   const isStepValid = () => {
     switch (currentStepData.id) {
+      case 'community': return communityAgreed;
       case 'vibe': return !!profile.vibe_category;
       case 'role': return !!profile.career && !!profile.industry;
       case 'stage': return !!profile.career_stage;
@@ -631,6 +638,77 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
   // ============================================================
   // STEP RENDERERS
   // ============================================================
+
+  const renderCommunityStep = () => {
+    const values = [
+      { icon: Shield, title: 'Safe & Supportive', desc: 'CircleW is built for women and non-binary professionals to connect without barriers.' },
+      { icon: Users, title: 'Inclusive & Respectful', desc: 'Treat everyone with kindness. Respect this space and its members.' },
+      { icon: HeartHandshake, title: 'Authentic Connections', desc: 'We are here to uplift each other — no spam, no sales pitches, just real conversations.' },
+    ];
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {values.map(({ icon: Icon, title, desc }) => (
+            <div
+              key={title}
+              style={{
+                display: 'flex',
+                gap: 14,
+                padding: 16,
+                borderRadius: 14,
+                background: '#fff',
+                border: `1px solid ${colors.border}`,
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: colors.selectedBg,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <Icon style={{ width: 20, height: 20, color: colors.primary }} />
+              </div>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 600, color: colors.text, fontFamily: fonts.sans, margin: '0 0 4px' }}>{title}</p>
+                <p style={{ fontSize: 13, color: colors.textLight, fontFamily: fonts.sans, margin: 0, lineHeight: 1.5 }}>{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setCommunityAgreed(prev => !prev)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '14px 16px',
+            borderRadius: 12,
+            border: `2px solid ${communityAgreed ? colors.primary : colors.borderMedium}`,
+            background: communityAgreed ? 'rgba(139, 111, 92, 0.06)' : '#fff',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            width: '100%',
+            textAlign: 'left',
+          }}
+        >
+          <div style={{
+            width: 22, height: 22, borderRadius: 6,
+            border: `2px solid ${communityAgreed ? colors.primary : colors.borderMedium}`,
+            background: communityAgreed ? colors.primary : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0, transition: 'all 0.2s',
+          }}>
+            {communityAgreed && <Check style={{ width: 14, height: 14, color: '#fff' }} />}
+          </div>
+          <p style={{ fontSize: 14, color: colors.textLight, fontFamily: fonts.sans, margin: 0, lineHeight: 1.5 }}>
+            I understand and will respect CircleW as a community built for women and non-binary professionals.
+          </p>
+        </button>
+      </div>
+    );
+  };
 
   const renderVibeStep = () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1425,6 +1503,7 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
 
   const renderStepContent = () => {
     switch (currentStepData.id) {
+      case 'community': return renderCommunityStep();
       case 'vibe': return renderVibeStep();
       case 'role': return renderRoleStep();
       case 'stage': return renderStageStep();
