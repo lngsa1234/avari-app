@@ -94,28 +94,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       // Load all coffee chats for the user
       const { data, error } = await supabase
         .from('coffee_chats')
-        .select(`
-          id,
-          requester_id,
-          recipient_id,
-          status,
-          scheduled_time,
-          topic,
-          notes,
-          room_url,
-          created_at
-        `)
+        .select('*')
         .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
         .in('status', ['pending', 'accepted', 'scheduled'])
         .order('scheduled_time', { ascending: true });
 
       if (error) {
-        // Silently handle missing table - feature not yet set up
-        if (error.message.includes('does not exist') || error.code === '42P01') {
-          setCoffeeChats([]);
-          return;
-        }
-        console.log('Coffee chats error:', error.message);
+        console.error('Coffee chats query error:', error.message);
         setCoffeeChats([]);
         return;
       }
