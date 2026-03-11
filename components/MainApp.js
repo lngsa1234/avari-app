@@ -1948,9 +1948,9 @@ function MainApp({ currentUser, onSignOut }) {
         return;
       }
 
-      // If this is a circle meetup, route to circle call (Agora)
+      // If this is a circle meetup, route to circle call (Agora) with meetup ID for session isolation
       if (circleId) {
-        const channelName = `connection-group-${circleId}`;
+        const channelName = `connection-group-${meetupId}`;
         window.location.href = `/call/circle/${channelName}`;
         return;
       }

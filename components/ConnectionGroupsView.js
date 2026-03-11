@@ -706,7 +706,17 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         return;
       }
 
-      const { channelName } = await createConnectionGroupRoom(groupId);
+      // Find the next upcoming meetup for this group to use as session ID
+      const { data: nextMeetup } = await supabase
+        .from('meetups')
+        .select('id')
+        .eq('circle_id', groupId)
+        .gte('date', new Date().toISOString().split('T')[0])
+        .order('date', { ascending: true })
+        .limit(1)
+        .single();
+
+      const { channelName } = await createConnectionGroupRoom(groupId, nextMeetup?.id);
       window.location.href = `/call/circle/${channelName}`;
     } catch (error) {
       alert('Could not join video call: ' + error.message);

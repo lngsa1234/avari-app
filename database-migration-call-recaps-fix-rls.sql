@@ -21,15 +21,25 @@ CREATE POLICY "Users can view their own call recaps"
     OR auth.uid() = ANY(participant_ids)
     OR (
       -- Allow circle members to view recaps for their circle
-      -- channel_name format: 'connection-group-{groupId}'
+      -- channel_name format: 'connection-group-{meetupId}' (new) or 'connection-group-{groupId}' (legacy)
       channel_name LIKE 'connection-group-%'
       AND EXISTS (
         SELECT 1 FROM connection_group_members cgm
-        WHERE cgm.group_id = CAST(
-          REPLACE(call_recaps.channel_name, 'connection-group-', '') AS UUID
-        )
-        AND cgm.user_id = auth.uid()
+        WHERE cgm.user_id = auth.uid()
         AND cgm.status = 'accepted'
+        AND (
+          -- New format: meetupId in channel name, look up circle_id from meetups
+          cgm.group_id IN (
+            SELECT m.circle_id FROM meetups m
+            WHERE m.id = CAST(
+              REPLACE(call_recaps.channel_name, 'connection-group-', '') AS UUID
+            )
+          )
+          -- Legacy format: groupId directly in channel name
+          OR cgm.group_id = CAST(
+            REPLACE(call_recaps.channel_name, 'connection-group-', '') AS UUID
+          )
+        )
       )
     )
   );

@@ -116,16 +116,26 @@ export function useCallRoom(callType, roomId) {
 
         case 'circle': {
           // Circle/Connection Group
-          // Channel name format: "connection-group-{groupId}"
+          // Channel name format: "connection-group-{meetupId}" (new) or "connection-group-{groupId}" (legacy)
           console.log('[useCallRoom] Fetching circle room:', roomId);
 
-          // Extract group ID from channel name
-          const groupIdMatch = roomId.match(/connection-group-(.+)/);
-          const groupId = groupIdMatch ? groupIdMatch[1] : null;
-          console.log('[useCallRoom] Extracted group ID:', groupId);
+          // Extract ID from channel name
+          const idMatch = roomId.match(/connection-group-(.+)/);
+          const extractedId = idMatch ? idMatch[1] : null;
+          console.log('[useCallRoom] Extracted ID:', extractedId);
 
-          if (groupId) {
-            // Fetch group info directly using the extracted group ID
+          if (extractedId) {
+            // Try to find a meetup with this ID first (new format: meetupId)
+            const { data: meetupData } = await supabase
+              .from('meetups')
+              .select('id, topic, date, time, circle_id')
+              .eq('id', extractedId)
+              .single();
+
+            const groupId = meetupData?.circle_id || extractedId;
+            console.log('[useCallRoom] Resolved groupId:', groupId, 'meetupId:', meetupData?.id);
+
+            // Fetch group info
             const { data: groupData, error: groupError } = await supabase
               .from('connection_groups')
               .select('id, name, creator_id')
@@ -135,21 +145,25 @@ export function useCallRoom(callType, roomId) {
             console.log('[useCallRoom] Group data:', groupData, 'Error:', groupError);
 
             if (groupData) {
-              // Fetch the latest meetup for this circle to get the topic
-              const { data: meetupData } = await supabase
-                .from('meetups')
-                .select('id, topic, date, time')
-                .eq('circle_id', groupId)
-                .order('date', { ascending: false })
-                .limit(1)
-                .single();
+              // If no meetup found by ID, fetch the latest meetup for the circle
+              let resolvedMeetup = meetupData;
+              if (!resolvedMeetup) {
+                const { data: latestMeetup } = await supabase
+                  .from('meetups')
+                  .select('id, topic, date, time')
+                  .eq('circle_id', groupId)
+                  .order('date', { ascending: false })
+                  .limit(1)
+                  .single();
+                resolvedMeetup = latestMeetup;
+              }
 
               related = {
                 ...groupData,
-                meetupId: meetupData?.id || null,
-                meetupTopic: meetupData?.topic || null,
-                meetupDate: meetupData?.date || null,
-                meetupTime: meetupData?.time || null,
+                meetupId: resolvedMeetup?.id || null,
+                meetupTopic: resolvedMeetup?.topic || null,
+                meetupDate: resolvedMeetup?.date || null,
+                meetupTime: resolvedMeetup?.time || null,
               };
               roomData = { channel_name: roomId, group_id: groupId };
 

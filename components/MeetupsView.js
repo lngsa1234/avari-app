@@ -664,8 +664,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const handleJoinCall = (meetup) => {
     // Route based on meetup type
     if (meetup.isCircleMeetup || meetup.circle_id) {
-      // Circle meetup - use Agora via /call/circle/
-      const channelName = `connection-group-${meetup.circle_id}`;
+      // Circle meetup - use Agora via /call/circle/ with meetup ID for session isolation
+      const channelName = `connection-group-${meetup.id}`;
       window.location.href = `/call/circle/${channelName}`;
     } else if (meetup.type === 'coffee' || meetup.type === '1on1') {
       // Coffee chat - use WebRTC via /call/coffee/

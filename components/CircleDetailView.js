@@ -277,10 +277,9 @@ export default function CircleDetailView({
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const channelName = `connection-group-${circleId}`;
 
-      // Run all independent queries in parallel
-      const [meetupsResult, pastResult, recapResult] = await Promise.all([
+      // Run independent queries in parallel (recaps loaded after we know meetup IDs)
+      const [meetupsResult, pastResult] = await Promise.all([
         getOrCreateCircleMeetups(circleId, circleData, 4),
         supabase
           .from('meetups')
@@ -290,11 +289,6 @@ export default function CircleDetailView({
           .not('status', 'eq', 'cancelled')
           .order('date', { ascending: false })
           .limit(10),
-        supabase
-          .from('call_recaps')
-          .select('id, channel_name, created_at, started_at')
-          .eq('channel_name', channelName)
-          .order('created_at', { ascending: false }),
       ]);
 
       // Process future meetups
@@ -335,53 +329,62 @@ export default function CircleDetailView({
         }));
         setPastMeetups(enrichedPast);
 
-        // Match recaps to past meetups
-        const recapData = recapResult.data;
-        if (recapResult.error) {
-          console.warn('Could not fetch circle recaps:', recapResult.error.message);
-        }
-
-        if (recapData && recapData.length > 0) {
+        // Match recaps to past meetups using meetup-based channel names
+        if (enrichedPast.length > 0) {
           const rMap = {};
-          const usedRecaps = new Set();
 
-          // Build a lookup map from recaps: local date string -> recap
-          const recapsByDate = new Map();
-          recapData.forEach(r => {
-            const recapTime = new Date(r.started_at || r.created_at);
-            const dateStr = `${recapTime.getFullYear()}-${String(recapTime.getMonth() + 1).padStart(2, '0')}-${String(recapTime.getDate()).padStart(2, '0')}`;
-            if (!recapsByDate.has(dateStr)) {
-              recapsByDate.set(dateStr, []);
-            }
-            recapsByDate.get(dateStr).push(r);
-          });
+          // Build channel names for each past meetup
+          const meetupChannelNames = enrichedPast.map(m => `connection-group-${m.id}`);
+          // Also include legacy channel name for backwards compatibility
+          const legacyChannelName = `connection-group-${circleId}`;
+          const allChannelNames = [...new Set([...meetupChannelNames, legacyChannelName])];
 
-          // Pass 1: strict match (same day) using Map for O(1) lookup
-          enrichedPast.forEach(meetup => {
-            const candidates = recapsByDate.get(meetup.date) || [];
-            const match = candidates.find(r => !usedRecaps.has(r.id));
-            if (match) {
-              rMap[meetup.id] = match.id;
-              usedRecaps.add(match.id);
-            }
-          });
+          const { data: recapData, error: recapError } = await supabase
+            .from('call_recaps')
+            .select('id, channel_name, created_at, started_at')
+            .in('channel_name', allChannelNames)
+            .order('created_at', { ascending: false });
 
-          // Pass 2: wider match (within 2 days) for unmatched meetups only
-          enrichedPast.forEach(meetup => {
-            if (rMap[meetup.id]) return;
-            const meetupMs = new Date(meetup.date + 'T00:00:00').getTime();
-            const matchingRecap = recapData.find(r => {
-              if (usedRecaps.has(r.id)) return false;
-              const recapTime = new Date(r.started_at || r.created_at);
-              const recapDateStr = `${recapTime.getFullYear()}-${String(recapTime.getMonth() + 1).padStart(2, '0')}-${String(recapTime.getDate()).padStart(2, '0')}`;
-              const recapMs = new Date(recapDateStr + 'T00:00:00').getTime();
-              return Math.abs(recapMs - meetupMs) / (1000 * 60 * 60 * 24) <= 2;
+          if (recapError) {
+            console.warn('Could not fetch circle recaps:', recapError.message);
+          }
+
+          if (recapData && recapData.length > 0) {
+            const usedRecaps = new Set();
+
+            // Pass 1: Direct match by meetup-based channel name (new format)
+            enrichedPast.forEach(meetup => {
+              const match = recapData.find(r =>
+                r.channel_name === `connection-group-${meetup.id}` && !usedRecaps.has(r.id)
+              );
+              if (match) {
+                rMap[meetup.id] = match.id;
+                usedRecaps.add(match.id);
+              }
             });
-            if (matchingRecap) {
-              rMap[meetup.id] = matchingRecap.id;
-              usedRecaps.add(matchingRecap.id);
+
+            // Pass 2: Legacy match by date for recaps with old circle-based channel name
+            const legacyRecaps = recapData.filter(r =>
+              r.channel_name === legacyChannelName && !usedRecaps.has(r.id)
+            );
+            if (legacyRecaps.length > 0) {
+              enrichedPast.forEach(meetup => {
+                if (rMap[meetup.id]) return;
+                const meetupMs = new Date(meetup.date + 'T00:00:00').getTime();
+                const match = legacyRecaps.find(r => {
+                  if (usedRecaps.has(r.id)) return false;
+                  const recapTime = new Date(r.started_at || r.created_at);
+                  const recapDateStr = `${recapTime.getFullYear()}-${String(recapTime.getMonth() + 1).padStart(2, '0')}-${String(recapTime.getDate()).padStart(2, '0')}`;
+                  const recapMs = new Date(recapDateStr + 'T00:00:00').getTime();
+                  return Math.abs(recapMs - meetupMs) / (1000 * 60 * 60 * 24) <= 2;
+                });
+                if (match) {
+                  rMap[meetup.id] = match.id;
+                  usedRecaps.add(match.id);
+                }
+              });
             }
-          });
+          }
 
           setRecapMap(rMap);
         }
@@ -539,8 +542,26 @@ export default function CircleDetailView({
 
   const handleStartCall = async () => {
     try {
-      const channelName = `connection-group-${circleId}`;
-      window.location.href = `/call/circle/${channelName}`;
+      // Find the next upcoming meetup for this circle to use as session ID
+      const nextMeetup = circleMeetups?.[0];
+      if (nextMeetup?.id) {
+        const channelName = `connection-group-${nextMeetup.id}`;
+        window.location.href = `/call/circle/${channelName}`;
+      } else {
+        // Fallback: query for next meetup
+        const { data: meetup } = await supabase
+          .from('meetups')
+          .select('id')
+          .eq('circle_id', circleId)
+          .gte('date', new Date().toISOString().split('T')[0])
+          .order('date', { ascending: true })
+          .limit(1)
+          .single();
+
+        const id = meetup?.id || circleId;
+        const channelName = `connection-group-${id}`;
+        window.location.href = `/call/circle/${channelName}`;
+      }
     } catch (error) {
       alert('Could not start video call: ' + error.message);
     }

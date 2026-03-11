@@ -230,9 +230,10 @@ export function useAgora() {
       const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
         {
           // Audio config
-          encoderConfig: 'music_standard',
+          encoderConfig: 'speech_standard',
           echoCancellation: true,
-          noiseSuppression: true
+          noiseSuppression: true,
+          autoGainControl: true
         },
         {
           // Video config

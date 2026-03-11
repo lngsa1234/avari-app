@@ -85,7 +85,8 @@ export default function useDeviceSelection() {
       audio: {
         deviceId: { exact: deviceId },
         echoCancellation: true,
-        noiseSuppression: true
+        noiseSuppression: true,
+        autoGainControl: true
       }
     };
   }, []);
@@ -99,8 +100,8 @@ export default function useDeviceSelection() {
         ? { deviceId: { exact: selectedVideoDevice }, width: { ideal: 1280 }, height: { ideal: 720 } }
         : { width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: selectedAudioDevice
-        ? { deviceId: { exact: selectedAudioDevice }, echoCancellation: true, noiseSuppression: true }
-        : { echoCancellation: true, noiseSuppression: true }
+        ? { deviceId: { exact: selectedAudioDevice }, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        : { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     };
     return constraints;
   }, [selectedVideoDevice, selectedAudioDevice]);

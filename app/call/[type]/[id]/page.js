@@ -199,6 +199,9 @@ export default function UnifiedCallPage() {
   const transcriptionProviderRef = useRef('webspeech');
   // Track last auto-finalized text to skip duplicate from browser's final event
   const lastAutoFinalizedRef = useRef('');
+  // Echo guard: track when remote users are speaking to drop leaked transcripts
+  const remoteSpeakingActiveRef = useRef(false);
+  const echoGuardTimeoutRef = useRef(null);
 
   // Save transcript entry to database
   const saveTranscriptToDb = useCallback(async (entry) => {
@@ -259,6 +262,12 @@ export default function UnifiedCallPage() {
 
   // Transcription handler
   const handleTranscript = useCallback(({ text, isFinal, timestamp }) => {
+    // Echo guard: drop transcripts that arrive while remote users are speaking
+    if (remoteSpeakingActiveRef.current) {
+      console.log('[Transcript] Dropped (remote speaking):', text?.trim()?.slice(0, 40));
+      return;
+    }
+
     // Clear any pending auto-finalize
     if (interimTimeoutRef.current) {
       clearTimeout(interimTimeoutRef.current);
@@ -781,7 +790,7 @@ export default function UnifiedCallPage() {
   const initializeWebRTCCall = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1280, max: 1280 }, height: { ideal: 720, max: 720 }, frameRate: { ideal: 24, max: 30 } },
-      audio: { echoCancellation: true, noiseSuppression: true }
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
     });
 
     setLocalVideoTrack(stream);
@@ -1001,21 +1010,34 @@ export default function UnifiedCallPage() {
     room.on(RoomEvent.TrackMuted, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackUnmuted, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      if (speakers.length > 0) {
-        // Pick the first active speaker that isn't us
-        const remoteSpeaker = speakers.find(s => s.identity !== user?.id);
-        if (remoteSpeaker) {
-          setActiveSpeakerId(remoteSpeaker.identity);
-          // Auto-switch from grid to speaker mode on first speech
-          if (!autoSwitchedRef.current) {
-            autoSwitchedRef.current = true;
-            setAutoSwitchedToSpeaker(true);
-            setGridView(false);
-          }
-          clearTimeout(activeSpeakerTimeoutRef.current);
-          activeSpeakerTimeoutRef.current = setTimeout(() => {
-            setActiveSpeakerId(null);
-          }, 3000);
+      const remoteSpeaker = speakers.find(s => s.identity !== user?.id);
+      if (remoteSpeaker) {
+        setActiveSpeakerId(remoteSpeaker.identity);
+        // Auto-switch from grid to speaker mode on first speech
+        if (!autoSwitchedRef.current) {
+          autoSwitchedRef.current = true;
+          setAutoSwitchedToSpeaker(true);
+          setGridView(false);
+        }
+        clearTimeout(activeSpeakerTimeoutRef.current);
+        activeSpeakerTimeoutRef.current = setTimeout(() => {
+          setActiveSpeakerId(null);
+        }, 3000);
+      }
+      // Echo guard for Web Speech API transcription
+      const anyRemoteSpeaking = !!remoteSpeaker;
+      if (anyRemoteSpeaking) {
+        remoteSpeakingActiveRef.current = true;
+        if (echoGuardTimeoutRef.current) {
+          clearTimeout(echoGuardTimeoutRef.current);
+          echoGuardTimeoutRef.current = null;
+        }
+      } else if (remoteSpeakingActiveRef.current) {
+        if (!echoGuardTimeoutRef.current) {
+          echoGuardTimeoutRef.current = setTimeout(() => {
+            remoteSpeakingActiveRef.current = false;
+            echoGuardTimeoutRef.current = null;
+          }, 500);
         }
       }
       updateLiveKitParticipants(room);
@@ -1137,6 +1159,7 @@ export default function UnifiedCallPage() {
 
     const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
       {
+        encoderConfig: 'speech_standard',
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
@@ -1171,16 +1194,34 @@ export default function UnifiedCallPage() {
       if (!setRemoteSpeakingRef.current) return;
       let loudestUid = null;
       let loudestLevel = 0;
+      let anyRemoteSpeaking = false;
       for (const { uid, level } of volumes) {
         const uidStr = String(uid);
         // Skip local user (uid 0 or our own UID)
         if (uid === 0 || uidStr === String(agoraUid)) continue;
-        // level > 5 means the remote user is actively speaking
-        setRemoteSpeakingRef.current(uidStr, level > 5);
+        const isSpeaking = level > 5;
+        setRemoteSpeakingRef.current(uidStr, isSpeaking);
+        if (isSpeaking) anyRemoteSpeaking = true;
         // Track loudest speaker for active speaker mode
         if (level > loudestLevel && level > 5) {
           loudestLevel = level;
           loudestUid = uidStr;
+        }
+      }
+      // Echo guard for Web Speech API: block transcripts while remote is speaking
+      if (anyRemoteSpeaking) {
+        remoteSpeakingActiveRef.current = true;
+        if (echoGuardTimeoutRef.current) {
+          clearTimeout(echoGuardTimeoutRef.current);
+          echoGuardTimeoutRef.current = null;
+        }
+      } else if (remoteSpeakingActiveRef.current) {
+        // Keep guard up briefly after remote stops to catch trailing echo
+        if (!echoGuardTimeoutRef.current) {
+          echoGuardTimeoutRef.current = setTimeout(() => {
+            remoteSpeakingActiveRef.current = false;
+            echoGuardTimeoutRef.current = null;
+          }, 500);
         }
       }
       // Update active speaker with debounce to avoid flicker
@@ -1722,7 +1763,13 @@ export default function UnifiedCallPage() {
         const AgoraRTC = (await import('agora-rtc-sdk-ng')).default;
         // Close old track and create new one
         if (localAudioTrack?.close) localAudioTrack.close();
-        const newAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({ microphoneId: deviceId });
+        const newAudioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+          microphoneId: deviceId,
+          encoderConfig: 'speech_standard',
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        });
         await agoraClientRef.current.unpublish([localAudioTrack]);
         await agoraClientRef.current.publish([newAudioTrack]);
         setLocalAudioTrack(newAudioTrack);
@@ -1982,6 +2029,11 @@ export default function UnifiedCallPage() {
       clearTimeout(activeSpeakerTimeoutRef.current);
       activeSpeakerTimeoutRef.current = null;
     }
+    if (echoGuardTimeoutRef.current) {
+      clearTimeout(echoGuardTimeoutRef.current);
+      echoGuardTimeoutRef.current = null;
+    }
+    remoteSpeakingActiveRef.current = false;
     if (qualityMonitorRef.current) {
       clearInterval(qualityMonitorRef.current);
       qualityMonitorRef.current = null;

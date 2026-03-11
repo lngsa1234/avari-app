@@ -518,7 +518,8 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   function handleJoinCall() {
     if (!meetup) return;
     if (meetup.circle_id) {
-      const channelName = `connection-group-${meetup.circle_id}`;
+      // Use meetup ID for session-isolated channel names
+      const channelName = `connection-group-${meetup.id || meetupId}`;
       window.location.href = `/call/circle/${channelName}`;
     } else {
       window.location.href = `/call/${meetupId}`;
