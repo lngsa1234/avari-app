@@ -1344,64 +1344,71 @@ export default function NetworkDiscoverView({
                   key={request.id}
                   style={{
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: isMobile ? '12px' : '16px',
-                    padding: isMobile ? '14px 14px' : '16px 20px',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'stretch' : 'center',
+                    gap: isMobile ? '10px' : '16px',
+                    padding: isMobile ? '12px 14px' : '16px 20px',
                     borderBottom: index < displayCount - 1 ? '1px solid rgba(180, 140, 100, 0.08)' : 'none',
                     transition: 'background 0.15s ease',
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(180, 140, 100, 0.04)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                 >
-                  {/* Rank number */}
-                  <div style={{
-                    width: isMobile ? '28px' : '32px',
-                    height: isMobile ? '28px' : '32px',
-                    borderRadius: rank <= 3 ? '10px' : '8px',
-                    background: rank <= 3 ? rankColors[index] : 'rgba(180, 140, 100, 0.08)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: isMobile ? '13px' : '14px',
-                    fontWeight: 800,
-                    color: rank <= 3 ? '#FFF' : '#8C7B6B',
-                    flexShrink: 0,
-                    fontFamily: fonts.sans,
-                  }}>
-                    {rank}
-                  </div>
-
-                  {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Top row: rank + content */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '16px', flex: 1, minWidth: 0 }}>
+                    {/* Rank number */}
                     <div style={{
-                      fontSize: isMobile ? '15px' : '16px',
-                      fontWeight: 600,
-                      color: '#3D2B1F',
-                      lineHeight: 1.35,
-                      fontFamily: fonts.serif,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
+                      width: isMobile ? '26px' : '32px',
+                      height: isMobile ? '26px' : '32px',
+                      borderRadius: rank <= 3 ? '10px' : '8px',
+                      background: rank <= 3 ? rankColors[index] : 'rgba(180, 140, 100, 0.08)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: isMobile ? '12px' : '14px',
+                      fontWeight: 800,
+                      color: rank <= 3 ? '#FFF' : '#8C7B6B',
+                      flexShrink: 0,
+                      fontFamily: fonts.sans,
                     }}>
-                      {request.topic}
+                      {rank}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                      {vibeInfo && (
-                        <span style={{
-                          fontSize: '11px', fontWeight: 600, color: '#8B6914',
-                          background: 'rgba(139, 105, 20, 0.08)',
-                          padding: '2px 8px', borderRadius: '6px',
-                          letterSpacing: '0.3px', textTransform: 'uppercase',
-                        }}>
-                          {vibeInfo.emoji} {vibeInfo.label}
+
+                    {/* Content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: isMobile ? '14px' : '16px',
+                        fontWeight: 600,
+                        color: '#3D2B1F',
+                        lineHeight: 1.35,
+                        fontFamily: fonts.serif,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {request.topic}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px', flexWrap: 'wrap' }}>
+                        {vibeInfo && (
+                          <span style={{
+                            fontSize: isMobile ? '10px' : '11px', fontWeight: 600, color: '#8B6914',
+                            background: 'rgba(139, 105, 20, 0.08)',
+                            padding: '2px 8px', borderRadius: '6px',
+                            letterSpacing: '0.3px', textTransform: 'uppercase',
+                          }}>
+                            {vibeInfo.emoji} {vibeInfo.label}
+                          </span>
+                        )}
+                        <span style={{ fontSize: isMobile ? '11px' : '12px', color: '#8C7B6B', fontWeight: 500 }}>
+                          {supporterCount} interested
                         </span>
-                      )}
-                      <span style={{ fontSize: '12px', color: '#8C7B6B', fontWeight: 500 }}>
-                        {supporterCount} interested
-                      </span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Action buttons */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0,
+                    ...(isMobile ? { paddingLeft: '36px' } : {}),
+                  }}>
                     <button
                       onClick={() => !hasSupported && handleSupportRequest(request.id)}
                       style={{
@@ -1410,8 +1417,8 @@ export default function NetworkDiscoverView({
                         background: hasSupported ? 'rgba(139, 105, 20, 0.08)' : 'linear-gradient(135deg, #6B4F1D, #8B6914)',
                         color: hasSupported ? '#8B6914' : '#FFF',
                         border: 'none', borderRadius: '10px',
-                        padding: isMobile ? '8px 12px' : '8px 14px',
-                        fontSize: '13px', fontWeight: 600,
+                        padding: isMobile ? '6px 12px' : '8px 14px',
+                        fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
                         cursor: hasSupported ? 'default' : 'pointer',
                         boxShadow: hasSupported ? 'none' : '0 1px 4px rgba(139, 105, 20, 0.2)',
                         fontFamily: fonts.sans, whiteSpace: 'nowrap',
@@ -1425,8 +1432,8 @@ export default function NetworkDiscoverView({
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         background: 'transparent', color: '#6B4F1D',
                         border: '1.5px solid rgba(139, 105, 20, 0.2)',
-                        borderRadius: '10px', padding: isMobile ? '7px 10px' : '7px 12px',
-                        fontSize: '13px', fontWeight: 600,
+                        borderRadius: '10px', padding: isMobile ? '5px 10px' : '7px 12px',
+                        fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
                         cursor: 'pointer', fontFamily: fonts.sans, whiteSpace: 'nowrap',
                       }}
                     >
@@ -1438,11 +1445,11 @@ export default function NetworkDiscoverView({
                         title="Remove request (admin)"
                         style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          width: '32px', height: '32px',
+                          width: isMobile ? '28px' : '32px', height: isMobile ? '28px' : '32px',
                           background: 'transparent', color: '#B0867A',
                           border: '1.5px solid rgba(176, 134, 122, 0.2)',
                           borderRadius: '8px',
-                          fontSize: '14px',
+                          fontSize: isMobile ? '12px' : '14px',
                           cursor: 'pointer',
                           transition: 'all 0.15s ease',
                         }}

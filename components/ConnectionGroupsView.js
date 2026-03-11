@@ -24,6 +24,17 @@ import { parseLocalDate } from '../lib/dateUtils';
 import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee } from 'lucide-react';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') return window.innerWidth < 640;
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [connectionGroups, setConnectionGroups] = useState([]);
   const [showChatModal, setShowChatModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -805,19 +816,19 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   }
 
   return (
-    <div style={styles.container} className="circles-container">
+    <div style={{...styles.container, padding: isMobile ? '16px 0' : '24px 0'}} className="circles-container">
 
       {/* Title Section */}
-      <section style={styles.titleSection} className="circles-title-section">
+      <section style={{...styles.titleSection, marginBottom: isMobile ? '16px' : '24px', margin: isMobile ? '0 auto 16px auto' : '0 auto 24px auto', paddingBottom: isMobile ? '14px' : '20px'}} className="circles-title-section">
         <div style={styles.titleContent}>
-          <h1 style={styles.pageTitle} className="circles-page-title">Circles</h1>
-          <p style={styles.tagline}>Where meaningful connections grow deeper</p>
+          <h1 style={{...styles.pageTitle, fontSize: isMobile ? '24px' : '32px'}} className="circles-page-title">Circles</h1>
+          <p style={{...styles.tagline, fontSize: isMobile ? '13px' : '15px'}}>Where meaningful connections grow deeper</p>
         </div>
       </section>
 
       {/* Pending Invitations Alert */}
       {groupInvites.length > 0 && (
-        <div style={styles.inviteAlert} className="circles-invite-alert">
+        <div style={{...styles.inviteAlert, padding: isMobile ? '12px 14px' : '16px 20px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center'}} className="circles-invite-alert">
           <div style={styles.inviteAlertContent}>
             <span style={styles.inviteAlertIcon}>✨</span>
             <span style={styles.inviteAlertText}>
@@ -1049,8 +1060,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             <>
               <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.1)', margin: '20px 0 0' }} />
               <div style={{ marginTop: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                  <h2 style={styles.cardTitle}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '14px' }}>
+                  <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
                     Recommend to Connect
                   </h2>
                   <button
@@ -1065,7 +1076,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 </div>
 
                 <div style={{
-                  display: 'flex', gap: '12px', overflowX: 'auto',
+                  display: 'flex', gap: isMobile ? '10px' : '12px', overflowX: 'auto',
                   paddingBottom: '8px', WebkitOverflowScrolling: 'touch',
                 }}>
                   {peerSuggestions.map((person) => (
@@ -1073,11 +1084,12 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       key={person.id}
                       onClick={() => onNavigate?.('userProfile', { userId: person.id })}
                       style={{
-                        minWidth: '150px', maxWidth: '150px',
+                        minWidth: isMobile ? '130px' : '150px',
+                        maxWidth: isMobile ? '130px' : '150px',
                         background: '#FFFBF7',
                         border: '1px solid rgba(139, 111, 92, 0.12)',
-                        borderRadius: '16px',
-                        padding: '20px 14px 16px',
+                        borderRadius: isMobile ? '14px' : '16px',
+                        padding: isMobile ? '16px 10px 14px' : '20px 14px 16px',
                         flexShrink: 0, cursor: 'pointer',
                         display: 'flex', flexDirection: 'column', alignItems: 'center',
                         textAlign: 'center',
@@ -1094,12 +1106,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     >
                       {/* Avatar */}
                       <div style={{
-                        width: '72px', height: '72px', borderRadius: '50%',
+                        width: isMobile ? '60px' : '72px',
+                        height: isMobile ? '60px' : '72px',
+                        borderRadius: '50%',
                         backgroundColor: '#8B6F5C',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '28px', color: 'white', fontWeight: '600',
-                        marginBottom: '12px', flexShrink: 0,
-                        border: '3px solid rgba(139, 111, 92, 0.15)',
+                        fontSize: isMobile ? '24px' : '28px', color: 'white', fontWeight: '600',
+                        marginBottom: isMobile ? '10px' : '12px', flexShrink: 0,
+                        border: isMobile ? '2px solid rgba(139, 111, 92, 0.15)' : '3px solid rgba(139, 111, 92, 0.15)',
                       }}>
                         {person.profile_picture ? (
                           <img src={person.profile_picture} alt={person.name}
@@ -1111,7 +1125,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
                       {/* Name */}
                       <h4 style={{
-                        fontFamily: '"Lora", serif', fontSize: '14px', fontWeight: '600',
+                        fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '14px', fontWeight: '600',
                         color: '#2C1810', margin: '0 0 2px',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                         width: '100%',
@@ -1181,10 +1195,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         {/* My Circles Section */}
         <section style={styles.section} className="circles-card">
           <div style={styles.cardHeader} className="circles-card-header">
-            <h2 style={styles.cardTitle} className="circles-card-title">
+            <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}} className="circles-card-title">
               My Circles
             </h2>
-            <button style={styles.addGroupBtn} onClick={() => onNavigate && onNavigate('discover')}>Discover Circles</button>
+            <button style={{...styles.addGroupBtn, fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '6px 12px' : '8px 14px'}} onClick={() => onNavigate && onNavigate('discover')}>Discover Circles</button>
           </div>
 
           <div style={styles.circlesList}>
@@ -1213,7 +1227,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     }}
                   >
                     {/* Main layout: horizontal on desktop, vertical on mobile */}
-                    <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'stretch', gap: '14px' }}>
+                    <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'stretch', gap: isMobile ? '10px' : '14px', flexDirection: isMobile ? 'column' : 'row' }}>
 
                       {/* Left: Icon or Image */}
                       <div style={{
