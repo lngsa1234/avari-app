@@ -2091,12 +2091,19 @@ export default function UnifiedCallPage() {
     setShowRecap(true);
 
     // Step 6: Fetch combined transcript from all participants in the room
+    // Filter by session start time to avoid mixing transcripts from previous sessions
     let combinedTranscript = currentTranscript;
     try {
-      const { data: dbTranscripts } = await supabase
+      let transcriptQuery = supabase
         .from('call_transcripts')
         .select('speaker_name, text, timestamp, user_id')
-        .eq('channel_name', roomId)
+        .eq('channel_name', roomId);
+
+      if (startTime) {
+        transcriptQuery = transcriptQuery.gte('created_at', startTime);
+      }
+
+      const { data: dbTranscripts } = await transcriptQuery
         .order('timestamp', { ascending: true });
 
       if (dbTranscripts && dbTranscripts.length > 0) {
@@ -2218,6 +2225,24 @@ export default function UnifiedCallPage() {
       }
     } finally {
       setLoadingSummary(false);
+
+      // Clean up this session's transcripts from the database
+      // (they're now stored in the call_recaps row)
+      try {
+        let deleteQuery = supabase
+          .from('call_transcripts')
+          .delete()
+          .eq('channel_name', roomId);
+
+        if (startTime) {
+          deleteQuery = deleteQuery.gte('created_at', startTime);
+        }
+
+        await deleteQuery;
+        console.log('[UnifiedCall] Session transcripts cleaned up');
+      } catch (cleanupErr) {
+        console.warn('[UnifiedCall] Failed to clean up transcripts:', cleanupErr);
+      }
     }
     } // end else (has content to summarize)
   };
