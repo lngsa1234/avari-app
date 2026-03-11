@@ -216,16 +216,17 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
   };
 
   const now = new Date();
-  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const activeStatuses = ['pending', 'accepted', 'scheduled'];
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const upcomingChats = coffeeChats.filter(
-    chat => (chat.status === 'accepted' || chat.status === 'pending') &&
-            new Date(chat.scheduled_time) >= new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    chat => activeStatuses.includes(chat.status) &&
+            new Date(chat.scheduled_time) >= todayStart
   );
 
   const pastChats = coffeeChats.filter(
     chat => chat.status === 'completed' ||
-           (chat.status === 'accepted' && new Date(chat.scheduled_time) < new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+           (activeStatuses.includes(chat.status) && new Date(chat.scheduled_time) < todayStart)
   );
 
   if (loading) {
@@ -555,13 +556,13 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
                               color: isToday ? 'rgba(255,255,255,0.9)' : '#2E7D32',
                             }}>Starting soon</span>
                           )}
-                          {chat.status === 'pending' && (
+                          {(chat.status === 'pending' || chat.status === 'scheduled') && (
                             <span style={{
                               fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
                               letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '6px', flexShrink: 0,
                               background: isToday ? 'rgba(255,200,50,0.25)' : '#FFF8E1',
                               color: isToday ? '#FFF' : '#F59E0B',
-                            }}>Awaiting response</span>
+                            }}>{chat.status === 'pending' ? 'Awaiting response' : 'Scheduled'}</span>
                           )}
                         </div>
 
@@ -589,12 +590,12 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
 
                       {/* Join button */}
                       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                        {chat.status === 'pending' ? (
+                        {(chat.status === 'pending' || chat.status === 'scheduled') ? (
                           <span style={{
                             fontSize: '12px', color: isToday ? 'rgba(255,255,255,0.5)' : '#B8A089',
                             fontFamily: '"Lora", serif', fontStyle: 'italic',
                           }}>
-                            Pending
+                            {chat.status === 'pending' ? 'Pending' : 'Scheduled'}
                           </span>
                         ) : chat.video_link ? (
                           <button
