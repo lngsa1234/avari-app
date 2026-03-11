@@ -215,13 +215,17 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
     return partner || { name: 'Unknown User', career: 'No career info', email: '' };
   };
 
+  const now = new Date();
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
   const upcomingChats = coffeeChats.filter(
-    chat => chat.status === 'accepted' && new Date(chat.scheduled_time) > new Date()
+    chat => (chat.status === 'accepted' || chat.status === 'pending') &&
+            new Date(chat.scheduled_time) >= new Date(now.getFullYear(), now.getMonth(), now.getDate())
   );
 
   const pastChats = coffeeChats.filter(
-    chat => chat.status === 'completed' || 
-           (chat.status === 'accepted' && new Date(chat.scheduled_time) <= new Date())
+    chat => chat.status === 'completed' ||
+           (chat.status === 'accepted' && new Date(chat.scheduled_time) < new Date(now.getFullYear(), now.getMonth(), now.getDate()))
   );
 
   if (loading) {
@@ -551,6 +555,14 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
                               color: isToday ? 'rgba(255,255,255,0.9)' : '#2E7D32',
                             }}>Starting soon</span>
                           )}
+                          {chat.status === 'pending' && (
+                            <span style={{
+                              fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
+                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '6px', flexShrink: 0,
+                              background: isToday ? 'rgba(255,200,50,0.25)' : '#FFF8E1',
+                              color: isToday ? '#FFF' : '#F59E0B',
+                            }}>Awaiting response</span>
+                          )}
                         </div>
 
                         {/* Chat title */}
@@ -577,7 +589,14 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
 
                       {/* Join button */}
                       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
-                        {chat.video_link ? (
+                        {chat.status === 'pending' ? (
+                          <span style={{
+                            fontSize: '12px', color: isToday ? 'rgba(255,255,255,0.5)' : '#B8A089',
+                            fontFamily: '"Lora", serif', fontStyle: 'italic',
+                          }}>
+                            Pending
+                          </span>
+                        ) : chat.video_link ? (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
