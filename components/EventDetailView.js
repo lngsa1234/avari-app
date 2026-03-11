@@ -230,6 +230,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       if (updateError) throw updateError;
 
       setMeetup(prev => ({ ...prev, image_url: publicUrl }));
+      onMeetupChanged?.();
     } catch (err) {
       console.error('Upload error:', err);
       alert('Failed to upload photo: ' + err.message);
@@ -246,6 +247,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
         .eq('id', meetupId);
       if (error) throw error;
       setMeetup(prev => ({ ...prev, image_url: null }));
+      onMeetupChanged?.();
     } catch (err) {
       alert('Failed to remove photo: ' + err.message);
     }

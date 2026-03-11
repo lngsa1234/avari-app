@@ -54,7 +54,7 @@ const colors = {
 
 // Font families
 const fonts = {
-  serif: "'Playfair Display', Georgia, serif",
+  serif: "'Lora', Georgia, serif",
   sans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 };
 
@@ -185,6 +185,8 @@ export default function NetworkDiscoverView({
   const [requestTopic, setRequestTopic] = useState('');
   const [requestDescription, setRequestDescription] = useState('');
   const [requestVibe, setRequestVibe] = useState('grow');
+  const [showAllRequests, setShowAllRequests] = useState(false);
+  const [deletingRequestId, setDeletingRequestId] = useState(null);
   const [sentRequests, setSentRequests] = useState(new Set()); // Track sent connection requests
   const [userRsvps, setUserRsvps] = useState(new Set()); // Track user's RSVPs
   const [rsvpLoading, setRsvpLoading] = useState({});
@@ -244,9 +246,9 @@ export default function NetworkDiscoverView({
       .sort((a, b) => b._scoring.score - a._scoring.score);
   }, [connectionGroups, currentUser, connectionIds]);
 
-  // Rotating placeholder animation
+  // Rotating placeholder animation — stops when focused or has input
   useEffect(() => {
-    if (searchText || selectedChips.length > 0) return;
+    if (searchText || selectedChips.length > 0 || searchFocused) return;
     const interval = setInterval(() => {
       setPlaceholderVisible(false);
       setTimeout(() => {
@@ -255,7 +257,7 @@ export default function NetworkDiscoverView({
       }, 400);
     }, 3000);
     return () => clearInterval(interval);
-  }, [searchText, selectedChips.length]);
+  }, [searchText, selectedChips.length, searchFocused]);
 
   const toggleChip = (chip) => {
     setSelectedChips((prev) =>
@@ -482,12 +484,13 @@ export default function NetworkDiscoverView({
 
   const loadMeetupRequests = async () => {
     try {
+      // Fetch all open requests — sort by votes, then recency for new ones
       const { data, error } = await supabase
         .from('meetup_requests')
         .select('*')
         .eq('status', 'open')
         .order('supporter_count', { ascending: false })
-        .limit(10);
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error('Error fetching meetup requests:', error);
@@ -723,6 +726,17 @@ export default function NetworkDiscoverView({
     }
   };
 
+  const handleDeleteRequest = async (requestId) => {
+    try {
+      await supabase.from('meetup_request_supporters').delete().eq('request_id', requestId);
+      await supabase.from('meetup_requests').delete().eq('id', requestId);
+      setDeletingRequestId(null);
+      await loadMeetupRequests();
+    } catch (error) {
+      console.error('Error deleting request:', error);
+    }
+  };
+
   const handleHostRequest = async (request) => {
     if (onHostMeetup) {
       onHostMeetup({
@@ -952,185 +966,6 @@ export default function NetworkDiscoverView({
 
   return (
     <div style={{ fontFamily: fonts.sans, paddingBottom: '100px' }}>
-      {/* Search Bar + Topic Chips */}
-      <div style={{ marginBottom: isMobile ? '20px' : '24px' }}>
-        {/* Search Bar */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: '6px',
-          padding: selectedChips.length > 0 ? '10px 14px' : '0 14px',
-          minHeight: '48px',
-          borderRadius: '999px',
-          backgroundColor: searchFocused ? '#FFFFFF' : '#FDF8F4',
-          border: searchFocused ? '2px solid #8B5E3C' : '1px solid #C49A6C40',
-          boxShadow: searchFocused
-            ? '0 0 0 3px #8B5E3C25, 0 2px 8px rgba(139, 94, 60, 0.15)'
-            : '0 2px 8px rgba(139, 94, 60, 0.1)',
-          transition: 'all 0.2s ease',
-          position: 'relative',
-          ...(selectedChips.length > 0 ? { borderRadius: '20px' } : {}),
-        }}>
-          {/* Magnifying glass */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            height: selectedChips.length > 0 ? '32px' : '48px',
-            flexShrink: 0,
-          }}>
-            <Search size={18} style={{ color: '#8B5E3C' }} />
-          </div>
-
-          {/* Selected chip pills inside bar */}
-          {selectedChips.map((chip) => (
-            <span
-              key={chip}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 10px',
-                borderRadius: '999px',
-                backgroundColor: '#8B5E3C15',
-                border: '1px solid #8B5E3C40',
-                fontSize: '12.5px',
-                fontFamily: "'Montserrat', sans-serif",
-                fontWeight: '500',
-                color: '#6B4226',
-                whiteSpace: 'nowrap',
-                lineHeight: '1.4',
-              }}
-            >
-              {chip}
-              <button
-                onClick={() => removeChip(chip)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: '0',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  color: '#8B5E3C',
-                }}
-              >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
-
-          {/* Text input */}
-          <div style={{ flex: 1, position: 'relative', minWidth: '80px', height: selectedChips.length > 0 ? '32px' : '48px', display: 'flex', alignItems: 'center' }}>
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              style={{
-                width: '100%',
-                height: '100%',
-                border: 'none',
-                outline: 'none',
-                background: 'transparent',
-                fontSize: '14px',
-                fontFamily: "'Montserrat', sans-serif",
-                color: '#4A3728',
-              }}
-            />
-            {/* Animated placeholder */}
-            {!hasInput && (
-              <span style={{
-                position: 'absolute',
-                left: 0,
-                top: '50%',
-                transform: 'translateY(-50%)',
-                fontSize: '14px',
-                fontFamily: "'Montserrat', sans-serif",
-                color: '#A0714F',
-                pointerEvents: 'none',
-                opacity: placeholderVisible ? 1 : 0,
-                transition: 'opacity 0.4s ease',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                maxWidth: '100%',
-              }}>
-                {PLACEHOLDER_HINTS[placeholderIndex]}
-              </span>
-            )}
-          </div>
-
-          {/* Clear all button */}
-          {hasInput && (
-            <button
-              onClick={clearAll}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                border: 'none',
-                backgroundColor: '#8B5E3C20',
-                cursor: 'pointer',
-                flexShrink: 0,
-                alignSelf: 'center',
-                color: '#6B4226',
-              }}
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        {/* Topic Chips */}
-        <div style={{
-          display: 'flex',
-          flexWrap: 'nowrap',
-          gap: '8px',
-          marginTop: '12px',
-          overflowX: 'auto',
-          paddingBottom: '4px',
-          marginLeft: isMobile ? '-16px' : '-24px',
-          marginRight: isMobile ? '-16px' : '-24px',
-          paddingLeft: isMobile ? '16px' : '24px',
-          paddingRight: isMobile ? '16px' : '24px',
-          WebkitOverflowScrolling: 'touch',
-        }}>
-          {TOPIC_CHIPS.map((chip) => {
-            const isSelected = selectedChips.includes(chip);
-            return (
-              <button
-                key={chip}
-                onClick={() => toggleChip(chip)}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '6px 11px',
-                  borderRadius: '999px',
-                  border: isSelected ? '1.5px solid #8B5E3C' : '1px solid #C49A6C50',
-                  backgroundColor: isSelected ? '#8B5E3C12' : '#FDF8F4',
-                  cursor: 'pointer',
-                  fontSize: '12.5px',
-                  fontFamily: "'Montserrat', sans-serif",
-                  fontWeight: '500',
-                  color: isSelected ? '#6B4226' : '#6B4226CC',
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                {isSelected && <Check size={13} style={{ color: '#8B5E3C' }} />}
-                {chip}
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Community Events */}
       <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>
@@ -1143,23 +978,21 @@ export default function NetworkDiscoverView({
                 Join conversations that matter to you
               </p>
             </div>
-            {featuredMeetups.length > 0 && (
-              <button
-                onClick={() => onNavigate?.('allEvents')}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  background: 'none',
-                  border: 'none',
-                  color: colors.primary,
-                  fontSize: isMobile ? '13px' : '15px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                }}>
-                See all <ChevronRight size={isMobile ? 12 : 14} />
-              </button>
-            )}
+            <button
+              onClick={() => onHostMeetup?.()}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                background: 'linear-gradient(135deg, #6B4226, #8B5E3C)',
+                color: '#FFF', border: 'none',
+                borderRadius: '12px', padding: '8px 14px',
+                fontSize: '13px', fontWeight: 600,
+                cursor: 'pointer', fontFamily: fonts.sans, flexShrink: 0,
+                boxShadow: '0 2px 8px rgba(107, 66, 38, 0.25)',
+              }}
+            >
+              <Plus size={14} />
+              Host yours
+            </button>
           </div>
 
           {featuredMeetups.length === 0 ? (
@@ -1460,236 +1293,280 @@ export default function NetworkDiscoverView({
           )}
         </div>
 
-      {/* Trending Requests */}
+      {/* Trending Requests — Ranking List */}
       {meetupRequests.length > 0 && (
         <div style={{
           marginBottom: isMobile ? '24px' : '32px',
-          marginLeft: isMobile ? '-16px' : '-24px',
-          marginRight: isMobile ? '-16px' : '-24px',
-          padding: isMobile ? '20px 16px' : '24px 24px',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '12px' : '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '14px' : '18px' }}>
             <div>
               <h2 style={{ fontSize: isMobile ? '20px' : '24px', fontWeight: '600', color: '#3D2E1F', margin: 0, fontFamily: fonts.serif }}>
                 Trending Requests
               </h2>
               <p style={{ fontSize: isMobile ? '13px' : '14px', color: '#7A6B5D', margin: '4px 0 0' }}>
-                Topics the community wants — support to make them happen
+                Most wanted topics — vote to make them happen
               </p>
             </div>
+            <button
+              onClick={() => setShowRequestModal(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '6px',
+                background: 'transparent', color: '#8B6914', border: '1.5px solid rgba(139, 105, 20, 0.25)',
+                borderRadius: '12px', padding: '8px 14px', fontSize: '13px', fontWeight: 600,
+                cursor: 'pointer', fontFamily: fonts.sans, flexShrink: 0,
+              }}
+            >
+              <Plus size={14} />
+              Suggest
+            </button>
           </div>
 
           <div style={{
-            display: 'flex',
-            gap: isMobile ? '10px' : '12px',
-            overflowX: 'auto',
-            paddingBottom: '8px',
-            marginLeft: isMobile ? '-16px' : '0',
-            marginRight: isMobile ? '-16px' : '0',
-            paddingLeft: isMobile ? '16px' : '0',
-            paddingRight: isMobile ? '16px' : '0',
-            WebkitOverflowScrolling: 'touch',
+            background: '#FFFBF5',
+            borderRadius: meetupRequests.length > 3 ? '16px 16px 0 0' : '16px',
+            border: '1px solid rgba(180, 140, 100, 0.12)',
+            borderBottom: meetupRequests.length > 3 ? 'none' : undefined,
+            boxShadow: meetupRequests.length > 3 ? 'none' : '0 2px 12px rgba(120, 80, 40, 0.06)',
+            overflow: 'hidden',
+            maxHeight: showAllRequests ? '400px' : 'none',
+            overflowY: showAllRequests ? 'auto' : 'hidden',
           }}>
-            {meetupRequests.slice(0, 6).map((request) => {
+            {(showAllRequests ? meetupRequests : meetupRequests.slice(0, 3)).map((request, index) => {
               const vibeInfo = VIBE_CATEGORIES.find(v => v.id === request.vibe_category);
               const hasSupported = request.supporters?.some(s => s.user_id === currentUser?.id);
               const supporterCount = request.supporter_count || 0;
-              const displaySupporters = request.supporters?.slice(0, 5) || [];
+              const rank = index + 1;
+              const rankColors = ['#C4956A', '#A0917A', '#B8A898'];
+              const displayCount = showAllRequests ? meetupRequests.length : Math.min(meetupRequests.length, 3);
 
               return (
                 <div
                   key={request.id}
                   style={{
-                    minWidth: isMobile ? '270px' : '300px',
-                    maxWidth: isMobile ? '270px' : '300px',
-                    padding: isMobile ? '20px' : '24px',
-                    background: '#FFFBF5',
-                    borderRadius: '20px',
-                    border: '1px solid rgba(180, 140, 100, 0.12)',
-                    boxShadow: '0 2px 16px rgba(120, 80, 40, 0.08)',
-                    flexShrink: 0,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {/* Top accent bar */}
-                  <div style={{
-                    position: 'absolute',
-                    top: 0, left: 0, right: 0,
-                    height: '3px',
-                    background: 'linear-gradient(90deg, #8B6914, #C4956A, #8B6914)',
-                    borderRadius: '20px 20px 0 0',
-                  }} />
-
-                  {/* Category tag */}
-                  {vibeInfo && (
-                    <div style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      alignSelf: 'flex-start',
-                      gap: '6px',
-                      background: 'rgba(139, 105, 20, 0.08)',
-                      color: '#8B6914',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      padding: '5px 12px',
-                      borderRadius: '20px',
-                      letterSpacing: '0.3px',
-                      textTransform: 'uppercase',
-                      marginBottom: '14px',
-                    }}>
-                      <span>{vibeInfo.emoji}</span>
-                      <span>{vibeInfo.label}</span>
-                    </div>
-                  )}
-
-                  {/* Title */}
-                  <h3 style={{
-                    fontSize: isMobile ? '18px' : '20px',
-                    fontWeight: 700,
-                    color: '#3D2B1F',
-                    lineHeight: 1.35,
-                    margin: '0 0 16px 0',
-                    fontFamily: fonts.serif,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    flex: 1,
-                  }}>
-                    {request.topic}
-                  </h3>
-
-                  {/* Interested avatars */}
-                  <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    marginBottom: '18px',
-                    paddingBottom: '18px',
-                    borderBottom: '1px solid rgba(180, 140, 100, 0.15)',
+                    gap: isMobile ? '12px' : '16px',
+                    padding: isMobile ? '14px 14px' : '16px 20px',
+                    borderBottom: index < displayCount - 1 ? '1px solid rgba(180, 140, 100, 0.08)' : 'none',
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(180, 140, 100, 0.04)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  {/* Rank number */}
+                  <div style={{
+                    width: isMobile ? '28px' : '32px',
+                    height: isMobile ? '28px' : '32px',
+                    borderRadius: rank <= 3 ? '10px' : '8px',
+                    background: rank <= 3 ? rankColors[index] : 'rgba(180, 140, 100, 0.08)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: isMobile ? '13px' : '14px',
+                    fontWeight: 800,
+                    color: rank <= 3 ? '#FFF' : '#8C7B6B',
+                    flexShrink: 0,
+                    fontFamily: fonts.sans,
                   }}>
-                    <div style={{ display: 'flex' }}>
-                      {displaySupporters.map((s, i) => {
-                        const isYou = s.user_id === currentUser?.id;
-                        const avatarColors = ['#C4956A', '#8B6914', '#D4B896', '#A67C2E', '#BFA27E'];
-                        return (
-                          <div key={i} style={{
-                            width: '28px', height: '28px', borderRadius: '50%',
-                            border: '2px solid #FFFBF5',
-                            marginLeft: i > 0 ? '-8px' : 0,
-                            zIndex: displaySupporters.length - i,
-                            position: 'relative',
-                            overflow: 'hidden',
-                            background: isYou ? '#6B4F1D' : avatarColors[i % 5],
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: isYou ? '9px' : '11px',
-                            color: 'white', fontWeight: 700,
-                          }}>
-                            {s.profile?.profile_picture ? (
-                              <img src={s.profile.profile_picture} alt="" style={{
-                                width: '100%', height: '100%', objectFit: 'cover',
-                              }} />
-                            ) : isYou ? 'You' : (s.profile?.name || '?')[0].toUpperCase()}
-                          </div>
-                        );
-                      })}
+                    {rank}
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: isMobile ? '15px' : '16px',
+                      fontWeight: 600,
+                      color: '#3D2B1F',
+                      lineHeight: 1.35,
+                      fontFamily: fonts.serif,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {request.topic}
                     </div>
-                    <span style={{ color: '#8C7B6B', fontSize: '13px', fontWeight: 500 }}>
-                      {supporterCount} interested
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                      {vibeInfo && (
+                        <span style={{
+                          fontSize: '11px', fontWeight: 600, color: '#8B6914',
+                          background: 'rgba(139, 105, 20, 0.08)',
+                          padding: '2px 8px', borderRadius: '6px',
+                          letterSpacing: '0.3px', textTransform: 'uppercase',
+                        }}>
+                          {vibeInfo.emoji} {vibeInfo.label}
+                        </span>
+                      )}
+                      <span style={{ fontSize: '12px', color: '#8C7B6B', fontWeight: 500 }}>
+                        {supporterCount} interested
+                      </span>
+                    </div>
                   </div>
 
                   {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
                     <button
                       onClick={() => !hasSupported && handleSupportRequest(request.id)}
                       style={{
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        background: hasSupported
-                          ? 'transparent'
-                          : 'linear-gradient(135deg, #6B4F1D, #8B6914)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        gap: '5px',
+                        background: hasSupported ? 'rgba(139, 105, 20, 0.08)' : 'linear-gradient(135deg, #6B4F1D, #8B6914)',
                         color: hasSupported ? '#8B6914' : '#FFF',
-                        border: hasSupported ? '1.5px solid #8B6914' : 'none',
-                        borderRadius: '14px',
-                        padding: isMobile ? '11px 16px' : '13px 20px',
-                        fontSize: '14px',
-                        fontWeight: 600,
+                        border: 'none', borderRadius: '10px',
+                        padding: isMobile ? '8px 12px' : '8px 14px',
+                        fontSize: '13px', fontWeight: 600,
                         cursor: hasSupported ? 'default' : 'pointer',
-                        boxShadow: hasSupported ? 'none' : '0 2px 8px rgba(139, 105, 20, 0.25)',
-                        letterSpacing: '0.2px',
-                        fontFamily: fonts.sans,
+                        boxShadow: hasSupported ? 'none' : '0 1px 4px rgba(139, 105, 20, 0.2)',
+                        fontFamily: fonts.sans, whiteSpace: 'nowrap',
                       }}
                     >
-                      <span>{hasSupported ? '✓' : '🙋‍♀️'}</span>
-                      <span>{hasSupported ? "I'm in!" : 'I want this'}</span>
+                      {hasSupported ? '✓ Voted' : '🙋‍♀️ Vote'}
                     </button>
-
                     <button
                       onClick={() => handleHostRequest(request)}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '8px',
-                        background: 'transparent',
-                        color: '#6B4F1D',
-                        border: '1.5px solid rgba(139, 105, 20, 0.25)',
-                        borderRadius: '14px',
-                        padding: isMobile ? '11px 16px' : '13px 20px',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        letterSpacing: '0.2px',
-                        fontFamily: fonts.sans,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'transparent', color: '#6B4F1D',
+                        border: '1.5px solid rgba(139, 105, 20, 0.2)',
+                        borderRadius: '10px', padding: isMobile ? '7px 10px' : '7px 12px',
+                        fontSize: '13px', fontWeight: 600,
+                        cursor: 'pointer', fontFamily: fonts.sans, whiteSpace: 'nowrap',
                       }}
                     >
-                      <span>🎙️</span>
-                      <span>Host</span>
+                      🎙️ Host
                     </button>
+                    {currentUser?.role === 'admin' && (
+                      <button
+                        onClick={() => setDeletingRequestId(request.id)}
+                        title="Remove request (admin)"
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: '32px', height: '32px',
+                          background: 'transparent', color: '#B0867A',
+                          border: '1.5px solid rgba(176, 134, 122, 0.2)',
+                          borderRadius: '8px',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(232, 93, 74, 0.08)'; e.currentTarget.style.color = '#E85D4A'; e.currentTarget.style.borderColor = 'rgba(232, 93, 74, 0.3)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#B0867A'; e.currentTarget.style.borderColor = 'rgba(176, 134, 122, 0.2)'; }}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </div>
               );
             })}
 
-            {/* Suggest a topic card */}
-            <button
-              onClick={() => setShowRequestModal(true)}
-              style={{
-                minWidth: isMobile ? '140px' : '160px',
-                maxWidth: isMobile ? '140px' : '160px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                padding: isMobile ? '16px' : '20px',
-                backgroundColor: 'transparent',
-                color: '#8B6F47',
-                border: '1.5px dashed #DDD2C2',
-                borderRadius: '16px',
-                fontSize: isMobile ? '13px' : '14px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                fontFamily: "'Nunito Sans', sans-serif",
-                flexShrink: 0,
-                transition: 'border-color 0.2s ease',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#8B6F47'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#DDD2C2'; }}
-            >
-              <Plus size={isMobile ? 18 : 20} />
-              Suggest a topic
-            </button>
           </div>
+          {/* See all / Show less toggle — outside scroll container */}
+          {meetupRequests.length > 3 && (
+            <button
+              onClick={() => setShowAllRequests(!showAllRequests)}
+              style={{
+                width: '100%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                padding: '12px 20px',
+                background: '#FFFBF5',
+                color: '#8B6914',
+                border: '1px solid rgba(180, 140, 100, 0.12)',
+                borderTop: 'none',
+                borderRadius: '0 0 16px 16px',
+                fontSize: '13px', fontWeight: 600,
+                cursor: 'pointer', fontFamily: fonts.sans,
+                transition: 'background 0.15s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(180, 140, 100, 0.04)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = '#FFFBF5'; }}
+            >
+              {showAllRequests ? 'Show less' : `See all ${meetupRequests.length} requests`}
+              <span style={{
+                display: 'inline-block',
+                transition: 'transform 0.2s ease',
+                transform: showAllRequests ? 'rotate(180deg)' : 'rotate(0deg)',
+                fontSize: '11px',
+              }}>&#9660;</span>
+            </button>
+          )}
         </div>
       )}
+
+      {/* Admin delete request confirmation */}
+      {deletingRequestId && (() => {
+        const request = meetupRequests.find(r => r.id === deletingRequestId);
+        return (
+          <div
+            onClick={() => setDeletingRequestId(null)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 9999,
+              background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '20px',
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'white', borderRadius: '20px',
+                padding: isMobile ? '24px' : '28px',
+                maxWidth: '380px', width: '100%',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
+              }}
+            >
+              <h3 style={{
+                fontSize: '18px', fontWeight: 700, color: '#3D2B1F',
+                margin: '0 0 8px', fontFamily: fonts.serif,
+              }}>
+                Remove Request
+              </h3>
+              <p style={{
+                fontSize: '14px', color: '#7A6B5D', margin: '0 0 6px', lineHeight: 1.5,
+              }}>
+                Are you sure you want to remove this request?
+              </p>
+              {request && (
+                <div style={{
+                  fontSize: '15px', fontWeight: 600, color: '#3D2B1F',
+                  background: 'rgba(180, 140, 100, 0.08)', borderRadius: '10px',
+                  padding: '10px 14px', margin: '12px 0 20px',
+                  fontFamily: fonts.serif,
+                }}>
+                  "{request.topic}"
+                </div>
+              )}
+              <p style={{
+                fontSize: '13px', color: '#A0917A', margin: '0 0 20px',
+              }}>
+                This will also remove all supporter votes. This cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => setDeletingRequestId(null)}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: '12px',
+                    background: 'rgba(180, 140, 100, 0.08)', color: '#6B5C42',
+                    border: 'none', fontSize: '14px', fontWeight: 600,
+                    cursor: 'pointer', fontFamily: fonts.sans,
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleDeleteRequest(deletingRequestId)}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: '12px',
+                    background: '#E85D4A', color: 'white',
+                    border: 'none', fontSize: '14px', fontWeight: 600,
+                    cursor: 'pointer', fontFamily: fonts.sans,
+                    boxShadow: '0 2px 8px rgba(232, 93, 74, 0.3)',
+                  }}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Intimate Circles */}
       {(() => {

@@ -501,7 +501,7 @@ const styles = {
     padding: '8px 0',
   },
   headerTitle: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '20px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -566,7 +566,7 @@ const styles = {
     paddingBottom: '100px',
   },
   stepTitle: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '28px',
     fontWeight: '600',
     color: '#3D2B1F',

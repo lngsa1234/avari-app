@@ -29,8 +29,8 @@ const COLORS = {
   blueLight: '#EBF1F7',
 };
 
-const FONT = "'DM Sans', 'Nunito', system-ui, sans-serif";
-const DISPLAY_FONT = "'Playfair Display', 'Georgia', serif";
+const FONT = "'DM Sans', sans-serif";
+const DISPLAY_FONT = "'Lora', 'Georgia', serif";
 
 const CAREER_STAGE_LABELS = {
   emerging: 'Early Career',

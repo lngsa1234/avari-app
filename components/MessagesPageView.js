@@ -1018,7 +1018,7 @@ const styles = {
     marginBottom: '16px',
   },
   inboxTitle: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '24px',
     fontWeight: '600',
     color: '#5D4E42',
@@ -1233,7 +1233,7 @@ const styles = {
     cursor: 'pointer',
   },
   composeTitle: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '20px',
     fontWeight: '600',
     color: '#5D4E42',

@@ -22,7 +22,7 @@ const colors = {
 };
 
 const fonts = {
-  serif: '"Playfair Display", Georgia, serif',
+  serif: '"Lora", Georgia, serif',
   sans: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
 };
 

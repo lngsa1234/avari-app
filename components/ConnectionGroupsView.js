@@ -813,52 +813,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           <h1 style={styles.pageTitle} className="circles-page-title">Circles</h1>
           <p style={styles.tagline}>Where meaningful connections grow deeper</p>
         </div>
-        <button
-          onClick={() => onNavigate?.('messages')}
-          style={{
-            position: 'relative',
-            background: 'rgba(139, 111, 92, 0.08)',
-            border: '1px solid rgba(139, 111, 92, 0.15)',
-            borderRadius: '50%',
-            width: 40,
-            height: 40,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: '#5C4033',
-            transition: 'all 0.2s ease',
-            flexShrink: 0,
-          }}
-          title="Messages"
-        >
-          <MessageCircle size={20} />
-          {Object.values(unreadCounts).reduce((a, b) => a + b, 0) > 0 && (
-            <span style={{
-              position: 'absolute',
-              top: -3,
-              right: -3,
-              backgroundColor: '#ef4444',
-              color: '#fff',
-              fontSize: 10,
-              fontWeight: 700,
-              minWidth: 18,
-              height: 18,
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              lineHeight: 1,
-              padding: '0 4px',
-              border: '2px solid #FDF8F3',
-            }}>
-              {(() => {
-                const total = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
-                return total > 9 ? '9+' : total;
-              })()}
-            </span>
-          )}
-        </button>
       </section>
 
       {/* Pending Invitations Alert */}
@@ -892,18 +846,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
         {/* Connections Section */}
         <section style={styles.section} className="circles-card">
-          <div style={styles.cardHeader} className="circles-card-header">
-            <h2 style={styles.cardTitle} className="circles-card-title">
-              Connections
-            </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span style={styles.onlineBadge}>
-                <span style={styles.pulsingDot}></span>
-                {onlineCount} online
-              </span>
-            </div>
-          </div>
-
           {/* Existing connections - slide bar */}
           <div style={styles.slideBar}>
             {connections.map((user, index) => (
@@ -1105,184 +1047,127 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           {/* People you may know */}
           {peerSuggestions.length > 0 && (
             <>
+              <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.1)', margin: '20px 0 0' }} />
               <div style={{ marginTop: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
                   <h2 style={styles.cardTitle}>
                     Recommend to Connect
                   </h2>
                   <button
                     onClick={() => onNavigate?.('allPeople')}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      background: 'none',
-                      border: 'none',
-                      color: '#8B6F5C',
-                      fontSize: '13px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      background: 'none', border: 'none', color: '#8B6F5C',
+                      fontSize: '13px', fontWeight: '600', cursor: 'pointer',
                     }}>
                     See all <ChevronRight size={14} />
                   </button>
                 </div>
 
                 <div style={{
-                  display: 'flex',
-                  gap: '12px',
-                  overflowX: 'auto',
-                  paddingBottom: '8px',
-                  WebkitOverflowScrolling: 'touch',
+                  display: 'flex', gap: '12px', overflowX: 'auto',
+                  paddingBottom: '8px', WebkitOverflowScrolling: 'touch',
                 }}>
                   {peerSuggestions.map((person) => (
                     <div
                       key={person.id}
                       onClick={() => onNavigate?.('userProfile', { userId: person.id })}
                       style={{
-                        minWidth: '220px',
-                        background: 'linear-gradient(160deg, #3E2C1E 0%, #5C4033 50%, #7A5C42 100%)',
+                        minWidth: '150px', maxWidth: '150px',
+                        background: '#FFFBF7',
+                        border: '1px solid rgba(139, 111, 92, 0.12)',
                         borderRadius: '16px',
-                        padding: '16px',
-                        boxShadow: '0 4px 16px rgba(139, 94, 60, 0.2)',
-                        flexShrink: 0,
-                        cursor: 'pointer',
+                        padding: '20px 14px 16px',
+                        flexShrink: 0, cursor: 'pointer',
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        textAlign: 'center',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(88, 66, 51, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{
-                          width: '48px',
-                          height: '48px',
-                          borderRadius: '50%',
-                          backgroundColor: '#8B6F5C',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '22px',
-                          flexShrink: 0,
-                          color: 'white',
-                          fontWeight: '600',
-                        }}>
-                          {person.profile_picture ? (
-                            <img
-                              src={person.profile_picture}
-                              alt={person.name}
-                              style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
-                            />
-                          ) : (
-                            (person.name?.[0] || '?').toUpperCase()
-                          )}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <h4 style={{
-                            fontSize: '14px',
-                            fontWeight: '600',
-                            color: '#FFF8F0',
-                            margin: '0 0 2px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {person.name}
-                          </h4>
-                          <p style={{
-                            fontSize: '12px',
-                            color: '#E8D5C0',
-                            margin: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            {person.career || 'Professional'}
-                          </p>
-                        </div>
+                      {/* Avatar */}
+                      <div style={{
+                        width: '72px', height: '72px', borderRadius: '50%',
+                        backgroundColor: '#8B6F5C',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '28px', color: 'white', fontWeight: '600',
+                        marginBottom: '12px', flexShrink: 0,
+                        border: '3px solid rgba(139, 111, 92, 0.15)',
+                      }}>
+                        {person.profile_picture ? (
+                          <img src={person.profile_picture} alt={person.name}
+                            style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                          (person.name?.[0] || '?').toUpperCase()
+                        )}
                       </div>
 
-                      {/* Hook / Ask me about */}
-                      {person.hook && (
+                      {/* Name */}
+                      <h4 style={{
+                        fontFamily: '"Lora", serif', fontSize: '14px', fontWeight: '600',
+                        color: '#2C1810', margin: '0 0 2px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        width: '100%',
+                      }}>
+                        {person.name}
+                      </h4>
+
+                      {/* Career */}
+                      <p style={{
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '11px',
+                        color: '#8B7A6B', margin: '0 0 6px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        width: '100%',
+                      }}>
+                        {person.career || 'Professional'}
+                      </p>
+
+                      {/* Mutual info */}
+                      {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
                         <p style={{
-                          fontSize: '12px',
-                          color: '#F5E6D5',
-                          margin: '10px 0 0',
-                          lineHeight: '1.4',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '10px',
+                          color: '#B8A089', margin: '0 0 8px',
+                          display: 'flex', alignItems: 'center', gap: '3px', justifyContent: 'center',
                         }}>
-                          {person.hook}
+                          <Users size={10} />
+                          {person.mutualConnections || 0} mutual
                         </p>
                       )}
-
-                      {/* Mutual + Location row */}
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        marginTop: '10px',
-                        paddingTop: '10px',
-                        borderTop: '1px solid rgba(255,248,240,0.12)',
-                        fontSize: '10px',
-                        color: '#E8D5C0',
-                      }}>
-                        {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#A8E6CF' }}>
-                            <Users size={10} />
-                            {person.mutualConnections || 0} mutual
-                          </span>
-                        )}
-                        {person.city && (
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <MapPin size={10} style={{ opacity: 0.7 }} />
-                            {person.city}{person.state ? `, ${person.state}` : ''}
-                          </span>
-                        )}
-                      </div>
 
                       {/* Connect button */}
                       {sentRequests.has(person.id) ? (
                         <div style={{
-                          width: '100%',
-                          marginTop: '10px',
-                          padding: '7px',
-                          backgroundColor: 'rgba(168,230,207,0.2)',
-                          color: '#A8E6CF',
-                          border: '1.5px solid rgba(168,230,207,0.4)',
-                          borderRadius: '10px',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                          boxSizing: 'border-box',
+                          width: '100%', marginTop: 'auto', padding: '6px 0',
+                          backgroundColor: 'rgba(92, 64, 51, 0.06)',
+                          color: '#8B6F5C',
+                          border: '1.5px solid rgba(139, 111, 92, 0.2)',
+                          borderRadius: '10px', fontSize: '12px', fontWeight: '600',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
                         }}>
-                          <Check size={13} />
-                          Requested
+                          <Check size={12} /> Requested
                         </div>
                       ) : (
                         <button
-                          onClick={() => handleConnect(person.id)}
+                          onClick={(e) => { e.stopPropagation(); handleConnect(person.id); }}
                           style={{
-                            width: '100%',
-                            marginTop: '10px',
-                            padding: '7px',
-                            backgroundColor: 'rgba(255,248,240,0.18)',
-                            color: '#FFF8F0',
-                            border: '1.5px solid rgba(255,248,240,0.3)',
-                            borderRadius: '10px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '6px',
-                            boxSizing: 'border-box',
+                            width: '100%', marginTop: 'auto', padding: '6px 0',
+                            backgroundColor: '#5C4033', color: '#FFF',
+                            border: 'none', borderRadius: '10px',
+                            fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                            transition: 'background 0.2s ease',
                           }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7A5C42'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5C4033'; }}
                         >
-                          <UserPlus size={13} />
-                          Connect
+                          <UserPlus size={12} /> Connect
                         </button>
                       )}
                     </div>
@@ -1935,7 +1820,6 @@ const styles = {
     alignItems: 'flex-end',
     marginBottom: '24px',
     paddingBottom: '20px',
-    borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
     position: 'relative',
     zIndex: 1,
     flexWrap: 'wrap',

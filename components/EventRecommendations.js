@@ -230,7 +230,7 @@ export default function EventRecommendations({
       borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
     },
     cardTitle: {
-      fontFamily: '"Playfair Display", serif',
+      fontFamily: '"Lora", serif',
       fontSize: '18px',
       fontWeight: '600',
       color: '#3D2B1F',

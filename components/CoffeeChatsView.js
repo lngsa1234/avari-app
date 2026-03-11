@@ -401,119 +401,182 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
                 {connections.length > 0 ? 'Schedule a Coffee Chat' : 'Find Meetups'}
               </button>
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              {upcomingChats.map((chat, idx) => {
-                const partner = getPartnerInfo(chat);
-                const chatDate = new Date(chat.scheduled_time);
-                const now = new Date();
-                const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                const eventDay = new Date(chatDate.getFullYear(), chatDate.getMonth(), chatDate.getDate());
-                const diffDays = Math.round((eventDay - today) / (1000 * 60 * 60 * 24));
-                const isSoon = (chatDate - now) < 60 * 60 * 1000 && chatDate > now;
-                const isLive = now >= chatDate && now <= new Date(chatDate.getTime() + 30 * 60 * 1000);
+          ) : (() => {
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-                const isHighlight = diffDays <= 1;
-                const month = chatDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-                const day = chatDate.getDate();
+            // Group chats by date
+            const grouped = [];
+            let lastDateKey = null;
+
+            upcomingChats.forEach((chat) => {
+              const chatDate = new Date(chat.scheduled_time);
+              const eventDay = new Date(chatDate.getFullYear(), chatDate.getMonth(), chatDate.getDate());
+              const diffDays = Math.round((eventDay - todayStart) / (1000 * 60 * 60 * 24));
+              const dateKey = eventDay.toISOString();
+
+              if (dateKey !== lastDateKey) {
                 let dayLabel;
                 if (diffDays === 0) dayLabel = 'TODAY';
-                else if (diffDays === 1) dayLabel = 'TOMOR';
+                else if (diffDays === 1) dayLabel = 'TMRW';
                 else dayLabel = chatDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
 
-                const timeStr = chatDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+                const monthDay = chatDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
 
-                return (
-                  <React.Fragment key={chat.id}>
-                    {idx > 0 && (
-                      <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.25)', margin: '0 8px' }} />
-                    )}
-                    <div
-                      style={{
-                        display: 'flex', gap: '16px', padding: '14px 8px',
-                        transition: 'background-color 0.2s ease', cursor: 'pointer',
-                        position: 'relative', borderRadius: '12px', alignItems: 'center',
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
-                      {/* Date Badge */}
-                      <div style={{
-                        minWidth: '72px', padding: '18px 8px',
-                        backgroundColor: isHighlight ? 'rgba(168, 132, 98, 0.75)' : 'rgba(189, 173, 162, 0.65)',
-                        borderRadius: '8px', display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                grouped.push({ type: 'header', dayLabel, monthDay, isToday: diffDays === 0, key: dateKey });
+                lastDateKey = dateKey;
+              }
+              grouped.push({ type: 'chat', chat, diffDays });
+            });
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {grouped.map((item, idx) => {
+                  if (item.type === 'header') {
+                    return (
+                      <div key={item.key} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        padding: idx === 0 ? '4px 0 12px' : '24px 0 12px',
                       }}>
+                        {item.isToday && (
+                          <span style={{
+                            width: '7px', height: '7px', borderRadius: '50%',
+                            background: '#6B4F3A', flexShrink: 0,
+                          }} />
+                        )}
                         <span style={{
-                          fontFamily: '"Lora", serif', fontSize: '11px', fontWeight: '600',
-                          color: isHighlight ? '#FFF' : '#605045', letterSpacing: '0.5px', textTransform: 'uppercase',
-                        }}>{dayLabel}</span>
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '700',
+                          color: '#6B4F3A',
+                          letterSpacing: '1px',
+                        }}>
+                          {item.dayLabel}
+                        </span>
                         <span style={{
-                          fontFamily: '"Lora", serif', fontSize: '24px', fontWeight: '500',
-                          color: isHighlight ? '#FFF' : '#605045', lineHeight: '33px', letterSpacing: '0.15px',
-                        }}>{day}</span>
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
+                          color: '#B8A089',
+                          letterSpacing: '0.5px',
+                        }}>
+                          {item.monthDay}
+                        </span>
+                        <div style={{ flex: 1, height: '1px', background: 'rgba(180, 160, 137, 0.25)' }} />
+                      </div>
+                    );
+                  }
+
+                  const { chat, diffDays } = item;
+                  const partner = getPartnerInfo(chat);
+                  const chatDate = new Date(chat.scheduled_time);
+                  const isSoon = (chatDate - now) < 60 * 60 * 1000 && chatDate > now;
+                  const isLive = now >= chatDate && now <= new Date(chatDate.getTime() + 30 * 60 * 1000);
+                  const isToday = diffDays === 0;
+                  const timeStr = chatDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+                  return (
+                    <div
+                      key={chat.id}
+                      style={{
+                        display: 'flex', alignItems: 'center',
+                        padding: isToday ? '20px 20px' : '18px 20px',
+                        borderRadius: '16px',
+                        background: isToday
+                          ? 'linear-gradient(135deg, #7A5C42 0%, #A08060 50%, #8B6B4F 100%)'
+                          : '#FFFBF7',
+                        border: isToday ? 'none' : '1px solid rgba(180, 160, 137, 0.15)',
+                        marginBottom: '8px',
+                        transition: 'all 0.2s ease',
+                        cursor: 'default',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = isToday
+                          ? '0 6px 24px rgba(88, 66, 51, 0.25)'
+                          : '0 4px 16px rgba(88, 66, 51, 0.08)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      {/* Time column */}
+                      <div style={{
+                        minWidth: '72px', flexShrink: 0,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center',
+                        paddingRight: '16px',
+                        borderRight: isToday
+                          ? '1px solid rgba(255,255,255,0.2)'
+                          : '1px solid rgba(180, 160, 137, 0.15)',
+                        gap: '2px',
+                      }}>
+                        <svg width="16" height="16" fill="none" stroke={isToday ? 'rgba(255,255,255,0.6)' : '#B8A089'} strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                         <span style={{
-                          fontFamily: '"Lora", serif', fontSize: '12px', fontWeight: '500',
-                          color: isHighlight ? 'rgba(255,255,255,0.8)' : '#9B8A7E', marginTop: '2px',
-                        }}>{month}</span>
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                          color: isToday ? '#FFF' : '#6B4F3A',
+                        }}>
+                          {timeStr}
+                        </span>
                       </div>
 
                       {/* Content */}
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <span style={{
-                            fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
-                            letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
-                            background: '#F0E4D8', color: '#6B4632',
-                          }}>1:1</span>
+                      <div style={{ flex: 1, minWidth: 0, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                        {/* Topic tag + status */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {chat.topic && (
+                            <span style={{
+                              fontSize: '11px', fontWeight: '600',
+                              padding: '3px 10px', borderRadius: '6px',
+                              background: isToday ? 'rgba(255,255,255,0.2)' : 'rgba(139, 111, 71, 0.08)',
+                              color: isToday ? 'rgba(255,255,255,0.9)' : '#7A5C42',
+                              letterSpacing: '0.3px', textTransform: 'uppercase',
+                            }}>
+                              {chat.topic}
+                            </span>
+                          )}
                           {isLive && (
                             <span style={{
                               fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
-                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px',
-                              background: '#FEF0EC', color: '#D45B3E',
+                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '6px',
+                              background: isToday ? 'rgba(255,100,80,0.25)' : '#FEF0EC',
+                              color: isToday ? '#FFF' : '#D45B3E',
                               display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0,
                             }}>
-                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
+                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isToday ? '#FFF' : '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
                               Live
                             </span>
                           )}
                           {isSoon && !isLive && (
                             <span style={{
                               fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
-                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
-                              background: '#E8F5E9', color: '#2E7D32',
+                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '6px', flexShrink: 0,
+                              background: isToday ? 'rgba(255,255,255,0.15)' : '#E8F5E9',
+                              color: isToday ? 'rgba(255,255,255,0.9)' : '#2E7D32',
                             }}>Starting soon</span>
                           )}
                         </div>
 
+                        {/* Chat title */}
                         <h4 style={{
-                          fontFamily: '"Lora", serif', fontSize: '20px', fontWeight: '600',
-                          color: '#523C2E', margin: 0, lineHeight: '20px', letterSpacing: '0.15px',
+                          fontFamily: '"Lora", serif', fontSize: '17px', fontWeight: '600',
+                          color: isToday ? '#FFF' : '#3D2B1F', margin: 0, lineHeight: 1.3,
                         }}>
-                          {chat.topic ? `${chat.topic} — with ${partner.name}` : `Coffee Chat with ${partner.name}`}
+                          {chat.topic
+                            ? `Coffee Chat with ${partner.name}`
+                            : `Coffee Chat with ${partner.name}`}
                         </h4>
 
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
-                            <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                            <span style={{ fontWeight: '600' }}>{timeStr}</span>
-                          </div>
-                          <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
-                            <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                            <span>{partner.name}</span>
-                          </div>
+                        {/* Attendees */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                          <svg width="14" height="14" fill="none" stroke={isToday ? 'rgba(255,255,255,0.5)' : '#B8A089'} strokeWidth="1.5" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                          <span style={{
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
+                            color: isToday ? 'rgba(255,255,255,0.6)' : '#B8A089',
+                          }}>
+                            2 attendees
+                          </span>
                         </div>
-
-                        {chat.notes && (
-                          <p style={{ fontFamily: '"Lora", serif', fontSize: '14px', color: '#9B8A7E', fontStyle: 'italic', margin: 0 }}>
-                            "{chat.notes}"
-                          </p>
-                        )}
                       </div>
 
-                      {/* Action Button */}
-                      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
+                      {/* Join button */}
+                      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'center' }}>
                         {chat.video_link ? (
                           <button
                             onClick={(e) => {
@@ -521,38 +584,46 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
                               window.location.href = `/call/coffee/${chat.id}`;
                             }}
                             style={{
-                              background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
-                              padding: '10px 20px', borderRadius: '18px',
-                              fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '16px', fontWeight: '700',
+                              background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
+                              color: isToday ? '#6B4F3A' : '#F5EDE9',
+                              border: 'none',
+                              padding: '10px 22px', borderRadius: '12px',
+                              fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
                               cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                              gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
+                              gap: '7px', whiteSpace: 'nowrap',
+                              transition: 'all 0.15s ease',
                             }}
+                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
                           >
-                            <Video style={{ width: '18px', height: '18px', color: 'rgba(255, 246, 238, 0.85)' }} />
+                            <Video style={{ width: '16px', height: '16px' }} />
                             Join
                           </button>
                         ) : (
-                          <span style={{ fontSize: '12px', color: '#B8A089', fontFamily: '"Lora", serif' }}>
-                            Video link pending
+                          <span style={{ fontSize: '12px', color: isToday ? 'rgba(255,255,255,0.5)' : '#B8A089', fontFamily: '"Lora", serif' }}>
+                            Link pending
                           </span>
                         )}
                         <button
                           onClick={(e) => { e.stopPropagation(); handleCancel(chat.id); }}
                           style={{
-                            background: 'none', border: 'none', color: '#C48B6B',
-                            fontSize: '12px', fontFamily: '"Lora", serif', cursor: 'pointer',
-                            padding: '4px 8px',
+                            background: 'none', border: 'none',
+                            color: isToday ? 'rgba(255,255,255,0.4)' : '#C4A08B',
+                            fontSize: '11px', fontFamily: '"DM Sans", sans-serif', cursor: 'pointer',
+                            padding: '2px 6px', transition: 'color 0.15s ease',
                           }}
+                          onMouseEnter={(e) => { e.currentTarget.style.color = isToday ? 'rgba(255,255,255,0.8)' : '#D45B3E'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.color = isToday ? 'rgba(255,255,255,0.4)' : '#C4A08B'; }}
                         >
                           Cancel
                         </button>
                       </div>
                     </div>
-                  </React.Fragment>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 

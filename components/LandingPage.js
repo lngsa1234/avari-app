@@ -414,7 +414,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
           <h1 style={{
             fontSize: 36,
             fontWeight: 700,
-            fontFamily: '"Playfair Display", serif',
+            fontFamily: '"Lora", serif',
             color: '#5E4530',
             margin: '0 0 8px',
             letterSpacing: '-0.3px',

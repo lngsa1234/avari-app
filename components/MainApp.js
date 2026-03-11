@@ -501,10 +501,11 @@ function MainApp({ currentUser, onSignOut }) {
   useEffect(() => {
     const prevView = previousViewRef.current
     previousViewRef.current = currentView
-    // Only reload if we're returning to home from a different view
-    if (currentView === 'home' && prevView !== 'home' && hasLoadedRef.current) {
+    // Reload when returning to home or discover from a different view
+    // so updated meetup images/data are reflected immediately
+    if ((currentView === 'home' || currentView === 'discover') && prevView !== currentView && hasLoadedRef.current) {
       loadHomePageData()
-      loadCoffeeChatRequests()
+      if (currentView === 'home') loadCoffeeChatRequests()
     }
   }, [currentView])
 
@@ -3849,7 +3850,7 @@ function MainApp({ currentUser, onSignOut }) {
         <div className="max-w-4xl mx-auto px-4 pt-4 pb-2 md:px-6">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#5E4530]" style={{ fontFamily: '"Playfair Display", serif', letterSpacing: '-0.3px' }}>
+            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#5E4530]" style={{ fontFamily: '"Lora", serif', letterSpacing: '-0.3px' }}>
               <svg width="44" height="44" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-12 md:h-12">
                 <circle
                   cx="50"

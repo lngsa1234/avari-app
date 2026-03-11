@@ -30,7 +30,7 @@ const colors = {
 
 // Font families
 const fonts = {
-  serif: "'Playfair Display', Georgia, serif",
+  serif: "'Lora', Georgia, serif",
   sans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 };
 

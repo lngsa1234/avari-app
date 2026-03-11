@@ -915,24 +915,19 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         </button>
       </section>
 
-      {/* View Toggle & Filters */}
-      <div style={{...styles.controlsRow, marginBottom: isMobile ? '14px' : '20px'}}>
-        <div style={{...styles.viewToggle, width: isMobile ? '100%' : undefined}}>
-          <button
-            style={{...styles.viewBtn, ...(activeView === 'upcoming' ? styles.viewBtnActive : {}), flex: isMobile ? 1 : undefined, textAlign: 'center', padding: isMobile ? '8px 14px' : '10px 20px'}}
-            onClick={() => setActiveView('upcoming')}
-          >
-            Upcoming
-          </button>
-          <button
-            style={{...styles.viewBtn, ...(activeView === 'past' ? styles.viewBtnActive : {}), flex: isMobile ? 1 : undefined, textAlign: 'center', padding: isMobile ? '8px 14px' : '10px 20px'}}
-            onClick={() => setActiveView('past')}
-          >
-            Past
-          </button>
-        </div>
-
-      </div>
+      {/* Back to upcoming link when viewing past */}
+      {activeView === 'past' && (
+        <button
+          onClick={() => setActiveView('upcoming')}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
+            color: '#8B6F5C', padding: '0 0 12px', display: 'flex', alignItems: 'center', gap: '4px',
+          }}
+        >
+          ← Back to upcoming
+        </button>
+      )}
 
       {/* Content */}
       {activeView === 'upcoming' ? (
@@ -946,268 +941,311 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                 Browse Events
               </button>
             </div>
-          ) : (
-            filteredItems.map((item, index) => (
-              (() => {
-                const today = new Date(); today.setHours(0,0,0,0);
-                const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-                const itemDate = item.rawDate ? new Date(item.rawDate) : null;
-                if (itemDate) itemDate.setHours(0,0,0,0);
-                const isHighlighted = itemDate && (itemDate.getTime() === today.getTime() || itemDate.getTime() === tomorrow.getTime());
-                const isToday = itemDate && itemDate.getTime() === today.getTime();
-                const isTomorrow = itemDate && itemDate.getTime() === tomorrow.getTime();
-                const cardMonth = item.rawDate ? item.rawDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : '—';
-                const cardDay = item.rawDate ? item.rawDate.getDate() : '—';
-                const cardWeekday = isToday ? 'TODAY' : isTomorrow ? 'TMRW' : item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
+          ) : (() => {
+            // Group items by date for date divider rows
+            const todayDate = new Date(); todayDate.setHours(0,0,0,0);
+            const tomorrowDate = new Date(todayDate); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+            const grouped = [];
+            let lastDateKey = null;
 
-                const isCoffee = item.type === 'coffee';
-                const title = isCoffee ? (item.topic ? `${item.topic} — with ${item.with}` : `Coffee Chat with ${item.with}`) : (item.title || 'Community Event');
-                const time = item.time && item.time !== 'TBD' ? item.time : null;
+            filteredItems.forEach((item) => {
+              const itemDate = item.rawDate ? new Date(item.rawDate) : null;
+              if (itemDate) itemDate.setHours(0,0,0,0);
+              const dateKey = itemDate ? itemDate.toISOString() : 'unknown';
 
-                // Attendee avatars for group events
-                const attendees = isCoffee ? [] : (item.attendeeProfiles || []);
-                // For coffee chats, show the other person as a single attendee
-                const coffeeAvatar = isCoffee ? { name: item.with, profile_picture: item.avatar } : null;
+              if (dateKey !== lastDateKey) {
+                const diffDays = itemDate ? Math.round((itemDate - todayDate) / (1000 * 60 * 60 * 24)) : -1;
+                let dayLabel;
+                if (diffDays === 0) dayLabel = 'TODAY';
+                else if (diffDays === 1) dayLabel = 'TMRW';
+                else dayLabel = item.rawDate ? item.rawDate.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() : '';
+                const monthDay = item.rawDate ? item.rawDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase() : '';
 
+                grouped.push({ type: 'header', dayLabel, monthDay, isToday: diffDays === 0, key: dateKey });
+                lastDateKey = dateKey;
+              }
+              grouped.push({ type: 'item', item });
+            });
+
+            return grouped.map((entry, gIdx) => {
+              if (entry.type === 'header') {
                 return (
-                  <div key={item.id} onClick={(e) => {
-                    // Don't toggle if clicking a button or menu
-                    if (e.target.closest('button') || e.target.closest('[data-menu]')) return;
-                    // Navigate to event detail for group events
-                    if (!isCoffee && onNavigate) {
-                      onNavigate('eventDetail', { meetupId: item.id });
-                      return;
-                    }
-                    setActiveCardId(activeCardId === item.id ? null : item.id);
-                  }} style={{
-                    ...styles.meetupCard,
-                    animationDelay: `${index * 0.1}s`,
-                    cursor: 'pointer',
+                  <div key={entry.key} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    padding: gIdx === 0 ? '0 0 6px' : '14px 0 6px',
                   }}>
-                    {/* Date column */}
-                    <div style={{
-                      ...styles.dateBadge,
-                      ...(isHighlighted ? { backgroundColor: '#5C4033' } : {}),
+                    {entry.isToday && (
+                      <span style={{
+                        width: '7px', height: '7px', borderRadius: '50%',
+                        background: '#5C4033', flexShrink: 0,
+                      }} />
+                    )}
+                    <span style={{
+                      fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '700',
+                      color: '#5C4033', letterSpacing: '1px',
                     }}>
-                      <span style={{
-                        ...styles.dateBadgeMonth,
-                        ...(isHighlighted ? { color: 'rgba(255,255,255,0.7)' } : {}),
-                      }}>{cardMonth}</span>
-                      <span style={{
-                        ...styles.dateBadgeDay,
-                        ...(isHighlighted ? { color: '#fff' } : {}),
-                      }}>{cardDay}</span>
-                      <span style={{
-                        ...styles.dateBadgeWeekday,
-                        ...(isHighlighted ? { color: '#fff' } : {}),
-                      }}>{cardWeekday}</span>
+                      {entry.dayLabel}
+                    </span>
+                    <span style={{
+                      fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
+                      color: '#B8A089', letterSpacing: '0.5px',
+                    }}>
+                      {entry.monthDay}
+                    </span>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(180, 160, 137, 0.25)' }} />
+                  </div>
+                );
+              }
+
+              const item = entry.item;
+              const itemDate = item.rawDate ? new Date(item.rawDate) : null;
+              const isToday = itemDate && (() => { const d = new Date(itemDate); d.setHours(0,0,0,0); return d.getTime() === todayDate.getTime(); })();
+
+              const isCoffee = item.type === 'coffee';
+              const title = isCoffee ? (item.topic ? `${item.topic} — with ${item.with}` : `Coffee Chat with ${item.with}`) : (item.title || 'Community Event');
+              const time = item.time && item.time !== 'TBD' ? item.time : null;
+              const attendees = isCoffee ? [] : (item.attendeeProfiles || []);
+              const coffeeAvatar = isCoffee ? { name: item.with, profile_picture: item.avatar } : null;
+              const attendeeCount = isCoffee ? 2 : (attendees.length || 0);
+
+              // Topic tag: use vibe_category or meeting type
+              const topicTag = isCoffee ? '1:1 Chat' : (item.vibe_category || item.category || null);
+
+              return (
+                <div key={item.id} onClick={(e) => {
+                  if (e.target.closest('button') || e.target.closest('[data-menu]')) return;
+                  if (!isCoffee && onNavigate) { onNavigate('eventDetail', { meetupId: item.id }); return; }
+                  setActiveCardId(activeCardId === item.id ? null : item.id);
+                }} style={{
+                  display: 'flex', alignItems: 'center',
+                  padding: isToday ? '12px 14px' : '10px 14px',
+                  borderRadius: '12px',
+                  background: isToday
+                    ? 'linear-gradient(135deg, #7A5C42 0%, #9B7A5C 50%, #8B6B4F 100%)'
+                    : '#FFFBF7',
+                  border: isToday ? 'none' : '1px solid rgba(180, 160, 137, 0.12)',
+                  marginBottom: '5px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                  e.currentTarget.style.boxShadow = isToday
+                    ? '0 6px 24px rgba(88, 66, 51, 0.25)'
+                    : '0 4px 16px rgba(88, 66, 51, 0.06)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'none';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}>
+                  {/* Time column */}
+                  <div style={{
+                    minWidth: '60px', flexShrink: 0,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
+                    paddingRight: '12px',
+                    borderRight: isToday
+                      ? '1px solid rgba(255,255,255,0.2)'
+                      : '1px solid rgba(180, 160, 137, 0.15)',
+                  }}>
+                    <svg width="13" height="13" fill="none" stroke={isToday ? 'rgba(255,255,255,0.5)' : '#B8A089'} strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <span style={{
+                      fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                      color: isToday ? '#FFF' : '#5C4033',
+                    }}>
+                      {time || 'TBD'}
+                    </span>
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0, paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {/* Topic tag + format badge */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      {topicTag && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: '600',
+                          padding: '2px 8px', borderRadius: '5px',
+                          background: isToday ? 'rgba(255,255,255,0.2)' : 'rgba(139, 111, 71, 0.08)',
+                          color: isToday ? 'rgba(255,255,255,0.9)' : '#7A5C42',
+                          letterSpacing: '0.3px', textTransform: 'capitalize',
+                        }}>
+                          {topicTag}
+                        </span>
+                      )}
+                      {!isCoffee && item.meeting_format && item.meeting_format !== 'virtual' && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '6px',
+                          backgroundColor: isToday ? 'rgba(255,255,255,0.15)' : (item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4'),
+                          color: isToday ? 'rgba(255,255,255,0.8)' : (item.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46'),
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {item.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
+                        </span>
+                      )}
+                      {isCoffee && item.isPending && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '6px',
+                          background: isToday ? 'rgba(255,255,255,0.15)' : 'rgba(196, 149, 106, 0.2)',
+                          color: isToday ? 'rgba(255,255,255,0.8)' : '#8B6F5C',
+                        }}>
+                          {item.isInviteReceived ? 'Invited you' : 'Awaiting response'}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Content area */}
-                    <div style={{ flex: 1, padding: '14px 14px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          <h4 style={{
-                            fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '600',
-                            color: '#2C1810', margin: 0, lineHeight: 1.3, letterSpacing: '-0.2px',
-                          }}>
-                            {title}
-                          </h4>
-                          {!isCoffee && item.meeting_format && item.meeting_format !== 'virtual' && (
-                            <span style={{
-                              fontSize: '10px', fontWeight: '600', padding: '2px 8px',
-                              borderRadius: '100px',
-                              backgroundColor: item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4',
-                              color: item.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46',
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {item.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
-                            </span>
-                          )}
-                        </div>
-                        {/* Edit/Delete menu for owned items — shown only when card is tapped */}
-                        {activeCardId === item.id && ((!isCoffee && item.created_by === currentUser.id) || (isCoffee && item.requester_id === currentUser.id)) && (
-                          <div style={{ position: 'relative', flexShrink: 0 }}>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setActionMenuOpen(actionMenuOpen === item.id ? null : item.id); }}
-                              style={styles.moreBtn}
-                            >
-                              <MoreHorizontal size={16} />
-                            </button>
-                            {actionMenuOpen === item.id && (
-                              <div style={styles.actionMenu}>
-                                {!isCoffee && (
-                                  <button style={styles.actionMenuItem} onClick={(e) => { e.stopPropagation(); handleEditMeetup(item); }}>
-                                    <Edit3 size={14} /> Edit
-                                  </button>
-                                )}
-                                {isCoffee ? (
-                                  <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setCancellingChatId(item.id); setShowCancelChatConfirm(true); setActionMenuOpen(null); }}>
-                                    <Trash2 size={14} /> Cancel
-                                  </button>
-                                ) : (
-                                  <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setDeletingMeetupId(item.id); setShowDeleteConfirm(true); setActionMenuOpen(null); }}>
-                                    <Trash2 size={14} /> Delete
-                                  </button>
-                                )}
-                              </div>
+                    {/* Title */}
+                    <h4 style={{
+                      fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '17px', fontWeight: '600',
+                      color: isToday ? '#FFF' : '#2C1810', margin: 0, lineHeight: 1.3,
+                    }}>
+                      {title}
+                    </h4>
+
+                    {/* Attendee count */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <svg width="12" height="12" fill="none" stroke={isToday ? 'rgba(255,255,255,0.45)' : '#B8A089'} strokeWidth="1.5" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                      <span style={{
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
+                        color: isToday ? 'rgba(255,255,255,0.55)' : '#B8A089',
+                      }}>
+                        {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
+                      </span>
+                    </div>
+
+                    {/* Edit/Delete menu for owned items */}
+                    {activeCardId === item.id && ((!isCoffee && item.created_by === currentUser.id) || (isCoffee && item.requester_id === currentUser.id)) && (
+                      <div style={{ position: 'relative', marginTop: '4px' }}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setActionMenuOpen(actionMenuOpen === item.id ? null : item.id); }}
+                          style={styles.moreBtn}
+                        >
+                          <MoreHorizontal size={16} />
+                        </button>
+                        {actionMenuOpen === item.id && (
+                          <div style={styles.actionMenu}>
+                            {!isCoffee && (
+                              <button style={styles.actionMenuItem} onClick={(e) => { e.stopPropagation(); handleEditMeetup(item); }}>
+                                <Edit3 size={14} /> Edit
+                              </button>
+                            )}
+                            {isCoffee ? (
+                              <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setCancellingChatId(item.id); setShowCancelChatConfirm(true); setActionMenuOpen(null); }}>
+                                <Trash2 size={14} /> Cancel
+                              </button>
+                            ) : (
+                              <button style={{...styles.actionMenuItem, color: '#D32F2F'}} onClick={(e) => { e.stopPropagation(); setDeletingMeetupId(item.id); setShowDeleteConfirm(true); setActionMenuOpen(null); }}>
+                                <Trash2 size={14} /> Delete
+                              </button>
                             )}
                           </div>
                         )}
                       </div>
+                    )}
+                  </div>
 
-                      {time && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50' }}>
-                          <svg width="14" height="14" fill="none" stroke="#C4A07C" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                          <span style={{ fontWeight: '600', color: '#5C3A24' }}>{time}</span>
-                        </div>
-                      )}
-
-                      {isCoffee && item.isPending && (
-                        <div style={{
-                          fontSize: '11px', fontWeight: '600', padding: '3px 10px',
-                          borderRadius: '100px', display: 'inline-block', width: 'fit-content',
-                          backgroundColor: item.isInviteReceived ? 'rgba(196, 149, 106, 0.25)' : 'rgba(139, 111, 92, 0.1)',
-                          color: item.isInviteReceived ? '#8B6F5C' : '#7A6855',
-                        }}>
-                          {item.isInviteReceived ? 'Invited you' : 'Awaiting response'}
-                        </div>
-                      )}
-
-                      {/* Attendee avatars */}
-                      {isCoffee ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{
-                            width: '24px', height: '24px', borderRadius: '50%',
-                            overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
-                            color: coffeeAvatar.profile_picture ? undefined : 'white',
-                            background: coffeeAvatar.profile_picture ? undefined : '#8B6347',
-                          }}>
-                            {coffeeAvatar.profile_picture ? (
-                              <img src={coffeeAvatar.profile_picture} alt={coffeeAvatar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              (coffeeAvatar.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)
-                            )}
-                          </div>
-                          <span style={{ fontSize: '12px', color: '#9B8A7E' }}>
-                            <span style={{ fontWeight: '600', color: '#6B5B50' }}>{item.with}</span> · {item.role}
-                          </span>
-                        </div>
-                      ) : attendees.length > 0 ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center' }}>
-                            {attendees.slice(0, 3).map((p, idx) => (
-                              <div key={p.id} style={{
-                                width: '24px', height: '24px', borderRadius: '50%',
-                                border: '2px solid #FFFCF8', marginLeft: idx === 0 ? 0 : '-7px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
-                                overflow: 'hidden',
-                                color: p.profile_picture ? undefined : 'white',
-                                background: p.profile_picture ? undefined : ['#8B6347', '#A67B5B', '#C4A07C'][idx % 3],
-                                zIndex: 3 - idx, position: 'relative',
-                              }}>
-                                {p.profile_picture ? (
-                                  <img src={p.profile_picture} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  (p.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)
-                                )}
-                              </div>
-                            ))}
-                            {attendees.length > 3 && (
-                              <div style={{
-                                width: '24px', height: '24px', borderRadius: '50%',
-                                border: '2px solid #FFFCF8', marginLeft: '-7px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
-                                color: '#6B4632', background: '#E8D5BE',
-                                zIndex: 0, position: 'relative',
-                              }}>
-                                +{attendees.length - 3}
-                              </div>
-                            )}
-                          </div>
-                          <span style={{ fontSize: '12px', color: '#9B8A7E' }}>
-                            <span style={{ fontWeight: '600', color: '#6B5B50' }}>{attendees.length}</span> attendees
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    {/* Action button - right column */}
-                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px 0 0', flexShrink: 0 }}>
-                      {isCoffee ? (
-                        item.isInviteReceived ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            <button onClick={() => handleAcceptChat(item)} style={{
-                              background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
-                              padding: '9px 16px', borderRadius: '10px',
-                              fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
-                              cursor: 'pointer', whiteSpace: 'nowrap',
-                            }}>Accept</button>
-                            <button onClick={() => handleDeclineChat(item)} style={{
-                              background: 'none', color: '#9B8A7E', border: '1px solid rgba(139,111,92,0.2)',
-                              padding: '7px 14px', borderRadius: '10px',
-                              fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
-                              cursor: 'pointer', whiteSpace: 'nowrap',
-                            }}>Decline</button>
-                          </div>
-                        ) : item.isPending ? (
-                          <span style={{
-                            fontSize: '12px', fontWeight: '600', color: '#9B8A7E',
-                            fontFamily: '"DM Sans", sans-serif',
-                          }}>Pending</span>
-                        ) : (
-                          <button onClick={() => handleJoinCall(item)} style={{
-                            background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
-                            padding: '9px 16px', borderRadius: '10px',
+                  {/* Action button */}
+                  <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingLeft: '12px' }}>
+                    {isCoffee ? (
+                      item.isInviteReceived ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <button onClick={(e) => { e.stopPropagation(); handleAcceptChat(item); }} style={{
+                            background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
+                            color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
+                            padding: '9px 16px', borderRadius: '12px',
                             fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}>Accept</button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDeclineChat(item); }} style={{
+                            background: 'none', color: isToday ? 'rgba(255,255,255,0.5)' : '#9B8A7E',
+                            border: isToday ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(139,111,92,0.2)',
+                            padding: '7px 14px', borderRadius: '12px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
+                            cursor: 'pointer', whiteSpace: 'nowrap',
+                          }}>Decline</button>
+                        </div>
+                      ) : item.isPending ? (
+                        <span style={{
+                          fontSize: '12px', fontWeight: '600',
+                          color: isToday ? 'rgba(255,255,255,0.5)' : '#9B8A7E',
+                          fontFamily: '"DM Sans", sans-serif',
+                        }}>Pending</span>
+                      ) : (
+                        <button onClick={(e) => { e.stopPropagation(); handleJoinCall(item); }} style={{
+                          background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
+                          color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
+                          padding: '10px 20px', borderRadius: '12px',
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                          cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                          gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                        >
+                          <Video size={16} />
+                          Join
+                        </button>
+                      )
+                    ) : (
+                      (item.status === 'going' || item.isCircleMeetup) ? (
+                        item.meeting_format === 'in_person' ? (
+                          <span style={{
+                            fontSize: '13px', fontWeight: '600',
+                            color: isToday ? 'rgba(255,255,255,0.8)' : '#4E6B46',
+                            fontFamily: '"DM Sans", sans-serif',
+                            padding: '8px 16px', borderRadius: '12px',
+                            backgroundColor: isToday ? 'rgba(255,255,255,0.15)' : '#E8F0E4',
+                          }}>Going</span>
+                        ) : (
+                          <button onClick={(e) => { e.stopPropagation(); handleJoinCall(item); }} style={{
+                            background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
+                            color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
+                            padding: '10px 20px', borderRadius: '12px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
                             cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                            gap: '6px', whiteSpace: 'nowrap',
-                          }}>
-                            <Video size={15} />
-                            Join &gt;
+                            gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                          >
+                            <Video size={16} />
+                            Join
                           </button>
                         )
                       ) : (
-                        (item.status === 'going' || item.isCircleMeetup) ? (
-                          item.meeting_format === 'in_person' ? (
-                            <span style={{
-                              fontSize: '12px', fontWeight: '600', color: '#4E6B46',
-                              fontFamily: '"DM Sans", sans-serif',
-                              padding: '6px 12px', borderRadius: '10px',
-                              backgroundColor: '#E8F0E4',
-                            }}>Going</span>
-                          ) : (
-                            <button onClick={() => handleJoinCall(item)} style={{
-                              background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
-                              padding: '9px 16px', borderRadius: '10px',
-                              fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
-                              cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                              gap: '6px', whiteSpace: 'nowrap',
-                            }}>
-                              <Video size={15} />
-                              Join &gt;
-                            </button>
-                          )
-                        ) : (
-                          <button onClick={() => handleRsvpMeetup(item)} style={{
-                            background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
-                            padding: '9px 14px', borderRadius: '10px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
-                            cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                            gap: '5px', whiteSpace: 'nowrap',
-                          }}>
-                            Reserve spot &gt;
-                          </button>
-                        )
-                      )}
-                    </div>
+                        <button onClick={(e) => { e.stopPropagation(); handleRsvpMeetup(item); }} style={{
+                          background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
+                          color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
+                          padding: '10px 20px', borderRadius: '12px',
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                          cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
+                          gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                        >
+                          <Video size={16} />
+                          Join
+                        </button>
+                      )
+                    )}
                   </div>
-                );
-              })()
-            ))
+                </div>
+              );
+            });
+          })()}
+          {/* View past link */}
+          {filteredItems.length > 0 && pastMeetups.length > 0 && (
+            <button
+              onClick={() => setActiveView('past')}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
+                color: '#B8A089', padding: '16px 0 4px', margin: '0 auto', display: 'block',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#8B6F5C'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#B8A089'; }}
+            >
+              View past meetups →
+            </button>
           )}
         </div>
       ) : (
@@ -1346,7 +1384,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       )}
 
       {/* Suggested Section */}
-      {activeView === 'upcoming' && groupEvents.length < 3 && (
+      {activeView !== 'past' && groupEvents.length < 3 && (
         <section style={styles.suggestedSection}>
           <h2 style={styles.sectionTitle}>
             <span style={styles.sectionIcon}>✨</span>
@@ -1682,7 +1720,7 @@ const styles = {
     flexDirection: 'column',
   },
   statNumber: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '22px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -2632,7 +2670,7 @@ const styles = {
     textAlign: 'center',
   },
   sectionTitle: {
-    fontFamily: '"Playfair Display", serif',
+    fontFamily: '"Lora", serif',
     fontSize: '18px',
     fontWeight: '600',
     color: '#3D2B1F',
