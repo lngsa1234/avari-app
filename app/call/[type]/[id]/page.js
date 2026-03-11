@@ -65,12 +65,21 @@ export default function UnifiedCallPage() {
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
   const [remoteParticipants, setRemoteParticipants] = useState([]);
+  const [activeSpeakerId, setActiveSpeakerId] = useState(null);
+  const activeSpeakerTimeoutRef = useRef(null);
 
   // Control state
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [gridView, setGridView] = useState(callType !== 'coffee');
+  const [gridView, setGridView] = useState(true); // Start in grid, auto-switch to speaker when someone talks
+  const [autoSwitchedToSpeaker, setAutoSwitchedToSpeaker] = useState(false);
+  const autoSwitchedRef = useRef(false);
+  const gridViewRef = useRef(true);
+  const activeSpeakerIdRef = useRef(null);
+  // Keep refs in sync for use in event handler closures
+  gridViewRef.current = gridView;
+  activeSpeakerIdRef.current = activeSpeakerId;
   const [isLocalMain, setIsLocalMain] = useState(false);
   const [isVideoDeviceSwitching, setIsVideoDeviceSwitching] = useState(false);
   const [isAudioDeviceSwitching, setIsAudioDeviceSwitching] = useState(false);
@@ -105,6 +114,10 @@ export default function UnifiedCallPage() {
   // Meeting info state
   const [callDuration, setCallDuration] = useState(0);
   const [connectionQuality, setConnectionQuality] = useState('good');
+
+  // Host controls
+  const hostChannelRef = useRef(null);
+  const isHost = relatedData?.creator_id === user?.id || relatedData?.created_by === user?.id;
 
   // Recap state
   const [showRecap, setShowRecap] = useState(false);
@@ -587,7 +600,98 @@ export default function UnifiedCallPage() {
         updateLiveKitParticipants(roomRef.current);
       }
     }
-  }, [roomParticipants]);
+  }, [roomParticipants, remoteParticipants.length]);
+
+  // Manage video subscriptions based on active speaker in speaker mode (3+ participants)
+  // Only subscribe to the active speaker's video; unsubscribe others to save bandwidth
+  const speakerOptimizationActiveRef = useRef(false);
+  useEffect(() => {
+    // Only optimize in speaker mode with 3+ participants
+    if (gridView || remoteParticipants.length < 2) {
+      // Switched back to grid or fewer people: re-subscribe all video
+      if (speakerOptimizationActiveRef.current) {
+        resubscribeAllVideo();
+        speakerOptimizationActiveRef.current = false;
+      }
+      return;
+    }
+    speakerOptimizationActiveRef.current = true;
+
+    const client = agoraClientRef.current;
+    const room = roomRef.current;
+
+    if (config?.provider === 'agora' && client) {
+      // Find which UID should have video
+      const speakerUid = activeSpeakerId || String(remoteParticipants[0]?.uid || remoteParticipants[0]?.id);
+      let changed = false;
+
+      const ops = [];
+      for (const remoteUser of client.remoteUsers) {
+        const uid = String(remoteUser.uid);
+        if (uid.endsWith('_screen')) continue; // Don't touch screen shares
+
+        if (uid === speakerUid) {
+          // Subscribe to active speaker's video if not already subscribed
+          if (!remoteUser.videoTrack && remoteUser.hasVideo) {
+            ops.push(
+              client.subscribe(remoteUser, 'video').catch(() => {})
+            );
+            changed = true;
+          }
+        } else {
+          // Unsubscribe non-speakers' video to save bandwidth
+          if (remoteUser.videoTrack) {
+            ops.push(
+              client.unsubscribe(remoteUser, 'video').catch(() => {})
+            );
+            changed = true;
+          }
+        }
+      }
+
+      // Batch update participants after all subscribe/unsubscribe ops complete
+      if (changed) {
+        Promise.all(ops).then(() => updateAgoraParticipants(client));
+      }
+    } else if (config?.provider === 'livekit' && room) {
+      const speakerId = activeSpeakerId || remoteParticipants[0]?.id;
+
+      for (const [, participant] of room.remoteParticipants) {
+        const camPub = participant.getTrackPublication('camera');
+        if (!camPub) continue;
+
+        if (participant.identity === speakerId) {
+          camPub.setSubscribed(true);
+        } else {
+          camPub.setSubscribed(false);
+        }
+      }
+      // LiveKit auto-updates tracks via events, so updateLiveKitParticipants
+      // will be triggered by TrackSubscribed/TrackUnsubscribed events
+    }
+  }, [activeSpeakerId, gridView, remoteParticipants.length, config?.provider]);
+
+  // Re-subscribe all video (when switching back to grid mode)
+  const resubscribeAllVideo = () => {
+    const client = agoraClientRef.current;
+    const room = roomRef.current;
+
+    if (config?.provider === 'agora' && client) {
+      for (const remoteUser of client.remoteUsers) {
+        if (String(remoteUser.uid).endsWith('_screen')) continue;
+        if (remoteUser.hasVideo && !remoteUser.videoTrack) {
+          client.subscribe(remoteUser, 'video').then(() => {
+            updateAgoraParticipants(client);
+          }).catch(() => {});
+        }
+      }
+    } else if (config?.provider === 'livekit' && room) {
+      for (const [, participant] of room.remoteParticipants) {
+        const camPub = participant.getTrackPublication('camera');
+        if (camPub) camPub.setSubscribed(true);
+      }
+    }
+  };
 
   // Handle language change
   const handleLanguageChange = useCallback((newLanguage) => {
@@ -896,6 +1000,26 @@ export default function UnifiedCallPage() {
     room.on(RoomEvent.TrackUnsubscribed, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackMuted, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackUnmuted, () => updateLiveKitParticipants(room));
+    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      if (speakers.length > 0) {
+        // Pick the first active speaker that isn't us
+        const remoteSpeaker = speakers.find(s => s.identity !== user?.id);
+        if (remoteSpeaker) {
+          setActiveSpeakerId(remoteSpeaker.identity);
+          // Auto-switch from grid to speaker mode on first speech
+          if (!autoSwitchedRef.current) {
+            autoSwitchedRef.current = true;
+            setAutoSwitchedToSpeaker(true);
+            setGridView(false);
+          }
+          clearTimeout(activeSpeakerTimeoutRef.current);
+          activeSpeakerTimeoutRef.current = setTimeout(() => {
+            setActiveSpeakerId(null);
+          }, 3000);
+        }
+      }
+      updateLiveKitParticipants(room);
+    });
     room.on(RoomEvent.Disconnected, () => setIsJoined(false));
     room.on(RoomEvent.Reconnecting, () => setIsConnecting(true));
     room.on(RoomEvent.Reconnected, () => {
@@ -962,6 +1086,18 @@ export default function UnifiedCallPage() {
       if (isOwnScreenClient) {
         console.log('[Agora] Skipping own screen client');
         return;
+      }
+
+      // In speaker mode with 3+ participants, skip video for non-active speakers
+      // Audio is always subscribed; video only for the active speaker
+      const inSpeakerMode = !gridViewRef.current && client.remoteUsers.filter(u => !String(u.uid).endsWith('_screen')).length >= 2;
+      if (inSpeakerMode && mediaType === 'video' && !isScreenClient) {
+        const currentSpeaker = activeSpeakerIdRef.current;
+        if (currentSpeaker && uid !== currentSpeaker) {
+          console.log('[Agora] Speaker mode: skipping video subscribe for non-speaker', uid);
+          updateAgoraParticipants(client);
+          return;
+        }
       }
 
       await client.subscribe(remoteUser, mediaType);
@@ -1033,12 +1169,33 @@ export default function UnifiedCallPage() {
     client.enableAudioVolumeIndicator();
     client.on('volume-indicator', (volumes) => {
       if (!setRemoteSpeakingRef.current) return;
+      let loudestUid = null;
+      let loudestLevel = 0;
       for (const { uid, level } of volumes) {
         const uidStr = String(uid);
         // Skip local user (uid 0 or our own UID)
         if (uid === 0 || uidStr === String(agoraUid)) continue;
         // level > 5 means the remote user is actively speaking
         setRemoteSpeakingRef.current(uidStr, level > 5);
+        // Track loudest speaker for active speaker mode
+        if (level > loudestLevel && level > 5) {
+          loudestLevel = level;
+          loudestUid = uidStr;
+        }
+      }
+      // Update active speaker with debounce to avoid flicker
+      if (loudestUid) {
+        setActiveSpeakerId(loudestUid);
+        // Auto-switch from grid to speaker mode on first speech
+        if (!autoSwitchedRef.current) {
+          autoSwitchedRef.current = true;
+          setAutoSwitchedToSpeaker(true);
+          setGridView(false);
+        }
+        clearTimeout(activeSpeakerTimeoutRef.current);
+        activeSpeakerTimeoutRef.current = setTimeout(() => {
+          setActiveSpeakerId(null);
+        }, 3000);
       }
     });
 
@@ -1048,23 +1205,37 @@ export default function UnifiedCallPage() {
 
   // Helper to get participant name from roomParticipants by UID
   // Uses ref to avoid stale closure issues in event handlers
+  // Cache for names fetched directly from DB
+  const nameCache = useRef({});
+
   const getParticipantName = (uid) => {
     const uidStr = String(uid);
     const participants = roomParticipantsRef.current;
-    console.log('[getParticipantName] Looking for UID:', uidStr);
-    console.log('[getParticipantName] roomParticipants:', participants?.map(p => ({ id: p.id, name: p.name })));
 
-    // Try to find by exact ID match
+    // Try to find by exact ID match in room participants
     const participant = participants?.find(p => p.id === uidStr);
-    if (participant?.name) {
-      console.log('[getParticipantName] Found:', participant.name);
-      return participant.name;
+    if (participant?.name) return participant.name;
+
+    // Check cache from direct DB lookups
+    if (nameCache.current[uidStr]) return nameCache.current[uidStr];
+
+    // If it looks like a UUID and we don't have the name, fetch it
+    if (uidStr.length > 8 && uidStr.includes('-')) {
+      supabase.from('profiles').select('name').eq('id', uidStr).single().then(({ data }) => {
+        if (data?.name) {
+          nameCache.current[uidStr] = data.name;
+          // Trigger re-render of participants
+          if (config?.provider === 'agora' && agoraClientRef.current) {
+            updateAgoraParticipants(agoraClientRef.current);
+          } else if (config?.provider === 'livekit' && roomRef.current) {
+            updateLiveKitParticipants(roomRef.current);
+          }
+        }
+      });
     }
 
-    // Fallback to a shorter display
-    const fallback = uidStr.length > 8 ? `User ${uidStr.slice(0, 8)}...` : `User ${uidStr}`;
-    console.log('[getParticipantName] Not found, using fallback:', fallback);
-    return fallback;
+    // Fallback
+    return uidStr.length > 8 ? `User ${uidStr.slice(0, 8)}...` : `User ${uidStr}`;
   };
 
   // Update LiveKit participants
@@ -1404,6 +1575,65 @@ export default function UnifiedCallPage() {
   handleToggleVideoRef.current = handleToggleVideo;
   showChatRef.current = showChat;
   userIdRef.current = user?.id || null;
+
+  // Host controls channel — broadcast mute-all / video-off commands
+  const isMutedRef = useRef(isMuted);
+  const isVideoOffRef = useRef(isVideoOff);
+  isMutedRef.current = isMuted;
+  isVideoOffRef.current = isVideoOff;
+
+  useEffect(() => {
+    if (!isJoined || !roomId || callType === 'coffee') return;
+
+    const channel = supabase.channel(`host-controls-${roomId}`);
+    channel.on('broadcast', { event: 'host-command' }, ({ payload }) => {
+      if (payload?.from === user?.id) return;
+      if (payload?.command === 'mute-all' && !isMutedRef.current) {
+        handleToggleMuteRef.current?.();
+      } else if (payload?.command === 'unmute-all' && isMutedRef.current) {
+        handleToggleMuteRef.current?.();
+      } else if (payload?.command === 'video-off-all' && !isVideoOffRef.current) {
+        handleToggleVideoRef.current?.();
+      } else if (payload?.command === 'video-on-all' && isVideoOffRef.current) {
+        handleToggleVideoRef.current?.();
+      }
+    }).subscribe();
+
+    hostChannelRef.current = channel;
+    return () => { supabase.removeChannel(channel); };
+  }, [isJoined, roomId, callType, user?.id]);
+
+  const handleMuteAll = () => {
+    hostChannelRef.current?.send({
+      type: 'broadcast', event: 'host-command',
+      payload: { command: 'mute-all', from: user?.id },
+    });
+    if (!isMuted) handleToggleMute();
+  };
+
+  const handleUnmuteAll = () => {
+    hostChannelRef.current?.send({
+      type: 'broadcast', event: 'host-command',
+      payload: { command: 'unmute-all', from: user?.id },
+    });
+    if (isMuted) handleToggleMute();
+  };
+
+  const handleVideoOffAll = () => {
+    hostChannelRef.current?.send({
+      type: 'broadcast', event: 'host-command',
+      payload: { command: 'video-off-all', from: user?.id },
+    });
+    if (!isVideoOff) handleToggleVideo();
+  };
+
+  const handleVideoOnAll = () => {
+    hostChannelRef.current?.send({
+      type: 'broadcast', event: 'host-command',
+      payload: { command: 'video-on-all', from: user?.id },
+    });
+    if (isVideoOff) handleToggleVideo();
+  };
 
   // Detect screen share support (iOS browsers don't support getDisplayMedia)
   const [isScreenShareSupported, setIsScreenShareSupported] = useState(true);
@@ -1748,6 +1978,10 @@ export default function UnifiedCallPage() {
     }
 
     // Cleanup based on provider
+    if (activeSpeakerTimeoutRef.current) {
+      clearTimeout(activeSpeakerTimeoutRef.current);
+      activeSpeakerTimeoutRef.current = null;
+    }
     if (qualityMonitorRef.current) {
       clearInterval(qualityMonitorRef.current);
       qualityMonitorRef.current = null;
@@ -2197,7 +2431,7 @@ export default function UnifiedCallPage() {
         isRecording={isRecording}
         gridView={gridView}
         showGridToggle={remoteParticipants.length > 0}
-        onToggleView={() => setGridView(!gridView)}
+        onToggleView={() => { setGridView(!gridView); autoSwitchedRef.current = true; }}
         meetingId={roomId}
         callDuration={callDuration}
         connectionQuality={connectionQuality}
@@ -2244,6 +2478,7 @@ export default function UnifiedCallPage() {
             accentColor={config.ui.accentColor}
             remoteParticipants={remoteParticipants}
             providerType={config.provider}
+            activeSpeakerId={activeSpeakerId}
             isLocalMain={isLocalMain}
             onSwap={() => setIsLocalMain(!isLocalMain)}
             localScreenTrack={localScreenTrack}
@@ -2615,6 +2850,11 @@ export default function UnifiedCallPage() {
               isVideoOff={isVideoOff}
               isScreenSharing={isScreenSharing}
               participantCount={participantCount}
+              isHost={isHost}
+              onMuteAll={handleMuteAll}
+              onUnmuteAll={handleUnmuteAll}
+              onVideoOffAll={handleVideoOffAll}
+              onVideoOnAll={handleVideoOnAll}
             />
           )}
 

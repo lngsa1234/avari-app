@@ -197,6 +197,11 @@ export default function ParticipantsPanel({
   isVideoOff = false,
   isScreenSharing = false,
   participantCount = 0,
+  isHost = false,
+  onMuteAll,
+  onUnmuteAll,
+  onVideoOffAll,
+  onVideoOnAll,
 }) {
   const allConnected = remoteParticipants.every((p) => p.connectionQuality !== 'poor');
 
@@ -224,12 +229,40 @@ export default function ParticipantsPanel({
         )}
       </div>
 
+      {/* Host controls */}
+      {isHost && remoteParticipants.length > 0 && (
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={isMuted ? onUnmuteAll : onMuteAll}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold transition-colors"
+            style={{
+              background: isMuted ? C.greenSoft : C.redSoft,
+              color: isMuted ? C.green : C.red,
+              border: 'none', cursor: 'pointer',
+            }}
+          >
+            <MicIcon muted={!isMuted} /> {isMuted ? 'Unmute All' : 'Mute All'}
+          </button>
+          <button
+            onClick={isVideoOff ? onVideoOnAll : onVideoOffAll}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold transition-colors"
+            style={{
+              background: isVideoOff ? C.greenSoft : C.redSoft,
+              color: isVideoOff ? C.green : C.red,
+              border: 'none', cursor: 'pointer',
+            }}
+          >
+            <CamIcon off={!isVideoOff} /> {isVideoOff ? 'Cameras On' : 'Cameras Off'}
+          </button>
+        </div>
+      )}
+
       {/* Participants list */}
       <div className="flex flex-col gap-1">
         {/* Current User */}
         <ParticipantRow
           name={currentUser?.name || currentUser?.email?.split('@')[0] || 'You'}
-          role="Host"
+          role={isHost ? 'Host' : null}
           isHost={true}
           mic={!isMuted}
           cam={!isVideoOff}

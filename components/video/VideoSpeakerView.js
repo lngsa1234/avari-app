@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import LocalVideo from './LocalVideo';
 import RemoteVideo from './RemoteVideo';
 import ScreenShareView from './ScreenShareView';
@@ -10,7 +11,7 @@ import ScreenShareView from './ScreenShareView';
  * Shows screen share as main area when active
  *
  * For 2 participants: PiP layout with swappable main/thumbnail
- * For 3+: Main speaker with thumbnails strip
+ * For 3+: Active speaker gets full video, others show as audio-only avatars (saves bandwidth)
  * For 1: Full screen local video
  */
 export default function VideoSpeakerView({
@@ -25,6 +26,9 @@ export default function VideoSpeakerView({
   // Remote participants
   remoteParticipants = [],
   providerType,
+
+  // Active speaker
+  activeSpeakerId = null,
 
   // Screen share
   localScreenTrack = null,
@@ -182,10 +186,24 @@ export default function VideoSpeakerView({
     );
   }
 
-  // 3+ participants - Main speaker with thumbnails strip
+  // 3+ participants - Active speaker gets video, others show as audio-only avatars
+  // Sort so active speaker is first; fall back to first remote participant
+  const { mainSpeaker, otherParticipants } = useMemo(() => {
+    const speakerIdx = activeSpeakerId
+      ? remoteParticipants.findIndex(p =>
+          String(p.id) === activeSpeakerId || String(p.uid) === activeSpeakerId
+        )
+      : -1;
+    const idx = speakerIdx >= 0 ? speakerIdx : 0;
+    return {
+      mainSpeaker: remoteParticipants[idx],
+      otherParticipants: remoteParticipants.filter((_, i) => i !== idx),
+    };
+  }, [remoteParticipants, activeSpeakerId]);
+
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Thumbnails strip at top - responsive height */}
+      {/* Thumbnails strip at top - audio-only avatars for non-speakers */}
       <div className="flex gap-2 h-20 sm:h-24 flex-shrink-0 overflow-x-auto pb-2 px-1">
         {/* Local thumbnail */}
         <div className="h-full aspect-video flex-shrink-0">
@@ -202,8 +220,8 @@ export default function VideoSpeakerView({
           />
         </div>
 
-        {/* Other remote participant thumbnails (skip first which is main speaker) */}
-        {remoteParticipants.slice(1).map((participant) => (
+        {/* Non-speaking participants — video unsubscribed at SDK level to save bandwidth */}
+        {otherParticipants.map((participant) => (
           <div
             key={participant.id || participant.uid}
             className="h-full aspect-video flex-shrink-0"
@@ -217,13 +235,15 @@ export default function VideoSpeakerView({
         ))}
       </div>
 
-      {/* Main speaker */}
+      {/* Main speaker - only this person's video is rendered */}
       <div className="flex-1 min-h-0">
-        <RemoteVideo
-          participant={remoteParticipants[0]}
-          providerType={providerType}
-          size="full"
-        />
+        {mainSpeaker && (
+          <RemoteVideo
+            participant={mainSpeaker}
+            providerType={providerType}
+            size="full"
+          />
+        )}
       </div>
     </div>
   );
