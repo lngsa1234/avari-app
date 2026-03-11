@@ -121,16 +121,16 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       }
 
       // Filter to only upcoming chats (client-side filter)
-      // Allow 1 hour grace period for recently started chats
+      // Show all chats scheduled from today onwards
       const now = new Date();
-      const gracePeriod = new Date(now.getTime() - 60 * 60 * 1000);
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const upcomingChats = (data || []).filter(chat => {
         // Exclude completed, declined, cancelled
         if (chat.status === 'completed' || chat.status === 'declined' || chat.status === 'cancelled') return false;
         if (!chat.scheduled_time) return false;
         const chatTime = new Date(chat.scheduled_time);
-        return chatTime >= gracePeriod;
+        return chatTime >= todayStart;
       });
 
       // Get profile info for the other person in each chat
