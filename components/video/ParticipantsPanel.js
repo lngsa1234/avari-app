@@ -202,6 +202,8 @@ export default function ParticipantsPanel({
   onUnmuteAll,
   onVideoOffAll,
   onVideoOnAll,
+  transcriptionLanguage = 'en-US',
+  onSetLanguageAll,
 }) {
   const allConnected = remoteParticipants.every((p) => p.connectionQuality !== 'poor');
 
@@ -254,6 +256,44 @@ export default function ParticipantsPanel({
           >
             <CamIcon off={!isVideoOff} /> {isVideoOff ? 'Cameras On' : 'Cameras Off'}
           </button>
+        </div>
+      )}
+
+      {/* Host language control */}
+      {isHost && onSetLanguageAll && (
+        <div className="mb-3">
+          <span
+            className="text-[10px] font-bold uppercase tracking-wider block mb-1.5"
+            style={{ color: C.textMuted }}
+          >
+            Transcript Language (All)
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onSetLanguageAll('en-US')}
+              className="flex-1 py-2 rounded-lg text-[12px] font-semibold transition-colors"
+              style={{
+                background: transcriptionLanguage === 'en-US' ? C.accentSoft : 'rgba(245,237,228,0.04)',
+                color: transcriptionLanguage === 'en-US' ? C.accent : C.textMuted,
+                border: transcriptionLanguage === 'en-US' ? `1px solid ${C.accent}40` : '1px solid rgba(245,237,228,0.08)',
+                cursor: 'pointer',
+              }}
+            >
+              English
+            </button>
+            <button
+              onClick={() => onSetLanguageAll('zh-CN')}
+              className="flex-1 py-2 rounded-lg text-[12px] font-semibold transition-colors"
+              style={{
+                background: transcriptionLanguage === 'zh-CN' ? C.accentSoft : 'rgba(245,237,228,0.04)',
+                color: transcriptionLanguage === 'zh-CN' ? C.accent : C.textMuted,
+                border: transcriptionLanguage === 'zh-CN' ? `1px solid ${C.accent}40` : '1px solid rgba(245,237,228,0.08)',
+                cursor: 'pointer',
+              }}
+            >
+              中文
+            </button>
+          </div>
         </div>
       )}
 

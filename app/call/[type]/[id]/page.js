@@ -1637,6 +1637,8 @@ export default function UnifiedCallPage() {
         handleToggleVideoRef.current?.();
       } else if (payload?.command === 'video-on-all' && isVideoOffRef.current) {
         handleToggleVideoRef.current?.();
+      } else if (payload?.command === 'set-language' && payload?.language) {
+        handleLanguageChange(payload.language);
       }
     }).subscribe();
 
@@ -1674,6 +1676,14 @@ export default function UnifiedCallPage() {
       payload: { command: 'video-on-all', from: user?.id },
     });
     if (isVideoOff) handleToggleVideo();
+  };
+
+  const handleSetLanguageAll = (language) => {
+    hostChannelRef.current?.send({
+      type: 'broadcast', event: 'host-command',
+      payload: { command: 'set-language', language, from: user?.id },
+    });
+    handleLanguageChange(language);
   };
 
   // Detect screen share support (iOS browsers don't support getDisplayMedia)
@@ -2932,6 +2942,8 @@ export default function UnifiedCallPage() {
               onUnmuteAll={handleUnmuteAll}
               onVideoOffAll={handleVideoOffAll}
               onVideoOnAll={handleVideoOnAll}
+              transcriptionLanguage={transcriptionLanguage}
+              onSetLanguageAll={handleSetLanguageAll}
             />
           )}
 
