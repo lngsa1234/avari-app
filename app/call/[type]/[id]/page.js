@@ -996,6 +996,18 @@ export default function UnifiedCallPage() {
       },
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
+        facingMode: 'user',
+      },
+      publishDefaults: {
+        videoEncoding: {
+          maxBitrate: 1_500_000,
+          maxFramerate: 24,
+        },
+        screenShareEncoding: {
+          maxBitrate: 2_500_000,
+          maxFramerate: 15,
+        },
+        videoSimulcastLayers: [VideoPresets.h360, VideoPresets.h180],
       },
       // Don't use webAudioMix — Chrome aggressively suspends AudioContexts
       // before remote audio arrives, causing silence. Instead, remote audio
