@@ -479,6 +479,17 @@ export default function ControlBar({
           />
         </div>
 
+        {/* Background blur */}
+        {isBlurSupported && (
+          <ControlBtn
+            icon={isBlurLoading ? <span className="animate-spin">⏳</span> : <BlurIcon />}
+            active={isBlurEnabled}
+            onClick={onToggleBlur}
+            disabled={isBlurLoading || isVideoOff}
+            tooltip={isVideoOff ? 'Turn on camera first' : isBlurEnabled ? 'Disable background blur' : 'Enable background blur'}
+          />
+        )}
+
         <Divider />
 
         {/* Secondary: Collaboration */}
