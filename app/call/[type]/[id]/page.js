@@ -1201,7 +1201,9 @@ export default function UnifiedCallPage() {
         if (uid === 0 || uidStr === String(agoraUid)) continue;
         const isSpeaking = level > 5;
         setRemoteSpeakingRef.current(uidStr, isSpeaking);
-        if (isSpeaking) anyRemoteSpeaking = true;
+        // Echo guard uses higher threshold — only block transcripts when remote
+        // audio is loud enough to actually leak through speakers into the mic
+        if (level > 30) anyRemoteSpeaking = true;
         // Track loudest speaker for active speaker mode
         if (level > loudestLevel && level > 5) {
           loudestLevel = level;

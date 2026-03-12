@@ -1424,7 +1424,7 @@ export default function NetworkDiscoverView({
                         fontFamily: fonts.sans, whiteSpace: 'nowrap',
                       }}
                     >
-                      {hasSupported ? '✓ Voted' : '🙋‍♀️ Vote'}
+                      {hasSupported ? <><Check size={13} /> Voted</> : <><ThumbsUp size={13} /> Vote</>}
                     </button>
                     <button
                       onClick={() => handleHostRequest(request)}
@@ -1781,7 +1781,7 @@ export default function NetworkDiscoverView({
                   : 'Connect & grow together');
 
                 const cardWidth = isMobile ? 200 : 230;
-                const collapsedHeight = isMobile ? 140 : 160;
+                const collapsedHeight = isMobile ? 180 : 200;
                 return (
                   <div
                     key={circle.id}
@@ -1866,8 +1866,8 @@ export default function NetworkDiscoverView({
                         bottom: 0,
                         left: 0,
                         right: 0,
-                        padding: '36px 12px 12px',
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0) 100%)',
+                        padding: '48px 12px 12px',
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)',
                         zIndex: 2,
                       }}>
                         <h4 style={{
@@ -1884,6 +1884,18 @@ export default function NetworkDiscoverView({
                         }}>
                           {circle.name}
                         </h4>
+                        <p style={{
+                          fontSize: isMobile ? '11px' : '12px',
+                          color: 'rgba(255,255,255,0.75)',
+                          margin: '4px 0 0',
+                          lineHeight: '1.4',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                        }}>
+                          {description}
+                        </p>
                       </div>
                     </div>
 
