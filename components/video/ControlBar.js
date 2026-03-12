@@ -395,7 +395,7 @@ export default function ControlBar({
   // Background blur is shown as a direct button next to video, not in More menu
 
   return (
-    <div className="flex flex-col items-center gap-2 py-3 px-4 relative z-50">
+    <div className="flex flex-col items-center gap-2 py-3 px-4 relative z-50" style={{ background: 'rgba(30, 20, 16, 0.6)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
       {/* Status indicators row */}
       <div className="flex items-center gap-3">
         {isRecording && (
