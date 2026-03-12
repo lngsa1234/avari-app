@@ -208,6 +208,18 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [currentUser?.id])
 
+  // Handle deep links (e.g. ?event=<id>)
+  useEffect(() => {
+    if (!currentUser?.id) return
+    const params = new URLSearchParams(window.location.search)
+    const eventId = params.get('event')
+    if (eventId) {
+      handleNavigate('eventDetail', { meetupId: eventId })
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [currentUser?.id, handleNavigate])
+
   // Track user activity (update last_active timestamp)
   useEffect(() => {
     if (!currentUser?.id) return

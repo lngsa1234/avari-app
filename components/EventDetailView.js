@@ -22,6 +22,7 @@ import {
   X,
   Pencil,
   Check,
+  Share2,
 } from 'lucide-react';
 import { parseLocalDate } from '../lib/dateUtils';
 
@@ -1030,6 +1031,27 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                       <UserCheck size={18} /> RSVP
                     </button>
                   )}
+                  <button
+                    onClick={async () => {
+                      const url = `${window.location.origin}/?event=${meetupId}`;
+                      const text = `${meetup.topic || 'Event'}${meetup.date ? ` on ${meetup.date}` : ''}`;
+                      if (navigator.share) {
+                        try { await navigator.share({ title: meetup.topic || 'Event', text, url }); } catch (e) { /* cancelled */ }
+                      } else {
+                        await navigator.clipboard.writeText(url);
+                        alert('Link copied to clipboard!');
+                      }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                      padding: '12px 16px', borderRadius: '14px',
+                      backgroundColor: 'transparent', color: colors.textLight,
+                      border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
+                      cursor: 'pointer', fontFamily: fonts.sans,
+                    }}
+                  >
+                    <Share2 size={16} /> Share
+                  </button>
                 </div>
 
                 {/* Hybrid format picker */}
