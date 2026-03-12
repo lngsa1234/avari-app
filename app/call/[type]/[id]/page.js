@@ -989,6 +989,11 @@ export default function UnifiedCallPage() {
     const room = new Room({
       adaptiveStream: true,
       dynacast: true,
+      audioCaptureDefaults: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
       },
