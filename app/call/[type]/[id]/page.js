@@ -199,7 +199,7 @@ export default function UnifiedCallPage() {
   const transcriptionProviderRef = useRef('webspeech');
   // Track last auto-finalized text to skip duplicate from browser's final event
   const lastAutoFinalizedRef = useRef('');
-  // Echo guard: track when remote users are speaking to drop leaked transcripts
+  // Echo guard refs (kept for future use but disabled — too aggressive in group calls)
   const remoteSpeakingActiveRef = useRef(false);
   const echoGuardTimeoutRef = useRef(null);
 
@@ -262,11 +262,9 @@ export default function UnifiedCallPage() {
 
   // Transcription handler
   const handleTranscript = useCallback(({ text, isFinal, timestamp }) => {
-    // Echo guard: drop transcripts that arrive while remote users are speaking
-    if (remoteSpeakingActiveRef.current) {
-      console.log('[Transcript] Dropped (remote speaking):', text?.trim()?.slice(0, 40));
-      return;
-    }
+    // Note: Echo guard disabled — was too aggressive in group calls, blocking
+    // the local user's own speech. Relying on Web Speech API's built-in echo
+    // cancellation and Deepgram's gain-node muting instead.
 
     // Clear any pending auto-finalize
     if (interimTimeoutRef.current) {
@@ -1024,22 +1022,6 @@ export default function UnifiedCallPage() {
           setActiveSpeakerId(null);
         }, 3000);
       }
-      // Echo guard for Web Speech API transcription
-      const anyRemoteSpeaking = !!remoteSpeaker;
-      if (anyRemoteSpeaking) {
-        remoteSpeakingActiveRef.current = true;
-        if (echoGuardTimeoutRef.current) {
-          clearTimeout(echoGuardTimeoutRef.current);
-          echoGuardTimeoutRef.current = null;
-        }
-      } else if (remoteSpeakingActiveRef.current) {
-        if (!echoGuardTimeoutRef.current) {
-          echoGuardTimeoutRef.current = setTimeout(() => {
-            remoteSpeakingActiveRef.current = false;
-            echoGuardTimeoutRef.current = null;
-          }, 500);
-        }
-      }
       updateLiveKitParticipants(room);
     });
     room.on(RoomEvent.Disconnected, () => setIsJoined(false));
@@ -1208,22 +1190,6 @@ export default function UnifiedCallPage() {
         if (level > loudestLevel && level > 5) {
           loudestLevel = level;
           loudestUid = uidStr;
-        }
-      }
-      // Echo guard for Web Speech API: block transcripts while remote is speaking
-      if (anyRemoteSpeaking) {
-        remoteSpeakingActiveRef.current = true;
-        if (echoGuardTimeoutRef.current) {
-          clearTimeout(echoGuardTimeoutRef.current);
-          echoGuardTimeoutRef.current = null;
-        }
-      } else if (remoteSpeakingActiveRef.current) {
-        // Keep guard up briefly after remote stops to catch trailing echo
-        if (!echoGuardTimeoutRef.current) {
-          echoGuardTimeoutRef.current = setTimeout(() => {
-            remoteSpeakingActiveRef.current = false;
-            echoGuardTimeoutRef.current = null;
-          }, 500);
         }
       }
       // Update active speaker with debounce to avoid flicker
