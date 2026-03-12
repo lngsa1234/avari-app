@@ -522,7 +522,9 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       const channelName = `connection-group-${meetup.id || meetupId}`;
       window.location.href = `/call/circle/${channelName}`;
     } else {
-      window.location.href = `/call/${meetupId}`;
+      // Regular meetup - use LiveKit via /call/meetup/
+      const channelName = `meetup-${meetup.id || meetupId}`;
+      window.location.href = `/call/meetup/${channelName}`;
     }
   }
 
