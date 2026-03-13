@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
  * This endpoint triggers:
  * 1. Batch nudge generation for eligible users
  * 2. Batch event recommendation generation
+ * 3. Batch discussion topic generation for meetups within 24h
  */
 export async function GET(request) {
   try {
@@ -26,11 +27,12 @@ export async function GET(request) {
       timestamp: new Date().toISOString(),
       nudges: null,
       eventRecommendations: null,
+      discussionTopics: null,
       errors: []
     };
 
     // Run batch jobs in parallel
-    const [nudgeResult, eventRecResult] = await Promise.allSettled([
+    const [nudgeResult, eventRecResult, topicsResult] = await Promise.allSettled([
       // Batch nudges
       fetch(`${baseUrl}/api/agent/nudges`, {
         method: 'POST',
@@ -40,6 +42,13 @@ export async function GET(request) {
 
       // Batch event recommendations
       fetch(`${baseUrl}/api/agent/event-recommendations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch: true })
+      }).then(r => r.json()),
+
+      // Batch discussion topics for meetups within 24h
+      fetch(`${baseUrl}/api/agent/discussion-topics`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch: true })
@@ -57,6 +66,12 @@ export async function GET(request) {
       results.eventRecommendations = eventRecResult.value;
     } else {
       results.errors.push({ job: 'eventRecommendations', error: eventRecResult.reason?.message || 'Unknown error' });
+    }
+
+    if (topicsResult.status === 'fulfilled') {
+      results.discussionTopics = topicsResult.value;
+    } else {
+      results.errors.push({ job: 'discussionTopics', error: topicsResult.reason?.message || 'Unknown error' });
     }
 
     console.log('[Cron] Agent batch completed:', results);
