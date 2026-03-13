@@ -232,8 +232,7 @@ export function useAgora() {
           // Audio config
           encoderConfig: 'speech_standard',
           echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: false
+          noiseSuppression: true
         },
         {
           // Video config

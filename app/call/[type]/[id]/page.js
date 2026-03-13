@@ -788,7 +788,7 @@ export default function UnifiedCallPage() {
   const initializeWebRTCCall = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { width: { ideal: 1280, max: 1280 }, height: { ideal: 720, max: 720 }, frameRate: { ideal: 24, max: 30 } },
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      audio: { echoCancellation: true, noiseSuppression: true }
     });
 
     setLocalVideoTrack(stream);
@@ -992,7 +992,6 @@ export default function UnifiedCallPage() {
       audioCaptureDefaults: {
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true,
       },
       videoCaptureDefaults: {
         resolution: VideoPresets.h720.resolution,
@@ -1161,9 +1160,6 @@ export default function UnifiedCallPage() {
         encoderConfig: 'speech_standard',
         echoCancellation: true,
         noiseSuppression: true,
-        // AGC disabled: it progressively boosts background noise when nobody
-        // speaks, causing a "noise ramping" effect during silent moments
-        autoGainControl: false,
       },
       {
         encoderConfig: {
@@ -1765,7 +1761,6 @@ export default function UnifiedCallPage() {
           encoderConfig: 'speech_standard',
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: false,
         });
         await agoraClientRef.current.unpublish([localAudioTrack]);
         await agoraClientRef.current.publish([newAudioTrack]);
