@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat, ImagePlus, X } from 'lucide-react';
 import { reconcileCircleMeetups } from '@/lib/circleMeetupHelpers';
+import { toLocalDateString } from '@/lib/dateUtils';
 
 
 // Color palette - Mocha Brown theme
@@ -107,7 +108,7 @@ export default function ScheduleMeetupView({
             const daysUntil = (dayIndex - today.getDay() + 7) % 7;
             const nextDate = new Date(today);
             nextDate.setDate(today.getDate() + (daysUntil === 0 ? 7 : daysUntil));
-            setScheduledDate(nextDate.toISOString().split('T')[0]);
+            setScheduledDate(toLocalDateString(nextDate));
           }
         }
       }
@@ -425,8 +426,8 @@ export default function ScheduleMeetupView({
     onNavigate?.(previousView || 'meetups');
   };
 
-  // Get today's date for min date
-  const today = new Date().toISOString().split('T')[0];
+  // Get today's date for min date (local time, not UTC)
+  const today = toLocalDateString();
 
   if (loading) {
     return (

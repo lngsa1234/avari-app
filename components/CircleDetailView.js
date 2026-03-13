@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Trash2, Check, UserPlus, Plus, FileText, Camera } from 'lucide-react';
-import { parseLocalDate } from '../lib/dateUtils';
+import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
 import {
   getOrCreateCircleMeetups,
   getUserRSVPStatus,
@@ -276,7 +276,7 @@ export default function CircleDetailView({
     if (!circleData) return;
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = toLocalDateString();
 
       // Run independent queries in parallel (recaps loaded after we know meetup IDs)
       const [meetupsResult, pastResult] = await Promise.all([
@@ -553,7 +553,7 @@ export default function CircleDetailView({
           .from('meetups')
           .select('id')
           .eq('circle_id', circleId)
-          .gte('date', new Date().toISOString().split('T')[0])
+          .gte('date', toLocalDateString())
           .order('date', { ascending: true })
           .limit(1)
           .single();

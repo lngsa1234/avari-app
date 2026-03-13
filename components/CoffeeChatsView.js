@@ -15,6 +15,7 @@ import {
   getSentRequests
 } from '@/lib/coffeeChatHelpers';
 import VideoCallButton from './VideoCallButton';
+import { toLocalDateString } from '@/lib/dateUtils';
 
 export default function CoffeeChatsView({ currentUser, connections, supabase, onNavigate }) {
   const [activeTab, setActiveTab] = useState('schedule'); // schedule, upcoming, requests, sent
@@ -845,7 +846,7 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
                   type="date"
                   value={scheduledDate}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
+                  min={toLocalDateString()}
                   className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
                 />
               </div>

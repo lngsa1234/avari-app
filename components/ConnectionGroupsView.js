@@ -20,7 +20,7 @@ import {
   deleteGroupMessage
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
-import { parseLocalDate } from '../lib/dateUtils';
+import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
 import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee } from 'lucide-react';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
@@ -711,7 +711,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         .from('meetups')
         .select('id')
         .eq('circle_id', groupId)
-        .gte('date', new Date().toISOString().split('T')[0])
+        .gte('date', toLocalDateString())
         .order('date', { ascending: true })
         .limit(1)
         .single();

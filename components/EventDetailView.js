@@ -24,7 +24,7 @@ import {
   Check,
   Share2,
 } from 'lucide-react';
-import { parseLocalDate } from '../lib/dateUtils';
+import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
 
 const colors = {
   primary: '#8B6F5C',
@@ -577,13 +577,14 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
     );
   }
 
-  // Parse event date
+  // Parse event date — compare by date only (not time) so today's events aren't marked past
   const eventDate = parseLocalDate(meetup.date);
   const now = new Date();
-  const isPast = eventDate < now;
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const isPast = eventDate < todayMidnight;
 
   // Check if event is live (today and within time window)
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = toLocalDateString();
   const eventDateStr = meetup.date;
   const isToday = todayStr === eventDateStr;
   let isLive = false;
@@ -956,81 +957,80 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
         {activeTab === 'details' && (
           <>
             {/* Action buttons */}
-            {!isPast && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}>
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                  {(isSignedUp || isHost) ? (
-                    <>
-                      {meetup.meeting_format !== 'in_person' && (
-                        <button
-                          onClick={handleJoinCall}
-                          style={{
-                            flex: 1,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                            padding: '12px 20px', borderRadius: '14px',
-                            backgroundColor: colors.primaryDark, color: 'white',
-                            border: 'none', fontSize: '15px', fontWeight: '600',
-                            cursor: 'pointer', fontFamily: fonts.sans,
-                          }}
-                        >
-                          <Video size={18} /> Join Call
-                        </button>
-                      )}
-                      {isHost ? (
-                        <button
-                          onClick={handleCancelEvent}
-                          disabled={actionLoading}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            padding: '12px 16px', borderRadius: '14px',
-                            backgroundColor: 'transparent', color: '#D45B3E',
-                            border: '1px solid rgba(212, 91, 62, 0.3)', fontSize: '14px', fontWeight: '500',
-                            cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
-                            opacity: actionLoading ? 0.6 : 1,
-                            flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
-                          }}
-                        >
-                          <XCircle size={16} /> Cancel Event
-                        </button>
-                      ) : (
-                        <button
-                          onClick={handleCancelRsvp}
-                          disabled={actionLoading}
-                          style={{
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                            padding: '12px 16px', borderRadius: '14px',
-                            backgroundColor: 'transparent', color: colors.textMuted,
-                            border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
-                            cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
-                            opacity: actionLoading ? 0.6 : 1,
-                            flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
-                          }}
-                        >
-                          <XCircle size={16} /> Cancel RSVP
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => handleRsvp()}
-                      disabled={actionLoading}
-                      style={{
-                        flex: 1,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                        padding: '12px 20px', borderRadius: '14px',
-                        backgroundColor: colors.primaryDark, color: 'white',
-                        border: 'none', fontSize: '15px', fontWeight: '600',
-                        cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
-                        opacity: actionLoading ? 0.6 : 1,
-                      }}
-                    >
-                      <UserCheck size={18} /> RSVP
-                    </button>
-                  )}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px',
+            }}>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {(isSignedUp || isHost) ? (
+                  <>
+                    {meetup.meeting_format !== 'in_person' && (
+                      <button
+                        onClick={handleJoinCall}
+                        style={{
+                          flex: 1,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                          padding: '12px 20px', borderRadius: '14px',
+                          backgroundColor: colors.primaryDark, color: 'white',
+                          border: 'none', fontSize: '15px', fontWeight: '600',
+                          cursor: 'pointer', fontFamily: fonts.sans,
+                        }}
+                      >
+                        <Video size={18} /> Join Call
+                      </button>
+                    )}
+                    {!isPast && (isHost ? (
+                      <button
+                        onClick={handleCancelEvent}
+                        disabled={actionLoading}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          padding: '12px 16px', borderRadius: '14px',
+                          backgroundColor: 'transparent', color: '#D45B3E',
+                          border: '1px solid rgba(212, 91, 62, 0.3)', fontSize: '14px', fontWeight: '500',
+                          cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
+                          opacity: actionLoading ? 0.6 : 1,
+                          flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
+                        }}
+                      >
+                        <XCircle size={16} /> Cancel Event
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleCancelRsvp}
+                        disabled={actionLoading}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                          padding: '12px 16px', borderRadius: '14px',
+                          backgroundColor: 'transparent', color: colors.textMuted,
+                          border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
+                          cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
+                          opacity: actionLoading ? 0.6 : 1,
+                          flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
+                        }}
+                      >
+                        <XCircle size={16} /> Cancel RSVP
+                      </button>
+                    ))}
+                  </>
+                ) : !isPast ? (
+                  <button
+                    onClick={() => handleRsvp()}
+                    disabled={actionLoading}
+                    style={{
+                      flex: 1,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                      padding: '12px 20px', borderRadius: '14px',
+                      backgroundColor: colors.primaryDark, color: 'white',
+                      border: 'none', fontSize: '15px', fontWeight: '600',
+                      cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: fonts.sans,
+                      opacity: actionLoading ? 0.6 : 1,
+                    }}
+                  >
+                    <UserCheck size={18} /> RSVP
+                  </button>
+                ) : null}
                   <button
                     onClick={async () => {
                       const url = `${window.location.origin}/?event=${meetupId}`;
@@ -1096,7 +1096,6 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                   </div>
                 )}
               </div>
-            )}
 
             {/* Description */}
             {(meetup.description || (isHost && !isPast)) && (

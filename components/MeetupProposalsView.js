@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { Calendar, Clock, Send, CheckCircle, XCircle, Eye, Trash2 } from 'lucide-react';
-import { parseLocalDate } from '../lib/dateUtils';
+import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
 import {
   submitMeetupProposal,
   getMyProposals,
@@ -476,7 +476,7 @@ export default function MeetupProposalsView({ currentUser, supabase, isAdmin }) 
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
+                    min={toLocalDateString()}
                     className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-blue-500"
                   />
                 </div>

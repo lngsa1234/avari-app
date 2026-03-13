@@ -1161,7 +1161,9 @@ export default function UnifiedCallPage() {
         encoderConfig: 'speech_standard',
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true,
+        // AGC disabled: it progressively boosts background noise when nobody
+        // speaks, causing a "noise ramping" effect during silent moments
+        autoGainControl: false,
       },
       {
         encoderConfig: {
@@ -1763,7 +1765,7 @@ export default function UnifiedCallPage() {
           encoderConfig: 'speech_standard',
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false,
         });
         await agoraClientRef.current.unpublish([localAudioTrack]);
         await agoraClientRef.current.publish([newAudioTrack]);
