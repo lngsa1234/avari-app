@@ -172,10 +172,11 @@ export async function GET(request) {
 // ── Helpers ─────────────────────────────────────────────────────────
 
 async function generateTopics(title, description, attendees) {
-  const hasRichContext = attendees?.length >= 2 &&
-    attendees.some(a => a.interests?.length > 0 || a.career);
+  const hasAI = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY;
+  const hasContext = title || (attendees?.length >= 1 &&
+    attendees.some(a => a.interests?.length > 0 || a.career));
 
-  if (!hasRichContext || (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY)) {
+  if (!hasContext || !hasAI) {
     return { topics: generateTemplateTopics(title, attendees), tier: 'rule' };
   }
 
