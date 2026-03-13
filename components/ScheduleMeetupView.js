@@ -4,7 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat, ImagePlus, X } from 'lucide-react';
+import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat, ImagePlus, X, CheckCircle } from 'lucide-react';
 import { reconcileCircleMeetups } from '@/lib/circleMeetupHelpers';
 import { toLocalDateString } from '@/lib/dateUtils';
 
@@ -67,6 +67,7 @@ export default function ScheduleMeetupView({
   const [availableConnections, setAvailableConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [createdEvent, setCreatedEvent] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -420,10 +421,34 @@ export default function ScheduleMeetupView({
         .from('meetup_signups')
         .insert({ meetup_id: meetupData.id, user_id: authUser.id, signup_type: 'video' });
       if (signupError) console.error('Auto-RSVP failed:', signupError);
+
+      // Generate initial discussion topics based on host profile (non-blocking)
+      fetch('/api/agent/discussion-topics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meetupId: meetupData.id,
+          title: topic.trim(),
+          description: notes || 'Community event',
+          attendees: [{
+            name: currentUser.name,
+            career: currentUser.career,
+            interests: currentUser.interests || [],
+          }],
+        }),
+      }).catch(err => console.error('Initial topic generation failed:', err));
     }
 
-    alert('Community event created!');
-    onNavigate?.(previousView || 'meetups');
+    // Show success modal with event details
+    const eventDate = new Date(scheduledDate + 'T00:00:00');
+    setCreatedEvent({
+      id: meetupData.id,
+      title: topic.trim(),
+      date: eventDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+      time: new Date(`2000-01-01T${formattedTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      format: meetingFormat,
+      location: meetingFormat === 'virtual' ? 'Virtual' : location,
+    });
   };
 
   // Get today's date for min date (local time, not UTC)
@@ -842,9 +867,109 @@ export default function ScheduleMeetupView({
         </>
       )}
 
+      {/* Event Created Success Modal */}
+      {createdEvent && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '20px',
+        }}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: '20px',
+            padding: '32px 24px', maxWidth: '360px', width: '100%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+            textAlign: 'center',
+            animation: 'modalSlideUp 0.3s ease-out',
+          }}>
+            <div style={{
+              width: '56px', height: '56px', borderRadius: '50%',
+              backgroundColor: 'rgba(76, 175, 80, 0.1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+            }}>
+              <CheckCircle size={32} style={{ color: '#4CAF50' }} />
+            </div>
+
+            <h3 style={{
+              fontFamily: fonts.serif, fontSize: '20px', fontWeight: '600',
+              color: colors.text, margin: '0 0 6px',
+            }}>
+              Event Created!
+            </h3>
+            <p style={{
+              fontSize: '14px', color: colors.textMuted,
+              margin: '0 0 20px',
+            }}>
+              Your event is live and ready to share
+            </p>
+
+            <div style={{
+              backgroundColor: colors.cream, borderRadius: '12px',
+              padding: '14px 16px', marginBottom: '20px', textAlign: 'left',
+            }}>
+              <p style={{
+                fontSize: '15px', fontWeight: '600', color: colors.text,
+                margin: '0 0 8px',
+              }}>
+                {createdEvent.title}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <span style={{ fontSize: '13px', color: colors.textLight, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Calendar size={13} /> {createdEvent.date}
+                </span>
+                <span style={{ fontSize: '13px', color: colors.textLight, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Clock size={13} /> {createdEvent.time}
+                </span>
+                <span style={{ fontSize: '13px', color: colors.textLight, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <MapPin size={13} /> {createdEvent.location}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => {
+                  setCreatedEvent(null);
+                  onNavigate?.(previousView || 'meetups');
+                }}
+                style={{
+                  flex: 1, padding: '12px',
+                  backgroundColor: 'rgba(139, 111, 92, 0.08)',
+                  color: colors.primaryDark, border: 'none', borderRadius: '12px',
+                  fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                  fontFamily: fonts.sans,
+                }}
+              >
+                Done
+              </button>
+              <button
+                onClick={() => {
+                  setCreatedEvent(null);
+                  onNavigate?.('eventDetail', { meetupId: createdEvent.id });
+                }}
+                style={{
+                  flex: 1, padding: '12px',
+                  backgroundColor: colors.primary, color: 'white',
+                  border: 'none', borderRadius: '12px',
+                  fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                  fontFamily: fonts.sans,
+                }}
+              >
+                View Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes modalSlideUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

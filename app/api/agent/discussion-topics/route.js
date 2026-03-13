@@ -43,9 +43,8 @@ async function handleBatch() {
   // Find meetups happening today or tomorrow
   const { data: meetups, error: meetupsError } = await supabase
     .from('meetups')
-    .select('id, title, description, date')
-    .in('date', [todayStr, tomorrowStr])
-    .eq('status', 'active');
+    .select('id, topic, description, date')
+    .in('date', [todayStr, tomorrowStr]);
 
   if (meetupsError || !meetups?.length) {
     return NextResponse.json({
@@ -54,25 +53,8 @@ async function handleBatch() {
     });
   }
 
-  // Filter out meetups that already have cached topics
-  const meetupIds = meetups.map(m => m.id);
-  const { data: existing } = await supabase
-    .from('meetup_icebreakers')
-    .select('meetup_id, discussion_topics')
-    .in('meetup_id', meetupIds);
-
-  const alreadyCached = new Set(
-    (existing || []).filter(e => e.discussion_topics).map(e => e.meetup_id)
-  );
-
-  const toGenerate = meetups.filter(m => !alreadyCached.has(m.id)).slice(0, 20);
-
-  if (toGenerate.length === 0) {
-    return NextResponse.json({
-      processed: 0,
-      message: 'All upcoming meetups already have topics cached',
-    });
-  }
+  // Regenerate topics for all upcoming meetups (refreshes with latest attendee list)
+  const toGenerate = meetups.slice(0, 20);
 
   const results = [];
 
@@ -101,7 +83,7 @@ async function handleBatch() {
       }
 
       // Generate topics
-      const { topics, tier } = await generateTopics(meetup.title, meetup.description, attendees);
+      const { topics, tier } = await generateTopics(meetup.topic, meetup.description, attendees);
 
       // Cache
       await cacheTopics(supabase, meetup.id, topics, tier);
