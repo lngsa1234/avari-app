@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAuth } from './AuthProvider'
 import MainApp from './MainApp'
 import LandingPage from './LandingPage'
@@ -7,6 +8,14 @@ import ProfileSetupFlow from './ProfileSetupFlow'
 import { supabase } from '@/lib/supabase'
 
 export default function AppContainer() {
+  // Persist deep link params so they survive the auth redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const eventId = params.get('event')
+    if (eventId) {
+      localStorage.setItem('pendingEventId', eventId)
+    }
+  }, [])
   const {
     user,
     profile,

@@ -208,12 +208,14 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [currentUser?.id])
 
-  // Handle deep links (e.g. ?event=<id>)
+  // Handle deep links (e.g. ?event=<id>) — check both URL and localStorage
+  // localStorage is used because the query param is lost during OAuth redirect
   useEffect(() => {
     if (!currentUser?.id) return
     const params = new URLSearchParams(window.location.search)
-    const eventId = params.get('event')
+    const eventId = params.get('event') || localStorage.getItem('pendingEventId')
     if (eventId) {
+      localStorage.removeItem('pendingEventId')
       handleNavigate('eventDetail', { meetupId: eventId })
       // Clean up URL
       window.history.replaceState({}, '', window.location.pathname)
