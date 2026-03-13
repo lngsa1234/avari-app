@@ -226,6 +226,13 @@ export default function useDeepgramTranscription({
 
     let audioSendCount = 0;
     processor.onaudioprocess = (e) => {
+      // Zero the output buffer to prevent mic audio from playing back through
+      // speakers — without this, the path Mic → ScriptProcessor → Speakers → Mic
+      // creates a positive feedback loop that progressively amplifies noise
+      for (let ch = 0; ch < e.outputBuffer.numberOfChannels; ch++) {
+        e.outputBuffer.getChannelData(ch).fill(0);
+      }
+
       if (!isListeningRef.current || !socketRef.current?.connected) return;
 
       const inputData = e.inputBuffer.getChannelData(0);
@@ -245,6 +252,8 @@ export default function useDeepgramTranscription({
       }
     };
 
+    // Connect to destination to keep onaudioprocess firing — output is silenced
+    // by zeroing the buffer above, so no audio feeds back to speakers
     processor.connect(audioContext.destination);
 
     // 3. Connect to Socket.IO backend and start transcription
