@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus } from 'lucide-react';
-import { parseLocalDate } from '../lib/dateUtils';
+import { parseLocalDate, isEventPast } from '../lib/dateUtils';
 
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null }) {
   const [activeView, setActiveView] = useState(initialView || 'upcoming');
@@ -205,27 +205,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const now = new Date();
       const upcomingFiltered = (signedUpMeetups || []).filter(meetup => {
         if (meetup.status === 'completed' || meetup.status === 'cancelled') return false;
-        try {
-          let meetupDate;
-          const dateStr = meetup.date;
-          if (dateStr?.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            const [year, month, day] = dateStr.split('-').map(Number);
-            meetupDate = new Date(year, month - 1, day);
-          } else if (dateStr) {
-            const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '');
-            meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`);
-          } else {
-            return false;
-          }
-          if (meetup.time) {
-            const [hours, minutes] = meetup.time.split(':').map(Number);
-            meetupDate.setHours(hours, minutes, 0, 0);
-          }
-          const gracePeriod = new Date(meetupDate.getTime() + (4 * 60 * 60 * 1000));
-          return now < gracePeriod;
-        } catch {
-          return false;
-        }
+        if (!meetup.date) return false;
+        // Use timezone-aware check with generous grace period (4 hours = 240 min)
+        return !isEventPast(meetup.date, meetup.time, meetup.timezone, parseInt(meetup.duration || '60'), 240);
       });
 
       // Fire circle counts + attendee signups in parallel

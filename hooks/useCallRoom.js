@@ -73,22 +73,14 @@ export function useCallRoom(callType, roomId) {
         }
 
         case 'meetup': {
-          // Group Meetup - uses agora_rooms table (but LiveKit provider)
-          const { data, error: roomError } = await supabase
-            .from('agora_rooms')
-            .select('*')
-            .eq('channel_name', roomId)
-            .single();
+          // Group Meetup - extract meetup UUID from channel name (meetup-{uuid})
+          const meetupId = roomId?.startsWith('meetup-') ? roomId.replace('meetup-', '') : null;
+          roomData = { channel_name: roomId, meetup_id: meetupId };
 
-          if (roomError && roomError.code !== 'PGRST116') throw roomError;
-          roomData = data;
-
-          // Fetch meetup details separately (more reliable than join)
-          const meetupId = data?.meetup_id;
           if (meetupId) {
             const { data: meetupData } = await supabase
               .from('meetups')
-              .select('id, topic, date, time, location, created_by')
+              .select('id, topic, description, date, time, location, created_by')
               .eq('id', meetupId)
               .single();
 

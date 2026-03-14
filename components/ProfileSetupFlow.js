@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Heart,
   MessageCircle,
@@ -26,6 +26,58 @@ import {
   Users,
   HeartHandshake
 } from 'lucide-react';
+
+// ============================================================
+// ERROR BOUNDARY — captures render errors for debugging
+// ============================================================
+
+class ProfileSetupErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('[ProfileSetup] Error boundary caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          position: 'fixed', inset: 0, display: 'flex', alignItems: 'center',
+          justifyContent: 'center', background: '#FDF8F3', zIndex: 50, padding: 24,
+        }}>
+          <div style={{ textAlign: 'center', maxWidth: 400 }}>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: '#3F1906', marginBottom: 8 }}>
+              Something went wrong
+            </h2>
+            <p style={{ fontSize: 14, color: '#584233', marginBottom: 16 }}>
+              We ran into an issue setting up your profile. Please try again.
+            </p>
+            <p style={{ fontSize: 12, color: '#A89080', marginBottom: 24, wordBreak: 'break-word' }}>
+              {this.state.error?.message || 'Unknown error'}
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '12px 32px', background: '#8B6F5C', color: '#fff',
+                border: 'none', borderRadius: 12, fontSize: 16, cursor: 'pointer',
+              }}
+            >
+              Reload
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ============================================================
 // DESIGN TOKENS
@@ -316,7 +368,7 @@ const VIBE_OPTIONS = [
 // COMPONENT
 // ============================================================
 
-export default function ProfileSetupFlow({ session, supabase, onComplete }) {
+function ProfileSetupFlowInner({ session, supabase, onComplete }) {
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 640;
 
@@ -1706,5 +1758,13 @@ export default function ProfileSetupFlow({ session, supabase, onComplete }) {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function ProfileSetupFlow(props) {
+  return (
+    <ProfileSetupErrorBoundary>
+      <ProfileSetupFlowInner {...props} />
+    </ProfileSetupErrorBoundary>
   );
 }

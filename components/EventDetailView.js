@@ -24,7 +24,7 @@ import {
   Check,
   Share2,
 } from 'lucide-react';
-import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
+import { parseLocalDate, toLocalDateString, isEventPast, isEventLive, formatEventTime } from '../lib/dateUtils';
 
 const colors = {
   primary: '#8B6F5C',
@@ -294,7 +294,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       if (userIds.length > 0) {
         const { data: profiles } = await sb
           .from('profiles')
-          .select('id, name, profile_picture, career, interests')
+          .select('id, name, profile_picture, career')
           .in('id', userIds);
         attendeesData = signups.map(s => ({
           user_id: s.user_id,
@@ -321,10 +321,14 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
       loadSuggestedTopics(meetupData, attendeesData);
 
       // Load recap if available (for any event that has had a call)
-      const { data: recapData } = await sb
+      // First try to find a recap with AI summary
+      const { data: recapData, error: recapError } = await sb
         .from('call_recaps')
         .select('*')
-        .ilike('channel_name', `%${meetupId}%`);
+        .ilike('channel_name', `%${meetupId}%`)
+        .not('ai_summary', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (recapData && recapData.length > 0) {
         const recapRecord = recapData[0];
@@ -612,25 +616,11 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
     );
   }
 
-  // Parse event date — compare by date only (not time) so today's events aren't marked past
+  // Check event status using timezone-aware comparison
+  const eventDuration = parseInt(meetup.duration || '60');
+  const isPast = isEventPast(meetup.date, meetup.time, meetup.timezone, eventDuration);
+  const isLive = isEventLive(meetup.date, meetup.time, meetup.timezone, eventDuration);
   const eventDate = parseLocalDate(meetup.date);
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const isPast = eventDate < todayMidnight;
-
-  // Check if event is live (today and within time window)
-  const todayStr = toLocalDateString();
-  const eventDateStr = meetup.date;
-  const isToday = todayStr === eventDateStr;
-  let isLive = false;
-  if (isToday && meetup.time) {
-    try {
-      const [h, m] = meetup.time.split(':').map(Number);
-      const eventStart = new Date(); eventStart.setHours(h, m, 0, 0);
-      const eventEnd = new Date(eventStart.getTime() + (parseInt(meetup.duration || '60') * 60000));
-      isLive = now >= eventStart && now <= eventEnd;
-    } catch {}
-  }
 
   const dateDisplay = eventDate.toLocaleDateString('en-US', isMobile
     ? { month: 'short', day: 'numeric', year: 'numeric' }
@@ -897,7 +887,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
               </span>
               {meetup.time && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-                  <Clock size={isMobile ? 12 : 14} /> {formatTime(meetup.time)}
+                  <Clock size={isMobile ? 12 : 14} /> {formatEventTime(meetup.date, meetup.time, meetup.timezone)}
                 </span>
               )}
               {isHost && !isPast && (
@@ -1034,12 +1024,29 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                   <button
                     onClick={async () => {
                       const url = `${window.location.origin}/?event=${meetupId}`;
-                      const text = `${meetup.topic || 'Event'}${meetup.date ? ` on ${meetup.date}` : ''}`;
+                      const title = meetup.topic || 'Event';
+                      const dateStr = meetup.date ? new Date(meetup.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : '';
+                      const timeStr = meetup.time ? formatEventTime(meetup.date, meetup.time, meetup.timezone) : '';
+                      const location = meetup.location || '';
+                      const desc = meetup.description ? meetup.description.substring(0, 120) + (meetup.description.length > 120 ? '...' : '') : '';
+                      const attendeeCount = attendees.length;
+
+                      const lines = [
+                        title,
+                        '',
+                        dateStr && timeStr ? `${dateStr} at ${timeStr}` : dateStr || timeStr,
+                        location ? `${location}` : '',
+                        desc ? `\n${desc}` : '',
+                        attendeeCount > 0 ? `\n${attendeeCount} ${attendeeCount === 1 ? 'person' : 'people'} attending` : '',
+                        '',
+                        `Join here: ${url}`,
+                      ].filter(Boolean).join('\n');
+
                       if (navigator.share) {
-                        try { await navigator.share({ title: meetup.topic || 'Event', text, url }); } catch (e) { /* cancelled */ }
+                        try { await navigator.share({ title, text: lines, url }); } catch (e) { /* cancelled */ }
                       } else {
-                        await navigator.clipboard.writeText(url);
-                        alert('Link copied to clipboard!');
+                        await navigator.clipboard.writeText(lines);
+                        alert('Event details copied to clipboard!');
                       }
                     }}
                     style={{

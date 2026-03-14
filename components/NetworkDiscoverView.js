@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { parseLocalDate } from '../lib/dateUtils';
+import { parseLocalDate, isEventPast } from '../lib/dateUtils';
 import {
   Search,
   Calendar,
@@ -787,7 +787,7 @@ export default function NetworkDiscoverView({
 
   // Get upcoming meetups (for Trending This Week - shows all events)
   const upcomingMeetups = filteredMeetups
-    .filter(m => parseLocalDate(m.date) >= new Date(new Date().setHours(0, 0, 0, 0)))
+    .filter(m => !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60')))
     .sort((a, b) => parseLocalDate(a.date) - parseLocalDate(b.date));
 
   // Community Events - only meetups without a circle (public events)

@@ -349,6 +349,7 @@ export default function ScheduleMeetupView({
             meeting_format: meetingFormat,
             created_by: authUser.id,
             participant_limit: 10,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           })
           .select('id')
           .single();
@@ -405,6 +406,7 @@ export default function ScheduleMeetupView({
         meeting_format: meetingFormat,
         created_by: authUser.id,
         participant_limit: participantLimit,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...(imageUrl && { image_url: imageUrl }),
       })
       .select('id')

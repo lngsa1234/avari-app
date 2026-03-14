@@ -383,14 +383,6 @@ export default function ControlBar({
     });
   }
 
-  if (features.topics || features.icebreakers) {
-    moreMenuItems.push({
-      icon: <TopicsIcon />,
-      label: 'Icebreaker Topics',
-      active: showTopics,
-      onClick: onToggleTopics,
-    });
-  }
 
   // Background blur is shown as a direct button next to video, not in More menu
 

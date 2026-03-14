@@ -22,14 +22,6 @@ import {
   ParticipantsPanel,
 } from '@/components/video';
 
-// Fallback topic suggestions (used when icebreakers fail to load)
-const FALLBACK_TOPICS = [
-  { question: "What brings you here today?", category: "intro" },
-  { question: "What's something you're excited about right now?", category: "general" },
-  { question: "What's the best advice you've received recently?", category: "learning" },
-  { question: "What's a skill you'd like to develop this year?", category: "growth" }
-];
-
 /**
  * Unified Video Call Page
  * Supports: coffee (WebRTC), meetup (LiveKit), circle (Agora)
@@ -99,12 +91,50 @@ export default function UnifiedCallPage() {
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('en-US');
   const [pendingLanguageRestart, setPendingLanguageRestart] = useState(false);
 
-  // Topics/Icebreakers state (for meetups)
-  const [currentTopic, setCurrentTopic] = useState(null);
-  const [usedTopicIndices, setUsedTopicIndices] = useState(new Set());
-  const [icebreakers, setIcebreakers] = useState([]);
-  const [icebreakersLoading, setIcebreakersLoading] = useState(false);
-  const [isAIGenerated, setIsAIGenerated] = useState(false);
+  // Discussion topics state
+  const [discussionTopics, setDiscussionTopics] = useState(null);
+
+  // Load discussion topics — extract meetup UUID from channel name (meetup-{uuid})
+  const meetupUUID = roomId?.startsWith('meetup-') ? roomId.replace('meetup-', '') : relatedData?.id;
+  useEffect(() => {
+    if (!meetupUUID || !config?.features.topics) return;
+
+    const loadTopics = async () => {
+      try {
+        // Try cache first
+        const cacheRes = await fetch(`/api/agent/discussion-topics?meetupId=${meetupUUID}`);
+        const cacheData = await cacheRes.json();
+        if (cacheData.found && cacheData.topics) {
+          setDiscussionTopics(cacheData.topics);
+          return;
+        }
+
+        // No cache — generate on demand
+        const res = await fetch('/api/agent/discussion-topics', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            meetupId: meetupUUID,
+            title: relatedData?.topic || relatedData?.name || '',
+            description: relatedData?.description || '',
+            attendees: (roomParticipants || []).map(p => ({
+              name: p.name,
+              career: p.career,
+              interests: p.interests || [],
+            })),
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.topics) setDiscussionTopics(data.topics);
+        }
+      } catch (err) {
+        console.error('[Call] Error loading discussion topics:', err);
+      }
+    };
+
+    loadTopics();
+  }, [meetupUUID, config?.features.topics]);
 
   // Screen share state
   const [localScreenTrack, setLocalScreenTrack] = useState(null);
@@ -517,62 +547,6 @@ export default function UnifiedCallPage() {
       supabase.removeChannel(channel);
     };
   }, [roomId]);
-
-  // Load icebreakers for calls with icebreakers feature enabled
-  useEffect(() => {
-    if (roomId && config?.features.icebreakers) {
-      loadIcebreakers();
-    }
-  }, [callType, roomId, config?.features.icebreakers]);
-
-  // Load icebreakers from API
-  const loadIcebreakers = async () => {
-    setIcebreakersLoading(true);
-    try {
-      // First try to get cached icebreakers
-      const getResponse = await fetch(`/api/agent/icebreakers?meetupId=${roomId}`);
-      const getData = await getResponse.json();
-
-      if (getData.found && getData.icebreakers) {
-        setIcebreakers(getData.icebreakers);
-        setIsAIGenerated(getData.tier === 'light_ai' || getData.tier === 'ai');
-        setIcebreakersLoading(false);
-        return;
-      }
-
-      // Generate new icebreakers if we have enough context
-      const postResponse = await fetch('/api/agent/icebreakers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meetupId: roomId,
-          callType,
-          title: relatedData?.topic || relatedData?.name || (callType === 'coffee' ? '1:1 Coffee Chat' : 'Networking Meetup'),
-          description: relatedData?.description || '',
-          attendees: roomParticipants?.map(p => ({
-            career: p.career,
-            interests: p.interests
-          })) || []
-        })
-      });
-
-      const postData = await postResponse.json();
-      if (postData.icebreakers) {
-        setIcebreakers(postData.icebreakers);
-        setIsAIGenerated(postData.tier === 'light_ai' || postData.tier === 'ai');
-      } else {
-        // Fallback to default topics
-        setIcebreakers(FALLBACK_TOPICS);
-        setIsAIGenerated(false);
-      }
-    } catch (e) {
-      console.error('[Call] Error loading icebreakers:', e);
-      setIcebreakers(FALLBACK_TOPICS);
-      setIsAIGenerated(false);
-    } finally {
-      setIcebreakersLoading(false);
-    }
-  };
 
   // Call duration timer
   useEffect(() => {
@@ -1934,25 +1908,6 @@ export default function UnifiedCallPage() {
     }
   }, [isTranscribing, startListening, stopListening]);
 
-  // Shuffle topic (for meetups) - uses icebreakers from API
-  const shuffleTopic = useCallback(() => {
-    const topics = icebreakers.length > 0 ? icebreakers : FALLBACK_TOPICS;
-    const availableIndices = topics
-      .map((_, index) => index)
-      .filter(index => !usedTopicIndices.has(index));
-
-    if (availableIndices.length === 0) {
-      setUsedTopicIndices(new Set());
-      const randomIndex = Math.floor(Math.random() * topics.length);
-      setCurrentTopic(topics[randomIndex]);
-      setUsedTopicIndices(new Set([randomIndex]));
-    } else {
-      const randomIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
-      setCurrentTopic(topics[randomIndex]);
-      setUsedTopicIndices(prev => new Set([...prev, randomIndex]));
-    }
-  }, [icebreakers, usedTopicIndices]);
-
   // Send message
   const handleSendMessage = async (e) => {
     e?.preventDefault();
@@ -2504,6 +2459,11 @@ export default function UnifiedCallPage() {
         meetingId={roomId}
         callDuration={callDuration}
         connectionQuality={connectionQuality}
+        showTopics={showTopics}
+        onToggleTopics={(config?.features.topics || config?.features.icebreakers) ? () => {
+          setShowTopics(!showTopics);
+          if (!showTopics) setActiveTab('topics');
+        } : undefined}
       />
 
       {/* Toast notification */}
@@ -2745,11 +2705,17 @@ export default function UnifiedCallPage() {
           {/* Topics Content */}
           {showTopics && (enabledPanels.length === 1 || activeTab === 'topics') && (
             <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Topic Card */}
-              <div className="p-3.5">
-                {icebreakersLoading ? (
+              {/* Discussion Topics */}
+              <div className="p-3.5 flex flex-col gap-2.5">
+                <span
+                  className="text-[10px] font-bold uppercase"
+                  style={{ color: '#D4A574', letterSpacing: '1.2px' }}
+                >
+                  Suggested Topics
+                </span>
+                {!discussionTopics ? (
                   <div
-                    className="rounded-2xl p-4 relative overflow-hidden"
+                    className="rounded-2xl p-4"
                     style={{
                       background: 'linear-gradient(135deg, rgba(212,165,116,0.15) 0%, rgba(139,94,60,0.12) 100%)',
                       border: '1px solid rgba(212,165,116,0.25)',
@@ -2757,72 +2723,42 @@ export default function UnifiedCallPage() {
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                      <span style={{ color: '#D4A574' }} className="text-sm">Loading icebreakers...</span>
+                      <span style={{ color: '#D4A574' }} className="text-sm">Loading topics...</span>
                     </div>
                   </div>
-                ) : (
-                  <div
-                    className="rounded-2xl p-4 relative overflow-hidden"
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(212,165,116,0.15) 0%, rgba(139,94,60,0.12) 100%)',
-                      border: '1px solid rgba(212,165,116,0.25)',
-                    }}
-                  >
-                    {/* Subtle glow */}
+                ) : discussionTopics.length > 0 ? (
+                  discussionTopics.map((item, i) => (
                     <div
-                      className="absolute -top-5 -right-5 w-20 h-20"
-                      style={{ background: 'radial-gradient(circle, rgba(212,165,116,0.15) 0%, transparent 70%)' }}
-                    />
-                    <div className="flex items-start gap-3 relative">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span
-                            className="text-[10px] font-bold uppercase"
-                            style={{ color: '#D4A574', letterSpacing: '1.2px' }}
-                          >
-                            Current Topic
-                          </span>
-                          {isAIGenerated && (
-                            <span className="flex items-center gap-1 text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-full font-medium">
-                              ✨ AI
-                            </span>
-                          )}
-                          {currentTopic?.category && (
-                            <span
-                              className="text-[10px] px-1.5 py-0.5 rounded-full font-medium"
-                              style={{ background: 'rgba(245,237,228,0.08)', color: 'rgba(245,237,228,0.6)' }}
-                            >
-                              {currentTopic.category}
-                            </span>
-                          )}
-                        </div>
+                      key={i}
+                      className="flex gap-3 items-start rounded-xl p-3"
+                      style={{
+                        background: 'rgba(245,237,228,0.06)',
+                        border: '1px solid rgba(245,237,228,0.05)',
+                      }}
+                    >
+                      <span className="text-base flex-shrink-0 mt-0.5">{item.emoji || '💡'}</span>
+                      <div className="flex-1 min-w-0">
                         <p
-                          className="text-[15px] font-semibold leading-relaxed"
-                          style={{ color: '#F5EDE4', letterSpacing: '-0.01em' }}
+                          className="text-sm font-semibold"
+                          style={{ color: '#F5EDE4', margin: 0, lineHeight: 1.4 }}
                         >
-                          {currentTopic?.question || currentTopic || 'Click shuffle to get a conversation starter!'}
+                          {item.topic}
                         </p>
+                        {item.reason && (
+                          <p
+                            className="text-xs mt-1"
+                            style={{ color: 'rgba(245,237,228,0.45)', margin: 0, lineHeight: 1.4 }}
+                          >
+                            {item.reason}
+                          </p>
+                        )}
                       </div>
-                      <button
-                        onClick={shuffleTopic}
-                        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform hover:scale-105 active:scale-95"
-                        style={{
-                          background: '#D4A574',
-                          boxShadow: '0 2px 8px rgba(212,165,116,0.3)',
-                        }}
-                        title="Shuffle topic"
-                        disabled={icebreakersLoading}
-                      >
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="16 3 21 3 21 8" />
-                          <line x1="4" y1="20" x2="21" y2="3" />
-                          <polyline points="21 16 21 21 16 21" />
-                          <line x1="15" y1="15" x2="21" y2="21" />
-                          <line x1="4" y1="4" x2="9" y2="9" />
-                        </svg>
-                      </button>
                     </div>
-                  </div>
+                  ))
+                ) : (
+                  <p className="text-sm" style={{ color: 'rgba(245,237,228,0.5)' }}>
+                    No topics available for this event.
+                  </p>
                 )}
               </div>
 

@@ -219,6 +219,9 @@ export default function VideoHeader({
   meetingId,
   callDuration = 0,
   connectionQuality = 'good',
+  // Topics
+  showTopics = false,
+  onToggleTopics,
 }) {
   const [copied, setCopied] = useState(false);
   const [showViewMenu, setShowViewMenu] = useState(false);
@@ -409,6 +412,31 @@ export default function VideoHeader({
             </div>
           )}
         </div>
+
+        {/* Topics toggle */}
+        {onToggleTopics && (
+          <Tooltip text={showTopics ? 'Hide topics' : 'Topics'}>
+            <button
+              onClick={onToggleTopics}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
+              style={{
+                background: showTopics ? 'rgba(212,165,116,0.2)' : 'rgba(245,237,228,0.08)',
+                border: `1px solid ${showTopics ? 'rgba(212,165,116,0.3)' : 'rgba(245,237,228,0.08)'}`,
+                color: showTopics ? '#D4A574' : '#F5EDE4',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+              <span className="hidden sm:inline">Topics</span>
+            </button>
+          </Tooltip>
+        )}
 
         {/* View mode selector */}
         {showGridToggle && onToggleView && (

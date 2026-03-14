@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { parseLocalDate } from '../lib/dateUtils';
+import { parseLocalDate, isEventPast } from '../lib/dateUtils';
 import {
   Search,
   Calendar,
@@ -110,13 +110,10 @@ export default function AllEventsView({
 
   // Filter meetups based on search, vibe, and date
   const filteredMeetups = meetups.filter((meetup) => {
-    // Filter by date (upcoming vs past)
-    const meetupDate = parseLocalDate(meetup.date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (activeView === 'upcoming' && meetupDate < today) return false;
-    if (activeView === 'past' && meetupDate >= today) return false;
+    // Filter by date (upcoming vs past) — timezone-aware
+    const past = isEventPast(meetup.date, meetup.time, meetup.timezone, parseInt(meetup.duration || '60'));
+    if (activeView === 'upcoming' && past) return false;
+    if (activeView === 'past' && !past) return false;
 
     // Filter by vibe category
     if (selectedVibe !== 'all' && meetup.vibe_category !== selectedVibe) return false;
