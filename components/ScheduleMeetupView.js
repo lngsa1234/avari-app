@@ -57,6 +57,7 @@ export default function ScheduleMeetupView({
   const [meetingFormat, setMeetingFormat] = useState('virtual');
   const [location, setLocation] = useState('Virtual');
   const [participantLimit, setParticipantLimit] = useState(20);
+  const [duration, setDuration] = useState(60);
   const [isRepeating, setIsRepeating] = useState(false);
   const [repeatCadence, setRepeatCadence] = useState('Weekly');
 
@@ -344,7 +345,7 @@ export default function ScheduleMeetupView({
             time: formattedTime,
             topic: topic.trim(),
             description: notes || `Meetup for ${selectedCircle.name}`,
-            duration: 60,
+            duration,
             location: meetingFormat === 'virtual' ? 'Virtual' : location,
             meeting_format: meetingFormat,
             created_by: authUser.id,
@@ -632,6 +633,32 @@ export default function ScheduleMeetupView({
                   onChange={(e) => setScheduledTime(e.target.value)}
                   style={styles.input}
                 />
+              </div>
+            </div>
+            {/* Duration */}
+            <div style={styles.section}>
+              <label style={styles.label}>Duration</label>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {[30, 45, 60, 90, 120].map((min) => (
+                  <button
+                    key={min}
+                    type="button"
+                    onClick={() => setDuration(min)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '10px',
+                      border: `1.5px solid ${duration === min ? colors.primary : colors.border}`,
+                      background: duration === min ? colors.primary : 'transparent',
+                      color: duration === min ? '#FFF' : colors.text,
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontFamily: fonts.sans,
+                    }}
+                  >
+                    {min < 60 ? `${min} min` : `${min >= 120 ? (min / 60) : min === 60 ? '1' : '1.5'} hr${min > 60 ? 's' : ''}`}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
@@ -933,7 +960,6 @@ export default function ScheduleMeetupView({
               <button
                 onClick={() => {
                   setCreatedEvent(null);
-                  onNavigate?.(previousView || 'meetups');
                 }}
                 style={{
                   flex: 1, padding: '12px',
@@ -943,7 +969,7 @@ export default function ScheduleMeetupView({
                   fontFamily: fonts.sans,
                 }}
               >
-                Done
+                Go Back
               </button>
               <button
                 onClick={() => {
@@ -958,7 +984,7 @@ export default function ScheduleMeetupView({
                   fontFamily: fonts.sans,
                 }}
               >
-                View Event
+                Done
               </button>
             </div>
           </div>

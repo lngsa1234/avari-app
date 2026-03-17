@@ -151,7 +151,7 @@ const TRENDING_REQUESTS = [
     supporter_count: 42,
   },
   {
-    topic: 'Side project to revenue: first $1K MRR',
+    topic: 'Secret to first $1K MRR',
     description: 'Has anyone taken a side project and turned it into a revenue-generating product? Share your journey to the first $1K in monthly recurring revenue.',
     vibe_category: 'grow',
     supporter_count: 36,

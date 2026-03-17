@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { parseLocalDate, isEventPast } from '../lib/dateUtils';
+import { parseLocalDate, isEventPast, formatEventTime, formatEventDate } from '../lib/dateUtils';
 import {
   Search,
   Calendar,
@@ -172,7 +172,8 @@ export default function NetworkDiscoverView({
   meetups = [],
   onNavigate,
   onHostMeetup,
-  onRequestMeetup
+  onRequestMeetup,
+  toast,
 }) {
   const [selectedVibe, setSelectedVibe] = useState('peers');
   const [connectionGroups, setConnectionGroups] = useState([]);
@@ -392,7 +393,7 @@ export default function NetworkDiscoverView({
       await loadMeetupSignups();
     } catch (err) {
       console.error('Error handling RSVP:', err);
-      alert('Failed to update RSVP. Please try again.');
+      toast?.error('Failed to update RSVP. Please try again.');
     } finally {
       setRsvpLoading(prev => ({ ...prev, [meetupId]: false }));
     }
@@ -749,7 +750,7 @@ export default function NetworkDiscoverView({
 
   const handleSubmitRequest = async () => {
     if (!requestTopic.trim()) {
-      alert('Please enter a topic');
+      toast?.error('Please enter a topic');
       return;
     }
 
@@ -773,10 +774,10 @@ export default function NetworkDiscoverView({
       setRequestVibe('grow');
 
       await loadMeetupRequests();
-      alert('Request submitted! Others can now support your idea.');
+      toast?.success('Request submitted! Others can now support your idea.');
     } catch (error) {
       console.error('Error submitting request:', error);
-      alert('Error submitting request: ' + error.message);
+      toast?.error('Error submitting request: ' + error.message);
     }
   };
 
@@ -928,8 +929,8 @@ export default function NetworkDiscoverView({
 
     return {
       ...content,
-      date: meetup ? parseLocalDate(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Thu, Feb 6',
-      time: formatTime(meetup?.time),
+      date: meetup ? formatEventDate(meetup.date, meetup.time, meetup.timezone, { weekday: 'short', month: 'short', day: 'numeric' }) : 'Thu, Feb 6',
+      time: meetup ? formatEventTime(meetup.date, meetup.time, meetup.timezone) : '7:00 PM',
       location: meetup?.location || 'Virtual',
       spots: meetup ? Math.max(1, (meetup.participant_limit || 8) - (meetup.signups?.length || 0)) : 2,
       totalSpots: meetup?.participant_limit || 8,
@@ -1128,7 +1129,7 @@ export default function NetworkDiscoverView({
                       color: textColor,
                     }}>
                       <Calendar size={isMobile ? 11 : 12} />
-                      {parseLocalDate(meetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {formatEventDate(meetup.date, meetup.time, meetup.timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
                     </span>
                   </div>
 
@@ -1169,7 +1170,7 @@ export default function NetworkDiscoverView({
                       color: textColorMuted,
                     }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <Clock size={isMobile ? 10 : 11} /> {meetup.time}
+                        <Clock size={isMobile ? 10 : 11} /> {formatEventTime(meetup.date, meetup.time, meetup.timezone)}
                       </span>
                       <span style={{ color: textColorFaint }}>|</span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
@@ -1334,7 +1335,7 @@ export default function NetworkDiscoverView({
             {(showAllRequests ? meetupRequests : meetupRequests.slice(0, 3)).map((request, index) => {
               const vibeInfo = VIBE_CATEGORIES.find(v => v.id === request.vibe_category);
               const hasSupported = request.supporters?.some(s => s.user_id === currentUser?.id);
-              const supporterCount = request.supporter_count || 0;
+              const supporterCount = (request.supporters || []).length;
               const rank = index + 1;
               const rankColors = ['#C4956A', '#A0917A', '#B8A898'];
               const displayCount = showAllRequests ? meetupRequests.length : Math.min(meetupRequests.length, 3);
@@ -1386,8 +1387,8 @@ export default function NetworkDiscoverView({
                       }}>
                         {request.topic}
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px', flexWrap: 'wrap' }}>
-                        {vibeInfo && (
+                      {vibeInfo && (
+                        <div style={{ marginTop: '3px' }}>
                           <span style={{
                             fontSize: isMobile ? '10px' : '11px', fontWeight: 600, color: '#8B6914',
                             background: 'rgba(139, 105, 20, 0.08)',
@@ -1396,11 +1397,34 @@ export default function NetworkDiscoverView({
                           }}>
                             {vibeInfo.emoji} {vibeInfo.label}
                           </span>
-                        )}
-                        <span style={{ fontSize: isMobile ? '11px' : '12px', color: '#8C7B6B', fontWeight: 500 }}>
-                          {supporterCount} interested
-                        </span>
-                      </div>
+                        </div>
+                      )}
+                      {supporterCount > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+                          <span style={{ display: 'flex', alignItems: 'center' }}>
+                            {(request.supporters || []).slice(0, 3).map((s, idx) => (
+                              <span key={s.user_id} style={{
+                                width: isMobile ? 20 : 22, height: isMobile ? 20 : 22,
+                                borderRadius: '50%', border: '1.5px solid #FBF7F0',
+                                marginLeft: idx > 0 ? -6 : 0,
+                                overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: s.profile?.profile_picture ? 'none' : '#C4A97D',
+                                fontSize: '10px', color: '#FFF', fontWeight: 600,
+                                flexShrink: 0,
+                              }}>
+                                {s.profile?.profile_picture ? (
+                                  <img src={s.profile.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  (s.profile?.name || '?')[0].toUpperCase()
+                                )}
+                              </span>
+                            ))}
+                          </span>
+                          <span style={{ fontSize: isMobile ? '11px' : '12px', color: '#8C7B6B', fontWeight: 500 }}>
+                            {supporterCount} interested
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1428,6 +1452,7 @@ export default function NetworkDiscoverView({
                     </button>
                     <button
                       onClick={() => handleHostRequest(request)}
+                      title="Volunteer to host this discussion"
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         background: 'transparent', color: '#6B4F1D',
@@ -1628,8 +1653,8 @@ export default function NetworkDiscoverView({
                 onClick={() => onNavigate?.('createCircle')}
                 style={{
                   background: 'linear-gradient(135deg, #F5EDE4 0%, #EDE3D7 50%, #E8DDD0 100%)',
-                  borderRadius: '19px',
-                  padding: isMobile ? '28px 20px' : '32px',
+                  borderRadius: '16px',
+                  padding: isMobile ? '20px 16px' : '24px',
                   textAlign: 'center',
                   cursor: 'pointer',
                   border: '1px solid #E0D5C7',
@@ -1639,34 +1664,34 @@ export default function NetworkDiscoverView({
                 }}
               >
                 <div style={{
-                  width: '48px',
-                  height: '48px',
+                  width: '40px',
+                  height: '40px',
                   borderRadius: '50%',
                   backgroundColor: '#D8CFC6',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  marginBottom: '14px',
+                  marginBottom: '10px',
                 }}>
-                  <span style={{ fontSize: '22px' }}>✨</span>
+                  <span style={{ fontSize: '18px' }}>✨</span>
                 </div>
 
                 <h3 style={{
-                  fontSize: isMobile ? '20px' : '24px',
+                  fontSize: isMobile ? '17px' : '20px',
                   fontWeight: '600',
                   color: '#3E2C1E',
-                  margin: '0 0 8px',
+                  margin: '0 0 6px',
                   fontFamily: fonts.serif,
                 }}>
                   Start your own Circle
                 </h3>
 
                 <p style={{
-                  fontSize: isMobile ? '13px' : '14px',
+                  fontSize: isMobile ? '12px' : '13px',
                   color: '#7A6855',
-                  margin: '0 0 18px',
-                  lineHeight: '1.6',
-                  maxWidth: '320px',
+                  margin: '0 0 14px',
+                  lineHeight: '1.5',
+                  maxWidth: '300px',
                   fontStyle: 'italic',
                 }}>
                   Start a trusted small group of 6-10 women to meet weekly and help each other move forward.
@@ -1675,15 +1700,15 @@ export default function NetworkDiscoverView({
                 <div style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '8px',
-                  marginBottom: '20px',
+                  gap: '6px',
+                  marginBottom: '16px',
                   alignItems: 'flex-start',
                 }}>
                   {['6-10 women per Circle', 'Weekly check-ins', 'Clear next steps'].map((item) => (
-                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                       <div style={{
-                        width: '20px',
-                        height: '20px',
+                        width: '18px',
+                        height: '18px',
                         borderRadius: '50%',
                         backgroundColor: '#8B6F5C',
                         display: 'flex',
@@ -1691,10 +1716,10 @@ export default function NetworkDiscoverView({
                         justifyContent: 'center',
                         flexShrink: 0,
                       }}>
-                        <Check size={12} style={{ color: 'white' }} />
+                        <Check size={10} style={{ color: 'white' }} />
                       </div>
                       <span style={{
-                        fontSize: isMobile ? '13px' : '14px',
+                        fontSize: isMobile ? '12px' : '13px',
                         fontWeight: '500',
                         color: '#3E2C1E',
                       }}>
@@ -1710,12 +1735,12 @@ export default function NetworkDiscoverView({
                     onNavigate?.('createCircle');
                   }}
                   style={{
-                    padding: isMobile ? '11px 28px' : '12px 32px',
+                    padding: isMobile ? '9px 24px' : '10px 28px',
                     backgroundColor: '#8B6F5C',
                     color: 'white',
                     border: 'none',
                     borderRadius: '999px',
-                    fontSize: isMobile ? '14px' : '15px',
+                    fontSize: isMobile ? '13px' : '14px',
                     fontWeight: '600',
                     cursor: 'pointer',
                   }}

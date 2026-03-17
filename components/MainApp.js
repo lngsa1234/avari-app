@@ -3991,7 +3991,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={handleNavigate} initialView={meetupsInitialView} />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
         {currentView === 'connections' && <ConnectionsView />}
-        {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} onHostMeetup={(requestData) => {
+        {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} toast={toast} onHostMeetup={(requestData) => {
             setScheduleMeetupContext({
               type: 'community',
               topic: requestData?.topic || '',
@@ -4027,6 +4027,7 @@ function MainApp({ currentUser, onSignOut }) {
             meetupId={selectedMeetupId}
             previousView={previousView}
             onMeetupChanged={loadMeetupsFromDatabase}
+            toast={toast}
           />
         )}
         {currentView === 'allPeople' && <AllPeopleView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} previousView={previousView} />}

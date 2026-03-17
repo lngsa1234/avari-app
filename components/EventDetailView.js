@@ -24,7 +24,7 @@ import {
   Check,
   Share2,
 } from 'lucide-react';
-import { parseLocalDate, toLocalDateString, isEventPast, isEventLive, formatEventTime } from '../lib/dateUtils';
+import { parseLocalDate, toLocalDateString, isEventPast, isEventLive, formatEventTime, formatEventDate, eventDateTimeToUTC } from '../lib/dateUtils';
 
 const colors = {
   primary: '#8B6F5C',
@@ -175,7 +175,7 @@ function formatDuration(seconds) {
   return `${mins}m`;
 }
 
-export default function EventDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, previousView, onMeetupChanged }) {
+export default function EventDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, previousView, onMeetupChanged, toast }) {
   const sb = supabaseProp || supabase;
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 640;
@@ -199,6 +199,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   const [editing, setEditing] = useState(null); // 'time' | 'location' | 'description' | null
   const [editValues, setEditValues] = useState({});
   const [saving, setSaving] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null); // { type: 'cancelRsvp' | 'cancelEvent', title, message }
 
   const isHost = meetup?.created_by === currentUser.id;
 
@@ -455,46 +456,63 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
     }
   }
 
-  async function handleCancelRsvp() {
-    if (!confirm('Are you sure you want to cancel your RSVP?')) return;
-    try {
-      setActionLoading(true);
-      const { error } = await sb
-        .from('meetup_signups')
-        .delete()
-        .eq('meetup_id', meetupId)
-        .eq('user_id', currentUser.id);
-
-      if (error) {
-        alert('Error canceling: ' + error.message);
-      } else {
-        setIsSignedUp(false);
-        await reloadAttendees();
-      }
-    } catch (err) {
-      alert('Error: ' + err.message);
-    } finally {
-      setActionLoading(false);
-    }
+  function handleCancelRsvp() {
+    setConfirmAction({
+      type: 'cancelRsvp',
+      title: 'Cancel RSVP',
+      message: 'Are you sure you want to cancel your RSVP?',
+    });
   }
 
-  async function handleCancelEvent() {
-    if (!confirm('Are you sure you want to cancel this event? This will remove it for all attendees.')) return;
-    try {
-      setActionLoading(true);
-      const { error } = await sb.from('meetups')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', meetupId);
-      if (error) {
-        alert('Error canceling event: ' + error.message);
-      } else {
-        await onMeetupChanged?.();
-        onNavigate?.(previousView || 'meetups');
+  function handleCancelEvent() {
+    setConfirmAction({
+      type: 'cancelEvent',
+      title: 'Cancel Event',
+      message: 'Are you sure you want to cancel this event? This will remove it for all attendees.',
+    });
+  }
+
+  async function executeConfirmAction() {
+    const action = confirmAction;
+    setConfirmAction(null);
+
+    if (action.type === 'cancelRsvp') {
+      try {
+        setActionLoading(true);
+        const { error } = await sb
+          .from('meetup_signups')
+          .delete()
+          .eq('meetup_id', meetupId)
+          .eq('user_id', currentUser.id);
+
+        if (error) {
+          toast?.error('Error canceling: ' + error.message);
+        } else {
+          setIsSignedUp(false);
+          await reloadAttendees();
+        }
+      } catch (err) {
+        toast?.error('Error: ' + err.message);
+      } finally {
+        setActionLoading(false);
       }
-    } catch (err) {
-      alert('Error: ' + err.message);
-    } finally {
-      setActionLoading(false);
+    } else if (action.type === 'cancelEvent') {
+      try {
+        setActionLoading(true);
+        const { error } = await sb.from('meetups')
+          .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+          .eq('id', meetupId);
+        if (error) {
+          toast?.error('Error canceling event: ' + error.message);
+        } else {
+          await onMeetupChanged?.();
+          onNavigate?.(previousView || 'meetups');
+        }
+      } catch (err) {
+        toast?.error('Error: ' + err.message);
+      } finally {
+        setActionLoading(false);
+      }
     }
   }
 
@@ -622,7 +640,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   const isLive = isEventLive(meetup.date, meetup.time, meetup.timezone, eventDuration);
   const eventDate = parseLocalDate(meetup.date);
 
-  const dateDisplay = eventDate.toLocaleDateString('en-US', isMobile
+  const dateDisplay = formatEventDate(meetup.date, meetup.time, meetup.timezone, isMobile
     ? { month: 'short', day: 'numeric', year: 'numeric' }
     : { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }
   );
@@ -1025,7 +1043,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                     onClick={async () => {
                       const url = `${window.location.origin}/?event=${meetupId}`;
                       const title = meetup.topic || 'Event';
-                      const dateStr = meetup.date ? new Date(meetup.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : '';
+                      const dateStr = meetup.date ? formatEventDate(meetup.date, meetup.time, meetup.timezone, { weekday: 'long', month: 'long', day: 'numeric' }) : '';
                       const timeStr = meetup.time ? formatEventTime(meetup.date, meetup.time, meetup.timezone) : '';
                       const location = meetup.location || '';
                       const desc = meetup.description ? meetup.description.substring(0, 120) + (meetup.description.length > 120 ? '...' : '') : '';
@@ -1573,6 +1591,62 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
           </>
         )}
       </div>
+
+      {/* Confirmation Modal */}
+      {confirmAction && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '20px',
+        }}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: '20px',
+            padding: '28px 24px', maxWidth: '340px', width: '100%',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+            textAlign: 'center',
+          }}>
+            <h3 style={{
+              fontFamily: '"Lora", Georgia, serif', fontSize: '18px', fontWeight: '600',
+              color: '#3D2B1F', margin: '0 0 8px',
+            }}>
+              {confirmAction.title}
+            </h3>
+            <p style={{
+              fontSize: '14px', color: '#6B5344',
+              margin: '0 0 24px', lineHeight: '1.5',
+            }}>
+              {confirmAction.message}
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setConfirmAction(null)}
+                style={{
+                  flex: 1, padding: '12px',
+                  backgroundColor: 'rgba(139, 111, 92, 0.08)',
+                  color: '#5C4033', border: 'none', borderRadius: '12px',
+                  fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                  fontFamily: '"DM Sans", -apple-system, sans-serif',
+                }}
+              >
+                Go Back
+              </button>
+              <button
+                onClick={executeConfirmAction}
+                style={{
+                  flex: 1, padding: '12px',
+                  backgroundColor: '#D32F2F', color: 'white',
+                  border: 'none', borderRadius: '12px',
+                  fontSize: '14px', fontWeight: '600', cursor: 'pointer',
+                  fontFamily: '"DM Sans", -apple-system, sans-serif',
+                }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
