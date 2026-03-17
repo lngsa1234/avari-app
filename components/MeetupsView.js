@@ -6,7 +6,13 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus } from 'lucide-react';
-import { parseLocalDate, isEventPast } from '../lib/dateUtils';
+import { parseLocalDate, isEventPast, formatEventTime, eventDateTimeToUTC } from '../lib/dateUtils';
+
+const formatDate = (isoStr) => {
+  try {
+    return new Date(isoStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  } catch { return 'TBD'; }
+};
 
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null }) {
   const [activeView, setActiveView] = useState(initialView || 'upcoming');
@@ -289,9 +295,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           sessionNumber,
           originalDate: meetup.date,
           rawDate: parseLocalDate(meetup.date),
-          date: formatDate(meetup.date),
+          date: formatDateLocal(meetup.date, meetup.time, meetup.timezone),
           rawTime: meetup.time,
-          time: formatTime(meetup.time),
+          time: formatEventTime(meetup.date, meetup.time, meetup.timezone),
           duration: `${meetup.duration || 60} min`,
           location: meetup.location || 'Virtual',
           attendees: attendeeProfiles.length || meetup.signupCount || 0,
@@ -448,7 +454,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             ? `🔒 ${circleName || 'Circle'} Meetup`
             : `🎉 ${meetup.topic || 'Event'}`,
           emoji: isCircle ? '🔒' : '🎉',
-          date: formatDate(meetup.date),
+          date: formatDateLocal(meetup.date, meetup.time, meetup.timezone),
           rawDate: (() => { const d = parseLocalDate(meetup.date); if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); d.setHours(h, m, 0, 0); } return d; })(),
           topic: meetup.topic || meetup.description || (isCircle ? 'Circle meetup' : 'Public event'),
           notes: meetup.description,
@@ -587,18 +593,26 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     }
   }, [currentUser.id, supabase]);
 
-  const formatDate = (dateStr) => {
+  const formatDateLocal = (dateStr, timeStr, timezone) => {
     if (!dateStr) return 'TBD';
     try {
-      const date = parseLocalDate(dateStr);
+      // Get the event's date in the viewer's timezone
+      let viewerDate;
+      if (timezone && timeStr) {
+        const eventUTC = eventDateTimeToUTC(dateStr, timeStr, timezone);
+        viewerDate = eventUTC; // This is a proper Date, will display in viewer's local
+      } else {
+        viewerDate = parseLocalDate(dateStr);
+      }
+
       const now = new Date();
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
 
-      if (date.toDateString() === now.toDateString()) return 'Today';
-      if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+      if (viewerDate.toDateString() === now.toDateString()) return 'Today';
+      if (viewerDate.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
 
-      return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      return viewerDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     } catch {
       return dateStr;
     }
@@ -767,9 +781,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             title: editingMeetup.topic || e.title,
             originalDate: editingMeetup.date,
             rawDate: parseLocalDate(editingMeetup.date),
-            date: formatDate(editingMeetup.date),
+            date: formatDateLocal(editingMeetup.date, editingMeetup.time, editingMeetup.timezone),
             rawTime: editingMeetup.time,
-            time: formatTime(editingMeetup.time),
+            time: formatEventTime(editingMeetup.date, editingMeetup.time, editingMeetup.timezone),
             location: editingMeetup.meeting_format === 'virtual' ? 'Virtual' : editingMeetup.location,
             meeting_format: editingMeetup.meeting_format,
             image_url: imageUrl,
@@ -864,10 +878,6 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           <p style={{
             ...styles.subtitle,
             fontSize: isMobile ? '14px' : '15px',
-            background: 'linear-gradient(89.8deg, #7E654D 27.14%, #9C8370 72.64%, #B9A594 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
           }}>Catch up over a virtual coffee</p>
         </div>
         <button style={{
@@ -878,7 +888,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           justifyContent: 'center',
         }} onClick={handleScheduleCoffeeChat}>
           <Plus size={isMobile ? 16 : 18} />
-          Schedule Meetup
+          Host a Coffee Chat
         </button>
       </section>
 
@@ -975,8 +985,21 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               const coffeeAvatar = isCoffee ? { name: item.with, profile_picture: item.avatar } : null;
               const attendeeCount = isCoffee ? 2 : (attendees.length || 0);
 
-              // Topic tag: use vibe_category or meeting type
-              const topicTag = isCoffee ? '1:1 Chat' : (item.vibe_category || item.category || null);
+              // Topic tag: use vibe_category, or derive from title keywords
+              const topicTag = isCoffee ? '1:1 Chat' : (item.vibe_category || item.category || (() => {
+                const t = (item.title || '').toLowerCase();
+                if (/\bai\b|machine learning|ml\b|tech|coding|engineer/.test(t)) return 'AI & Tech';
+                if (/founder|startup|fundrais|venture|bootstrap|mrr/.test(t)) return 'Founder Life';
+                if (/product|pm\b|build|ship|launch/.test(t)) return 'Product';
+                if (/career|job|hiring|interview|resume|transition|promotion/.test(t)) return 'Career';
+                if (/design|ux\b|ui\b|creative|brand/.test(t)) return 'Design';
+                if (/lead|manage|team|executive|ceo|cto/.test(t)) return 'Leadership';
+                if (/burnout|mental|wellness|balance|self.care|stress/.test(t)) return 'Wellness';
+                if (/marketing|growth|content|social media|seo/.test(t)) return 'Marketing';
+                if (/remote|async|distributed/.test(t)) return 'Remote Work';
+                if (/network|community|connect|circle/.test(t)) return 'Community';
+                return 'Discussion';
+              })());
 
               return (
                 <div key={item.id} onClick={(e) => {
@@ -985,13 +1008,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   setActiveCardId(activeCardId === item.id ? null : item.id);
                 }} style={{
                   display: 'flex', alignItems: 'center',
-                  padding: isToday ? '12px 14px' : '10px 14px',
-                  borderRadius: '12px',
+                  padding: isMobile ? '14px 16px' : '18px 22px',
+                  borderRadius: '16px',
                   background: isToday
                     ? 'linear-gradient(135deg, #7A5C42 0%, #9B7A5C 50%, #8B6B4F 100%)'
                     : '#FFFBF7',
                   border: isToday ? 'none' : '1px solid rgba(180, 160, 137, 0.12)',
-                  marginBottom: '5px',
+                  marginBottom: '8px',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                 }}
@@ -1005,42 +1028,61 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   e.currentTarget.style.transform = 'none';
                   e.currentTarget.style.boxShadow = 'none';
                 }}>
-                  {/* Time column */}
+                  {/* Time column with host avatar */}
                   <div style={{
-                    minWidth: '60px', flexShrink: 0,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
-                    paddingRight: '12px',
+                    minWidth: isMobile ? '65px' : '80px', flexShrink: 0,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+                    paddingRight: isMobile ? '12px' : '18px',
                     borderRight: isToday
                       ? '1px solid rgba(255,255,255,0.2)'
                       : '1px solid rgba(180, 160, 137, 0.15)',
                   }}>
-                    <svg width="13" height="13" fill="none" stroke={isToday ? 'rgba(255,255,255,0.5)' : '#B8A089'} strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    {/* Host avatar */}
+                    {(() => {
+                      const avatarSrc = isCoffee ? coffeeAvatar?.profile_picture : item.hostProfile?.profile_picture;
+                      const avatarName = isCoffee ? (coffeeAvatar?.name || '?') : (item.host || '?');
+                      return avatarSrc ? (
+                        <img src={avatarSrc} alt="" style={{
+                          width: 40, height: 40, borderRadius: '50%', objectFit: 'cover',
+                          border: `2px solid ${isToday ? 'rgba(255,255,255,0.3)' : 'rgba(180, 160, 137, 0.2)'}`,
+                        }} />
+                      ) : (
+                        <div style={{
+                          width: 40, height: 40, borderRadius: '50%',
+                          background: isToday ? 'rgba(255,255,255,0.2)' : '#C4A97D',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '15px', fontWeight: 600, color: '#FFF',
+                          border: `2px solid ${isToday ? 'rgba(255,255,255,0.3)' : 'rgba(180, 160, 137, 0.2)'}`,
+                        }}>
+                          {avatarName[0].toUpperCase()}
+                        </div>
+                      );
+                    })()}
                     <span style={{
-                      fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                      fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '14px' : '15px', fontWeight: '700',
                       color: isToday ? '#FFF' : '#5C4033',
                     }}>
-                      {time || 'TBD'}
+                      {(time || 'TBD').replace(/\s+([A-Z]{2,5}|[\w\s]+ time)$/i, '')}
                     </span>
                   </div>
 
                   {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0, paddingLeft: '12px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingLeft: isMobile ? '12px' : '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {/* Topic tag + format badge */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      {topicTag && (
-                        <span style={{
-                          fontSize: '10px', fontWeight: '600',
-                          padding: '2px 8px', borderRadius: '5px',
-                          background: isToday ? 'rgba(255,255,255,0.2)' : 'rgba(139, 111, 71, 0.08)',
-                          color: isToday ? 'rgba(255,255,255,0.9)' : '#7A5C42',
-                          letterSpacing: '0.3px', textTransform: 'capitalize',
-                        }}>
-                          {topicTag}
-                        </span>
-                      )}
+                      <span style={{
+                        fontSize: '11px', fontWeight: '700',
+                        padding: '3px 10px', borderRadius: '6px',
+                        background: isToday ? 'rgba(255,255,255,0.2)' : 'rgba(139, 111, 71, 0.12)',
+                        color: isToday ? 'rgba(255,255,255,0.9)' : '#7A5C42',
+                        letterSpacing: '0.4px', textTransform: 'capitalize',
+                        fontFamily: '"DM Sans", sans-serif',
+                      }}>
+                        {topicTag}
+                      </span>
                       {!isCoffee && item.meeting_format && item.meeting_format !== 'virtual' && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '6px',
+                          fontSize: '10px', fontWeight: '600', padding: '3px 10px', borderRadius: '6px',
                           backgroundColor: isToday ? 'rgba(255,255,255,0.15)' : (item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4'),
                           color: isToday ? 'rgba(255,255,255,0.8)' : (item.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46'),
                           whiteSpace: 'nowrap',
@@ -1050,7 +1092,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       )}
                       {isCoffee && item.isPending && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '6px',
+                          fontSize: '10px', fontWeight: '600', padding: '3px 10px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : 'rgba(196, 149, 106, 0.2)',
                           color: isToday ? 'rgba(255,255,255,0.8)' : '#8B6F5C',
                         }}>
@@ -1061,18 +1103,64 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
                     {/* Title */}
                     <h4 style={{
-                      fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '17px', fontWeight: '600',
+                      fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '18px', fontWeight: '600',
                       color: isToday ? '#FFF' : '#2C1810', margin: 0, lineHeight: 1.3,
                     }}>
                       {title}
                     </h4>
 
-                    {/* Attendee count */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <svg width="12" height="12" fill="none" stroke={isToday ? 'rgba(255,255,255,0.45)' : '#B8A089'} strokeWidth="1.5" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                    {/* Description */}
+                    {item.description && (
+                      <p style={{
+                        fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px', fontWeight: '400',
+                        color: isToday ? 'rgba(255,255,255,0.55)' : '#A89080',
+                        margin: 0, lineHeight: 1.4,
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {item.description}
+                      </p>
+                    )}
+
+                    {/* Participant avatars + count */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                      {attendees.length > 0 && (
+                        <span style={{ display: 'flex', alignItems: 'center' }}>
+                          {attendees.slice(0, 3).map((a, idx) => (
+                            <span key={a.id || idx} style={{
+                              width: 22, height: 22, borderRadius: '50%',
+                              border: `1.5px solid ${isToday ? 'rgba(122,92,66,0.8)' : '#FFFBF7'}`,
+                              marginLeft: idx > 0 ? -6 : 0,
+                              overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              background: a.profile_picture ? 'none' : (isToday ? 'rgba(255,255,255,0.25)' : '#C4A97D'),
+                              fontSize: '9px', color: '#FFF', fontWeight: 600, flexShrink: 0,
+                            }}>
+                              {a.profile_picture ? (
+                                <img src={a.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                (a.name || '?')[0].toUpperCase()
+                              )}
+                            </span>
+                          ))}
+                        </span>
+                      )}
+                      {isCoffee && coffeeAvatar && (
+                        <span style={{
+                          width: 22, height: 22, borderRadius: '50%',
+                          border: `1.5px solid ${isToday ? 'rgba(122,92,66,0.8)' : '#FFFBF7'}`,
+                          overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: coffeeAvatar.profile_picture ? 'none' : (isToday ? 'rgba(255,255,255,0.25)' : '#C4A97D'),
+                          fontSize: '9px', color: '#FFF', fontWeight: 600, flexShrink: 0,
+                        }}>
+                          {coffeeAvatar.profile_picture ? (
+                            <img src={coffeeAvatar.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            (coffeeAvatar.name || '?')[0].toUpperCase()
+                          )}
+                        </span>
+                      )}
                       <span style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
-                        color: isToday ? 'rgba(255,255,255,0.55)' : '#B8A089',
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
+                        color: isToday ? 'rgba(255,255,255,0.55)' : '#C4956A',
                       }}>
                         {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
                       </span>
@@ -1117,14 +1205,14 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           <button onClick={(e) => { e.stopPropagation(); handleAcceptChat(item); }} style={{
                             background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                             color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                            padding: '9px 16px', borderRadius: '12px',
+                            padding: '9px 18px', borderRadius: '14px',
                             fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
                             cursor: 'pointer', whiteSpace: 'nowrap',
                           }}>Accept</button>
                           <button onClick={(e) => { e.stopPropagation(); handleDeclineChat(item); }} style={{
                             background: 'none', color: isToday ? 'rgba(255,255,255,0.5)' : '#9B8A7E',
                             border: isToday ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(139,111,92,0.2)',
-                            padding: '7px 14px', borderRadius: '12px',
+                            padding: '7px 14px', borderRadius: '14px',
                             fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
                             cursor: 'pointer', whiteSpace: 'nowrap',
                           }}>Decline</button>
@@ -1139,7 +1227,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         <button onClick={(e) => { e.stopPropagation(); handleJoinCall(item); }} style={{
                           background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                           color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                          padding: '10px 20px', borderRadius: '12px',
+                          padding: '10px 22px', borderRadius: '14px',
                           fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
                           cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                           gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
@@ -1158,14 +1246,14 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                             fontSize: '13px', fontWeight: '600',
                             color: isToday ? 'rgba(255,255,255,0.8)' : '#4E6B46',
                             fontFamily: '"DM Sans", sans-serif',
-                            padding: '8px 16px', borderRadius: '12px',
+                            padding: '10px 18px', borderRadius: '14px',
                             backgroundColor: isToday ? 'rgba(255,255,255,0.15)' : '#E8F0E4',
                           }}>Going</span>
                         ) : (
                           <button onClick={(e) => { e.stopPropagation(); handleJoinCall(item); }} style={{
                             background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                             color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                            padding: '10px 20px', borderRadius: '12px',
+                            padding: '10px 22px', borderRadius: '14px',
                             fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
                             cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                             gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
@@ -1181,7 +1269,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         <button onClick={(e) => { e.stopPropagation(); handleRsvpMeetup(item); }} style={{
                           background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                           color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                          padding: '10px 20px', borderRadius: '12px',
+                          padding: '10px 22px', borderRadius: '14px',
                           fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
                           cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                           gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
