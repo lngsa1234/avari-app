@@ -32,8 +32,8 @@ export default function useSpeechRecognition({
   const continuousRef = useRef(continuous);
   const interimResultsRef = useRef(interimResults);
 
-  const MAX_CONSECUTIVE_ERRORS = 5;
-  const RESTART_DELAY = 100; // Fast restart for better responsiveness
+  const MAX_CONSECUTIVE_ERRORS = 10;
+  const RESTART_DELAY = 300; // Base restart delay in ms (exponential backoff applied on errors)
 
   // Keep refs updated
   useEffect(() => {
@@ -165,7 +165,9 @@ export default function useSpeechRecognition({
 
       switch (event.error) {
         case 'no-speech':
-          // Normal - silence detected
+          // Silence detected — count consecutive failures to avoid infinite restart loop
+          errorCountRef.current += 1;
+          lastErrorRef.current = event.error;
           break;
         case 'aborted':
           // Expected when restarting
