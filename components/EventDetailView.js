@@ -638,7 +638,21 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   const eventDuration = parseInt(meetup.duration || '60');
   const isPast = isEventPast(meetup.date, meetup.time, meetup.timezone, eventDuration);
   const isLive = isEventLive(meetup.date, meetup.time, meetup.timezone, eventDuration);
-  const eventDate = parseLocalDate(meetup.date);
+  // Compute viewer-local date for the calendar badge (handles cross-timezone date shifts)
+  const eventDate = (() => {
+    if (meetup.timezone && meetup.time) {
+      try {
+        const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const utc = eventDateTimeToUTC(meetup.date, meetup.time, meetup.timezone)
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone: viewerTz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(utc)
+        const y = parseInt(parts.find(p => p.type === 'year').value)
+        const m = parseInt(parts.find(p => p.type === 'month').value)
+        const d = parseInt(parts.find(p => p.type === 'day').value)
+        return new Date(y, m - 1, d)
+      } catch { /* fall through */ }
+    }
+    return parseLocalDate(meetup.date)
+  })();
 
   const dateDisplay = formatEventDate(meetup.date, meetup.time, meetup.timezone, isMobile
     ? { month: 'short', day: 'numeric', year: 'numeric' }

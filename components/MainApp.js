@@ -33,7 +33,7 @@ import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/coffeeChatHelpers'
 import NudgeBanner from './NudgeBanner'
 import { ToastContainer, useToast } from './Toast'
-import { parseLocalDate } from '@/lib/dateUtils'
+import { parseLocalDate, formatEventTime, isEventPast, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -105,6 +105,9 @@ function MainApp({ currentUser, onSignOut }) {
   const [circleInvitations, setCircleInvitations] = useState([]) // Invitations to join circles (invitee perspective)
   const [coffeeChatRequests, setCoffeeChatRequests] = useState([]) // Incoming coffee chat requests
   const [meetupsInitialView, setMeetupsInitialView] = useState(null) // 'past' when coming from review recaps
+
+  // Home page search
+  const [homeSearchQuery, setHomeSearchQuery] = useState('')
 
   // Schedule meetup context (for pre-filling)
   const [scheduleMeetupContext, setScheduleMeetupContext] = useState({
@@ -1533,8 +1536,42 @@ function MainApp({ currentUser, onSignOut }) {
     )
   }
 
-  // Demo data - will be replaced with Supabase data later
-  const upcomingMeetups = meetups
+  // Show events that haven't ended yet, with 30-min grace for meetings running over
+  const upcomingMeetups = meetups.filter(m =>
+    !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), 30)
+  )
+
+  // Home page search results
+  const homeSearchResults = React.useMemo(() => {
+    const q = homeSearchQuery.toLowerCase().trim()
+    if (!q) return null
+
+    const matchedMeetups = upcomingMeetups.slice(0, 50).filter(m =>
+      (m.topic || '').toLowerCase().includes(q) ||
+      (m.description || '').toLowerCase().includes(q) ||
+      (m.host?.name || '').toLowerCase().includes(q) ||
+      (m.connection_groups?.name || '').toLowerCase().includes(q)
+    ).slice(0, 4)
+
+    const matchedPeople = connections.filter(c =>
+      (c.name || '').toLowerCase().includes(q) ||
+      (c.career || '').toLowerCase().includes(q) ||
+      (c.city || '').toLowerCase().includes(q)
+    ).slice(0, 4)
+
+    const circleMap = {}
+    meetups.forEach(m => {
+      if (m.connection_groups?.id && m.connection_groups?.name) {
+        circleMap[m.connection_groups.id] = m.connection_groups
+      }
+    })
+    const matchedCircles = Object.values(circleMap).filter(c =>
+      c.name.toLowerCase().includes(q)
+    ).slice(0, 4)
+
+    const total = matchedMeetups.length + matchedPeople.length + matchedCircles.length
+    return { meetups: matchedMeetups, people: matchedPeople, circles: matchedCircles, total }
+  }, [homeSearchQuery, upcomingMeetups, connections, meetups])
 
   // Use database unread count instead of hardcoded chats
   const unreadCount = unreadMessageCount
@@ -2050,123 +2087,7 @@ function MainApp({ currentUser, onSignOut }) {
       return () => window.removeEventListener('resize', checkMobile)
     }, [])
 
-    // Filter to show UPCOMING meetups and recent ones (within 4 hours grace period)
-    const upcomingMeetups = useMemo(() => {
-      const now = new Date()
-      const GRACE_PERIOD_HOURS = 4
 
-      const filteredMeetups = meetups.filter(meetup => {
-        // Skip cancelled/completed meetups
-        if (meetup.status === 'cancelled' || meetup.status === 'completed') return false
-
-        try {
-          let meetupDate
-          const dateStr = meetup.date
-
-          if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-            const [year, month, day] = dateStr.split('-').map(Number)
-            meetupDate = new Date(year, month - 1, day)
-          } else {
-            const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
-            meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
-          }
-
-          if (isNaN(meetupDate.getTime())) return false
-
-          if (meetup.time) {
-            const [hours, minutes] = meetup.time.split(':').map(Number)
-            meetupDate.setHours(hours, minutes, 0, 0)
-          }
-
-          const gracePeriodEnd = new Date(meetupDate.getTime() + (GRACE_PERIOD_HOURS * 60 * 60 * 1000))
-          return now < gracePeriodEnd
-        } catch (err) {
-          return false
-        }
-      })
-
-      // Normalize accepted coffee chats into meetup-like objects and merge
-      const normalizedChats = upcomingCoffeeChats.map(chat => {
-        const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : new Date()
-        const otherPerson = chat._otherPerson
-        const dateStr = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, '0')}-${String(scheduledDate.getDate()).padStart(2, '0')}`
-        const timeStr = `${String(scheduledDate.getHours()).padStart(2, '0')}:${String(scheduledDate.getMinutes()).padStart(2, '0')}`
-        return {
-          id: chat.id,
-          date: dateStr,
-          time: timeStr,
-          topic: chat.topic ? `${chat.topic} — with ${otherPerson?.name || 'Someone'}` : `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
-          location: null,
-          duration: 30,
-          participant_limit: 2,
-          circle_id: null,
-          connection_groups: null,
-          created_by: chat.requester_id,
-          _isCoffeeChat: true,
-          _coffeeChatData: chat,
-          _scheduledDate: scheduledDate,
-        }
-      })
-
-      const getDate = (item) => {
-        if (item._scheduledDate) return item._scheduledDate
-        try {
-          const d = new Date(item.date)
-          if (item.time) {
-            const [h, m] = item.time.split(':').map(Number)
-            d.setHours(h, m, 0, 0)
-          }
-          return d
-        } catch { return new Date() }
-      }
-
-      const scoreEvent = (item) => {
-        let score = 0
-
-        // Coffee chats: always top priority
-        if (item._isCoffeeChat) score += 100
-
-        const itemDate = getDate(item)
-        const isUserEvent = item._isCoffeeChat || userSignups.includes(item.id) || item.created_by === currentUser.id
-
-        // Events the user is attending/hosting: high base score + sooner = higher
-        if (isUserEvent) {
-          score += 200
-          // Sooner events rank higher: subtract hours away (capped at 168 = 1 week)
-          const hoursAway = Math.max(0, (itemDate - now) / (1000 * 60 * 60))
-          score -= Math.min(hoursAway, 168)
-        }
-
-        // Currently live (within duration window)
-        const endTime = new Date(itemDate.getTime() + (item.duration || 60) * 60000)
-        if (now >= itemDate && now <= endTime) score += 80
-
-        // Host is a connection
-        if (item.host && connections.some(c => c.id === item.host.id)) score += 30
-
-        // Attendees include connections (5 per connection, max 25)
-        const meetupSignups = signups[item.id] || []
-        const connectionAttendees = meetupSignups.filter(s => connections.some(c => c.id === s.user_id)).length
-        score += Math.min(connectionAttendees * 5, 25)
-
-        // User's circle meetup
-        if (item.circle_id) score += 20
-
-        // Capacity
-        if (item.participant_limit) {
-          if (meetupSignups.length >= item.participant_limit) score -= 10
-          else score += 5
-        }
-
-        return score
-      }
-
-      return [...filteredMeetups, ...normalizedChats].sort((a, b) => {
-        const scoreDiff = scoreEvent(b) - scoreEvent(a)
-        if (scoreDiff !== 0) return scoreDiff
-        return getDate(a) - getDate(b)
-      })
-    }, [meetups, upcomingCoffeeChats, currentUser.id, userSignups, connections, signups])
 
     // Get time-based greeting
     const { greeting, emoji } = getTimeBasedGreeting()
@@ -2201,11 +2122,21 @@ function MainApp({ currentUser, onSignOut }) {
     }
     const weeklyProgress = getWeeklyProgress()
 
-    // Event Date Badge Component
-    const EventDateBadge = ({ date }) => {
+    // Event Date Badge Component — timezone-aware
+    const EventDateBadge = ({ date, time, timezone }) => {
+      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
       let parsedDate
       try {
-        if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        if (timezone && time) {
+          // Convert to viewer's local date (handles cross-timezone date shifts)
+          const utc = eventDateTimeToUTC(date, time, timezone)
+          // Extract date parts in viewer's timezone
+          const parts = new Intl.DateTimeFormat('en-US', { timeZone: viewerTz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(utc)
+          const y = parseInt(parts.find(p => p.type === 'year').value)
+          const m = parseInt(parts.find(p => p.type === 'month').value)
+          const d = parseInt(parts.find(p => p.type === 'day').value)
+          parsedDate = new Date(y, m - 1, d)
+        } else if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
           const [year, month, day] = date.split('-').map(Number)
           parsedDate = new Date(year, month - 1, day)
         } else {
@@ -2931,32 +2862,20 @@ function MainApp({ currentUser, onSignOut }) {
                       : rawSignups
 
                     // Determine if event is currently live (started but not ended)
-                    let isLive = false
-                    try {
-                      let meetupDate
-                      const dateStr = meetup.date
-                      if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-                        const [year, month, day] = dateStr.split('-').map(Number)
-                        meetupDate = new Date(year, month - 1, day)
-                      } else {
-                        const cleanDateStr = dateStr.replace(/^[A-Za-z]+,\s*/, '')
-                        meetupDate = new Date(`${cleanDateStr} ${new Date().getFullYear()}`)
-                      }
-                      if (meetup.time) {
-                        const [hours, minutes] = meetup.time.split(':').map(Number)
-                        meetupDate.setHours(hours, minutes, 0, 0)
-                      }
-                      const now = new Date()
-                      const durationMs = (meetup.duration || 60) * 60 * 1000
-                      isLive = now >= meetupDate && now <= new Date(meetupDate.getTime() + durationMs)
-                    } catch (e) {
-                      isLive = false
-                    }
+                    const isLive = isEventLive(meetup.date, meetup.time, meetup.timezone, parseInt(meetup.duration || '60'))
 
-                    // Parse date for mobile card
+                    // Parse date for mobile card — timezone-aware
                     let cardParsedDate
                     try {
-                      if (meetup.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                      const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+                      if (meetup.timezone && meetup.time) {
+                        const utc = eventDateTimeToUTC(meetup.date, meetup.time, meetup.timezone)
+                        const parts = new Intl.DateTimeFormat('en-US', { timeZone: viewerTz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(utc)
+                        const y = parseInt(parts.find(p => p.type === 'year').value)
+                        const m = parseInt(parts.find(p => p.type === 'month').value)
+                        const d = parseInt(parts.find(p => p.type === 'day').value)
+                        cardParsedDate = new Date(y, m - 1, d)
+                      } else if (meetup.date.match(/^\d{4}-\d{2}-\d{2}$/)) {
                         const [y, m, d] = meetup.date.split('-').map(Number)
                         cardParsedDate = new Date(y, m - 1, d)
                       } else {
@@ -3027,7 +2946,7 @@ function MainApp({ currentUser, onSignOut }) {
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50' }}>
                               <svg width="14" height="14" fill="none" stroke="#C4A07C" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                              <span style={{ fontWeight: '600', color: '#5C3A24' }}>{formatTime(meetup.time)}</span>
+                              <span style={{ fontWeight: '600', color: '#5C3A24' }}>{formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false })}</span>
                             </div>
 
                             {(() => {
@@ -3038,16 +2957,24 @@ function MainApp({ currentUser, onSignOut }) {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <div style={{ display: 'flex', alignItems: 'center' }}>
                                     {meetupSignupsList.slice(0, 3).map((signup, i) => (
-                                      <div key={signup.user_id || i} style={{
-                                        width: '24px', height: '24px', borderRadius: '50%',
-                                        border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-7px',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
-                                        color: 'white',
-                                        background: ['#8B6347', '#A67B5B', '#C4A07C'][i % 3],
-                                      }}>
-                                        {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                      </div>
+                                      signup.profiles?.profile_picture ? (
+                                        <img key={signup.user_id || i} src={signup.profiles.profile_picture} alt="" style={{
+                                          width: '24px', height: '24px', borderRadius: '50%',
+                                          border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-7px',
+                                          objectFit: 'cover',
+                                        }} />
+                                      ) : (
+                                        <div key={signup.user_id || i} style={{
+                                          width: '24px', height: '24px', borderRadius: '50%',
+                                          border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-7px',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
+                                          color: 'white',
+                                          background: ['#8B6347', '#A67B5B', '#C4A07C'][i % 3],
+                                        }}>
+                                          {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                        </div>
+                                      )
                                     ))}
                                     {attendeeCount > 3 && (
                                       <div style={{
@@ -3125,7 +3052,7 @@ function MainApp({ currentUser, onSignOut }) {
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#FAF5EF'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
-                        <EventDateBadge date={meetup.date} />
+                        <EventDateBadge date={meetup.date} time={meetup.time} timezone={meetup.timezone} />
 
                         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -3176,7 +3103,7 @@ function MainApp({ currentUser, onSignOut }) {
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
                               <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                              <span style={{ fontWeight: '600' }}>{formatTime(meetup.time)}</span>
+                              <span style={{ fontWeight: '600' }}>{formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false })}</span>
                             </div>
                             {meetup.location && (
                               <>
@@ -3208,17 +3135,25 @@ function MainApp({ currentUser, onSignOut }) {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center' }}>
                                   {meetupSignupsList.slice(0, 3).map((signup, i) => (
-                                    <div key={signup.user_id || i} style={{
-                                      width: '34px', height: '34px', borderRadius: '50%',
-                                      border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
-                                      color: '#523C2E',
-                                      background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
-                                      boxShadow: '0px 1px 4px #9E7868', letterSpacing: '0.15px',
-                                    }}>
-                                      {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                    </div>
+                                    signup.profiles?.profile_picture ? (
+                                      <img key={signup.user_id || i} src={signup.profiles.profile_picture} alt="" style={{
+                                        width: '34px', height: '34px', borderRadius: '50%',
+                                        border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
+                                        objectFit: 'cover',
+                                      }} />
+                                    ) : (
+                                      <div key={signup.user_id || i} style={{
+                                        width: '34px', height: '34px', borderRadius: '50%',
+                                        border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                        color: '#523C2E',
+                                        background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
+                                        boxShadow: '0px 1px 4px #9E7868', letterSpacing: '0.15px',
+                                      }}>
+                                        {(signup.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                      </div>
+                                    )
                                   ))}
                                   {attendeeCount > 3 && (
                                     <div style={{
@@ -3894,16 +3829,97 @@ function MainApp({ currentUser, onSignOut }) {
             {/* Right side: Search + Profile */}
             <div className="flex items-center gap-3">
               {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B8A089]" />
+              <div className="relative" style={{ zIndex: 50 }}>
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#B8A089]" style={{ zIndex: 1 }} />
                 <input
                   type="text"
-                  placeholder="Search..."
+                  placeholder="Search meetups, people, circles..."
+                  value={homeSearchQuery}
+                  onChange={(e) => setHomeSearchQuery(e.target.value)}
                   className="pl-10 pr-4 py-2 w-36 md:w-[200px] text-[13px] rounded-full border border-[#E8DDD0] bg-white text-[#5E4530] placeholder-[#B8A089] focus:outline-none md:focus:w-[260px] focus:border-[#B8A089] transition-all duration-300"
                   style={{ boxShadow: 'none' }}
                   onFocus={(e) => { e.target.style.boxShadow = '0 0 0 3px rgba(122,92,66,0.08)'; }}
-                  onBlur={(e) => { e.target.style.boxShadow = 'none'; }}
+                  onBlur={(e) => { setTimeout(() => { e.target.style.boxShadow = 'none'; setHomeSearchQuery(''); }, 200); }}
                 />
+                {homeSearchResults && homeSearchQuery && (
+                  <div style={{
+                    position: 'absolute', top: '100%', right: 0, marginTop: '8px',
+                    width: '320px', maxHeight: '400px', overflowY: 'auto',
+                    background: 'white', borderRadius: '16px',
+                    boxShadow: '0 8px 32px rgba(59,35,20,0.15)', border: '1px solid #E8DDD0',
+                    padding: '8px 0',
+                  }}>
+                    {homeSearchResults.total === 0 ? (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#9B8A7E', fontSize: '13px', fontFamily: '"DM Sans", sans-serif' }}>
+                        No results for "{homeSearchQuery}"
+                      </div>
+                    ) : (
+                      <>
+                        {homeSearchResults.meetups.length > 0 && (
+                          <>
+                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: '"DM Sans", sans-serif' }}>Meetups</div>
+                            {homeSearchResults.meetups.map(m => (
+                              <div key={m.id} onClick={() => { setHomeSearchQuery(''); handleNavigate('eventDetail', { meetupId: m.id }); }}
+                                style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.15s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#FAF5EF'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#F3EAE0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <Calendar style={{ width: '16px', height: '16px', color: '#8B6347' }} />
+                                </div>
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: '"DM Sans", sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.topic}</div>
+                                  <div style={{ fontSize: '11px', color: '#9B8A7E', fontFamily: '"DM Sans", sans-serif' }}>{formatEventTime(m.date, m.time, m.timezone)}{m.connection_groups?.name ? ` · ${m.connection_groups.name}` : ''}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                        {homeSearchResults.circles.length > 0 && (
+                          <>
+                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: '"DM Sans", sans-serif' }}>Circles</div>
+                            {homeSearchResults.circles.map(c => (
+                              <div key={c.id} onClick={() => { setHomeSearchQuery(''); handleNavigate('circleDetail', { circleId: c.id }); }}
+                                style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.15s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#FAF5EF'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#EDE4D8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  <Users style={{ width: '16px', height: '16px', color: '#7A5C42' }} />
+                                </div>
+                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: '"DM Sans", sans-serif' }}>{c.name}</div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                        {homeSearchResults.people.length > 0 && (
+                          <>
+                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: '"DM Sans", sans-serif' }}>People</div>
+                            {homeSearchResults.people.map(p => (
+                              <div key={p.id} onClick={() => { setHomeSearchQuery(''); handleNavigate('userProfile', { userId: p.id }); }}
+                                style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.15s' }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#FAF5EF'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                {p.profile_picture ? (
+                                  <img src={p.profile_picture} alt="" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+                                ) : (
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#E6D5C3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '13px', fontWeight: '600', color: '#6B4632', fontFamily: '"DM Sans", sans-serif' }}>
+                                    {(p.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                  </div>
+                                )}
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: '"DM Sans", sans-serif' }}>{p.name}</div>
+                                  {p.career && <div style={{ fontSize: '11px', color: '#9B8A7E', fontFamily: '"DM Sans", sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.career}</div>}
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Profile Avatar */}
