@@ -135,6 +135,10 @@ function MainApp({ currentUser, onSignOut }) {
     }
     if (data.recapId) {
       setSelectedRecapId(data.recapId)
+      // Mark recap as viewed
+      supabase.from('recap_views').insert({ recap_id: data.recapId, user_id: currentUser.id }).then(() => {
+        setPendingRecaps(prev => prev.filter(r => r.id !== data.recapId))
+      })
     }
     if (data.meetupId) {
       setSelectedMeetupId(data.meetupId)
@@ -366,6 +370,10 @@ function MainApp({ currentUser, onSignOut }) {
             deferredPromises.push(supabase.from('profiles').select('id, name, career, city, state, profile_picture').in('id', pendingIds))
             deferredKeys.push('reqProfiles')
           }
+          if (requestUserIds.length > 0) {
+            deferredPromises.push(supabase.from('ignored_connection_requests').select('ignored_user_id, created_at').eq('user_id', currentUser.id))
+            deferredKeys.push('ignoredRequests')
+          }
           if (createdCircleIds.length > 0) {
             deferredPromises.push(supabase.from('connection_group_members').select('id, user_id, group_id, invited_at').eq('status', 'invited').in('group_id', createdCircleIds))
             deferredKeys.push('pendingMembers')
@@ -387,7 +395,9 @@ function MainApp({ currentUser, onSignOut }) {
           // Process connection requests
           if (requestUserIds.length > 0) {
             const myInterestIds = new Set((dMap.myInterests || []).map(i => i.interested_in_user_id))
-            const pendingRequests = incomingInterests.filter(i => !myInterestIds.has(i.user_id))
+            const ignoredMap = {}
+            ;(dMap.ignoredRequests || []).forEach(i => { ignoredMap[i.ignored_user_id] = i.created_at })
+            const pendingRequests = incomingInterests.filter(i => !myInterestIds.has(i.user_id) && (!ignoredMap[i.user_id] || new Date(i.created_at) > new Date(ignoredMap[i.user_id])))
             const pendingIds = pendingRequests.map(i => i.user_id)
             if (pendingIds.length > 0) {
               const timestampMap = {}
@@ -745,18 +755,20 @@ function MainApp({ currentUser, onSignOut }) {
       }
 
       // Step 2: Get people current user has expressed interest in (to filter out mutual)
-      const { data: myInterestsData, error: myError } = await supabase
-        .from('user_interests')
-        .select('interested_in_user_id')
-        .eq('user_id', currentUser.id)
+      // and get ignored requests
+      const [{ data: myInterestsData, error: myError }, { data: ignoredData }] = await Promise.all([
+        supabase.from('user_interests').select('interested_in_user_id').eq('user_id', currentUser.id),
+        supabase.from('ignored_connection_requests').select('ignored_user_id').eq('user_id', currentUser.id),
+      ])
 
       if (myError) throw myError
 
       const myInterestIds = new Set((myInterestsData || []).map(i => i.interested_in_user_id))
+      const ignoredIds = new Set((ignoredData || []).map(i => i.ignored_user_id))
 
-      // Step 3: Filter to only non-mutual (pending requests)
+      // Step 3: Filter to only non-mutual, non-ignored (pending requests)
       const pendingRequestUserIds = incomingInterests
-        .filter(i => !myInterestIds.has(i.user_id))
+        .filter(i => !myInterestIds.has(i.user_id) && !ignoredIds.has(i.user_id))
         .map(i => ({ user_id: i.user_id, created_at: i.created_at }))
 
       if (pendingRequestUserIds.length === 0) {
@@ -999,12 +1011,21 @@ function MainApp({ currentUser, onSignOut }) {
   const loadPendingRecaps = useCallback(async () => {
     try {
       // Uses created_by or participant_ids array (correct column names)
-      const { data, error } = await supabase
-        .from('call_recaps')
-        .select('*')
-        .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
-        .order('created_at', { ascending: false })
-        .limit(5)
+      // Only consider recaps from the last 30 days as potentially pending
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 30)
+      const [{ data, error }, { data: viewedData }] = await Promise.all([
+        supabase
+          .from('call_recaps')
+          .select('*')
+          .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
+          .gte('created_at', cutoff.toISOString())
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('recap_views')
+          .select('recap_id')
+          .eq('user_id', currentUser.id),
+      ])
 
       if (error) {
         // Silently handle missing table/column errors
@@ -1015,7 +1036,20 @@ function MainApp({ currentUser, onSignOut }) {
         return
       }
 
-      const recapsData = data || []
+      const viewedIds = new Set((viewedData || []).map(v => v.recap_id))
+      const unviewedRecaps = (data || []).filter(r => !viewedIds.has(r.id))
+
+      // Deduplicate: keep only the most recent recap per entity (meetup/chat)
+      const bestByEntity = {}
+      unviewedRecaps.forEach(recap => {
+        const channelName = recap.channel_name || ''
+        const uuidMatch = channelName.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
+        const entityId = uuidMatch ? uuidMatch[0] : recap.id // use recap id as fallback for orphans
+        if (!bestByEntity[entityId] || new Date(recap.created_at) > new Date(bestByEntity[entityId].created_at)) {
+          bestByEntity[entityId] = recap
+        }
+      })
+      const recapsData = Object.values(bestByEntity)
 
       // Extract IDs from channel_name and separate by call type
       const meetupIds = []
@@ -2787,7 +2821,7 @@ function MainApp({ currentUser, onSignOut }) {
                             </>
                           ) : (
                             <button
-                              onClick={() => handleShowInterest(request.id, user.name)}
+                              onClick={() => handleNavigate('userProfile', { userId: request.id })}
                               style={{
                                 padding: isMobile ? '7px 16px' : '9px 20px',
                                 background: 'rgba(103, 77, 59, 0.9)',

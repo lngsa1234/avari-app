@@ -67,6 +67,8 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [mutualCircles, setMutualCircles] = useState([]);
   const [connectionCount, setConnectionCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
+  const [accepting, setAccepting] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
@@ -93,7 +95,19 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       const { data: matches } = await supabase
         .rpc('get_mutual_matches', { for_user_id: currentUser.id });
       const matchedIds = (matches || []).map(m => m.matched_user_id);
-      setIsConnected(matchedIds.includes(userId));
+      const connected = matchedIds.includes(userId);
+      setIsConnected(connected);
+
+      // Check if this person has sent us a pending connection request
+      if (!connected && userId !== currentUser.id) {
+        const { data: incomingInterest } = await supabase
+          .from('user_interests')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('interested_in_user_id', currentUser.id)
+          .limit(1);
+        setHasIncomingRequest((incomingInterest || []).length > 0);
+      }
 
       if (userId === currentUser.id) {
         setConnectionCount((matches || []).length);
@@ -152,6 +166,45 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       alert('Failed to remove connection. Please try again.');
     } finally {
       setRemoving(false);
+    }
+  };
+
+  const handleAcceptConnection = async () => {
+    setAccepting(true);
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .insert({
+          user_id: currentUser.id,
+          interested_in_user_id: userId,
+        });
+
+      if (error && error.code !== '23505') throw error;
+
+      setIsConnected(true);
+      setHasIncomingRequest(false);
+    } catch (err) {
+      console.error('Error accepting connection:', err);
+      alert('Failed to accept connection. Please try again.');
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  const handleIgnoreConnection = async () => {
+    try {
+      const { error } = await supabase
+        .from('ignored_connection_requests')
+        .insert({
+          user_id: currentUser.id,
+          ignored_user_id: userId,
+        });
+
+      if (error && error.code !== '23505') throw error;
+
+      setHasIncomingRequest(false);
+    } catch (err) {
+      console.error('Error ignoring connection:', err);
     }
   };
 
@@ -356,6 +409,50 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             </div>
           )}
         </div>
+
+        {/* ─── Incoming Connection Request ─── */}
+        {!isOwnProfile && !isConnected && hasIncomingRequest && (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 12, marginTop: 20, padding: '14px 20px',
+            background: COLORS.greenLight, borderRadius: 14,
+            border: `1px solid ${COLORS.green}20`,
+            ...fadeIn(0.1),
+          }}>
+            <span style={{ fontFamily: FONT, fontSize: 14, color: COLORS.brown700, fontWeight: 500 }}>
+              {profile.name?.split(' ')[0]} wants to connect with you
+            </span>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={handleAcceptConnection}
+                disabled={accepting}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 20px', background: COLORS.green, color: COLORS.white,
+                  border: 'none', borderRadius: 12,
+                  fontFamily: FONT, fontSize: 14, fontWeight: 600,
+                  cursor: accepting ? 'default' : 'pointer',
+                  opacity: accepting ? 0.7 : 1,
+                }}
+              >
+                <Check size={16} />
+                {accepting ? 'Accepting...' : 'Accept'}
+              </button>
+              <button
+                onClick={handleIgnoreConnection}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '8px 20px', background: 'transparent', color: COLORS.brown500,
+                  border: `1.5px solid ${COLORS.brown200}`, borderRadius: 12,
+                  fontFamily: FONT, fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Ignore
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ─── Visitor CTA (connected, not own profile) ─── */}
         {!isOwnProfile && isConnected && (

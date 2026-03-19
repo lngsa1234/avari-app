@@ -83,15 +83,20 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const loadData = async () => {
     const t0 = Date.now();
     setLoading(true);
-    await Promise.all([
+    const promises = [
       loadCoffeeChats(),
       loadGroupEvents(),
-      loadPendingRequests()
-    ]);
+      loadPendingRequests(),
+    ];
+    if (initialView === 'past') {
+      promises.push(loadPastMeetups());
+    }
+    await Promise.all(promises);
     console.log(`⏱️ Meetups page data loaded in ${Date.now() - t0}ms`);
     setLoading(false);
-    // Defer past meetups — only visible in the "past" tab
-    loadPastMeetups();
+    if (initialView !== 'past') {
+      loadPastMeetups();
+    }
   };
 
   const loadCoffeeChats = useCallback(async () => {
@@ -353,13 +358,22 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const signedUpIds = (signupsResult.data || []).map(s => s.meetup_id);
       const userCircleIds = (membershipResult.data || []).map(m => m.group_id);
 
-      // Helper: check if a date has a matching recap (within 4 hours)
-      const findMatchingRecap = (rawDate) => {
-        return recaps.find(r => {
-          const recapTime = new Date(r.started_at || r.created_at);
-          const timeDiff = Math.abs(rawDate - recapTime);
-          return timeDiff < 4 * 60 * 60 * 1000;
-        });
+      // Build a map of entity ID → recap by extracting UUID from channel_name
+      const recapsByEntityId = {};
+      recaps.forEach(r => {
+        const channelName = r.channel_name || '';
+        const uuidMatch = channelName.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+        if (uuidMatch) {
+          const entityId = uuidMatch[0];
+          // Keep the most recent recap per entity
+          if (!recapsByEntityId[entityId] || new Date(r.created_at) > new Date(recapsByEntityId[entityId].created_at)) {
+            recapsByEntityId[entityId] = r;
+          }
+        }
+      });
+
+      const findMatchingRecap = (entityId) => {
+        return recapsByEntityId[entityId] || null;
       };
 
       // Round 2: Queries that depend on Round 1 results — in parallel
@@ -373,7 +387,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         if (chat.status === 'completed') return true;
         if (chat.status === 'accepted') {
           const chatTime = new Date(chat.scheduled_time);
-          return chatTime < gracePeriod && !!findMatchingRecap(chatTime);
+          return chatTime < gracePeriod && !!findMatchingRecap(chat.id);
         }
         return false;
       });
@@ -430,21 +444,24 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
       // Process meetups
       const meetupsData = round2Map.meetups || [];
+      const userCircleIdSet = new Set(userCircleIds);
       const pastMeetups = meetupsData.filter(meetup => {
         const userParticipated = signedUpIds.includes(meetup.id) || meetup.created_by === currentUser.id;
-        if (!userParticipated) return false;
+        const isCircleMember = meetup.circle_id && userCircleIdSet.has(meetup.circle_id);
+        if (!userParticipated && !isCircleMember) return false;
         if (meetup.status === 'completed') return true;
         const meetupDate = parseLocalDate(meetup.date);
         if (meetup.time) {
           const [hours, minutes] = meetup.time.split(':').map(Number);
           meetupDate.setHours(hours, minutes, 0, 0);
         }
-        return meetupDate < gracePeriod && !!findMatchingRecap(meetupDate);
+        return meetupDate < gracePeriod && !!findMatchingRecap(meetup.id);
       });
 
       pastMeetups.forEach(meetup => {
         const isCircle = !!meetup.circle_id;
         const circleName = meetup.connection_groups?.name;
+        const didAttend = signedUpIds.includes(meetup.id) || meetup.created_by === currentUser.id;
         allPastMeetups.push({
           id: `meetup-${meetup.id}`,
           sourceId: meetup.id,
@@ -462,12 +479,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           followUp: false,
           circleName: circleName,
           circleId: meetup.circle_id,
+          didAttend,
         });
       });
 
       // 3. Match recaps to past meetups and extract topics
       allPastMeetups.forEach(item => {
-        const matchingRecap = findMatchingRecap(item.rawDate);
+        const matchingRecap = findMatchingRecap(item.sourceId);
 
         if (matchingRecap) {
           item.hasRecap = true;
@@ -1373,6 +1391,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       <span style={styles.pastCardTopic}>{item.topic || item.title}</span>
                       {isUnreviewed && (
                         <span style={styles.newBadge}>New</span>
+                      )}
+                      {item.didAttend === false && (
+                        <span style={{ fontSize: '10px', fontWeight: 600, color: '#A89080', backgroundColor: '#F5EDE4', borderRadius: '6px', padding: '2px 8px' }}>Missed</span>
                       )}
                     </div>
                     <span style={styles.pastCardMeta}>

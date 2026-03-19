@@ -219,12 +219,20 @@ export default function AllPeopleView({
         userMutualConnections[personId] = count;
       });
 
+      // Get current user's sent interests (pending requests)
+      const { data: myInterests } = await supabase
+        .from('user_interests')
+        .select('interested_in_user_id')
+        .eq('user_id', currentUser.id);
+      const myInterestIds = new Set((myInterests || []).map(i => i.interested_in_user_id));
+
       // Enrich profiles with mutual data and connection status
       const enrichedProfiles = profilesData.map(person => ({
         ...person,
         mutualCircles: userCircleCount[person.id] || 0,
         mutualConnections: userMutualConnections[person.id] || 0,
         isConnected: myConnectionIds.has(person.id),
+        hasPendingRequest: !myConnectionIds.has(person.id) && myInterestIds.has(person.id),
       }));
 
       console.log('🔍 Enriched profiles:', enrichedProfiles.map(p => ({
@@ -268,12 +276,30 @@ export default function AllPeopleView({
   };
 
   const handleRequestConnect = async (personId) => {
-    // Here you would implement the actual connection request logic
-    setConnectionRequested(true);
-    setTimeout(() => {
-      setSelectedPerson(null);
-      setConnectionRequested(false);
-    }, 2000);
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .insert({
+          user_id: currentUser.id,
+          interested_in_user_id: personId,
+        });
+
+      if (error) {
+        if (error.code === '23505') {
+          // Duplicate — already sent
+        } else {
+          console.error('Error sending connection request:', error);
+        }
+      }
+
+      setConnectionRequested(true);
+      setTimeout(() => {
+        setSelectedPerson(null);
+        setConnectionRequested(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Error sending connection request:', err);
+    }
   };
 
   if (loading) {
@@ -1169,6 +1195,29 @@ function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, 
               >
                 <MessageCircle size={18} />
                 View Profile
+              </button>
+            ) : (person.hasPendingRequest || connectionRequested) ? (
+              <button
+                disabled
+                style={{
+                  width: '100%',
+                  padding: '14px',
+                  backgroundColor: colors.border,
+                  color: colors.textMuted,
+                  border: 'none',
+                  borderRadius: '12px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'default',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginBottom: '10px',
+                }}
+              >
+                <Heart size={18} />
+                Requested
               </button>
             ) : (
               <button

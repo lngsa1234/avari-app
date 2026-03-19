@@ -77,11 +77,13 @@ export async function POST(request) {
     if (openaiKey) {
       // Use OpenAI
       console.log('[Generate Recap Summary] Using OpenAI');
-      result = await generateWithOpenAI(openaiKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
+      const aiResult = await generateWithOpenAI(openaiKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
+      if (aiResult) result = aiResult;
     } else if (anthropicKey) {
       // Use Anthropic Claude
       console.log('[Generate Recap Summary] Using Anthropic');
-      result = await generateWithAnthropic(anthropicKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
+      const aiResult = await generateWithAnthropic(anthropicKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
+      if (aiResult) result = aiResult;
     } else {
       console.log('[Generate Recap Summary] No AI provider configured, using simple summary');
     }
@@ -272,14 +274,15 @@ async function generateWithOpenAI(apiKey, content, participants, duration, meeti
         return normalizeResponse(parsed, participants, duration, meetingTitle);
       } catch (parseError) {
         console.error('Failed to parse OpenAI JSON response:', parseError);
-        return generateSimpleSummary(null, null, participants, duration, meetingTitle);
+        return null;
       }
     }
   } catch (e) {
     console.error('OpenAI error:', e);
   }
 
-  return generateSimpleSummary(null, null, participants, duration, meetingTitle);
+  console.log('[OpenAI] Falling back to simple summary');
+  return null;
 }
 
 /**
@@ -295,7 +298,7 @@ async function generateWithAnthropic(apiKey, content, participants, duration, me
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 2000,
         messages: [
           {
@@ -331,7 +334,7 @@ ${content}`
         return normalizeResponse(parsed, participants, duration, meetingTitle);
       } catch (parseError) {
         console.error('[Anthropic] Failed to parse JSON response:', parseError, 'Raw:', responseText?.substring(0, 200));
-        return generateSimpleSummary(null, null, participants, duration, meetingTitle);
+        return null;
       }
     } else {
       const errBody = await response.text();
@@ -342,7 +345,7 @@ ${content}`
   }
 
   console.log('[Anthropic] Falling back to simple summary');
-  return generateSimpleSummary(null, null, participants, duration, meetingTitle);
+  return null;
 }
 
 /**
