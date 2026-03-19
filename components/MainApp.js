@@ -136,7 +136,7 @@ function MainApp({ currentUser, onSignOut }) {
     if (data.recapId) {
       setSelectedRecapId(data.recapId)
       // Mark recap as viewed
-      supabase.from('recap_views').insert({ recap_id: data.recapId, user_id: currentUser.id }).then(() => {
+      supabase.from('recap_views').upsert({ recap_id: data.recapId, user_id: currentUser.id }, { onConflict: 'recap_id,user_id' }).then(() => {
         setPendingRecaps(prev => prev.filter(r => r.id !== data.recapId))
       })
     }
@@ -1054,40 +1054,50 @@ function MainApp({ currentUser, onSignOut }) {
       // Extract IDs from channel_name and separate by call type
       const meetupIds = []
       const groupIds = []
+      const coffeeIds = []
       recapsData.forEach(recap => {
         const channelName = recap.channel_name || ''
         const uuidMatch = channelName.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
         if (uuidMatch) {
           if (recap.call_type === 'group') {
             groupIds.push(uuidMatch[0])
+          } else if (recap.call_type === '1on1') {
+            coffeeIds.push(uuidMatch[0])
           } else {
             meetupIds.push(uuidMatch[0])
           }
         }
       })
 
-      // Fetch meetup titles
+      // Fetch titles for all entity types in parallel
       let titleMap = {}
-      if (meetupIds.length > 0) {
-        const { data: meetups } = await supabase
-          .from('meetups')
-          .select('id, topic')
-          .in('id', meetupIds)
+      const titlePromises = []
+      const titleKeys = []
 
-        ;(meetups || []).forEach(m => {
-          titleMap[m.id] = m.topic
-        })
+      if (meetupIds.length > 0) {
+        titlePromises.push(supabase.from('meetups').select('id, topic').in('id', meetupIds))
+        titleKeys.push('meetups')
+      }
+      if (groupIds.length > 0) {
+        titlePromises.push(supabase.from('connection_groups').select('id, name').in('id', groupIds))
+        titleKeys.push('groups')
+      }
+      if (coffeeIds.length > 0) {
+        titlePromises.push(supabase.from('coffee_chats').select('id, requester_id, recipient_id').in('id', coffeeIds))
+        titleKeys.push('coffees')
       }
 
-      // Fetch connection group names for group calls
-      if (groupIds.length > 0) {
-        const { data: groups } = await supabase
-          .from('connection_groups')
-          .select('id, name')
-          .in('id', groupIds)
-
-        ;(groups || []).forEach(g => {
-          titleMap[g.id] = g.name
+      if (titlePromises.length > 0) {
+        const titleResults = await Promise.all(titlePromises)
+        titleKeys.forEach((key, i) => {
+          const data = titleResults[i]?.data || []
+          if (key === 'meetups') {
+            data.forEach(m => { titleMap[m.id] = m.topic })
+          } else if (key === 'groups') {
+            data.forEach(g => { titleMap[g.id] = g.name })
+          } else if (key === 'coffees') {
+            data.forEach(c => { titleMap[c.id] = 'Coffee Chat' })
+          }
         })
       }
 
@@ -1114,7 +1124,7 @@ function MainApp({ currentUser, onSignOut }) {
         return { takeaways, actionItems }
       }
 
-      // Enrich recaps with title and parsed counts
+      // Enrich recaps with title and parsed counts, filter out orphans with no matching entity
       const enrichedRecaps = recapsData.map(recap => {
         const channelName = recap.channel_name || ''
         const uuidMatch = channelName.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
@@ -1124,11 +1134,12 @@ function MainApp({ currentUser, onSignOut }) {
 
         return {
           ...recap,
+          entityId,
           meetup_title: title || null,
           takeaways_count: counts.takeaways,
           action_items_count: counts.actionItems
         }
-      })
+      }).filter(r => r.meetup_title) // Only count recaps with a matching meetup/group
 
       setPendingRecaps(enrichedRecaps)
     } catch (err) {
@@ -3273,7 +3284,7 @@ function MainApp({ currentUser, onSignOut }) {
                   icon: <FileText style={{ width: '20px', height: '20px', color: '#8B6F5C' }} />,
                   gradient: 'linear-gradient(135deg, #F5EDE4 0%, #E8DDD0 100%)',
                   iconBg: '#E8E0D8',
-                  onClick: () => handleNavigate('meetups', { initialView: 'past' }),
+                  onClick: () => handleNavigate('pastMeetings'),
                   badge: pendingRecaps.length > 0 ? pendingRecaps.length : null,
                   thumbnail: '/thumbnails/review-recaps.svg'
                 },
@@ -4039,6 +4050,7 @@ function MainApp({ currentUser, onSignOut }) {
       >
         {currentView === 'home' && <HomeView />}
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={handleNavigate} initialView={meetupsInitialView} />}
+        {currentView === 'pastMeetings' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={handleNavigate} pastOnly />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
         {currentView === 'connections' && <ConnectionsView />}
         {currentView === 'discover' && <NetworkDiscoverView currentUser={currentUser} supabase={supabase} connections={connections} meetups={meetups} onNavigate={handleNavigate} toast={toast} onHostMeetup={(requestData) => {

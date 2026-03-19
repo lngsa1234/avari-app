@@ -190,6 +190,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
   const [attendeeCounts, setAttendeeCounts] = useState({ in_person: 0, video: 0 });
   const [recap, setRecap] = useState(null);
   const [parsed, setParsed] = useState(null);
+  const [actualParticipants, setActualParticipants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -335,6 +336,16 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
         const recapRecord = recapData[0];
         setRecap(recapRecord);
         setParsed(parseAISummary(recapRecord.ai_summary));
+
+        // Load actual participant profiles from recap
+        const participantIds = recapRecord.participant_ids || [];
+        if (participantIds.length > 0) {
+          const { data: participantProfiles } = await sb
+            .from('profiles')
+            .select('id, name, profile_picture, career')
+            .in('id', participantIds);
+          setActualParticipants(participantProfiles || []);
+        }
 
         // Load completed actions from localStorage
         const savedActions = localStorage.getItem('completed_recap_actions');
@@ -1279,65 +1290,161 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
 
             {/* Attendees */}
             <div style={{ ...styles.card, padding: cardPadding, borderRadius: cardRadius }}>
-              <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize }}>
-                <Users size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
-                Attendees ({attendees.length})
-              </h3>
-              {attendees.length > 0 ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '10px' }}>
-                  {attendees.map(signup => {
-                    const profile = signup.profiles;
-                    return (
-                      <div
-                        key={signup.user_id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: isMobile ? '6px' : '8px',
-                          padding: isMobile ? '6px 10px' : '8px 12px',
-                          backgroundColor: 'rgba(250, 245, 239, 0.7)',
-                          borderRadius: '20px',
-                          fontSize: isMobile ? '12px' : '13px',
-                          color: colors.textLight,
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => onNavigate?.('userProfile', { userId: signup.user_id })}
-                      >
-                        {profile?.profile_picture ? (
-                          <img src={profile.profile_picture} alt={profile.name} style={{
-                            width: isMobile ? '20px' : '24px',
-                            height: isMobile ? '20px' : '24px',
-                            borderRadius: '50%',
-                            objectFit: 'cover',
-                          }} />
-                        ) : (
-                          <div style={{
-                            width: isMobile ? '20px' : '24px',
-                            height: isMobile ? '20px' : '24px',
-                            borderRadius: '50%',
-                            backgroundColor: colors.primary,
-                            color: 'white',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: isMobile ? '9px' : '11px',
-                            fontWeight: '600',
-                          }}>
-                            {(profile?.name || 'U')[0].toUpperCase()}
-                          </div>
-                        )}
-                        <span style={{ fontWeight: '500' }}>{profile?.name || 'Unknown'}</span>
-                        {profile?.career && !isMobile && (
-                          <span style={{ color: colors.textSoft, fontSize: '12px' }}>{profile.career}</span>
-                        )}
+              {hasRecap && actualParticipants.length > 0 ? (() => {
+                const actualIds = new Set(actualParticipants.map(p => p.id));
+                const noShows = attendees.filter(s => !actualIds.has(s.user_id));
+                const durationMins = recap.duration_seconds ? Math.floor(recap.duration_seconds / 60) : 0;
+                const durationStr = durationMins >= 60
+                  ? `${Math.floor(durationMins / 60)}h ${durationMins % 60}min`
+                  : `${durationMins} min`;
+
+                return (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '8px' : '12px' }}>
+                      <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize, margin: 0 }}>
+                        <Users size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
+                        Attended ({actualParticipants.length})
+                      </h3>
+                      {durationMins > 0 && (
+                        <span style={{ fontSize: isMobile ? '12px' : '13px', color: colors.textSoft, fontWeight: '500' }}>
+                          {durationStr}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '10px' }}>
+                      {actualParticipants.map(profile => (
+                        <div
+                          key={profile.id}
+                          style={{
+                            display: 'flex', alignItems: 'center',
+                            gap: isMobile ? '6px' : '8px',
+                            padding: isMobile ? '6px 10px' : '8px 12px',
+                            backgroundColor: 'rgba(250, 245, 239, 0.7)',
+                            borderRadius: '20px',
+                            fontSize: isMobile ? '12px' : '13px',
+                            color: colors.textLight, cursor: 'pointer',
+                          }}
+                          onClick={() => onNavigate?.('userProfile', { userId: profile.id })}
+                        >
+                          {profile.profile_picture ? (
+                            <img src={profile.profile_picture} alt={profile.name} style={{
+                              width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px',
+                              borderRadius: '50%', objectFit: 'cover',
+                            }} />
+                          ) : (
+                            <div style={{
+                              width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px',
+                              borderRadius: '50%', backgroundColor: colors.primary, color: 'white',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: isMobile ? '9px' : '11px', fontWeight: '600',
+                            }}>
+                              {(profile.name || 'U')[0].toUpperCase()}
+                            </div>
+                          )}
+                          <span style={{ fontWeight: '500' }}>{profile.name || 'Unknown'}</span>
+                          {profile.career && !isMobile && (
+                            <span style={{ color: colors.textSoft, fontSize: '12px' }}>{profile.career}</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {noShows.length > 0 && (
+                      <div style={{ marginTop: '12px' }}>
+                        <h4 style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textSoft, fontWeight: '600', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Signed up but didn't attend ({noShows.length})
+                        </h4>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '4px' : '6px' }}>
+                          {noShows.map(signup => {
+                            const profile = signup.profiles;
+                            return (
+                              <div
+                                key={signup.user_id}
+                                style={{
+                                  display: 'flex', alignItems: 'center',
+                                  gap: '5px', padding: isMobile ? '4px 8px' : '5px 10px',
+                                  backgroundColor: 'rgba(250, 245, 239, 0.4)',
+                                  borderRadius: '16px',
+                                  fontSize: isMobile ? '11px' : '12px',
+                                  color: colors.textSoft, cursor: 'pointer', opacity: 0.6,
+                                }}
+                                onClick={() => onNavigate?.('userProfile', { userId: signup.user_id })}
+                              >
+                                {profile?.profile_picture ? (
+                                  <img src={profile.profile_picture} alt={profile?.name} style={{
+                                    width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover',
+                                  }} />
+                                ) : (
+                                  <div style={{
+                                    width: '18px', height: '18px', borderRadius: '50%',
+                                    backgroundColor: colors.textSoft, color: 'white',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '9px', fontWeight: '600',
+                                  }}>
+                                    {(profile?.name || 'U')[0].toUpperCase()}
+                                  </div>
+                                )}
+                                <span>{profile?.name || 'Unknown'}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p style={{ fontSize: bodyFontSize, color: colors.textSoft, fontStyle: 'italic', margin: 0 }}>
-                  No attendees yet. Be the first to RSVP!
-                </p>
+                    )}
+                  </>
+                );
+              })() : (
+                <>
+                  <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize }}>
+                    <Users size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
+                    Attendees ({attendees.length})
+                  </h3>
+                  {attendees.length > 0 ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '10px' }}>
+                      {attendees.map(signup => {
+                        const profile = signup.profiles;
+                        return (
+                          <div
+                            key={signup.user_id}
+                            style={{
+                              display: 'flex', alignItems: 'center',
+                              gap: isMobile ? '6px' : '8px',
+                              padding: isMobile ? '6px 10px' : '8px 12px',
+                              backgroundColor: 'rgba(250, 245, 239, 0.7)',
+                              borderRadius: '20px',
+                              fontSize: isMobile ? '12px' : '13px',
+                              color: colors.textLight, cursor: 'pointer',
+                            }}
+                            onClick={() => onNavigate?.('userProfile', { userId: signup.user_id })}
+                          >
+                            {profile?.profile_picture ? (
+                              <img src={profile.profile_picture} alt={profile.name} style={{
+                                width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px',
+                                borderRadius: '50%', objectFit: 'cover',
+                              }} />
+                            ) : (
+                              <div style={{
+                                width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px',
+                                borderRadius: '50%', backgroundColor: colors.primary, color: 'white',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: isMobile ? '9px' : '11px', fontWeight: '600',
+                              }}>
+                                {(profile?.name || 'U')[0].toUpperCase()}
+                              </div>
+                            )}
+                            <span style={{ fontWeight: '500' }}>{profile?.name || 'Unknown'}</span>
+                            {profile?.career && !isMobile && (
+                              <span style={{ color: colors.textSoft, fontSize: '12px' }}>{profile.career}</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: bodyFontSize, color: colors.textSoft, fontStyle: 'italic', margin: 0 }}>
+                      No attendees yet. Be the first to RSVP!
+                    </p>
+                  )}
+                </>
               )}
             </div>
         </>

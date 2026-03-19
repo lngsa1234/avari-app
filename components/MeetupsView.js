@@ -5,7 +5,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus } from 'lucide-react';
+import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus, ChevronLeft, FileText, Check, Circle } from 'lucide-react';
 import { parseLocalDate, isEventPast, formatEventTime, eventDateTimeToUTC } from '../lib/dateUtils';
 
 const formatDate = (isoStr) => {
@@ -14,8 +14,8 @@ const formatDate = (isoStr) => {
   } catch { return 'TBD'; }
 };
 
-export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null }) {
-  const [activeView, setActiveView] = useState(initialView || 'upcoming');
+export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null, pastOnly = false }) {
+  const [activeView, setActiveView] = useState(pastOnly ? 'past' : (initialView || 'upcoming'));
   const [activeFilter, setActiveFilter] = useState('all');
   const [coffeeChats, setCoffeeChats] = useState([]);
   const [groupEvents, setGroupEvents] = useState([]);
@@ -33,6 +33,15 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const [deletingMeetupId, setDeletingMeetupId] = useState(null);
   const [showCancelChatConfirm, setShowCancelChatConfirm] = useState(false);
   const [cancellingChatId, setCancellingChatId] = useState(null);
+
+  // Past meetings: completed follow-ups and expanded summaries
+  const [completedFollowUps, setCompletedFollowUps] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try { return JSON.parse(localStorage.getItem('completedFollowUps') || '{}'); } catch { return {}; }
+    }
+    return {};
+  });
+  const [expandedSummaries, setExpandedSummaries] = useState({});
 
   // Close action menu and active card when clicking outside
   useEffect(() => {
@@ -53,24 +62,40 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Track which recaps have been viewed (persisted in localStorage)
-  const [reviewedRecaps, setReviewedRecaps] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return JSON.parse(localStorage.getItem('reviewedRecaps') || '[]');
-      } catch { return []; }
-    }
-    return [];
-  });
+  // Track which recaps have been viewed (from recap_views table)
+  const [reviewedRecaps, setReviewedRecaps] = useState([]);
+
+  useEffect(() => {
+    supabase
+      .from('recap_views')
+      .select('recap_id')
+      .eq('user_id', currentUser.id)
+      .then(({ data }) => {
+        setReviewedRecaps((data || []).map(v => v.recap_id));
+      });
+  }, [currentUser.id]);
 
   const markRecapReviewed = (recapId) => {
     if (!recapId) return;
     setReviewedRecaps(prev => {
       if (prev.includes(recapId)) return prev;
-      const updated = [...prev, recapId];
-      localStorage.setItem('reviewedRecaps', JSON.stringify(updated));
+      return [...prev, recapId];
+    });
+    supabase.from('recap_views')
+      .upsert({ recap_id: recapId, user_id: currentUser.id }, { onConflict: 'recap_id,user_id' });
+  };
+
+  const toggleFollowUp = (itemId, actionIndex) => {
+    const key = `${itemId}_${actionIndex}`;
+    setCompletedFollowUps(prev => {
+      const updated = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('completedFollowUps', JSON.stringify(updated));
       return updated;
     });
+  };
+
+  const toggleSummaryExpanded = (itemId) => {
+    setExpandedSummaries(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   };
 
   const hasLoadedRef = React.useRef(false);
@@ -88,13 +113,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       loadGroupEvents(),
       loadPendingRequests(),
     ];
-    if (initialView === 'past') {
+    if (initialView === 'past' || pastOnly) {
       promises.push(loadPastMeetups());
     }
     await Promise.all(promises);
     console.log(`⏱️ Meetups page data loaded in ${Date.now() - t0}ms`);
     setLoading(false);
-    if (initialView !== 'past') {
+    if (initialView !== 'past' && !pastOnly) {
       loadPastMeetups();
     }
   };
@@ -436,7 +461,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           emoji: '☕',
           date: formatDate(chat.scheduled_time || chat.created_at),
           rawDate: new Date(chat.scheduled_time || chat.created_at),
-          topic: chat.notes || 'Coffee chat',
+          topic: chat.topic || `Coffee with ${profile?.name || 'Unknown'}`,
           notes: null,
           followUp: chat.status !== 'completed',
         });
@@ -516,6 +541,82 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         }
       });
 
+      // 3b. Add recap-driven events not already in the list
+      // (events where the user participated via call but didn't sign up)
+      const addedEntityIds = new Set(allPastMeetups.map(m => m.sourceId));
+      const missingRecapEntities = Object.entries(recapsByEntityId)
+        .filter(([entityId]) => !addedEntityIds.has(entityId));
+
+      if (missingRecapEntities.length > 0) {
+        // Fetch meetup/group info for missing entities
+        const missingMeetupIds = missingRecapEntities
+          .filter(([, r]) => r.call_type !== 'group')
+          .map(([entityId]) => entityId);
+        const missingGroupIds = missingRecapEntities
+          .filter(([, r]) => r.call_type === 'group')
+          .map(([entityId]) => entityId);
+
+        const missingPromises = [];
+        const missingKeys = [];
+        if (missingMeetupIds.length > 0) {
+          missingPromises.push(supabase.from('meetups').select('id, topic, date, time, timezone, description, circle_id, connection_groups(id, name)').in('id', missingMeetupIds));
+          missingKeys.push('meetups');
+        }
+        if (missingGroupIds.length > 0) {
+          missingPromises.push(supabase.from('connection_groups').select('id, name').in('id', missingGroupIds));
+          missingKeys.push('groups');
+        }
+
+        if (missingPromises.length > 0) {
+          const missingResults = await Promise.all(missingPromises);
+          const missingMap = {};
+          missingKeys.forEach((key, i) => { missingMap[key] = missingResults[i]?.data || []; });
+
+          // Add missing meetups
+          (missingMap.meetups || []).forEach(meetup => {
+            const recap = recapsByEntityId[meetup.id];
+            if (!recap) return;
+            const isCircle = !!meetup.circle_id;
+            const circleName = meetup.connection_groups?.name;
+            allPastMeetups.push({
+              id: `meetup-${meetup.id}`,
+              sourceId: meetup.id,
+              type: isCircle ? 'circle' : 'public',
+              with: isCircle ? circleName : null,
+              title: isCircle ? `🔒 ${circleName || 'Circle'} Meetup` : `🎉 ${meetup.topic || 'Event'}`,
+              emoji: isCircle ? '🔒' : '🎉',
+              date: formatDateLocal(meetup.date, meetup.time, meetup.timezone),
+              rawDate: (() => { const d = parseLocalDate(meetup.date); if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); d.setHours(h, m, 0, 0); } return d; })(),
+              topic: meetup.topic || meetup.description || (isCircle ? 'Circle meetup' : 'Public event'),
+              notes: meetup.description,
+              circleName, circleId: meetup.circle_id,
+              didAttend: true,
+              hasRecap: true, recapId: recap.id, recapData: recap,
+            });
+          });
+
+          // Add missing group calls (circle meetings without a meetup record)
+          (missingMap.groups || []).forEach(group => {
+            const recap = recapsByEntityId[group.id];
+            if (!recap) return;
+            allPastMeetups.push({
+              id: `group-${group.id}-${recap.id}`,
+              sourceId: group.id,
+              type: 'circle',
+              with: group.name,
+              title: `🔒 ${group.name} Meeting`,
+              emoji: '🔒',
+              date: formatDate(recap.started_at || recap.created_at),
+              rawDate: new Date(recap.started_at || recap.created_at),
+              topic: group.name,
+              circleName: group.name, circleId: group.id,
+              didAttend: true,
+              hasRecap: true, recapId: recap.id, recapData: recap,
+            });
+          });
+        }
+      }
+
       // 4. Fetch participants for group meetups
       const meetupIds = allPastMeetups
         .filter(m => m.type === 'circle' || m.type === 'public')
@@ -578,7 +679,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const handleViewRecap = (item) => {
     if (item.recapId) {
       markRecapReviewed(item.recapId);
-      onNavigate('sessionRecapDetail', { recapId: item.recapId });
+      if (item.type === 'coffee') {
+        // Coffee chats don't have an event page yet — use session recap
+        onNavigate('sessionRecapDetail', { recapId: item.recapId });
+      } else {
+        // Meetups and circle meetings — go to event page which shows the recap
+        onNavigate('eventDetail', { meetupId: item.sourceId, recapId: item.recapId });
+      }
     }
   };
 
@@ -885,33 +992,66 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       <div style={styles.ambientBg}></div>
 
       {/* Page Title Section */}
-      <section style={{
-        ...styles.titleSection,
-        flexDirection: isMobile ? 'column' : 'row',
-        alignItems: isMobile ? 'flex-start' : 'center',
-        marginBottom: isMobile ? '16px' : '24px',
-      }}>
-        <div style={styles.titleLeft}>
-          <h1 style={{...styles.pageTitle, fontSize: isMobile ? '24px' : '32px'}}>Coffee Chats</h1>
-          <p style={{
-            ...styles.subtitle,
-            fontSize: isMobile ? '14px' : '15px',
-          }}>Catch up over a virtual coffee</p>
-        </div>
-        <button style={{
-          ...styles.scheduleBtn,
-          padding: isMobile ? '10px 16px' : '12px 20px',
-          fontSize: isMobile ? '13px' : '14px',
-          width: isMobile ? '100%' : 'auto',
-          justifyContent: 'center',
-        }} onClick={handleScheduleCoffeeChat}>
-          <Plus size={isMobile ? 16 : 18} />
-          Host a Coffee Chat
-        </button>
-      </section>
+      {pastOnly ? (
+        <section style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          marginBottom: isMobile ? '20px' : '24px',
+          paddingBottom: '20px',
+          borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
+        }}>
+          <button
+            onClick={() => onNavigate?.('home')}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
+              display: 'flex', alignItems: 'center', color: '#7E654D', flexShrink: 0,
+            }}
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <div>
+            <h1 style={{
+              fontFamily: '"Lora", serif', fontSize: isMobile ? '24px' : '32px',
+              fontWeight: '500', color: '#584233', letterSpacing: '0.15px',
+              lineHeight: 1.28, margin: 0,
+            }}>Past Meetings</h1>
+            <p style={{
+              fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '14px',
+              fontWeight: '500', margin: '4px 0 0',
+              color: 'rgba(107, 86, 71, 0.77)',
+            }}>Review recaps and follow up on action items</p>
+          </div>
+        </section>
+      ) : (
+        <section style={{
+          ...styles.titleSection,
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          marginBottom: isMobile ? '16px' : '24px',
+        }}>
+          <div style={styles.titleLeft}>
+            <h1 style={{...styles.pageTitle, fontSize: isMobile ? '24px' : '32px'}}>Coffee Chats</h1>
+            <p style={{
+              ...styles.subtitle,
+              fontSize: isMobile ? '14px' : '15px',
+            }}>Catch up over a virtual coffee</p>
+          </div>
+          <button style={{
+            ...styles.scheduleBtn,
+            padding: isMobile ? '10px 16px' : '12px 20px',
+            fontSize: isMobile ? '13px' : '14px',
+            width: isMobile ? '100%' : 'auto',
+            justifyContent: 'center',
+          }} onClick={handleScheduleCoffeeChat}>
+            <Plus size={isMobile ? 16 : 18} />
+            Host a Coffee Chat
+          </button>
+        </section>
+      )}
 
-      {/* Back to upcoming link when viewing past */}
-      {activeView === 'past' && (
+      {/* Back link when viewing past (only in non-pastOnly mode) */}
+      {activeView === 'past' && !pastOnly && (
         <button
           onClick={() => setActiveView('upcoming')}
           style={{
@@ -1308,7 +1448,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           {/* View past link */}
           {filteredItems.length > 0 && pastMeetups.length > 0 && (
             <button
-              onClick={() => setActiveView('past')}
+              onClick={() => onNavigate?.('pastMeetings')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
@@ -1317,34 +1457,29 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               onMouseEnter={(e) => { e.currentTarget.style.color = '#8B6F5C'; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = '#B8A089'; }}
             >
-              View past meetups →
+              View past meetings →
             </button>
           )}
         </div>
       ) : (
-        // Past Meetups
+        // Past Meetings — redesigned
         <div style={styles.pastList}>
           {pastMeetups.length === 0 ? (
             <div style={styles.emptyState}>
               <span style={styles.emptyIcon}>📚</span>
-              <h3 style={styles.emptyTitle}>No past meetups yet</h3>
+              <h3 style={styles.emptyTitle}>No past meetings yet</h3>
               <p style={styles.emptyText}>Your completed calls will appear here</p>
             </div>
-          ) : (
-            pastMeetups.map((item, index) => {
-              const durationMin = item.recapData?.duration_seconds
-                ? Math.round(item.recapData.duration_seconds / 60)
-                : null;
-              const durationStr = durationMin
-                ? durationMin >= 60
-                  ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`
-                  : `${durationMin}m`
-                : null;
-              const attendeeCount = item.recapData?.participant_count
-                || item.participants?.length
-                || (item.type === 'coffee' ? 2 : null);
+          ) : (() => {
+            // Compute all follow-up stats for global progress bar
+            let totalFollowUps = 0;
+            let totalCompleted = 0;
 
-              // ai_summary is stored as TEXT - could be JSON string or plain text
+            const parsedItems = pastMeetups.map(item => {
+              const durationMin = item.recapData?.duration_seconds ? Math.round(item.recapData.duration_seconds / 60) : null;
+              const durationStr = durationMin ? (durationMin >= 60 ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m` : `${durationMin}m`) : null;
+              const attendeeCount = item.recapData?.participant_count || item.participants?.length || (item.type === 'coffee' ? 2 : null);
+
               let summary = null;
               let actionItems = [];
               if (item.recapData?.ai_summary) {
@@ -1354,17 +1489,16 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   summary = parsed.summary || null;
                   actionItems = (parsed.actionItems || []).map(a => typeof a === 'string' ? a : a.text || '').filter(Boolean);
                 } catch {
-                  // Plain text format
                   const lines = raw.split('\n');
                   const summaryLines = [];
                   let currentSection = 'summary';
                   for (const line of lines) {
+                    const clean = line.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '').trim();
                     const lower = line.toLowerCase();
-                    if (lower.includes('key takeaway') || lower.includes('takeaways:') || lower.includes('highlights:')) { currentSection = 'takeaways'; continue; }
-                    if (lower.includes('action item') || lower.includes('next step') || lower.includes('follow up') || lower.includes('follow-up') || lower.includes('to-do')) { currentSection = 'actions'; continue; }
+                    if (lower.includes('key takeaway') || lower.includes('takeaways:')) { currentSection = 'takeaways'; continue; }
+                    if (lower.includes('action item') || lower.includes('follow up') || lower.includes('next step')) { currentSection = 'actions'; continue; }
                     if (lower.includes('topics discussed')) { currentSection = 'topics'; continue; }
                     if (lower.includes('quote') || lower.includes('memorable')) { currentSection = 'quotes'; continue; }
-                    const clean = line.replace(/^[-•*]\s*/, '').replace(/^\d+\.\s*/, '').trim();
                     if (!clean) continue;
                     if (currentSection === 'summary') summaryLines.push(clean);
                     else if (currentSection === 'actions' && clean.length > 5) actionItems.push(clean);
@@ -1373,89 +1507,215 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                 }
               }
 
-              const isUnreviewed = item.hasRecap && item.recapId && !reviewedRecaps.includes(item.recapId);
+              const completedCount = actionItems.filter((_, i) => completedFollowUps[`${item.id}_${i}`]).length;
+              totalFollowUps += actionItems.length;
+              totalCompleted += completedCount;
 
-              return (
-                <div key={item.id} onClick={() => {
-                  if (item.type !== 'coffee' && item.sourceId && onNavigate) {
-                    onNavigate('eventDetail', { meetupId: item.sourceId });
-                  }
-                }} style={{
-                  ...styles.pastCardCompact,
-                  alignItems: 'flex-start',
-                  animationDelay: `${index * 0.1}s`,
-                  cursor: item.type !== 'coffee' ? 'pointer' : 'default',
-                }}>
-                  <div style={styles.pastCardCompactLeft}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={styles.pastCardTopic}>{item.topic || item.title}</span>
-                      {isUnreviewed && (
-                        <span style={styles.newBadge}>New</span>
-                      )}
-                      {item.didAttend === false && (
-                        <span style={{ fontSize: '10px', fontWeight: 600, color: '#A89080', backgroundColor: '#F5EDE4', borderRadius: '6px', padding: '2px 8px' }}>Missed</span>
-                      )}
-                    </div>
-                    <span style={styles.pastCardMeta}>
-                      {item.type === 'coffee' && `with ${item.with}`}
-                      {item.type === 'circle' && (item.circleName || 'Circle')}
-                      {item.type === 'public' && 'Community'}
-                      {' · '}
-                      {item.date}
-                    </span>
-                    {(durationStr || attendeeCount != null) && (
-                      <span style={{ ...styles.pastCardMeta, display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {durationStr && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <Clock size={12} />
-                            {durationStr}
+              return { ...item, summary, actionItems, durationStr, attendeeCount, completedCount };
+            });
+
+            // Group by date
+            const grouped = [];
+            let lastDateKey = null;
+            parsedItems.forEach(item => {
+              const d = item.rawDate;
+              const dateKey = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : 'unknown';
+              if (dateKey !== lastDateKey) {
+                const today = new Date(); today.setHours(0,0,0,0);
+                const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+                const itemDay = new Date(d); itemDay.setHours(0,0,0,0);
+                let label;
+                if (itemDay.getTime() === today.getTime()) label = 'Today';
+                else if (itemDay.getTime() === yesterday.getTime()) label = 'Yesterday';
+                else label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                grouped.push({ type: 'date', label, key: dateKey });
+                lastDateKey = dateKey;
+              }
+              grouped.push({ type: 'item', data: item, key: item.id });
+            });
+
+            const typeTagColors = {
+              coffee: { bg: '#FDF3EB', text: '#C4763B', label: '1:1 Coffee' },
+              circle: { bg: '#EBF1F7', text: '#4A6A8B', label: 'Circle' },
+              public: { bg: '#E8F2EB', text: '#4A7C59', label: 'Community' },
+            };
+
+            return (
+              <>
+                {/* Global follow-up progress bar */}
+                {totalFollowUps > 0 && (() => {
+                  const pct = Math.round((totalCompleted / totalFollowUps) * 100);
+                  const allDone = totalCompleted === totalFollowUps;
+                  return (
+                    <div style={{
+                      padding: isMobile ? '10px 12px' : '12px 16px', marginBottom: isMobile ? '8px' : '10px', borderRadius: isMobile ? '12px' : '14px',
+                      background: allDone
+                        ? 'linear-gradient(135deg, rgba(74,124,89,0.1) 0%, rgba(74,124,89,0.04) 100%)'
+                        : 'linear-gradient(135deg, #5C4033 0%, #7A5C42 100%)',
+                      border: allDone ? '1px solid rgba(74,124,89,0.2)' : 'none',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '8px' }}>
+                          <div style={{
+                            width: isMobile ? '24px' : '28px', height: isMobile ? '24px' : '28px', borderRadius: '8px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: allDone ? 'rgba(74,124,89,0.15)' : 'rgba(255,255,255,0.15)',
+                          }}>
+                            {allDone
+                              ? <Check size={isMobile ? 13 : 15} style={{ color: '#4A7C59' }} />
+                              : <FileText size={isMobile ? 13 : 15} style={{ color: '#F5EDE4' }} />
+                            }
+                          </div>
+                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '600', color: allDone ? '#4A7C59' : '#F5EDE4' }}>
+                            {allDone ? 'All done!' : 'Follow-up Progress'}
                           </span>
-                        )}
-                        {attendeeCount != null && (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            <Users size={12} />
-                            {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
-                          </span>
-                        )}
-                      </span>
-                    )}
-                    {summary && (
-                      <div style={styles.summaryBox}>
-                        <span style={styles.summaryText}>
-                          {summary.length > 150 ? summary.slice(0, 150) + '...' : summary}
+                        </div>
+                        <span style={{
+                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
+                          color: allDone ? '#4A7C59' : '#F5EDE4',
+                          backgroundColor: allDone ? 'rgba(74,124,89,0.12)' : 'rgba(255,255,255,0.15)',
+                          padding: '2px 8px', borderRadius: '100px',
+                        }}>
+                          {totalCompleted} / {totalFollowUps}
                         </span>
                       </div>
-                    )}
-                    {actionItems.length > 0 && (
-                      <div style={styles.actionItemsBox}>
-                        <div style={styles.actionItemsHeader}>
-                          <span style={styles.actionItemsIcon}>&#9745;</span>
-                          <span style={styles.actionItemsLabel}>Follow-ups</span>
-                          <span style={styles.actionItemsCount}>{actionItems.length}</span>
-                        </div>
-                        {actionItems.slice(0, 3).map((action, i) => (
-                          <div key={i} style={styles.actionItem}>
-                            <span style={styles.actionBullet}>&#9702;</span>
-                            <span style={styles.actionText}>{action}</span>
-                          </div>
-                        ))}
+                      <div style={{ height: isMobile ? '6px' : '8px', backgroundColor: allDone ? 'rgba(74,124,89,0.12)' : 'rgba(255,255,255,0.2)', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', borderRadius: '4px', transition: 'width 0.4s ease',
+                          background: allDone ? '#4A7C59' : 'linear-gradient(90deg, #D4B896, #F5EDE4)',
+                          width: `${pct}%`,
+                        }} />
                       </div>
-                    )}
-                  </div>
-                  <button
-                    style={{
-                      ...styles.viewRecapBtnCompact,
-                      ...(isUnreviewed ? styles.viewRecapBtnUnreviewed : {}),
-                    }}
-                    onClick={(e) => { e.stopPropagation(); handleViewRecap(item); }}
-                  >
-                    <Sparkles size={13} />
-                    Recap
-                  </button>
-                </div>
-              );
-            })
-          )}
+                    </div>
+                  );
+                })()}
+
+                {grouped.map(entry => {
+                  if (entry.type === 'date') {
+                    return (
+                      <div key={entry.key} style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', fontWeight: '700', color: '#A89080', textTransform: 'uppercase', letterSpacing: '1px', padding: isMobile ? '6px 0 3px' : '8px 0 4px', marginTop: '2px' }}>
+                        {entry.label}
+                      </div>
+                    );
+                  }
+
+                  const item = entry.data;
+                  const isUnreviewed = item.hasRecap && item.recapId && !reviewedRecaps.includes(item.recapId);
+                  const isExpanded = expandedSummaries[item.id];
+                  const tag = typeTagColors[item.type] || typeTagColors.public;
+
+                  return (
+                    <div key={item.id} style={{ padding: isMobile ? '10px 12px' : '12px 14px', marginBottom: isMobile ? '4px' : '6px', background: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(250,245,239,0.3) 100%)', borderRadius: isMobile ? '12px' : '14px', border: '1px solid rgba(139,111,92,0.08)', cursor: item.type !== 'coffee' ? 'pointer' : 'default' }}
+                      onClick={() => { if (item.type !== 'coffee' && item.sourceId && onNavigate) onNavigate('eventDetail', { meetupId: item.sourceId }); }}
+                    >
+                      {/* Header row */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: isMobile ? '8px' : '10px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '17px', fontWeight: '600', color: '#3F1906', lineHeight: '1.3' }}>
+                              {item.topic || item.title}
+                            </span>
+                            <span style={{ fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: '2px 7px', borderRadius: '6px', backgroundColor: tag.bg, color: tag.text, flexShrink: 0 }}>
+                              {item.type === 'circle' ? (item.circleName || tag.label) : tag.label}
+                            </span>
+                            {isUnreviewed && <span style={{...styles.newBadge, fontSize: isMobile ? '9px' : '10px', padding: isMobile ? '1px 6px' : '2px 8px'}}>New</span>}
+                            {item.didAttend === false && (
+                              <span style={{ fontSize: isMobile ? '9px' : '10px', fontWeight: 600, color: '#A89080', backgroundColor: '#F5EDE4', borderRadius: '6px', padding: '2px 7px' }}>Missed</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px', marginTop: '3px', flexWrap: 'wrap' }}>
+                            {item.type === 'coffee' && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: isMobile ? '11px' : '12px', color: '#8B7355' }}>
+                                <Users size={isMobile ? 10 : 11} /> with {item.with}
+                              </span>
+                            )}
+                            {item.durationStr && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: isMobile ? '11px' : '12px', color: '#8B7355' }}>
+                                <Clock size={isMobile ? 10 : 11} /> {item.durationStr}
+                              </span>
+                            )}
+                            {item.attendeeCount != null && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: isMobile ? '11px' : '12px', color: '#8B7355' }}>
+                                <Users size={isMobile ? 10 : 11} /> {item.attendeeCount}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {item.hasRecap && (
+                          <button
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '4px',
+                              padding: isMobile ? '5px 10px' : '7px 14px', borderRadius: '100px', border: 'none',
+                              fontSize: isMobile ? '11px' : '12px', fontWeight: '600', cursor: 'pointer',
+                              fontFamily: '"DM Sans", sans-serif', flexShrink: 0,
+                              backgroundColor: isUnreviewed ? '#5C4033' : 'rgba(139,111,92,0.12)',
+                              color: isUnreviewed ? 'white' : '#5C4033',
+                              boxShadow: isUnreviewed ? '0 2px 8px rgba(92,64,51,0.35)' : 'none',
+                            }}
+                            onClick={(e) => { e.stopPropagation(); handleViewRecap(item); }}
+                          >
+                            <FileText size={isMobile ? 11 : 13} />
+                            Recap
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Summary with expand/collapse */}
+                      {item.summary && (
+                        <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: isMobile ? '8px' : '10px', borderLeft: '3px solid rgba(139,111,92,0.35)' }}>
+                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px', color: 'rgba(63,25,6,0.7)', lineHeight: '1.5', fontStyle: 'italic' }}>
+                            {isExpanded || item.summary.length <= (isMobile ? 100 : 150) ? item.summary : item.summary.slice(0, isMobile ? 100 : 150) + '...'}
+                          </span>
+                          {item.summary.length > (isMobile ? 100 : 150) && (
+                            <button onClick={(e) => { e.stopPropagation(); toggleSummaryExpanded(item.id); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8B6F5C', fontSize: isMobile ? '11px' : '12px', fontWeight: '600', padding: '3px 0 0', fontFamily: '"DM Sans", sans-serif' }}>
+                              {isExpanded ? 'Show less' : 'Read more'}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Follow-ups with checkable items */}
+                      {item.actionItems.length > 0 ? (
+                        <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(196,134,139,0.08)', borderRadius: isMobile ? '8px' : '10px', borderLeft: '3px solid #C4868B' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span style={{ fontSize: isMobile ? '10px' : '12px', fontWeight: '700', color: '#5C4033', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: '"DM Sans", sans-serif' }}>Follow-ups</span>
+                              <span style={{ fontSize: isMobile ? '9px' : '10px', fontWeight: '600', color: 'white', backgroundColor: '#C4868B', borderRadius: '100px', padding: '1px 5px', fontFamily: '"DM Sans", sans-serif' }}>
+                                {item.completedCount} / {item.actionItems.length}
+                              </span>
+                            </div>
+                            <div style={{ width: isMobile ? '40px' : '60px', height: '4px', backgroundColor: 'rgba(196,134,139,0.2)', borderRadius: '2px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', borderRadius: '2px', transition: 'width 0.3s ease', backgroundColor: item.completedCount === item.actionItems.length ? '#4A7C59' : '#C4868B', width: `${(item.completedCount / item.actionItems.length) * 100}%` }} />
+                            </div>
+                          </div>
+                          {item.actionItems.map((action, i) => {
+                            const isDone = !!completedFollowUps[`${item.id}_${i}`];
+                            return (
+                              <div key={i} onClick={(e) => { e.stopPropagation(); toggleFollowUp(item.id, i); }}
+                                style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', padding: '3px 0', cursor: 'pointer', opacity: isDone ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                                {isDone
+                                  ? <Check size={isMobile ? 12 : 14} style={{ color: '#4A7C59', flexShrink: 0, marginTop: '1px' }} />
+                                  : <Circle size={isMobile ? 12 : 14} style={{ color: '#C4868B', flexShrink: 0, marginTop: '1px' }} />
+                                }
+                                <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11.5px' : '12.5px', color: 'rgba(63,25,6,0.8)', lineHeight: '1.4', textDecoration: isDone ? 'line-through' : 'none' }}>
+                                  {action}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : item.hasRecap ? (
+                        <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '5px 8px' : '6px 10px', backgroundColor: 'rgba(139,111,92,0.04)', borderRadius: isMobile ? '8px' : '10px' }}>
+                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', color: '#A89080', fontStyle: 'italic' }}>No follow-ups for this meeting</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -2318,8 +2578,8 @@ const styles = {
   pastList: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '16px',
-    marginBottom: '32px',
+    gap: '2px',
+    marginBottom: '24px',
   },
   pastCard: {
     display: 'flex',
