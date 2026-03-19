@@ -5,6 +5,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Video, Calendar, Clock, User, Check, X, MessageCircle } from 'lucide-react';
+import { useAuth } from './AuthProvider';
+import CalendarAvailability from './CalendarAvailability';
 import {
   requestCoffeeChat,
   acceptCoffeeChat,
@@ -18,6 +20,7 @@ import VideoCallButton from './VideoCallButton';
 import { toLocalDateString } from '@/lib/dateUtils';
 
 export default function CoffeeChatsView({ currentUser, connections, supabase, onNavigate }) {
+  const { providerToken } = useAuth();
   const [activeTab, setActiveTab] = useState('schedule'); // schedule, upcoming, requests, sent
   const [coffeeChats, setCoffeeChats] = useState([]);
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -851,17 +854,11 @@ export default function CoffeeChatsView({ currentUser, connections, supabase, on
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Time *
-                </label>
-                <input
-                  type="time"
-                  value={scheduledTime}
-                  onChange={(e) => setScheduledTime(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:outline-none focus:border-purple-500"
-                />
-              </div>
+              <CalendarAvailability
+                selectedDate={scheduledDate}
+                onTimeSelect={(time) => setScheduledTime(time)}
+                providerToken={providerToken}
+              />
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">

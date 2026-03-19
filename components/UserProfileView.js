@@ -406,6 +406,17 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                   {VIBE_LABELS[profile.vibe_category] || profile.vibe_category}
                 </span>
               )}
+              {profile.open_to_coffee_chat && (
+                <span style={{
+                  fontFamily: FONT, fontSize: 12, fontWeight: 600,
+                  color: '#6B4F3A',
+                  background: '#FDF3EB',
+                  borderRadius: 20, padding: '5px 14px',
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                }}>
+                  <Coffee size={12} /> Open to Coffee Chat
+                </span>
+              )}
             </div>
           )}
         </div>

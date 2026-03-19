@@ -393,6 +393,7 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
     career_stage: null,
     hook: '',
     open_to_hosting: false,
+  open_to_coffee_chat: false,
     name: '',
     city: '',
     state: '',
@@ -469,6 +470,7 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
           hook: profile.hook?.trim() || null,
           bio: profile.hook?.trim() || null,
           open_to_hosting: profile.open_to_hosting,
+        open_to_coffee_chat: profile.open_to_coffee_chat,
           city: profile.city?.trim() || null,
           state: profile.state?.trim() || null,
           country: profile.country?.trim() || null,
@@ -1158,6 +1160,33 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
           </div>
           <p style={{ fontWeight: 600, color: colors.text, fontSize: isMobile ? 16 : 18, fontFamily: fonts.sans, margin: 0 }}>Not now</p>
           <p style={{ fontSize: 14, color: colors.textLight, fontFamily: fonts.sans, marginTop: 4 }}>Maybe later</p>
+        </button>
+      </div>
+
+      {/* Open to Coffee Chat */}
+      <div style={{ marginTop: 24 }}>
+        <p style={{ fontWeight: 600, color: colors.text, fontSize: isMobile ? 16 : 18, fontFamily: fonts.sans, textAlign: 'center', marginBottom: 12 }}>
+          Open to 1:1 coffee chats?
+        </p>
+        <button
+          onClick={() => setProfile(prev => ({ ...prev, open_to_coffee_chat: !prev.open_to_coffee_chat }))}
+          style={{
+            width: '100%',
+            padding: 16,
+            borderRadius: 12,
+            border: `2px solid ${profile.open_to_coffee_chat ? colors.success : colors.border}`,
+            background: profile.open_to_coffee_chat ? 'rgba(76, 175, 80, 0.06)' : '#fff',
+            cursor: 'pointer',
+            textAlign: 'center',
+            transition: 'all 0.2s',
+          }}
+        >
+          <p style={{ fontWeight: 600, color: colors.text, fontSize: 15, fontFamily: fonts.sans, margin: 0 }}>
+            {profile.open_to_coffee_chat ? 'Yes, I\'m open to coffee chats' : 'Not right now'}
+          </p>
+          <p style={{ fontSize: 13, color: colors.textLight, fontFamily: fonts.sans, marginTop: 4 }}>
+            {profile.open_to_coffee_chat ? 'Others will see a badge on your profile' : 'Tap to toggle'}
+          </p>
         </button>
       </div>
     </div>

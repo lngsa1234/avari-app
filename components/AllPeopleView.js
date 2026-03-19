@@ -12,6 +12,7 @@ import {
   X,
   ChevronLeft,
   Users,
+  Coffee,
 } from 'lucide-react';
 
 // Color palette - Mocha Brown theme
@@ -810,7 +811,7 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
         )}
 
         {/* Tags */}
-        {(person.industry || person.career_stage) && (
+        {(person.industry || person.career_stage || person.open_to_coffee_chat) && (
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -837,6 +838,21 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
                 borderRadius: '12px',
               }}>
                 {person.career_stage}
+              </span>
+            )}
+            {person.open_to_coffee_chat && (
+              <span style={{
+                padding: '4px 10px',
+                backgroundColor: '#FDF3EB',
+                color: '#6B4F3A',
+                fontSize: '11px',
+                borderRadius: '12px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                fontWeight: 600,
+              }}>
+                <Coffee size={10} /> Coffee Chat
               </span>
             )}
           </div>
@@ -1141,6 +1157,24 @@ function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, 
               </div>
             )}
           </div>
+
+          {/* Coffee Chat Badge */}
+          {person.open_to_coffee_chat && (
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 14px',
+              backgroundColor: '#FDF3EB',
+              color: '#6B4F3A',
+              fontSize: '13px',
+              fontWeight: 600,
+              borderRadius: '20px',
+              marginBottom: '16px',
+            }}>
+              <Coffee size={14} /> Open to Coffee Chat
+            </div>
+          )}
 
           {/* Looking For / Hook */}
           {person.hook && (
