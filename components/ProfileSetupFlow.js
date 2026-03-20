@@ -420,6 +420,16 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
   const totalSteps = steps.length;
   const progress = ((currentStep + 1) / totalSteps) * 100;
 
+  // Clean up camera stream when leaving photo step or unmounting
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+    };
+  }, [currentStep]);
+
   // Validation for each step
   const isStepValid = () => {
     switch (currentStepData.id) {
@@ -522,13 +532,13 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 640 } });
       streamRef.current = stream;
       setShowCamera(true);
-      // Attach stream after render
-      setTimeout(() => {
-        if (videoRef.current) {
+      // Attach stream after render via requestAnimationFrame
+      requestAnimationFrame(() => {
+        if (videoRef.current && streamRef.current === stream) {
           videoRef.current.srcObject = stream;
           videoRef.current.play().catch(() => {});
         }
-      }, 100);
+      });
     } catch (err) {
       console.error('Camera access failed:', err);
       alert('Could not access camera. Please check permissions or use Upload Photo instead.');
@@ -1691,13 +1701,16 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
         </div>
 
         {/* Content */}
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: isMobile ? '0 16px 24px' : '0 28px 24px',
-          WebkitOverflowScrolling: 'touch',
-          minHeight: 0,
-        }}>
+        <div
+          key={currentStepData.id}
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: isMobile ? '0 16px 24px' : '0 28px 24px',
+            WebkitOverflowScrolling: 'touch',
+            minHeight: 0,
+          }}
+        >
           {renderStepContent()}
         </div>
 
