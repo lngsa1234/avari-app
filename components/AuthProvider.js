@@ -67,6 +67,22 @@ export function AuthProvider({ children }) {
           .single()
 
         if (createError) {
+          // Race condition: profile may have been created by a concurrent call
+          // Retry once by fetching instead of failing
+          console.warn('⚠️ Profile creation failed, retrying fetch...', createError.code)
+          const { data: retryData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle()
+
+          if (retryData) {
+            console.log('✅ Profile found on retry:', retryData.email)
+            setProfile(retryData)
+            setStatus('ready')
+            return
+          }
+
           console.error('❌ Profile creation error:', createError)
           setStatus('profile_missing')
           setProfile(null)
@@ -188,32 +204,20 @@ export function AuthProvider({ children }) {
     console.log('🔐 Setting up auth listener')
     mountedRef.current = true
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        console.log('📱 Initial session found:', session.user.id)
-        setUser(session.user)
-        loadProfileRef.current(
-          session.user.id,
-          session.user.email,
-          session.user.user_metadata?.name || session.user.user_metadata?.full_name
-        )
-      } else {
-        console.log('📱 No initial session')
-        setStatus('signed_out')
-      }
-    })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('🔐 Auth event:', event)
 
-        if (event === 'SIGNED_IN' && session?.user) {
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
           setUser(session.user)
           loadProfileRef.current(
             session.user.id,
             session.user.email,
             session.user.user_metadata?.name || session.user.user_metadata?.full_name
           )
+        } else if (event === 'INITIAL_SESSION' && !session) {
+          console.log('📱 No initial session')
+          setStatus('signed_out')
         } else if (event === 'SIGNED_OUT') {
           console.log('👋 Signed out - updating state')
           setUser(null)
@@ -222,8 +226,6 @@ export function AuthProvider({ children }) {
           loadingUserIdRef.current = null
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
           setUser(session.user)
-        } else if (event === 'INITIAL_SESSION') {
-          console.log('⏭️ Ignoring INITIAL_SESSION - already handled by getSession()')
         }
       }
     )
