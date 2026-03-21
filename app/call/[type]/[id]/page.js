@@ -2022,14 +2022,15 @@ export default function UnifiedCallPage() {
     console.log('[UnifiedCall] Call left successfully');
   };
 
-  // Handle leave call and show recap
+  // Handle leave call — save transcript, generate AI recap only if last person
   const handleLeaveCall = async () => {
     // Step 1: Show "Ending call..." transition immediately
     setIsLeaving(true);
 
-    // Capture participant IDs before cleanup (filter out non-UUID placeholders like 'remote')
+    // Capture state before cleanup
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const participantIds = [user?.id, ...remoteParticipants.map(p => p.id)].filter(id => id && uuidRegex.test(id));
+    const isLastPerson = remoteParticipants.length === 0;
     const currentTranscript = [...transcript];
     const currentMessages = [...messages];
     const startTime = callStartTimeRef.current || callStartTime;
@@ -2050,13 +2051,9 @@ export default function UnifiedCallPage() {
     setShowTopics(false);
     setShowParticipants(false);
 
-    // Small delay to ensure video cleanup is complete
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Note: meetups/coffee chats are NOT marked completed on call end.
-    // They naturally filter out of "upcoming" once their scheduled time passes.
-
-    // Step 4: Prepare recap data — fetch profiles and connection status
+    // Step 4: Fetch participant profiles
     let allParticipants = [];
     if (participantIds.length > 0) {
       const [{ data: profiles }, { data: mutualMatches }] = await Promise.all([
@@ -2073,177 +2070,136 @@ export default function UnifiedCallPage() {
       }));
     }
 
-    setRecapData({
-      channelName: roomId,
-      callType: config.internalType,
-      provider: config.provider,
-      startedAt: startTime,
-      endedAt: endTime,
-      duration: startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0,
-      participants: allParticipants,
-      transcript: currentTranscript,
-      messages: currentMessages,
-    });
-
-    // Step 5: Hide transition and show recap
-    setIsLeaving(false);
-    setShowRecap(true);
-
-    // Step 6: Fetch combined transcript from all participants in the room
-    // Filter by session start time to avoid mixing transcripts from previous sessions
-    let combinedTranscript = currentTranscript;
+    // Step 5: Save this user's transcript to the recap (no AI summary yet)
     try {
-      let transcriptQuery = supabase
-        .from('call_transcripts')
-        .select('speaker_name, text, timestamp, user_id')
-        .eq('channel_name', roomId);
-
-      if (startTime) {
-        transcriptQuery = transcriptQuery.gte('created_at', startTime);
-      }
-
-      const { data: dbTranscripts } = await transcriptQuery
-        .order('timestamp', { ascending: true });
-
-      if (dbTranscripts && dbTranscripts.length > 0) {
-        combinedTranscript = dbTranscripts.map(t => ({
-          speakerName: t.speaker_name || 'Speaker',
-          text: t.text,
-          timestamp: t.timestamp,
-          speakerId: t.user_id
-        }));
-        console.log('[UnifiedCall] Using combined transcript from all participants:', combinedTranscript.length, 'entries');
-      }
-    } catch (fetchErr) {
-      console.warn('[UnifiedCall] Failed to fetch combined transcript, using local:', fetchErr);
-    }
-
-    // Update recap data with combined transcript for UI display
-    if (combinedTranscript !== currentTranscript) {
-      setRecapData(prev => prev ? { ...prev, transcript: combinedTranscript } : prev);
-    }
-
-    // Generate AI summary in background (only if there's content)
-    if (combinedTranscript.length === 0 && currentMessages.length === 0) {
-      // Save recap without AI summary
-      try {
-        await saveCallRecap({
-          channelName: roomId,
-          callType: config.internalType,
-          provider: config.provider,
-          startedAt: startTime,
-          endedAt: endTime,
-          participants: allParticipants,
-          transcript: [],
-          aiSummary: null,
-          metrics: {},
-          userId: user?.id
-        });
-        console.log('[UnifiedCall] Recap saved (no transcript/messages)');
-      } catch (saveErr) {
-        console.error('[UnifiedCall] Failed to save recap:', saveErr);
-      }
-      setLoadingSummary(false);
-    } else {
-    setLoadingSummary(true);
-    try {
-      const duration = startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0;
-      const response = await fetch('/api/generate-recap-summary', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcript: combinedTranscript,
-          messages: currentMessages,
-          participants: allParticipants.map(p => p.name || p.email?.split('@')[0]),
-          duration,
-          meetingTitle: relatedData?.topic || relatedData?.name || config.ui.title,
-          meetingType: callType === 'coffee' ? '1:1 coffee chat' : callType === 'meetup' ? 'group meetup' : 'circle meeting'
-        })
+      await saveCallRecap({
+        channelName: roomId,
+        callType: config.internalType,
+        provider: config.provider,
+        startedAt: startTime,
+        endedAt: endTime,
+        participants: allParticipants,
+        transcript: currentTranscript,
+        aiSummary: null,  // null = don't overwrite existing summary
+        metrics: {},
+        userId: user?.id
       });
+      console.log('[UnifiedCall] Transcript saved to database');
+    } catch (saveErr) {
+      console.error('[UnifiedCall] Failed to save transcript:', saveErr);
+    }
 
-      if (response.ok) {
-        const summaryData = await response.json();
-        setAiSummary(summaryData);
+    // Step 6: If last person, generate AI recap from combined transcripts
+    if (isLastPerson && (currentTranscript.length > 0 || currentMessages.length > 0)) {
+      console.log('[UnifiedCall] Last person left — generating AI recap');
 
-        // Build full summary text for storage
-        let fullSummaryText = summaryData.summary || '';
-        if (summaryData.keyTakeaways?.length > 0) {
-          fullSummaryText += '\n\nKey Takeaways:\n';
-          summaryData.keyTakeaways.forEach(t => {
-            const text = typeof t === 'string' ? t : (t.text || t);
-            const emoji = typeof t === 'object' && t.emoji ? t.emoji + ' ' : '• ';
-            fullSummaryText += `${emoji}${text}\n`;
-          });
-        }
-        if (summaryData.actionItems?.length > 0) {
-          fullSummaryText += '\nAction Items:\n';
-          summaryData.actionItems.forEach(a => {
-            const text = typeof a === 'string' ? a : (a.text || a);
-            fullSummaryText += `• ${text}\n`;
-          });
-        }
-
-        // Save recap to database
-        try {
-          await saveCallRecap({
-            channelName: roomId,
-            callType: config.internalType,
-            provider: config.provider,
-            startedAt: startTime,
-            endedAt: endTime,
-            participants: allParticipants,
-            transcript: combinedTranscript,
-            aiSummary: fullSummaryText.trim(),
-            metrics: {},
-            userId: user?.id
-          });
-          console.log('[UnifiedCall] Recap saved to database');
-        } catch (saveErr) {
-          console.error('[UnifiedCall] Failed to save recap:', saveErr);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to generate AI summary:', err);
-      // Still save the recap without AI summary
+      // Fetch combined transcript from all participants
+      let combinedTranscript = currentTranscript;
       try {
-        await saveCallRecap({
-          channelName: roomId,
-          callType: config.internalType,
-          provider: config.provider,
-          startedAt: startTime,
-          endedAt: endTime,
-          participants: allParticipants,
-          transcript: combinedTranscript,
-          aiSummary: null,
-          metrics: {},
-          userId: user?.id
-        });
-        console.log('[UnifiedCall] Recap saved to database (without AI summary)');
-      } catch (saveErr) {
-        console.error('[UnifiedCall] Failed to save recap:', saveErr);
-      }
-    } finally {
-      setLoadingSummary(false);
+        let transcriptQuery = supabase
+          .from('call_transcripts')
+          .select('speaker_name, text, timestamp, user_id')
+          .eq('channel_name', roomId);
 
-      // Clean up this session's transcripts from the database
-      // (they're now stored in the call_recaps row)
+        if (startTime) {
+          transcriptQuery = transcriptQuery.gte('created_at', startTime);
+        }
+
+        const { data: dbTranscripts } = await transcriptQuery
+          .order('timestamp', { ascending: true });
+
+        if (dbTranscripts && dbTranscripts.length > 0) {
+          combinedTranscript = dbTranscripts.map(t => ({
+            speakerName: t.speaker_name || 'Speaker',
+            text: t.text,
+            timestamp: t.timestamp,
+            speakerId: t.user_id
+          }));
+          console.log('[UnifiedCall] Combined transcript from all participants:', combinedTranscript.length, 'entries');
+        }
+      } catch (fetchErr) {
+        console.warn('[UnifiedCall] Failed to fetch combined transcript, using local:', fetchErr);
+      }
+
+      // Generate AI summary
+      try {
+        const duration = startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0;
+        const response = await fetch('/api/generate-recap-summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            transcript: combinedTranscript,
+            messages: currentMessages,
+            participants: allParticipants.map(p => p.name || p.email?.split('@')[0]),
+            duration,
+            meetingTitle: relatedData?.topic || relatedData?.name || config.ui.title,
+            meetingType: callType === 'coffee' ? '1:1 coffee chat' : callType === 'meetup' ? 'group meetup' : 'circle meeting'
+          })
+        });
+
+        if (response.ok) {
+          const summaryData = await response.json();
+
+          // Build full summary text for storage
+          let fullSummaryText = summaryData.summary || '';
+          if (summaryData.keyTakeaways?.length > 0) {
+            fullSummaryText += '\n\nKey Takeaways:\n';
+            summaryData.keyTakeaways.forEach(t => {
+              const text = typeof t === 'string' ? t : (t.text || t);
+              const emoji = typeof t === 'object' && t.emoji ? t.emoji + ' ' : '• ';
+              fullSummaryText += `${emoji}${text}\n`;
+            });
+          }
+          if (summaryData.actionItems?.length > 0) {
+            fullSummaryText += '\nAction Items:\n';
+            summaryData.actionItems.forEach(a => {
+              const text = typeof a === 'string' ? a : (a.text || a);
+              fullSummaryText += `• ${text}\n`;
+            });
+          }
+
+          // Save recap WITH AI summary
+          try {
+            await saveCallRecap({
+              channelName: roomId,
+              callType: config.internalType,
+              provider: config.provider,
+              startedAt: startTime,
+              endedAt: endTime,
+              participants: allParticipants,
+              transcript: combinedTranscript,
+              aiSummary: fullSummaryText.trim(),
+              metrics: {},
+              userId: user?.id
+            });
+            console.log('[UnifiedCall] AI recap saved to database');
+          } catch (saveErr) {
+            console.error('[UnifiedCall] Failed to save AI recap:', saveErr);
+          }
+        }
+      } catch (err) {
+        console.error('[UnifiedCall] Failed to generate AI summary:', err);
+      }
+
+      // Clean up raw transcripts from call_transcripts table
       try {
         let deleteQuery = supabase
           .from('call_transcripts')
           .delete()
           .eq('channel_name', roomId);
-
         if (startTime) {
           deleteQuery = deleteQuery.gte('created_at', startTime);
         }
-
         await deleteQuery;
         console.log('[UnifiedCall] Session transcripts cleaned up');
       } catch (cleanupErr) {
         console.warn('[UnifiedCall] Failed to clean up transcripts:', cleanupErr);
       }
     }
-    } // end else (has content to summarize)
+
+    // Step 7: Navigate back (no recap screen shown — recap is on the event page)
+    setIsLeaving(false);
+    router.push('/');
   };
 
   const handleRecapClose = () => {
