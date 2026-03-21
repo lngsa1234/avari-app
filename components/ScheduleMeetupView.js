@@ -4,9 +4,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat, ImagePlus, X, CheckCircle } from 'lucide-react';
+import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repeat, ImagePlus, X, CheckCircle, Coffee } from 'lucide-react';
 import { reconcileCircleMeetups } from '@/lib/circleMeetupHelpers';
 import { toLocalDateString } from '@/lib/dateUtils';
+import { useAuth } from './AuthProvider';
+import { formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 
 
 // Color palette - Mocha Brown theme
@@ -143,7 +145,7 @@ export default function ScheduleMeetupView({
         const userIds = matches.map(m => m.matched_user_id);
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, name, career, profile_picture')
+          .select('id, name, career, profile_picture, open_to_coffee_chat, coffee_chat_slots')
           .in('id', userIds);
 
         setAvailableConnections(profiles || []);
@@ -559,6 +561,18 @@ export default function ScheduleMeetupView({
               ))}
             </div>
           )}
+
+          {/* Preferred times hint */}
+          {selectedConnection?.open_to_coffee_chat && formatCoffeeSlots(selectedConnection.coffee_chat_slots) && (
+            <div style={{
+              marginTop: 10, padding: '10px 14px', borderRadius: 10,
+              background: '#FDF3EB', display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: '13px', color: '#6B4F3A', fontWeight: 500,
+            }}>
+              <Coffee size={14} style={{ flexShrink: 0 }} />
+              <span>{selectedConnection.name?.split(' ')[0]} prefers {formatCoffeeSlots(selectedConnection.coffee_chat_slots, true)}</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -622,15 +636,6 @@ export default function ScheduleMeetupView({
                   value={scheduledDate}
                   min={today}
                   onChange={(e) => setScheduledDate(e.target.value)}
-                  style={styles.input}
-                />
-              </div>
-              <div style={styles.inputGroup}>
-                <Clock size={18} style={styles.inputIcon} />
-                <input
-                  type="time"
-                  value={scheduledTime}
-                  onChange={(e) => setScheduledTime(e.target.value)}
                   style={styles.input}
                 />
               </div>

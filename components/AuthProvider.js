@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [status, setStatus] = useState('initializing')
-  const [providerToken, setProviderToken] = useState(null)
   
   const loadingUserIdRef = useRef(null)
   const mountedRef = useRef(true)
@@ -108,10 +107,8 @@ export function AuthProvider({ children }) {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}`,
-          scopes: 'https://www.googleapis.com/auth/calendar.events.readonly',
           queryParams: {
             prompt: 'select_account',
-            access_type: 'offline',
           }
         }
       })
@@ -195,7 +192,6 @@ export function AuthProvider({ children }) {
       if (session?.user) {
         console.log('📱 Initial session found:', session.user.id)
         setUser(session.user)
-        if (session.provider_token) setProviderToken(session.provider_token)
         loadProfileRef.current(
           session.user.id,
           session.user.email,
@@ -213,7 +209,6 @@ export function AuthProvider({ children }) {
 
         if (event === 'SIGNED_IN' && session?.user) {
           setUser(session.user)
-          if (session.provider_token) setProviderToken(session.provider_token)
           loadProfileRef.current(
             session.user.id,
             session.user.email,
@@ -223,12 +218,10 @@ export function AuthProvider({ children }) {
           console.log('👋 Signed out - updating state')
           setUser(null)
           setProfile(null)
-          setProviderToken(null)
           setStatus('signed_out')
           loadingUserIdRef.current = null
         } else if (event === 'TOKEN_REFRESHED' && session?.user) {
           setUser(session.user)
-          if (session.provider_token) setProviderToken(session.provider_token)
         } else if (event === 'INITIAL_SESSION') {
           console.log('⏭️ Ignoring INITIAL_SESSION - already handled by getSession()')
         }
@@ -247,14 +240,13 @@ export function AuthProvider({ children }) {
       user,
       profile,
       status,
-      providerToken,
       signInWithGoogle,
       signInWithEmail,
       signUpWithEmail,
       signOut,
       refreshProfile,
     }),
-    [user, profile, status, providerToken, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, refreshProfile]
+    [user, profile, status, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut, refreshProfile]
   )
 
   return (
