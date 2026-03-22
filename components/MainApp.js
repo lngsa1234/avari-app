@@ -4067,7 +4067,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'userProfile' && <UserProfileView currentUser={currentUser} supabase={supabase} userId={selectedUserId} onNavigate={handleNavigate} previousView={previousView} onConnectionRemoved={(userId) => {
           setConnections(prev => prev.filter(c => (c.connected_user?.id || c.id) !== userId));
         }} />}
-        {currentView === 'sessionRecapDetail' && (
+        {currentView === 'coffeeChatRecap' && (
           <CoffeeChatRecapView
             recapId={selectedRecapId}
             onNavigate={handleNavigate}

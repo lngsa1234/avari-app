@@ -66,9 +66,12 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [showConfirm, setShowConfirm] = useState(false);
   const [mutualCircles, setMutualCircles] = useState([]);
   const [connectionCount, setConnectionCount] = useState(0);
+  const [meetupCount, setMeetupCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
+  const [hasSentRequest, setHasSentRequest] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
@@ -98,15 +101,24 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       const connected = matchedIds.includes(userId);
       setIsConnected(connected);
 
-      // Check if this person has sent us a pending connection request
+      // Check if this person has sent us a pending connection request, or if we sent one
       if (!connected && userId !== currentUser.id) {
-        const { data: incomingInterest } = await supabase
-          .from('user_interests')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('interested_in_user_id', currentUser.id)
-          .limit(1);
+        const [{ data: incomingInterest }, { data: outgoingInterest }] = await Promise.all([
+          supabase
+            .from('user_interests')
+            .select('id')
+            .eq('user_id', userId)
+            .eq('interested_in_user_id', currentUser.id)
+            .limit(1),
+          supabase
+            .from('user_interests')
+            .select('id')
+            .eq('user_id', currentUser.id)
+            .eq('interested_in_user_id', userId)
+            .limit(1),
+        ]);
         setHasIncomingRequest((incomingInterest || []).length > 0);
+        setHasSentRequest((outgoingInterest || []).length > 0);
       }
 
       if (userId === currentUser.id) {
@@ -141,6 +153,13 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           setMutualCircles(circles || []);
         }
       }
+
+      // Count meetups attended (from call_recaps participant_ids)
+      const { count: recapCount } = await supabase
+        .from('call_recaps')
+        .select('id', { count: 'exact', head: true })
+        .contains('participant_ids', [userId]);
+      setMeetupCount(recapCount || 0);
     } catch (err) {
       console.error('Error loading user profile:', err);
     } finally {
@@ -188,6 +207,27 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       alert('Failed to accept connection. Please try again.');
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const handleSendConnectionRequest = async () => {
+    setConnecting(true);
+    try {
+      const { error } = await supabase
+        .from('user_interests')
+        .insert({
+          user_id: currentUser.id,
+          interested_in_user_id: userId,
+        });
+
+      if (error && error.code !== '23505') throw error;
+
+      setHasSentRequest(true);
+    } catch (err) {
+      console.error('Error sending connection request:', err);
+      alert('Failed to send connection request. Please try again.');
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -465,6 +505,36 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           </div>
         )}
 
+        {/* ─── Connect CTA (not connected, no incoming request) ─── */}
+        {!isOwnProfile && !isConnected && !hasIncomingRequest && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 20, ...fadeIn(0.1) }}>
+            <button
+              className="profile-cta-btn"
+              onClick={handleSendConnectionRequest}
+              disabled={connecting || hasSentRequest}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                gap: 8,
+                background: hasSentRequest ? COLORS.greenLight : COLORS.accent,
+                color: hasSentRequest ? COLORS.green : COLORS.white,
+                border: hasSentRequest ? `1.5px solid ${COLORS.green}40` : 'none',
+                borderRadius: 14,
+                fontFamily: FONT, fontWeight: 600,
+                cursor: hasSentRequest ? 'default' : connecting ? 'default' : 'pointer',
+                opacity: connecting ? 0.7 : 1,
+              }}
+            >
+              {hasSentRequest ? (
+                <><Check size={16} /> Request Sent</>
+              ) : connecting ? (
+                'Sending...'
+              ) : (
+                <><Users size={16} /> Connect</>
+              )}
+            </button>
+          </div>
+        )}
+
         {/* ─── Visitor CTA (connected, not own profile) ─── */}
         {!isOwnProfile && isConnected && (
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, ...fadeIn(0.1) }}>
@@ -504,7 +574,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         <div style={{ marginTop: 24, ...fadeIn(0.12) }}>
           <div style={{ display: 'flex', gap: 10 }}>
             {[
-              { value: profile.meetups_attended || 0, label: 'Meetups' },
+              { value: meetupCount, label: 'Meetups' },
               { value: connectionCount, label: 'Connections' },
               { value: mutualCircles.length, label: 'Shared Circles' },
             ].map((stat, i) => (

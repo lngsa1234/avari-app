@@ -193,6 +193,8 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
   const [participantProfiles, setParticipantProfiles] = useState({});
   const [completedActions, setCompletedActions] = useState(new Set());
   const [signedUpProfiles, setSignedUpProfiles] = useState([]);
+  const [connectionStatus, setConnectionStatus] = useState({}); // userId -> 'connected' | 'sent' | 'incoming' | null
+  const [isHost, setIsHost] = useState(false);
 
   const handleBack = () => {
     onNavigate?.(previousView || 'home');
@@ -239,7 +241,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
         // Circle meetup — try meetup first, then group
         const { data: meetupData } = await supabase
           .from('meetups')
-          .select('id, topic, description, date, time, location, circle_id')
+          .select('id, topic, description, date, time, location, circle_id, created_by')
           .eq('id', entityId)
           .single();
 
@@ -271,7 +273,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
         // Community event meetup
         const { data: meetupData } = await supabase
           .from('meetups')
-          .select('id, topic, description, date, time, location')
+          .select('id, topic, description, date, time, location, created_by')
           .eq('id', entityId)
           .single();
         meetup = meetupData;
@@ -323,6 +325,37 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
             .select('id, name, profile_picture, career')
             .in('id', signupUserIds);
           setSignedUpProfiles(signupProfiles || []);
+        }
+      }
+
+      // Load connection status for participant profiles
+      if (participantIds.length > 0) {
+        try {
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser) {
+            // Check if current user is the host
+            if (meetup?.created_by === authUser.id || group?.creator_id === authUser.id || data.created_by === authUser.id) {
+              setIsHost(true);
+            }
+            const [{ data: mutualMatches }, { data: myInterests }, { data: theirInterests }] = await Promise.all([
+              supabase.rpc('get_mutual_matches', { for_user_id: authUser.id }),
+              supabase.from('user_interests').select('interested_in_user_id').eq('user_id', authUser.id),
+              supabase.from('user_interests').select('user_id').eq('interested_in_user_id', authUser.id),
+            ]);
+            const status = {};
+            const connectedIds = new Set((mutualMatches || []).map(m => m.matched_user_id));
+            const sentIds = new Set((myInterests || []).map(i => i.interested_in_user_id));
+            const incomingIds = new Set((theirInterests || []).map(i => i.user_id));
+            participantIds.forEach(id => {
+              if (id === authUser.id) return;
+              if (connectedIds.has(id)) status[id] = 'connected';
+              else if (sentIds.has(id)) status[id] = 'sent';
+              else if (incomingIds.has(id)) status[id] = 'incoming';
+            });
+            setConnectionStatus(status);
+          }
+        } catch (err) {
+          console.warn('[RecapDetail] Failed to load connection status:', err);
         }
       }
 
@@ -661,7 +694,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                   </div>
                 ))}
               </div>
-              {noShows.length > 0 && (
+              {isHost && noShows.length > 0 && (
                 <div style={{ marginTop: '12px' }}>
                   <h4 style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textSoft, fontWeight: '600', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Signed up but didn't attend ({noShows.length})
@@ -959,23 +992,41 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                         <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textSoft, margin: '2px 0 0' }}>Topic: {followUp.suggestedTopic}</p>
                       )}
                     </div>
-                    {userId && (
-                      <button
-                        onClick={() => onNavigate?.('userProfile', { userId })}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '4px',
-                          padding: isMobile ? '6px 10px' : '7px 14px',
-                          borderRadius: '100px', border: 'none',
-                          backgroundColor: colors.primary, color: 'white',
-                          fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
-                          cursor: 'pointer', fontFamily: fonts.sans,
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Users size={isMobile ? 11 : 13} />
-                        Connect
-                      </button>
-                    )}
+                    {userId && (() => {
+                      const status = connectionStatus[userId];
+                      const label = status === 'connected' ? 'Schedule' : status === 'sent' ? 'Sent' : 'Connect';
+                      const bgColor = status === 'connected' ? colors.primary : status === 'sent' ? 'rgba(139, 158, 126, 0.15)' : colors.primary;
+                      const textColor = status === 'sent' ? '#5C7A4E' : 'white';
+                      const profile = participantProfiles[userId];
+                      return (
+                        <button
+                          onClick={() => {
+                            if (status === 'connected') {
+                              onNavigate?.('scheduleMeetup', {
+                                type: 'coffee',
+                                scheduleConnectionId: userId,
+                                scheduleConnectionName: profile?.name || followUp.personName,
+                              });
+                            } else {
+                              onNavigate?.('userProfile', { userId });
+                            }
+                          }}
+                          disabled={status === 'sent'}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '4px',
+                            padding: isMobile ? '6px 10px' : '7px 14px',
+                            borderRadius: '100px', border: 'none',
+                            backgroundColor: bgColor, color: textColor,
+                            fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
+                            cursor: status === 'sent' ? 'default' : 'pointer', fontFamily: fonts.sans,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {status === 'connected' ? <Calendar size={isMobile ? 11 : 13} /> : <Users size={isMobile ? 11 : 13} />}
+                          {label}
+                        </button>
+                      );
+                    })()}
                   </div>
                 );
               })}

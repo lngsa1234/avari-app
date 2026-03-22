@@ -680,7 +680,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     if (item.recapId) {
       markRecapReviewed(item.recapId);
       // All coffee chat types use the unified recap view
-      onNavigate('sessionRecapDetail', { recapId: item.recapId });
+      onNavigate('coffeeChatRecap', { recapId: item.recapId });
     }
   };
 

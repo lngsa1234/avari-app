@@ -1166,7 +1166,7 @@ export default function CircleDetailView({
                       borderRadius: '12px',
                       cursor: hasRecap ? 'pointer' : 'default',
                     }}
-                    onClick={hasRecap ? () => onNavigate?.('sessionRecapDetail', { recapId: recapMap[meetup.id] }) : undefined}
+                    onClick={hasRecap ? () => onNavigate?.('coffeeChatRecap', { recapId: recapMap[meetup.id] }) : undefined}
                   >
                     <div style={{
                       width: '40px',

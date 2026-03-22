@@ -56,8 +56,34 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
   const [showPassword, setShowPassword] = useState(false)
   const [message, setMessage] = useState(null)
 
+  const friendlyError = (msg) => {
+    if (!msg) return 'Something went wrong. Please try again.'
+    if (msg.includes('Anonymous sign-ins are disabled')) return 'Please enter your email and password.'
+    if (msg.includes('Invalid login credentials')) return 'Incorrect email or password.'
+    if (msg.includes('Email not confirmed')) return 'Please check your email and verify your account first.'
+    if (msg.includes('User already registered')) return 'An account with this email already exists. Try logging in.'
+    return msg
+  }
+
+  const validateFields = (needsPassword = true) => {
+    if (!email.trim()) {
+      setMessage({ type: 'error', text: 'Please enter your email.' })
+      return false
+    }
+    if (!/\S+@\S+\.\S+/.test(email.trim())) {
+      setMessage({ type: 'error', text: 'Please enter a valid email address.' })
+      return false
+    }
+    if (needsPassword && !password) {
+      setMessage({ type: 'error', text: 'Please enter a password.' })
+      return false
+    }
+    return true
+  }
+
   const handleEmailSignUp = async () => {
     setMessage(null)
+    if (!validateFields()) return
     try {
       const result = await onEmailSignUp(email, password)
 
@@ -72,19 +98,20 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error.message
+        text: friendlyError(error.message)
       })
     }
   }
 
   const handleEmailSignIn = async () => {
     setMessage(null)
+    if (!validateFields()) return
     try {
       await onEmailSignIn(email, password)
     } catch (error) {
       setMessage({
         type: 'error',
-        text: error.message
+        text: friendlyError(error.message)
       })
     }
   }
@@ -103,13 +130,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
 
   const handleForgotPassword = async () => {
     setMessage(null)
-    if (!email) {
-      setMessage({
-        type: 'error',
-        text: 'Please enter your email address'
-      })
-      return
-    }
+    if (!validateFields(false)) return
 
     try {
       const { error } = await import('@/lib/supabase').then(mod =>
@@ -223,6 +244,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
       />
       <button
         type="button"
+        aria-label={showPassword ? 'Hide password' : 'Show password'}
         onClick={() => setShowPassword(!showPassword)}
         style={{
           position: 'absolute',
@@ -280,6 +302,8 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
                 setShowForgotPassword(false)
                 setShowLogin(true)
                 setMessage(null)
+                setEmail('')
+                setPassword('')
               }}
               style={secondaryButtonStyle}
             >
@@ -330,6 +354,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
                 setShowForgotPassword(true)
                 setShowLogin(false)
                 setMessage(null)
+                setPassword('')
               }}
               style={{ ...secondaryButtonStyle, color: colors.primary, fontWeight: 500 }}
             >
@@ -339,6 +364,8 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
               onClick={() => {
                 setShowLogin(false)
                 setMessage(null)
+                setEmail('')
+                setPassword('')
               }}
               style={secondaryButtonStyle}
             >
@@ -388,6 +415,8 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
               onClick={() => {
                 setShowEmailSignup(false)
                 setMessage(null)
+                setEmail('')
+                setPassword('')
               }}
               style={secondaryButtonStyle}
             >
@@ -485,7 +514,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
 
           <div style={{ textAlign: 'center' }}>
             <button
-              onClick={() => setShowLogin(true)}
+              onClick={() => { setShowLogin(true); setEmail(''); setPassword(''); setMessage(null); }}
               style={{ ...secondaryButtonStyle, color: colors.primary, fontWeight: 500 }}
             >
               Already have an account? Log in

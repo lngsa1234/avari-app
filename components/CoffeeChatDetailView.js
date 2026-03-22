@@ -72,12 +72,19 @@ function parseAISummary(summary) {
     memorableQuotes: [],
     actionItems: [],
     suggestedFollowUps: [],
+    suggestedCircles: [],
   };
 
   if (!summary) return emptyResult;
 
+  let parsed = null;
   try {
-    const parsed = JSON.parse(summary);
+    parsed = typeof summary === 'object' ? summary : JSON.parse(summary);
+  } catch (e) {
+    // Not JSON — fall through to text parsing below
+  }
+
+  if (parsed && typeof parsed === 'object' && (parsed.summary || parsed.keyTakeaways || parsed.topicsDiscussed)) {
     return {
       summary: parsed.summary || '',
       sentiment: parsed.sentiment || null,
@@ -88,11 +95,10 @@ function parseAISummary(summary) {
         mentions: t.mentions || 1,
       })),
       memorableQuotes: parsed.memorableQuotes || [],
-      actionItems: (parsed.actionItems || []).map(a => typeof a === 'string' ? a : a.text || ''),
+      actionItems: (parsed.actionItems || []).map(a => typeof a === 'string' ? { text: a, assignee: '' } : { text: a.text || '', assignee: a.assignee || '' }),
       suggestedFollowUps: parsed.suggestedFollowUps || [],
+      suggestedCircles: (parsed.suggestedCircles || []).filter(c => c.name),
     };
-  } catch (e) {
-    // Not JSON, parse as text
   }
 
   const result = { ...emptyResult };
@@ -136,7 +142,7 @@ function parseAISummary(summary) {
       } else if (currentSection === 'takeaways' && cleanLine.length > 10) {
         result.keyTakeaways.push(cleanLine);
       } else if (currentSection === 'actions' && cleanLine.length > 5) {
-        result.actionItems.push(cleanLine);
+        result.actionItems.push({ text: cleanLine, assignee: '' });
       } else if (currentSection === 'topics' && cleanLine.length > 3) {
         result.topicsDiscussed.push({ topic: cleanLine, details: [] });
       } else if (currentSection === 'quotes' && cleanLine.length > 10) {
@@ -1724,14 +1730,25 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                       ) : (
                         <Circle size={isMobile ? 16 : 18} style={{ color: colors.textSoft, flexShrink: 0 }} />
                       )}
-                      <span style={{
-                        fontSize: bodyFontSize,
-                        color: isCompleted ? colors.sage : colors.textLight,
-                        textDecoration: isCompleted ? 'line-through' : 'none',
-                        flex: 1,
-                      }}>
-                        {item}
-                      </span>
+                      <div style={{ flex: 1 }}>
+                        <span style={{
+                          fontSize: bodyFontSize,
+                          color: isCompleted ? colors.sage : colors.textLight,
+                          textDecoration: isCompleted ? 'line-through' : 'none',
+                        }}>
+                          {typeof item === 'string' ? item : item.text}
+                        </span>
+                        {item.assignee && (
+                          <span style={{
+                            fontSize: isMobile ? '11px' : '12px',
+                            color: colors.primary,
+                            fontWeight: '500',
+                            marginLeft: '6px',
+                          }}>
+                            — {item.assignee}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })
