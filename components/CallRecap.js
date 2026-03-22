@@ -210,11 +210,9 @@ export default function CallRecap({
         setTopicsDiscussed(data.topicsDiscussed || []);
         setKeyTakeaways(data.keyTakeaways || []);
 
-        // Save the AI summary to the database
+        // Save the AI summary to the database as JSON for rich parsing
         if (channelName && data.summary) {
-          // Build a complete summary string that includes all structured data
-          const fullSummary = buildFullSummary(data);
-          await updateRecapSummaryByChannel(channelName, fullSummary);
+          await updateRecapSummaryByChannel(channelName, JSON.stringify(data));
         }
       }
     } catch (err) {

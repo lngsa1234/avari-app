@@ -41,7 +41,7 @@ export function useCallRoom(callType, roomId) {
           // 1:1 Coffee Chat - query coffee_chats directly (no video_rooms table needed)
           const { data: chatData, error: chatError } = await supabase
             .from('coffee_chats')
-            .select('id, requester_id, recipient_id, status, scheduled_time, notes, room_url')
+            .select('id, requester_id, recipient_id, status, scheduled_time, topic, notes, room_url')
             .eq('id', roomId)
             .single();
 
@@ -80,7 +80,7 @@ export function useCallRoom(callType, roomId) {
           if (meetupId) {
             const { data: meetupData } = await supabase
               .from('meetups')
-              .select('id, topic, description, date, time, location, created_by')
+              .select('id, topic, description, date, time, duration, location, created_by')
               .eq('id', meetupId)
               .single();
 
@@ -120,7 +120,7 @@ export function useCallRoom(callType, roomId) {
             // Try to find a meetup with this ID first (new format: meetupId)
             const { data: meetupData } = await supabase
               .from('meetups')
-              .select('id, topic, date, time, circle_id')
+              .select('id, topic, date, time, duration, circle_id')
               .eq('id', extractedId)
               .single();
 
@@ -142,7 +142,7 @@ export function useCallRoom(callType, roomId) {
               if (!resolvedMeetup) {
                 const { data: latestMeetup } = await supabase
                   .from('meetups')
-                  .select('id, topic, date, time')
+                  .select('id, topic, date, time, duration')
                   .eq('circle_id', groupId)
                   .order('date', { ascending: false })
                   .limit(1)
@@ -156,6 +156,7 @@ export function useCallRoom(callType, roomId) {
                 meetupTopic: resolvedMeetup?.topic || null,
                 meetupDate: resolvedMeetup?.date || null,
                 meetupTime: resolvedMeetup?.time || null,
+                meetupDuration: resolvedMeetup?.duration || null,
               };
               roomData = { channel_name: roomId, group_id: groupId };
 

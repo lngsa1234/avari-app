@@ -57,6 +57,7 @@ export default function UnifiedCallPage() {
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
   const [remoteParticipants, setRemoteParticipants] = useState([]);
+  const allParticipantIdsRef = useRef(new Set()); // Track everyone who ever joined
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const activeSpeakerTimeoutRef = useRef(null);
 
@@ -991,7 +992,10 @@ export default function UnifiedCallPage() {
     roomRef.current = room;
 
     // Event handlers
-    room.on(RoomEvent.ParticipantConnected, () => updateLiveKitParticipants(room));
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+      if (participant?.identity) allParticipantIdsRef.current.add(participant.identity);
+      updateLiveKitParticipants(room);
+    });
     room.on(RoomEvent.ParticipantDisconnected, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackSubscribed, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackUnsubscribed, () => updateLiveKitParticipants(room));
@@ -1105,6 +1109,7 @@ export default function UnifiedCallPage() {
     });
     client.on('user-joined', (remoteUser) => {
       console.log('[Agora] user-joined:', remoteUser.uid);
+      allParticipantIdsRef.current.add(String(remoteUser.uid));
       updateAgoraParticipants(client);
     });
     client.on('user-left', (remoteUser) => {
@@ -2028,8 +2033,10 @@ export default function UnifiedCallPage() {
     setIsLeaving(true);
 
     // Capture state before cleanup
+    // Use allParticipantIdsRef for complete list of everyone who ever joined
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const participantIds = [user?.id, ...remoteParticipants.map(p => p.id)].filter(id => id && uuidRegex.test(id));
+    allParticipantIdsRef.current.add(user?.id); // Add self
+    const participantIds = [...allParticipantIdsRef.current].filter(id => id && uuidRegex.test(id));
     const isLastPerson = remoteParticipants.length === 0;
     const currentTranscript = [...transcript];
     const currentMessages = [...messages];
@@ -2070,6 +2077,11 @@ export default function UnifiedCallPage() {
       }));
     }
 
+    // Get scheduled meeting info for duration clamping
+    const schedDate = relatedData?.date || relatedData?.meetupDate || null;
+    const schedTime = relatedData?.time || relatedData?.meetupTime || null;
+    const schedDuration = relatedData?.duration || relatedData?.meetupDuration || null;
+
     // Step 5: Save this user's transcript to the recap (no AI summary yet)
     try {
       await saveCallRecap({
@@ -2082,7 +2094,10 @@ export default function UnifiedCallPage() {
         transcript: currentTranscript,
         aiSummary: null,  // null = don't overwrite existing summary
         metrics: {},
-        userId: user?.id
+        userId: user?.id,
+        scheduledDate: schedDate,
+        scheduledTime: schedTime,
+        scheduledDuration: schedDuration,
       });
       console.log('[UnifiedCall] Transcript saved to database');
     } catch (saveErr) {
@@ -2140,23 +2155,8 @@ export default function UnifiedCallPage() {
         if (response.ok) {
           const summaryData = await response.json();
 
-          // Build full summary text for storage
-          let fullSummaryText = summaryData.summary || '';
-          if (summaryData.keyTakeaways?.length > 0) {
-            fullSummaryText += '\n\nKey Takeaways:\n';
-            summaryData.keyTakeaways.forEach(t => {
-              const text = typeof t === 'string' ? t : (t.text || t);
-              const emoji = typeof t === 'object' && t.emoji ? t.emoji + ' ' : '• ';
-              fullSummaryText += `${emoji}${text}\n`;
-            });
-          }
-          if (summaryData.actionItems?.length > 0) {
-            fullSummaryText += '\nAction Items:\n';
-            summaryData.actionItems.forEach(a => {
-              const text = typeof a === 'string' ? a : (a.text || a);
-              fullSummaryText += `• ${text}\n`;
-            });
-          }
+          // Store as JSON string so SessionRecapDetailView can parse all fields
+          const aiSummaryJson = JSON.stringify(summaryData);
 
           // Save recap WITH AI summary
           try {
@@ -2168,9 +2168,12 @@ export default function UnifiedCallPage() {
               endedAt: endTime,
               participants: allParticipants,
               transcript: combinedTranscript,
-              aiSummary: fullSummaryText.trim(),
+              aiSummary: aiSummaryJson,
               metrics: {},
-              userId: user?.id
+              userId: user?.id,
+              scheduledDate: schedDate,
+              scheduledTime: schedTime,
+              scheduledDuration: schedDuration,
             });
             console.log('[UnifiedCall] AI recap saved to database');
           } catch (saveErr) {

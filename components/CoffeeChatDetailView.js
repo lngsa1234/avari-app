@@ -175,7 +175,7 @@ function formatDuration(seconds) {
   return `${mins}m`;
 }
 
-export default function EventDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, previousView, onMeetupChanged, toast }) {
+export default function CoffeeChatDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, previousView, onMeetupChanged, toast }) {
   const sb = supabaseProp || supabase;
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 640;
@@ -1015,9 +1015,11 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
               )}
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
                 <Users size={isMobile ? 12 : 14} /> {
-                  meetup.meeting_format === 'hybrid'
-                    ? `${attendeeCounts.in_person} in-person, ${attendeeCounts.video} virtual`
-                    : `${attendees.length} attendee${attendees.length !== 1 ? 's' : ''}`
+                  showRecapView
+                    ? `${actualParticipants.length || recap?.participant_count || 0} attended`
+                    : meetup.meeting_format === 'hybrid'
+                      ? `${attendeeCounts.in_person} in-person, ${attendeeCounts.video} virtual`
+                      : `${attendees.length} signed up`
                 }
               </span>
             </div>
@@ -1034,51 +1036,55 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
         {/* Event details - always shown */}
         <>
             {/* Action buttons */}
+            {showRecapView ? (
+              /* Recap view: Share Recap only */
+              <button
+                onClick={async () => {
+                  const title = meetup.topic || 'Coffee Chat Recap';
+                  const topics = (parsed?.topicsDiscussed || []).map(t => typeof t === 'string' ? t : t.topic).filter(Boolean);
+                  const takeaways = (parsed?.keyTakeaways || []).map(t => typeof t === 'string' ? t : t.text || '').filter(Boolean).slice(0, 3);
+                  const durationMin = recap?.duration_seconds ? Math.floor(recap.duration_seconds / 60) : 0;
+                  const participantCount = actualParticipants.length || recap?.participant_count || 0;
+                  const url = `${window.location.origin}/recaps/${recap?.id}`;
+
+                  const lines = [
+                    `\u2615 ${title} \u2014 Recap`,
+                    '',
+                    `${durationMin > 0 ? durationMin + ' min' : ''}${durationMin > 0 && participantCount > 0 ? ' \u00B7 ' : ''}${participantCount > 0 ? participantCount + ' participants' : ''}`,
+                    topics.length > 0 ? `\nTopics:\n${topics.map(t => `\u2022 ${t}`).join('\n')}` : '',
+                    takeaways.length > 0 ? `\nKey Takeaways:\n${takeaways.map(t => `\u2022 ${t}`).join('\n')}` : '',
+                    '',
+                    `\uD83D\uDD17 View full recap on CircleW`,
+                    url,
+                  ].filter(Boolean).join('\n');
+
+                  if (navigator.share) {
+                    try { await navigator.share({ title, text: lines }); } catch (e) { /* cancelled */ }
+                  } else {
+                    await navigator.clipboard.writeText(lines);
+                    alert('Recap copied to clipboard!');
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                  padding: '10px 16px', borderRadius: '12px',
+                  backgroundColor: 'transparent', color: colors.textLight,
+                  border: `1px solid ${colors.border}`, fontSize: '13px', fontWeight: '500',
+                  cursor: 'pointer', fontFamily: fonts.sans,
+                }}
+              >
+                <Share2 size={15} /> Share Recap
+              </button>
+            ) : (
+              /* Detail view: Join Call + Share Event + Cancel/RSVP */
             <div style={{
               display: 'flex',
               flexDirection: 'column',
               gap: '10px',
             }}>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                {showRecapView ? (
-                  /* Recap view: Share Recap only */
-                  <button
-                    onClick={async () => {
-                      const title = meetup.topic || 'Coffee Chat Recap';
-                      const summary = parsed?.summary || '';
-                      const topics = (parsed?.topicsDiscussed || []).map(t => typeof t === 'string' ? t : t.topic).filter(Boolean);
-                      const durationMin = recap?.duration_seconds ? Math.floor(recap.duration_seconds / 60) : 0;
-
-                      const lines = [
-                        `${title} - Recap`,
-                        '',
-                        summary,
-                        topics.length > 0 ? `\nTopics: ${topics.join(', ')}` : '',
-                        durationMin > 0 ? `Duration: ${durationMin} min` : '',
-                        `${actualParticipants.length} participants`,
-                      ].filter(Boolean).join('\n');
-
-                      if (navigator.share) {
-                        try { await navigator.share({ title, text: lines }); } catch (e) { /* cancelled */ }
-                      } else {
-                        await navigator.clipboard.writeText(lines);
-                        alert('Recap copied to clipboard!');
-                      }
-                    }}
-                    style={{
-                      flex: 1,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
-                      padding: '12px 16px', borderRadius: '14px',
-                      backgroundColor: 'transparent', color: colors.textLight,
-                      border: `1px solid ${colors.border}`, fontSize: '14px', fontWeight: '500',
-                      cursor: 'pointer', fontFamily: fonts.sans,
-                    }}
-                  >
-                    <Share2 size={16} /> Share Recap
-                  </button>
-                ) : (
-                  /* Detail view: Join Call + Share Event + Cancel/RSVP */
-                  <>
+                <>
                 {(isSignedUp || isHost) ? (
                   <>
                     {meetup.meeting_format !== 'in_person' && (
@@ -1186,7 +1192,6 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                     <Share2 size={16} /> Share Event
                   </button>
                   </>
-                )}
                 </div>
 
                 {/* Hybrid format picker */}
@@ -1231,6 +1236,7 @@ export default function EventDetailView({ currentUser, supabase: supabaseProp, o
                   </div>
                 )}
               </div>
+            )}
 
             {/* Description */}
             {(meetup.description || (isHost && !isPast)) && (

@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server';
  */
 export async function POST(request) {
   try {
-    const { transcript, messages, participants, duration, meetingTitle, meetingType } = await request.json();
+    const { transcript, messages, participants, duration, meetingTitle, meetingType, existingCircles } = await request.json();
 
     // Check if we have content to summarize
     if ((!transcript || transcript.length === 0) && (!messages || messages.length === 0)) {
@@ -77,12 +77,12 @@ export async function POST(request) {
     if (openaiKey) {
       // Use OpenAI
       console.log('[Generate Recap Summary] Using OpenAI');
-      const aiResult = await generateWithOpenAI(openaiKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
+      const aiResult = await generateWithOpenAI(openaiKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType, existingCircles);
       if (aiResult) result = aiResult;
     } else if (anthropicKey) {
       // Use Anthropic Claude
       console.log('[Generate Recap Summary] Using Anthropic');
-      const aiResult = await generateWithAnthropic(anthropicKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType);
+      const aiResult = await generateWithAnthropic(anthropicKey, contentToSummarize, participantNames, durationMinutes, meetingTitle, meetingType, existingCircles);
       if (aiResult) result = aiResult;
     } else {
       console.log('[Generate Recap Summary] No AI provider configured, using simple summary');
@@ -189,6 +189,57 @@ function cleanTranscript(transcript) {
   ].join('\n');
 }
 
+/**
+ * Robustly extract a JSON object from an LLM response.
+ * Handles: raw JSON, markdown code blocks, preamble/postamble text, BOM characters.
+ */
+function extractJSON(text) {
+  if (!text || typeof text !== 'string') {
+    throw new Error('Empty or non-string response');
+  }
+
+  // Strip BOM and trim
+  let cleaned = text.replace(/^\uFEFF/, '').trim();
+
+  // 1. Try direct parse first (ideal case)
+  try {
+    return JSON.parse(cleaned);
+  } catch (_) { /* continue */ }
+
+  // 2. Try extracting from markdown code blocks: ```json ... ``` or ``` ... ```
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1].trim());
+    } catch (_) { /* continue */ }
+  }
+
+  // 3. Try finding the first { ... } that contains "summary" (our expected key)
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const candidate = cleaned.substring(firstBrace, lastBrace + 1);
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === 'object') {
+        return parsed;
+      }
+    } catch (_) { /* continue */ }
+  }
+
+  // 4. Last resort: try to fix common JSON issues (trailing commas, single quotes)
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    let candidate = cleaned.substring(firstBrace, lastBrace + 1);
+    // Remove trailing commas before } or ]
+    candidate = candidate.replace(/,\s*([}\]])/g, '$1');
+    try {
+      return JSON.parse(candidate);
+    } catch (_) { /* continue */ }
+  }
+
+  throw new Error('Could not extract valid JSON from response');
+}
+
 const ENHANCED_SYSTEM_PROMPT = `You are a helpful assistant that summarizes video call transcripts. The transcript may be in any language (English, Chinese, etc.) and may contain speech recognition errors — do your best to understand the intent.
 
 RULES:
@@ -216,16 +267,21 @@ Return a JSON object with this structure:
     { "quote": "Notable quote from transcript", "author": "Speaker Name" }
   ],
   "actionItems": [
-    { "text": "Action item if any were mentioned", "done": false }
+    { "text": "Action item if any were mentioned", "assignee": "Person Name", "done": false }
   ],
-  "suggestedFollowUps": []
+  "suggestedFollowUps": [
+    { "personName": "Person Name", "reason": "Why to follow up with them", "suggestedTopic": "Topic to discuss" }
+  ],
+  "suggestedCircles": []
 }
 
 Guidelines:
 - summary: Provide a warm, natural summary of the conversation. Mention what was discussed and the general vibe.
 - keyTakeaways: Extract actual insights or decisions from the conversation
 - topicsDiscussed: List 3-5 topics with exactly 2 bullet-point descriptions each. Each detail should start with a past-tense verb (e.g. "Discussed...", "Explored...", "Identified...", "Shared...")
-- actionItems: Only include if specific action items were mentioned
+- actionItems: Only include if specific action items were mentioned. Assign each to the person responsible using their name from the transcript
+- suggestedFollowUps: Suggest 1-3 participants to follow up with based on the conversation. Use the participant names provided. Include a reason and a specific topic to discuss next
+- suggestedCircles: ONLY suggest when the conversation reveals a strong shared interest that would benefit from ongoing group discussion. Each entry should have: "type" ("join" for an existing circle, "create" for a new one), "name" (circle name), "reason" (why this is relevant based on the conversation), and for "create" type, "suggestedMembers" (participant names who showed interest). If existing circles are provided in the context, check if any are a strong match. Leave this array EMPTY if there is no compelling reason — do not force suggestions
 - If transcript is minimal (just greetings), keep arrays short but still describe what happened
 
 Return ONLY valid JSON, no additional text or markdown.`;
@@ -233,7 +289,20 @@ Return ONLY valid JSON, no additional text or markdown.`;
 /**
  * Generate structured summary using OpenAI
  */
-async function generateWithOpenAI(apiKey, content, participants, duration, meetingTitle, meetingType) {
+function buildUserPrompt(content, participants, duration, meetingTitle, meetingType, existingCircles) {
+  let prompt = `Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}.
+
+Note: The transcript may be sampled from a longer conversation (beginning, middle, and end sections). Sections marked with "[...]" indicate omitted portions. Synthesize across all sections for a complete summary.`;
+
+  if (existingCircles && existingCircles.length > 0) {
+    prompt += `\n\nExisting circles on the platform (only suggest joining if strongly relevant to the conversation):\n${existingCircles.map(c => `- ${c.name}`).join('\n')}`;
+  }
+
+  prompt += `\n\nTranscript:\n${content}`;
+  return prompt;
+}
+
+async function generateWithOpenAI(apiKey, content, participants, duration, meetingTitle, meetingType, existingCircles) {
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -250,10 +319,10 @@ async function generateWithOpenAI(apiKey, content, participants, duration, meeti
           },
           {
             role: 'user',
-            content: `Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}.\n\nNote: The transcript may be sampled from a longer conversation (beginning, middle, and end sections). Sections marked with "[...]" indicate omitted portions. Synthesize across all sections for a complete summary.\n\nTranscript:\n${content}`
+            content: buildUserPrompt(content, participants, duration, meetingTitle, meetingType, existingCircles)
           }
         ],
-        max_tokens: 2000,
+        max_tokens: 4000,
         temperature: 0.7
       })
     });
@@ -263,14 +332,7 @@ async function generateWithOpenAI(apiKey, content, participants, duration, meeti
       const responseText = data.choices[0]?.message?.content;
 
       try {
-        // Try to extract JSON from the response (handle markdown code blocks)
-        let jsonStr = responseText;
-        const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[1].trim();
-        }
-
-        const parsed = JSON.parse(jsonStr);
+        const parsed = extractJSON(responseText);
         return normalizeResponse(parsed, participants, duration, meetingTitle);
       } catch (parseError) {
         console.error('Failed to parse OpenAI JSON response:', parseError);
@@ -288,7 +350,7 @@ async function generateWithOpenAI(apiKey, content, participants, duration, meeti
 /**
  * Generate structured summary using Anthropic Claude
  */
-async function generateWithAnthropic(apiKey, content, participants, duration, meetingTitle, meetingType) {
+async function generateWithAnthropic(apiKey, content, participants, duration, meetingTitle, meetingType, existingCircles) {
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -299,18 +361,11 @@ async function generateWithAnthropic(apiKey, content, participants, duration, me
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [
           {
             role: 'user',
-            content: `${ENHANCED_SYSTEM_PROMPT}
-
-Analyze this ${duration} minute ${meetingType || 'video call'}${meetingTitle ? ` titled "${meetingTitle}"` : ''} with ${participants.join(', ') || 'the participants'}.
-
-Note: The transcript may be sampled from a longer conversation (beginning, middle, and end sections). Sections marked with "[...]" indicate omitted portions. Synthesize across all sections for a complete summary.
-
-Transcript:
-${content}`
+            content: `${ENHANCED_SYSTEM_PROMPT}\n\n${buildUserPrompt(content, participants, duration, meetingTitle, meetingType, existingCircles)}`
           }
         ]
       })
@@ -322,18 +377,11 @@ ${content}`
       console.log('[Anthropic] Response received, length:', responseText?.length);
 
       try {
-        // Try to extract JSON from the response (handle markdown code blocks)
-        let jsonStr = responseText;
-        const jsonMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-          jsonStr = jsonMatch[1].trim();
-        }
-
-        const parsed = JSON.parse(jsonStr);
+        const parsed = extractJSON(responseText);
         console.log('[Anthropic] Parsed successfully, summary:', parsed.summary?.substring(0, 80));
         return normalizeResponse(parsed, participants, duration, meetingTitle);
       } catch (parseError) {
-        console.error('[Anthropic] Failed to parse JSON response:', parseError, 'Raw:', responseText?.substring(0, 200));
+        console.error('[Anthropic] Failed to parse JSON response:', parseError, 'Raw:', responseText?.substring(0, 300));
         return null;
       }
     } else {
@@ -376,6 +424,7 @@ function normalizeResponse(parsed, participants, duration, meetingTitle) {
     actionItems: Array.isArray(parsed.actionItems)
       ? parsed.actionItems.map(a => ({
           text: typeof a === 'string' ? a : (a.text || ''),
+          assignee: a.assignee || '',
           done: a.done || false
         }))
       : [],
@@ -389,7 +438,15 @@ function normalizeResponse(parsed, participants, duration, meetingTitle) {
           personName: typeof p === 'string' ? p : (p.name || ''),
           reason: 'Continue the conversation',
           suggestedTopic: 'Follow up on discussion'
-        }))
+        })),
+    suggestedCircles: Array.isArray(parsed.suggestedCircles)
+      ? parsed.suggestedCircles.map(c => ({
+          type: c.type || 'join',
+          name: c.name || '',
+          reason: c.reason || '',
+          suggestedMembers: Array.isArray(c.suggestedMembers) ? c.suggestedMembers : []
+        })).filter(c => c.name)
+      : []
   };
 }
 

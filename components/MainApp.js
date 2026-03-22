@@ -27,8 +27,8 @@ import MessagesPageView from './MessagesPageView'
 import CoffeeChatsView from './CoffeeChatsView'
 import UserProfileView from './UserProfileView'
 import ScheduleMeetupView from './ScheduleMeetupView'
-import SessionRecapDetailView from './SessionRecapDetailView'
-import EventDetailView from './EventDetailView'
+import CoffeeChatRecapView from './CoffeeChatRecapView'
+import CoffeeChatDetailView from './CoffeeChatDetailView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/coffeeChatHelpers'
 import NudgeBanner from './NudgeBanner'
@@ -1229,46 +1229,7 @@ function MainApp({ currentUser, onSignOut }) {
 
   const loadMeetupPeople = useCallback(async () => {
     try {
-      // STEP 1: Get meetups current user attended
-      const { data: mySignups, error: signupsError } = await supabase
-        .from('meetup_signups')
-        .select('meetup_id')
-        .eq('user_id', currentUser.id)
-
-      if (signupsError) throw signupsError
-
-      const myMeetupIds = mySignups.map(s => s.meetup_id)
-
-      if (myMeetupIds.length === 0) {
-        setMeetupPeople({})
-        return
-      }
-
-      // STEP 2: Get meetup details for attended meetups
-      const { data: allMeetupsData, error: meetupsError } = await supabase
-        .from('meetups')
-        .select('*')
-        .in('id', myMeetupIds)
-        .order('date', { ascending: false })
-
-      if (meetupsError) throw meetupsError
-
-      // STEP 3: Filter to ONLY PAST meetups (date + time check)
-      const now = new Date()
-      const meetupsData = allMeetupsData.filter(meetup => {
-        const meetupDateTime = parseLocalDate(meetup.date)
-        if (meetup.time) { const [h, m] = meetup.time.split(':').map(Number); meetupDateTime.setHours(h, m, 0, 0) }
-        const isPast = meetupDateTime < now
-        return isPast
-      })
-
-      if (!meetupsData || meetupsData.length === 0) {
-        setMeetupPeople({})
-        return
-      }
-
-      // STEP 4: 🔥 Get existing connections to exclude them
-      // Use the same RPC function as loadConnections
+      // STEP 1: Get existing connections to exclude them
       const { data: existingConnections, error: connectionsError } = await supabase
         .rpc('get_mutual_matches', { for_user_id: currentUser.id })
 
@@ -1276,49 +1237,39 @@ function MainApp({ currentUser, onSignOut }) {
         console.error('⚠️ Error loading connections for filtering:', connectionsError)
       }
 
-      // Build a Set of connected user IDs for fast lookup
       const connectedUserIds = new Set()
       if (existingConnections) {
         existingConnections.forEach(match => {
-          // The RPC returns matched_user_id
           connectedUserIds.add(match.matched_user_id)
         })
       }
 
-      // STEP 5: Batch fetch all signups for past meetups in ONE query
-      const pastMeetupIds = meetupsData.map(m => m.id)
-      const { data: allSignups, error: allSignupsError } = await supabase
+      // STEP 2: Get meetups current user attended (for mutual meetup scoring)
+      const { data: mySignups } = await supabase
         .from('meetup_signups')
-        .select('meetup_id, user_id')
-        .in('meetup_id', pastMeetupIds)
-        .neq('user_id', currentUser.id)
+        .select('meetup_id')
+        .eq('user_id', currentUser.id)
 
-      if (allSignupsError) {
-        console.error('❌ Error loading signups:', allSignupsError)
-        setMeetupPeople({})
-        return
+      const myMeetupIds = (mySignups || []).map(s => s.meetup_id)
+
+      // Get other users who attended the same meetups
+      const mutualMeetupUserIds = new Set()
+      if (myMeetupIds.length > 0) {
+        const { data: coAttendees } = await supabase
+          .from('meetup_signups')
+          .select('user_id')
+          .in('meetup_id', myMeetupIds)
+          .neq('user_id', currentUser.id)
+
+        ;(coAttendees || []).forEach(s => mutualMeetupUserIds.add(s.user_id))
       }
 
-      // Filter out connected users and collect all unique user IDs
-      const signupsByMeetup = {}
-      const allUserIds = new Set()
-      ;(allSignups || []).forEach(s => {
-        if (connectedUserIds.has(s.user_id)) return
-        if (!signupsByMeetup[s.meetup_id]) signupsByMeetup[s.meetup_id] = []
-        signupsByMeetup[s.meetup_id].push(s.user_id)
-        allUserIds.add(s.user_id)
-      })
-
-      if (allUserIds.size === 0) {
-        setMeetupPeople({})
-        return
-      }
-
-      // ONE profile query for all users
+      // STEP 3: Fetch ALL profiles (except self and already-connected)
       const { data: allProfiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, name, career, city, state, bio, last_active')
-        .in('id', Array.from(allUserIds))
+        .select('id, name, career, city, state, bio, last_active, open_to_coffee_chat, profile_picture')
+        .neq('id', currentUser.id)
+        .not('name', 'is', null)
 
       if (profilesError) {
         console.error('❌ Error loading profiles:', profilesError)
@@ -1326,24 +1277,33 @@ function MainApp({ currentUser, onSignOut }) {
         return
       }
 
-      const profileMap = {}
-      ;(allProfiles || []).forEach(p => { profileMap[p.id] = p })
+      // Filter out connected users and sort by priority
+      const candidates = (allProfiles || [])
+        .filter(p => !connectedUserIds.has(p.id))
+        .map(p => ({
+          id: p.id,
+          user: p,
+          hasMutualMeetup: mutualMeetupUserIds.has(p.id),
+        }))
+        .sort((a, b) => {
+          // Priority: mutual meetup > open to coffee chat > others
+          const scoreA = (a.hasMutualMeetup ? 4 : 0) + (a.user.open_to_coffee_chat ? 2 : 0)
+          const scoreB = (b.hasMutualMeetup ? 4 : 0) + (b.user.open_to_coffee_chat ? 2 : 0)
+          return scoreB - scoreA
+        })
 
-      // Assemble result
-      const meetupPeopleMap = {}
-      const meetupMap = {}
-      meetupsData.forEach(m => { meetupMap[m.id] = m })
+      if (candidates.length === 0) {
+        setMeetupPeople({})
+        return
+      }
 
-      Object.entries(signupsByMeetup).forEach(([meetupId, userIds]) => {
-        const people = userIds
-          .map(uid => profileMap[uid] ? { id: uid, user: profileMap[uid] } : null)
-          .filter(Boolean)
-        if (people.length > 0) {
-          meetupPeopleMap[meetupId] = { meetup: meetupMap[meetupId], people }
+      // Wrap in a single "recommended" group for the existing UI
+      setMeetupPeople({
+        recommended: {
+          meetup: { id: 'recommended', title: 'Recommended' },
+          people: candidates,
         }
       })
-
-      setMeetupPeople(meetupPeopleMap)
     } catch (err) {
       console.error('💥 Error loading meetup people:', err)
       setMeetupPeople({})
@@ -1933,6 +1893,7 @@ function MainApp({ currentUser, onSignOut }) {
           bio: editedProfile.hook || null,
           open_to_hosting: editedProfile.open_to_hosting || false,
           open_to_coffee_chat: editedProfile.open_to_coffee_chat || false,
+          coffee_chat_slots: editedProfile.coffee_chat_slots || null,
           age: editedProfile.age ? parseInt(editedProfile.age) : null,
           city: editedProfile.city,
           state: editedProfile.state.toUpperCase(),
@@ -3575,6 +3536,11 @@ function MainApp({ currentUser, onSignOut }) {
                         {person.bio && (
                           <p className="text-sm text-gray-700 mt-2 italic">"{person.bio}"</p>
                         )}
+                        {person.open_to_coffee_chat && (
+                          <span className="inline-flex items-center gap-1 mt-2 px-2.5 py-1 text-xs font-semibold rounded-full" style={{ backgroundColor: '#FDF3EB', color: '#6B4F3A' }}>
+                            <Coffee className="w-3 h-3" /> Open to Coffee Chat
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -4083,7 +4049,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'adminAnalytics' && currentUser.role === 'admin' && <AdminAnalyticsView currentUser={currentUser} supabase={supabase} />}
         {currentView === 'allEvents' && <AllEventsView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
         {currentView === 'eventDetail' && (
-          <EventDetailView
+          <CoffeeChatDetailView
             currentUser={currentUser}
             supabase={supabase}
             onNavigate={handleNavigate}
@@ -4102,7 +4068,7 @@ function MainApp({ currentUser, onSignOut }) {
           setConnections(prev => prev.filter(c => (c.connected_user?.id || c.id) !== userId));
         }} />}
         {currentView === 'sessionRecapDetail' && (
-          <SessionRecapDetailView
+          <CoffeeChatRecapView
             recapId={selectedRecapId}
             onNavigate={handleNavigate}
             previousView={previousView}

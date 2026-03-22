@@ -679,13 +679,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   const handleViewRecap = (item) => {
     if (item.recapId) {
       markRecapReviewed(item.recapId);
-      if (item.type === 'coffee') {
-        // Coffee chats don't have an event page yet — use session recap
-        onNavigate('sessionRecapDetail', { recapId: item.recapId });
-      } else {
-        // Meetups and circle meetings — go to event page which shows the recap
-        onNavigate('eventDetail', { meetupId: item.sourceId, recapId: item.recapId });
-      }
+      // All coffee chat types use the unified recap view
+      onNavigate('sessionRecapDetail', { recapId: item.recapId });
     }
   };
 
@@ -1476,7 +1471,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             let totalCompleted = 0;
 
             const parsedItems = pastMeetups.map(item => {
-              const durationMin = item.recapData?.duration_seconds ? Math.round(item.recapData.duration_seconds / 60) : null;
+              const durationMin = item.recapData?.duration_seconds ? Math.floor(item.recapData.duration_seconds / 60) : null;
               const durationStr = durationMin ? (durationMin >= 60 ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m` : `${durationMin}m`) : null;
               const attendeeCount = item.recapData?.participant_count || item.participants?.length || (item.type === 'coffee' ? 2 : null);
 

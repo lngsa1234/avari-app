@@ -14,6 +14,7 @@ import {
   ListTodo,
   MessageSquare,
   Quote,
+  Share2,
 } from 'lucide-react';
 
 const colors = {
@@ -62,6 +63,7 @@ function parseAISummary(summary) {
     memorableQuotes: [],
     actionItems: [],
     suggestedFollowUps: [],
+    suggestedCircles: [],
   };
 
   if (!summary) return emptyResult;
@@ -87,6 +89,7 @@ function parseAISummary(summary) {
       memorableQuotes: parsed.memorableQuotes || [],
       actionItems: (parsed.actionItems || []).map(a => typeof a === 'string' ? { text: a, assignee: '' } : { text: a.text || '', assignee: a.assignee || '' }),
       suggestedFollowUps: parsed.suggestedFollowUps || [],
+      suggestedCircles: (parsed.suggestedCircles || []).filter(c => c.name),
     };
   }
 
@@ -179,7 +182,7 @@ function getCallTypeLabel(callType) {
   }
 }
 
-export default function SessionRecapDetailView({ recapId, onNavigate, previousView }) {
+export default function CoffeeChatRecapView({ recapId, onNavigate, previousView }) {
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 640;
   const isTablet = windowWidth >= 640 && windowWidth < 768;
@@ -189,6 +192,7 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
   const [loading, setLoading] = useState(true);
   const [participantProfiles, setParticipantProfiles] = useState({});
   const [completedActions, setCompletedActions] = useState(new Set());
+  const [signedUpProfiles, setSignedUpProfiles] = useState([]);
 
   const handleBack = () => {
     onNavigate?.(previousView || 'home');
@@ -304,6 +308,24 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
         setParticipantProfiles(profileMap);
       }
 
+      // Load signups for meetup-based events to show no-shows
+      if (meetup?.id || entityId) {
+        const meetupId = meetup?.id || entityId;
+        const { data: signups } = await supabase
+          .from('meetup_signups')
+          .select('user_id')
+          .eq('meetup_id', meetupId);
+
+        if (signups && signups.length > 0) {
+          const signupUserIds = signups.map(s => s.user_id).filter(Boolean);
+          const { data: signupProfiles } = await supabase
+            .from('profiles')
+            .select('id, name, profile_picture, career')
+            .in('id', signupUserIds);
+          setSignedUpProfiles(signupProfiles || []);
+        }
+      }
+
       // Load completed actions from localStorage
       const savedActions = localStorage.getItem('completed_recap_actions');
       if (savedActions) {
@@ -315,6 +337,11 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
         console.log('[RecapDetail] No AI summary found, generating lazily...');
         try {
           const participantNames = Object.values(participantProfiles || {}).map(p => p.name).filter(Boolean);
+          // Fetch existing circles for AI context
+          const { data: circles } = await supabase
+            .from('connection_groups')
+            .select('id, name')
+            .eq('is_active', true);
           const response = await fetch('/api/generate-recap-summary', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -324,7 +351,8 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
               participants: participantNames.length > 0 ? participantNames : ['Participant'],
               duration: data.duration_seconds || 0,
               meetingTitle: eventTitle || 'Coffee Chat',
-              meetingType: data.call_type === '1on1' ? '1:1 coffee chat' : 'circle meetup'
+              meetingType: data.call_type === '1on1' ? '1:1 coffee chat' : 'circle meetup',
+              existingCircles: (circles || []).map(c => ({ name: c.name, id: c.id }))
             })
           });
           if (response.ok) {
@@ -534,6 +562,47 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
         </div>
       </div>
 
+      {/* Share Recap */}
+      <div style={{ padding: '0 0 8px' }}>
+        <button
+          onClick={async () => {
+            const title = recap.meetup_title || 'Coffee Chat Recap';
+            const topics = (parsed?.topicsDiscussed || []).map(t => typeof t === 'string' ? t : t.topic).filter(Boolean);
+            const takeaways = (parsed?.keyTakeaways || []).map(t => typeof t === 'string' ? t : t.text || '').filter(Boolean).slice(0, 3);
+            const durationMin = recap.duration_seconds ? Math.floor(recap.duration_seconds / 60) : 0;
+            const participantCount = recap.participant_count || 0;
+
+            const url = `${window.location.origin}/recaps/${recapId}`;
+            const lines = [
+              `\u2615 ${title} \u2014 Recap`,
+              '',
+              `${durationMin > 0 ? durationMin + ' min' : ''}${durationMin > 0 && participantCount > 0 ? ' \u00B7 ' : ''}${participantCount > 0 ? participantCount + ' participants' : ''}`,
+              topics.length > 0 ? `\nTopics:\n${topics.map(t => `\u2022 ${t}`).join('\n')}` : '',
+              takeaways.length > 0 ? `\nKey Takeaways:\n${takeaways.map(t => `\u2022 ${t}`).join('\n')}` : '',
+              '',
+              `\uD83D\uDD17 View full recap on CircleW`,
+              url,
+            ].filter(Boolean).join('\n');
+
+            if (navigator.share) {
+              try { await navigator.share({ title, text: lines }); } catch (e) { /* cancelled */ }
+            } else {
+              await navigator.clipboard.writeText(lines);
+              alert('Recap copied to clipboard!');
+            }
+          }}
+          style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+            padding: '10px 16px', borderRadius: '12px',
+            backgroundColor: 'transparent', color: colors.textLight,
+            border: `1px solid ${colors.border}`, fontSize: '13px', fontWeight: '500',
+            cursor: 'pointer', fontFamily: fonts.sans, width: '100%',
+          }}
+        >
+          <Share2 size={15} /> Share Recap
+        </button>
+      </div>
+
       {/* Content sections */}
       <div style={{
         padding: containerPadding,
@@ -542,59 +611,98 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
         gap: isMobile ? '12px' : '16px',
       }}>
         {/* Participants */}
-        {(recap.participant_ids || []).length > 0 && (
-          <div style={{ ...styles.card, padding: cardPadding, borderRadius: cardRadius }}>
-            <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize }}>
-              <Users size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
-              Participants ({(recap.participant_ids || []).length})
-            </h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '10px' }}>
-              {(recap.participant_ids || []).map(id => {
-                const profile = participantProfiles[id];
-                return (
-                  <div key={id} style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: isMobile ? '6px' : '8px',
-                    padding: isMobile ? '6px 10px' : '8px 12px',
-                    backgroundColor: 'rgba(250, 245, 239, 0.7)',
-                    borderRadius: '20px',
-                    fontSize: isMobile ? '12px' : '13px',
-                    color: colors.textLight,
-                  }}>
-                    {profile?.profile_picture ? (
+        {(recap.participant_ids || []).length > 0 && (() => {
+          const attendedIds = new Set(recap.participant_ids || []);
+          const noShows = signedUpProfiles.filter(p => !attendedIds.has(p.id));
+          const attendedProfiles = (recap.participant_ids || []).map(id => participantProfiles[id]).filter(Boolean);
+
+          return (
+            <div style={{ ...styles.card, padding: cardPadding, borderRadius: cardRadius }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '8px' : '12px' }}>
+                <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize, margin: 0 }}>
+                  <Users size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
+                  Attended ({attendedProfiles.length})
+                </h3>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '10px' }}>
+                {attendedProfiles.map(profile => (
+                  <div
+                    key={profile.id}
+                    style={{
+                      display: 'flex', alignItems: 'center',
+                      gap: isMobile ? '6px' : '8px',
+                      padding: isMobile ? '6px 10px' : '8px 12px',
+                      backgroundColor: 'rgba(250, 245, 239, 0.7)',
+                      borderRadius: '20px',
+                      fontSize: isMobile ? '12px' : '13px',
+                      color: colors.textLight, cursor: 'pointer',
+                    }}
+                    onClick={() => onNavigate?.('userProfile', { userId: profile.id })}
+                  >
+                    {profile.profile_picture ? (
                       <img src={profile.profile_picture} alt={profile.name} style={{
-                        width: isMobile ? '20px' : '24px',
-                        height: isMobile ? '20px' : '24px',
-                        borderRadius: '50%',
-                        objectFit: 'cover',
+                        width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px',
+                        borderRadius: '50%', objectFit: 'cover',
                       }} />
                     ) : (
                       <div style={{
-                        width: isMobile ? '20px' : '24px',
-                        height: isMobile ? '20px' : '24px',
-                        borderRadius: '50%',
-                        backgroundColor: colors.primary,
-                        color: 'white',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: isMobile ? '9px' : '11px',
-                        fontWeight: '600',
+                        width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px',
+                        borderRadius: '50%', backgroundColor: colors.primary, color: 'white',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: isMobile ? '9px' : '11px', fontWeight: '600',
                       }}>
-                        {(profile?.name || 'U')[0].toUpperCase()}
+                        {(profile.name || 'U')[0].toUpperCase()}
                       </div>
                     )}
-                    <span style={{ fontWeight: '500' }}>{profile?.name || 'Unknown'}</span>
-                    {profile?.career && !isMobile && (
-                      <span style={{ color: colors.textSoft, fontSize: '12px' }}>· {profile.career}</span>
+                    <span style={{ fontWeight: '500' }}>{profile.name || 'Unknown'}</span>
+                    {profile.career && !isMobile && (
+                      <span style={{ color: colors.textSoft, fontSize: '12px' }}>{profile.career}</span>
                     )}
                   </div>
-                );
-              })}
+                ))}
+              </div>
+              {noShows.length > 0 && (
+                <div style={{ marginTop: '12px' }}>
+                  <h4 style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textSoft, fontWeight: '600', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Signed up but didn't attend ({noShows.length})
+                  </h4>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '4px' : '6px' }}>
+                    {noShows.map(profile => (
+                      <div
+                        key={profile.id}
+                        style={{
+                          display: 'flex', alignItems: 'center',
+                          gap: '5px', padding: isMobile ? '4px 8px' : '5px 10px',
+                          backgroundColor: 'rgba(250, 245, 239, 0.4)',
+                          borderRadius: '16px',
+                          fontSize: isMobile ? '11px' : '12px',
+                          color: colors.textSoft, cursor: 'pointer', opacity: 0.6,
+                        }}
+                        onClick={() => onNavigate?.('userProfile', { userId: profile.id })}
+                      >
+                        {profile.profile_picture ? (
+                          <img src={profile.profile_picture} alt={profile.name} style={{
+                            width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover',
+                          }} />
+                        ) : (
+                          <div style={{
+                            width: '18px', height: '18px', borderRadius: '50%',
+                            backgroundColor: colors.textSoft, color: 'white',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '9px', fontWeight: '600',
+                          }}>
+                            {(profile.name || 'U')[0].toUpperCase()}
+                          </div>
+                        )}
+                        <span>{profile.name || 'Unknown'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Sentiment / Meeting Vibe */}
         {parsed.sentiment && (
@@ -809,40 +917,131 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
               Suggested Follow-ups
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {parsed.suggestedFollowUps.filter(f => f.personName).map((followUp, i) => (
+              {parsed.suggestedFollowUps.filter(f => f.personName).map((followUp, i) => {
+                // Find the user ID from participant profiles by name
+                const profileEntry = Object.entries(participantProfiles).find(
+                  ([, p]) => p.name === followUp.personName
+                );
+                const userId = profileEntry ? profileEntry[0] : null;
+
+                return (
+                  <div key={i} style={{
+                    display: 'flex',
+                    alignItems: isMobile ? 'flex-start' : 'center',
+                    gap: isMobile ? '10px' : '12px',
+                    padding: isMobile ? '10px 12px' : '12px 16px',
+                    backgroundColor: 'rgba(201, 169, 110, 0.08)',
+                    borderRadius: '12px',
+                  }}>
+                    <div style={{
+                      width: isMobile ? '32px' : '36px',
+                      height: isMobile ? '32px' : '36px',
+                      borderRadius: '50%',
+                      backgroundColor: colors.gold,
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: isMobile ? '12px' : '14px',
+                      fontWeight: '600',
+                      flexShrink: 0,
+                    }}>
+                      {(followUp.personName || 'U')[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: bodyFontSize, fontWeight: '600', color: colors.text, margin: 0 }}>
+                        {followUp.personName}
+                      </p>
+                      {followUp.reason && (
+                        <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textMuted, margin: '2px 0 0' }}>{followUp.reason}</p>
+                      )}
+                      {followUp.suggestedTopic && (
+                        <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textSoft, margin: '2px 0 0' }}>Topic: {followUp.suggestedTopic}</p>
+                      )}
+                    </div>
+                    {userId && (
+                      <button
+                        onClick={() => onNavigate?.('userProfile', { userId })}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: isMobile ? '6px 10px' : '7px 14px',
+                          borderRadius: '100px', border: 'none',
+                          backgroundColor: colors.primary, color: 'white',
+                          fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
+                          cursor: 'pointer', fontFamily: fonts.sans,
+                          flexShrink: 0,
+                        }}
+                      >
+                        <Users size={isMobile ? 11 : 13} />
+                        Connect
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Suggested Circles */}
+        {parsed.suggestedCircles.length > 0 && (
+          <div style={{ ...styles.card, padding: cardPadding, borderRadius: cardRadius }}>
+            <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize }}>
+              <Users size={isMobile ? 14 : 16} style={{ color: colors.sage }} />
+              Suggested Circles
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {parsed.suggestedCircles.map((circle, i) => (
                 <div key={i} style={{
-                  display: 'flex',
-                  alignItems: isMobile ? 'flex-start' : 'center',
-                  gap: isMobile ? '10px' : '12px',
                   padding: isMobile ? '10px 12px' : '12px 16px',
-                  backgroundColor: 'rgba(201, 169, 110, 0.08)',
+                  backgroundColor: 'rgba(139, 158, 126, 0.08)',
                   borderRadius: '12px',
                 }}>
-                  <div style={{
-                    width: isMobile ? '32px' : '36px',
-                    height: isMobile ? '32px' : '36px',
-                    borderRadius: '50%',
-                    backgroundColor: colors.gold,
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: isMobile ? '12px' : '14px',
-                    fontWeight: '600',
-                    flexShrink: 0,
-                  }}>
-                    {(followUp.personName || 'U')[0].toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: bodyFontSize, fontWeight: '600', color: colors.text, margin: 0 }}>
-                      {followUp.personName}
-                    </p>
-                    {followUp.reason && (
-                      <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textMuted, margin: '2px 0 0' }}>{followUp.reason}</p>
-                    )}
-                    {followUp.suggestedTopic && (
-                      <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textSoft, margin: '2px 0 0' }}>Topic: {followUp.suggestedTopic}</p>
-                    )}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: bodyFontSize, fontWeight: '600', color: colors.text, margin: 0 }}>
+                        {circle.name}
+                      </p>
+                      {circle.reason && (
+                        <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textMuted, margin: '2px 0 0' }}>{circle.reason}</p>
+                      )}
+                      {circle.type === 'create' && circle.suggestedMembers?.length > 0 && (
+                        <p style={{ fontSize: isMobile ? '11px' : '12px', color: colors.textSoft, margin: '4px 0 0' }}>
+                          With: {circle.suggestedMembers.join(', ')}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (circle.type === 'join') {
+                          const { data: match } = await supabase
+                            .from('connection_groups')
+                            .select('id')
+                            .eq('name', circle.name)
+                            .limit(1)
+                            .single();
+                          if (match) {
+                            onNavigate?.('circleDetail', { circleId: match.id });
+                          } else {
+                            onNavigate?.('allCircles');
+                          }
+                        } else {
+                          onNavigate?.('createCircle');
+                        }
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        padding: isMobile ? '6px 10px' : '7px 14px',
+                        borderRadius: '100px', border: 'none',
+                        backgroundColor: circle.type === 'join' ? colors.sage : colors.primary,
+                        color: 'white',
+                        fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
+                        cursor: 'pointer', fontFamily: fonts.sans,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {circle.type === 'join' ? 'Browse' : 'Create'}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -856,7 +1055,7 @@ export default function SessionRecapDetailView({ recapId, onNavigate, previousVi
 
 const styles = {
   card: {
-    background: colors.gradient,
+    background: 'white',
     borderRadius: '16px',
     boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
     border: '1px solid rgba(139, 111, 92, 0.08)',

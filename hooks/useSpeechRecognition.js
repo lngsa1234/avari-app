@@ -165,8 +165,8 @@ export default function useSpeechRecognition({
 
       switch (event.error) {
         case 'no-speech':
-          // Silence detected — count consecutive failures to avoid infinite restart loop
-          errorCountRef.current += 1;
+          // Silence detected — this is normal during conversations (pauses, remote
+          // person speaking, etc.). Don't count toward kill threshold; just restart.
           lastErrorRef.current = event.error;
           break;
         case 'aborted':
