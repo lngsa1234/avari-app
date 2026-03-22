@@ -77,8 +77,6 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [reportReason, setReportReason] = useState(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
-  const [hasOutgoingInterest, setHasOutgoingInterest] = useState(false);
-  const [connecting, setConnecting] = useState(false);
 
   const isOwnProfile = userId === currentUser.id;
 
