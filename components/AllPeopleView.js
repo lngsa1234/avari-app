@@ -852,7 +852,7 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
                 gap: '4px',
                 fontWeight: 600,
               }}>
-                <Coffee size={10} /> Coffee Chat
+                <Coffee size={10} /> Open to Coffee Chat
               </span>
             )}
           </div>

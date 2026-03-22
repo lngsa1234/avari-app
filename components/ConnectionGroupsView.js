@@ -343,7 +343,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       const [profilesResult, interestsResult, incomingInterestsResult] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
+          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture, open_to_coffee_chat')
           .neq('id', currentUser.id)
           .not('name', 'is', null)
           .limit(50),
@@ -370,15 +370,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
       );
 
-      // Prioritize people who expressed interest in the current user
+      // Prioritize: interested in me > open to coffee chat > others
       suggestions.sort((a, b) => {
-        const aInterested = interestedInMeIds.has(a.id) ? 1 : 0;
-        const bInterested = interestedInMeIds.has(b.id) ? 1 : 0;
-        return bInterested - aInterested;
+        const scoreA = (interestedInMeIds.has(a.id) ? 4 : 0) + (a.open_to_coffee_chat ? 2 : 0);
+        const scoreB = (interestedInMeIds.has(b.id) ? 4 : 0) + (b.open_to_coffee_chat ? 2 : 0);
+        return scoreB - scoreA;
       });
 
-      // Only enrich the final 4 we'll actually show
-      const finalSuggestions = suggestions.slice(0, 4);
+      const finalSuggestions = suggestions.slice(0, 20);
       const finalIds = finalSuggestions.map(s => s.id);
 
       if (finalIds.length === 0) {
@@ -1094,15 +1093,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       key={person.id}
                       onClick={() => onNavigate?.('userProfile', { userId: person.id })}
                       style={{
-                        minWidth: isMobile ? '130px' : '150px',
-                        maxWidth: isMobile ? '130px' : '150px',
+                        minWidth: isMobile ? '220px' : '250px',
+                        maxWidth: isMobile ? '220px' : '250px',
                         background: '#FFFBF7',
                         border: '1px solid rgba(139, 111, 92, 0.12)',
                         borderRadius: isMobile ? '14px' : '16px',
-                        padding: isMobile ? '16px 10px 14px' : '20px 14px 16px',
+                        padding: isMobile ? '14px' : '16px',
                         flexShrink: 0, cursor: 'pointer',
-                        display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        textAlign: 'center',
+                        display: 'flex', flexDirection: 'column',
                         transition: 'all 0.2s ease',
                       }}
                       onMouseEnter={(e) => {
@@ -1114,56 +1112,68 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      {/* Avatar */}
-                      <div style={{
-                        width: isMobile ? '60px' : '72px',
-                        height: isMobile ? '60px' : '72px',
-                        borderRadius: '50%',
-                        backgroundColor: '#8B6F5C',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: isMobile ? '24px' : '28px', color: 'white', fontWeight: '600',
-                        marginBottom: isMobile ? '10px' : '12px', flexShrink: 0,
-                        border: isMobile ? '2px solid rgba(139, 111, 92, 0.15)' : '3px solid rgba(139, 111, 92, 0.15)',
-                      }}>
-                        {person.profile_picture ? (
-                          <img src={person.profile_picture} alt={person.name}
-                            style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                        ) : (
-                          (person.name?.[0] || '?').toUpperCase()
-                        )}
+                      {/* Top row: Avatar + Name/Career */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                        <div style={{
+                          width: isMobile ? '44px' : '48px',
+                          height: isMobile ? '44px' : '48px',
+                          borderRadius: '50%',
+                          backgroundColor: '#8B6F5C',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: isMobile ? '18px' : '20px', color: 'white', fontWeight: '600',
+                          flexShrink: 0,
+                          border: '2px solid rgba(139, 111, 92, 0.15)',
+                          overflow: 'hidden',
+                        }}>
+                          {person.profile_picture ? (
+                            <img src={person.profile_picture} alt={person.name}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            (person.name?.[0] || '?').toUpperCase()
+                          )}
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <h4 style={{
+                            fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '15px', fontWeight: '600',
+                            color: '#2C1810', margin: 0,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {person.name}
+                          </h4>
+                          <p style={{
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '11px',
+                            color: '#8B7A6B', margin: '2px 0 0',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {person.career || 'Professional'}
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Name */}
-                      <h4 style={{
-                        fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '14px', fontWeight: '600',
-                        color: '#2C1810', margin: '0 0 2px',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        width: '100%',
-                      }}>
-                        {person.name}
-                      </h4>
-
-                      {/* Career */}
-                      <p style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: '11px',
-                        color: '#8B7A6B', margin: '0 0 6px',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        width: '100%',
-                      }}>
-                        {person.career || 'Professional'}
-                      </p>
-
-                      {/* Mutual info */}
-                      {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
-                        <p style={{
-                          fontFamily: '"DM Sans", sans-serif', fontSize: '10px',
-                          color: '#B8A089', margin: '0 0 8px',
-                          display: 'flex', alignItems: 'center', gap: '3px', justifyContent: 'center',
-                        }}>
-                          <Users size={10} />
-                          {person.mutualConnections || 0} mutual
-                        </p>
-                      )}
+                      {/* Badges */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
+                        {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
+                          <span style={{
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '10px',
+                            color: '#B8A089',
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                          }}>
+                            <Users size={10} />
+                            {person.mutualConnections || 0} mutual
+                          </span>
+                        )}
+                        {person.open_to_coffee_chat && (
+                          <span style={{
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '10px', fontWeight: 600,
+                            color: '#6B4F3A', backgroundColor: '#FDF3EB',
+                            borderRadius: '8px', padding: '2px 8px',
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            <Coffee size={9} /> Open to Coffee Chat
+                          </span>
+                        )}
+                      </div>
 
                       {/* Connect button */}
                       {sentRequests.has(person.id) ? (

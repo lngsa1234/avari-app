@@ -557,10 +557,10 @@ export default function NetworkDiscoverView({
       const [profilesResult, mutualResult, interestsResult] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture')
+          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture, open_to_coffee_chat')
           .neq('id', currentUser.id)
           .not('name', 'is', null)
-          .limit(10),
+          .limit(50),
         supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
         supabase
           .from('user_interests')
@@ -644,11 +644,16 @@ export default function NetworkDiscoverView({
         });
       }
 
-      const enriched = suggestions.slice(0, 4).map(person => ({
+      const enriched = suggestions.map(person => ({
         ...person,
         mutualCircles: userCircleCount[person.id] ? userCircleCount[person.id].size : 0,
         mutualConnections: userMutualConnections[person.id] || 0,
-      }));
+      })).sort((a, b) => {
+        // Priority: mutual connections > open to coffee chat > others
+        const scoreA = (a.mutualConnections * 4) + (a.mutualCircles * 2) + (a.open_to_coffee_chat ? 1 : 0);
+        const scoreB = (b.mutualConnections * 4) + (b.mutualCircles * 2) + (b.open_to_coffee_chat ? 1 : 0);
+        return scoreB - scoreA;
+      }).slice(0, 20);
 
       setPeerSuggestions(enriched);
     } catch (error) {

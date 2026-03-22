@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check } from 'lucide-react';
+import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock } from 'lucide-react';
+import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 
 const COLORS = {
   bg: '#FAF6F1',
@@ -76,6 +77,8 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [reportReason, setReportReason] = useState(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  const [hasOutgoingInterest, setHasOutgoingInterest] = useState(false);
+  const [connecting, setConnecting] = useState(false);
 
   const isOwnProfile = userId === currentUser.id;
 
@@ -220,9 +223,23 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           interested_in_user_id: userId,
         });
 
-      if (error && error.code !== '23505') throw error;
+      if (error) {
+        if (error.code === '23505') {
+          setHasSentRequest(true);
+        } else {
+          throw error;
+        }
+        return;
+      }
 
-      setHasSentRequest(true);
+      // Check if it's now a mutual match
+      const { data: isMutual } = await supabase
+        .rpc('check_mutual_interest', { user_a: currentUser.id, user_b: userId });
+      if (isMutual) {
+        setIsConnected(true);
+      } else {
+        setHasSentRequest(true);
+      }
     } catch (err) {
       console.error('Error sending connection request:', err);
       alert('Failed to send connection request. Please try again.');
@@ -460,6 +477,132 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             </div>
           )}
         </div>
+
+        {/* ─── Quick Toggles (own profile only) ─── */}
+        {isOwnProfile && (<>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, ...fadeIn(0.15) }}>
+            <button
+              onClick={async () => {
+                const newVal = !profile.open_to_hosting;
+                setProfile(prev => ({ ...prev, open_to_hosting: newVal }));
+                await supabase.from('profiles').update({ open_to_hosting: newVal }).eq('id', currentUser.id);
+              }}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 14px', borderRadius: 12,
+                border: `1.5px solid ${profile.open_to_hosting ? COLORS.green : COLORS.brown200}`,
+                background: profile.open_to_hosting ? COLORS.greenLight : COLORS.white,
+                cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 500,
+                color: profile.open_to_hosting ? COLORS.green : COLORS.brown500,
+                transition: 'all 0.2s',
+              }}
+            >
+              <Users size={14} />
+              {profile.open_to_hosting ? 'Hosting: On' : 'Hosting: Off'}
+            </button>
+            <button
+              onClick={async () => {
+                const newVal = !profile.open_to_coffee_chat;
+                setProfile(prev => ({ ...prev, open_to_coffee_chat: newVal }));
+                await supabase.from('profiles').update({ open_to_coffee_chat: newVal }).eq('id', currentUser.id);
+              }}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
+                padding: '10px 14px', borderRadius: 12,
+                border: `1.5px solid ${profile.open_to_coffee_chat ? '#6B4F3A' : COLORS.brown200}`,
+                background: profile.open_to_coffee_chat ? '#FDF3EB' : COLORS.white,
+                cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 500,
+                color: profile.open_to_coffee_chat ? '#6B4F3A' : COLORS.brown500,
+                transition: 'all 0.2s',
+              }}
+            >
+              <Coffee size={14} />
+              {profile.open_to_coffee_chat ? 'Open to Coffee Chat This Week' : 'Coffee Chat: Off'}
+            </button>
+          </div>
+
+          {/* Preferred time slots picker */}
+          {profile.open_to_coffee_chat && (
+            <div style={{
+              marginTop: 12, padding: '12px 14px', borderRadius: 12,
+              background: '#FDF3EB', border: '1px solid #E8D5C3',
+              ...fadeIn(0.2),
+            }}>
+              <p style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: '#6B4F3A', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Clock size={12} /> Preferred times
+              </p>
+              {/* Day chips */}
+              <div style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
+                {DAYS.map(day => {
+                  const selected = (profile.coffee_chat_slots?.days || []).includes(day);
+                  return (
+                    <button
+                      key={day}
+                      onClick={async () => {
+                        const currentDays = profile.coffee_chat_slots?.days || [];
+                        const newDays = selected ? currentDays.filter(d => d !== day) : [...currentDays, day];
+                        const newSlots = { ...profile.coffee_chat_slots, days: newDays };
+                        setProfile(prev => ({ ...prev, coffee_chat_slots: newSlots }));
+                        await supabase.from('profiles').update({ coffee_chat_slots: newSlots }).eq('id', currentUser.id);
+                      }}
+                      style={{
+                        padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                        fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s',
+                        border: selected ? '1.5px solid #6B4F3A' : '1.5px solid #D4C4A8',
+                        background: selected ? '#6B4F3A' : COLORS.white,
+                        color: selected ? COLORS.white : COLORS.brown500,
+                      }}
+                    >
+                      {getDayLabel(day)}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Time chips */}
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                {TIMES.map(time => {
+                  const selected = (profile.coffee_chat_slots?.times || []).includes(time);
+                  return (
+                    <button
+                      key={time}
+                      onClick={async () => {
+                        const currentTimes = profile.coffee_chat_slots?.times || [];
+                        const newTimes = selected ? currentTimes.filter(t => t !== time) : [...currentTimes, time];
+                        const newSlots = { ...profile.coffee_chat_slots, times: newTimes };
+                        setProfile(prev => ({ ...prev, coffee_chat_slots: newSlots }));
+                        await supabase.from('profiles').update({ coffee_chat_slots: newSlots }).eq('id', currentUser.id);
+                      }}
+                      style={{
+                        padding: '4px 10px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                        fontFamily: FONT, cursor: 'pointer', transition: 'all 0.15s',
+                        border: selected ? '1.5px solid #6B4F3A' : '1.5px solid #D4C4A8',
+                        background: selected ? '#6B4F3A' : COLORS.white,
+                        color: selected ? COLORS.white : COLORS.brown500,
+                      }}
+                    >
+                      {getTimeLabel(time)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>)}
+
+        {/* ─── Preferred slots display (other profiles) ─── */}
+        {!isOwnProfile && profile.open_to_coffee_chat && formatCoffeeSlots(profile.coffee_chat_slots) && (
+          <div style={{
+            marginTop: 10, padding: '8px 14px', borderRadius: 10,
+            background: '#FDF3EB',
+            display: 'flex', alignItems: 'center', gap: 6,
+            ...fadeIn(0.15),
+          }}>
+            <Clock size={12} style={{ color: '#6B4F3A', flexShrink: 0 }} />
+            <span style={{ fontFamily: FONT, fontSize: 12, color: '#6B4F3A' }}>
+              Prefers {formatCoffeeSlots(profile.coffee_chat_slots, true)}
+            </span>
+          </div>
+        )}
 
         {/* ─── Incoming Connection Request ─── */}
         {!isOwnProfile && !isConnected && hasIncomingRequest && (
