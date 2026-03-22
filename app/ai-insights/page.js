@@ -537,7 +537,7 @@ function generateMemorableMoments(meetings, signups, circles) {
       title: `Joined ${circle.group?.name || 'a circle'}`,
       description: "Your intimate connection group!",
       emoji: "🦋",
-      date: new Date(circle.joined_at || circle.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      date: (circle.joined_at || circle.created_at) ? new Date(circle.joined_at || circle.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '',
     });
   }
 
