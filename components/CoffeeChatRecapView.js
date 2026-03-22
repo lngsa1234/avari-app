@@ -475,6 +475,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
         marginBottom: '16px',
       }}>
         <button
+          aria-label="Go back"
           onClick={handleBack}
           style={{
             width: 36,

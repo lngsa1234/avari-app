@@ -725,6 +725,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
         marginBottom: '16px',
       }}>
         <button
+          aria-label="Go back"
           onClick={handleBack}
           style={{
             width: 36,
