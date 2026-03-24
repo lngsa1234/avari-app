@@ -92,7 +92,8 @@ export default function AllPeopleView({
   const [connectionRequested, setConnectionRequested] = useState(false);
 
   const { width: windowWidth } = useWindowSize();
-  const isMobile = windowWidth < 480;
+  const isMobile = windowWidth < 768;
+  const isSmallMobile = windowWidth < 400;
 
   useEffect(() => {
     loadPeople();
@@ -354,8 +355,8 @@ export default function AllPeopleView({
         </button>
         <div>
           <h1 style={{
-            fontSize: isMobile ? '22px' : '24px',
-            fontWeight: '600',
+            fontSize: isMobile ? '24px' : '32px',
+            fontWeight: '500',
             color: colors.text,
             margin: 0,
             fontFamily: fonts.serif,
@@ -369,7 +370,7 @@ export default function AllPeopleView({
         fontSize: isMobile ? '13px' : '14px',
         color: colors.textLight,
         margin: '0 0 20px',
-        paddingLeft: '52px',
+        paddingLeft: isMobile ? '52px' : '52px',
       }}>
         Find inspiring women in your community
       </p>
@@ -396,7 +397,7 @@ export default function AllPeopleView({
           placeholder="Search by name, role, or interests..."
           style={{
             width: '100%',
-            padding: '14px 40px 14px 44px',
+            padding: isMobile ? '12px 36px 12px 40px' : '14px 40px 14px 44px',
             borderRadius: '16px',
             border: `2px solid ${colors.border}`,
             backgroundColor: 'white',
@@ -441,7 +442,7 @@ export default function AllPeopleView({
               key={interest}
               onClick={() => setSelectedInterest(interest)}
               style={{
-                padding: '10px 16px',
+                padding: isMobile ? '8px 12px' : '10px 16px',
                 borderRadius: '20px',
                 border: isActive ? 'none' : `2px solid ${colors.border}`,
                 backgroundColor: isActive ? colors.primary : 'white',
@@ -557,7 +558,7 @@ export default function AllPeopleView({
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-          gap: '16px',
+          gap: isMobile ? '12px' : '16px',
         }}>
           {filteredPeople.map((person, index) => (
             <PersonCard
@@ -661,7 +662,7 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
       onClick={onClick}
       style={{
         backgroundColor: 'white',
-        borderRadius: '24px',
+        borderRadius: isMobile ? '16px' : '24px',
         overflow: 'hidden',
         boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
         border: `1px solid ${colors.border}`,
@@ -671,7 +672,7 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
     >
       {/* Avatar Header */}
       <div style={{
-        height: '96px',
+        height: isMobile ? '80px' : '96px',
         background: gradient,
         display: 'flex',
         alignItems: 'center',
@@ -683,8 +684,8 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
             src={person.photo_url}
             alt={person.name}
             style={{
-              width: '64px',
-              height: '64px',
+              width: isMobile ? '52px' : '64px',
+              height: isMobile ? '52px' : '64px',
               borderRadius: '50%',
               objectFit: 'cover',
               border: '3px solid white',
@@ -692,14 +693,14 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
           />
         ) : (
           <div style={{
-            width: '64px',
-            height: '64px',
+            width: isMobile ? '52px' : '64px',
+            height: isMobile ? '52px' : '64px',
             borderRadius: '50%',
             backgroundColor: colors.primary,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '28px',
+            fontSize: isMobile ? '22px' : '28px',
             fontWeight: '600',
             color: 'white',
             border: '3px solid white',
@@ -745,10 +746,10 @@ function PersonCard({ person, gradient, isMobile, onClick }) {
       </div>
 
       {/* Content */}
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: isMobile ? '12px' : '16px' }}>
         {/* Name */}
         <h3 style={{
-          fontSize: '17px',
+          fontSize: isMobile ? '15px' : '17px',
           fontWeight: '600',
           color: colors.text,
           margin: '0 0 4px',
@@ -998,7 +999,7 @@ function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, 
         position: 'relative',
         backgroundColor: colors.warmWhite,
         borderRadius: isMobile ? '24px 24px 0 0' : '24px',
-        width: '100%',
+        width: isMobile ? '100%' : '90%',
         maxWidth: '400px',
         maxHeight: isMobile ? '90vh' : '85vh',
         overflowY: 'auto',
@@ -1279,7 +1280,7 @@ function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, 
             )}
 
             <button
-              onClick={() => {}}
+              onClick={() => { onClose(); onNavigate?.('userProfile', { userId: person.id }); }}
               style={{
                 width: '100%',
                 padding: '14px',
@@ -1296,8 +1297,7 @@ function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, 
                 gap: '8px',
               }}
             >
-              <span>☕</span>
-              See Shared Events
+              View Profile
             </button>
           </div>
 

@@ -2555,10 +2555,9 @@ function MainApp({ currentUser, onSignOut }) {
         {/* Main Content */}
         <div style={homeStyles.contentGrid}>
           {/* Connection & Circle Join Requests Section */}
-            {(connectionRequests.length > 0 || circleJoinRequests.length > 0 || coffeeChatRequests.length > 0 || circleInvitations.length > 0) && (() => {
+            {(connectionRequests.length > 0 || coffeeChatRequests.length > 0 || circleInvitations.length > 0) && (() => {
               const allRequests = [
                 ...connectionRequests.map(r => ({ ...r, type: r.type || 'connection_request' })),
-                ...circleJoinRequests,
                 ...circleInvitations,
                 ...coffeeChatRequests.map(r => ({ ...r, type: 'coffee_chat_request' })),
               ].sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0))
@@ -2638,7 +2637,7 @@ function MainApp({ currentUser, onSignOut }) {
                               </>
                             ) : isCircleJoin ? (
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
-                                wants to join <strong>{request.circleName}</strong>
+                                invited to <strong>{request.circleName}</strong> · pending
                               </p>
                             ) : isCircleInvitation ? (
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
@@ -2707,48 +2706,24 @@ function MainApp({ currentUser, onSignOut }) {
                               </button>
                             </>
                           ) : isCircleJoin ? (
-                            <>
-                              <button
-                                onClick={() => handleDeclineCircleJoin(request.id)}
-                                style={{
-                                  padding: isMobile ? '7px 14px' : '9px 18px',
-                                  background: 'transparent',
-                                  border: '1px solid rgba(184, 160, 137, 0.4)',
-                                  borderRadius: '18px',
-                                  color: '#6B5647',
-                                  fontFamily: '"Lora", serif',
-                                  fontStyle: 'italic',
-                                  fontSize: isMobile ? '13px' : '15px',
-                                  fontWeight: '600',
-                                  cursor: 'pointer',
-                                  letterSpacing: '0.15px',
-                                }}
-                              >
-                                Decline
-                              </button>
-                              <button
-                                onClick={() => handleAcceptCircleJoin(request.id)}
-                                style={{
-                                  padding: isMobile ? '7px 16px' : '9px 20px',
-                                  background: 'rgba(103, 77, 59, 0.9)',
-                                  border: 'none',
-                                  borderRadius: '18px',
-                                  color: '#F5EDE9',
-                                  fontFamily: '"Lora", serif',
-                                  fontStyle: 'italic',
-                                  fontSize: isMobile ? '13px' : '15px',
-                                  fontWeight: '700',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  letterSpacing: '0.15px',
-                                }}
-                              >
-                                <Users style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
-                                Accept
-                              </button>
-                            </>
+                            <button
+                              onClick={() => handleDeclineCircleJoin(request.id)}
+                              style={{
+                                padding: isMobile ? '7px 14px' : '9px 18px',
+                                background: 'transparent',
+                                border: '1px solid rgba(184, 160, 137, 0.4)',
+                                borderRadius: '18px',
+                                color: '#6B5647',
+                                fontFamily: '"Lora", serif',
+                                fontStyle: 'italic',
+                                fontSize: isMobile ? '13px' : '15px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                letterSpacing: '0.15px',
+                              }}
+                            >
+                              Withdraw
+                            </button>
                           ) : isCircleInvitation ? (
                             <>
                               <button

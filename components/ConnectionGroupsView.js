@@ -21,7 +21,7 @@ import {
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
 import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
-import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee } from 'lucide-react';
+import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText } from 'lucide-react';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
   const [isMobile, setIsMobile] = useState(() => {
@@ -42,10 +42,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
   const [groupInvites, setGroupInvites] = useState([]);
+  const [sentCircleInvites, setSentCircleInvites] = useState([]);
   const [eligibleConnections, setEligibleConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createSuccess, setCreateSuccess] = useState(null);
   const [groupName, setGroupName] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
   const [selectedConnections, setSelectedConnections] = useState([]);
 
   // Use connections from props, add online status
@@ -59,6 +62,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   // Unread DM counts per sender
   const [unreadCounts, setUnreadCounts] = useState({});
+  // Recent chats
+  const [recentChats, setRecentChats] = useState([]);
 
   // Load connections directly from DB (single source of truth)
   const loadConnectionsDirect = async (sharedMatches) => {
@@ -199,6 +204,63 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     }
   };
 
+  const loadRecentChats = async () => {
+    console.log('⏱️ Circles: loadRecentChats starting, userId:', currentUser?.id);
+    try {
+      // Get latest message per conversation (sent or received)
+      const { data: sent } = await supabase
+        .from('messages')
+        .select('id, content, created_at, sender_id, receiver_id, read')
+        .eq('sender_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      const { data: received } = await supabase
+        .from('messages')
+        .select('id, content, created_at, sender_id, receiver_id, read')
+        .eq('receiver_id', currentUser.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      // Deduplicate by conversation partner, keep latest
+      const allMessages = [...(sent || []), ...(received || [])];
+      const latestByUser = {};
+      allMessages.forEach(msg => {
+        const partnerId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
+        if (!latestByUser[partnerId] || new Date(msg.created_at) > new Date(latestByUser[partnerId].created_at)) {
+          latestByUser[partnerId] = { ...msg, partnerId };
+        }
+      });
+
+      const chats = Object.values(latestByUser)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5);
+
+      if (chats.length === 0) { setRecentChats([]); return; }
+
+      // Fetch profiles for chat partners
+      const partnerIds = chats.map(c => c.partnerId);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, profile_picture, career')
+        .in('id', partnerIds);
+
+      const profileMap = {};
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+
+      const result = chats.map(c => ({
+        ...c,
+        partner: profileMap[c.partnerId] || { id: c.partnerId, name: 'Unknown' },
+        isFromMe: c.sender_id === currentUser.id,
+        unread: !c.read && c.receiver_id === currentUser.id,
+      }));
+      console.log('⏱️ Circles: loadRecentChats result:', result.length, 'chats');
+      setRecentChats(result);
+    } catch (err) {
+      console.error('Error loading recent chats:', err);
+    }
+  };
+
   const loadData = async () => {
     const t0 = Date.now();
     setLoading(true);
@@ -271,6 +333,24 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       }
     });
 
+    // Fetch latest recap for each circle
+    const groupIds = groups.map(g => g.id);
+    const channelNames = groupIds.map(id => `connection-group-${id}`);
+    const latestRecapByCircle = {};
+    if (channelNames.length > 0) {
+      const { data: recaps } = await supabase
+        .from('call_recaps')
+        .select('id, channel_name, created_at, ai_summary')
+        .in('channel_name', channelNames)
+        .order('created_at', { ascending: false });
+      (recaps || []).forEach(r => {
+        const circleId = r.channel_name.replace('connection-group-', '');
+        if (!latestRecapByCircle[circleId]) {
+          latestRecapByCircle[circleId] = r;
+        }
+      });
+    }
+
     for (const group of groups) {
       group.creator = creatorMap[group.creator_id] || null;
       group.members = membersByGroup[group.id] || [];
@@ -278,6 +358,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       group.nextMeetup = nextMeetupByCircle[group.id] || null;
       group.pastSessionCount = pastMeetupCountByCircle[group.id] || 0;
       group.lastTopic = lastTopicByCircle[group.id] || null;
+      group.lastRecap = latestRecapByCircle[group.id] || null;
     }
     groups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     setConnectionGroups(groups);
@@ -335,6 +416,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     // Deferred — peer suggestions and sent requests load in background
     loadPeerSuggestions(sharedMatches);
     loadSentRequests(sharedMatches);
+    loadRecentChats();
+    loadSentCircleInvites();
   };
 
   const loadPeerSuggestions = async (sharedMatches) => {
@@ -343,7 +426,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       const [profilesResult, interestsResult, incomingInterestsResult] = await Promise.all([
         supabase
           .from('profiles')
-          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture, open_to_coffee_chat')
+          .select('id, name, career, city, state, hook, industry, career_stage, interests, profile_picture, open_to_coffee_chat, last_active')
           .neq('id', currentUser.id)
           .not('name', 'is', null)
           .limit(50),
@@ -592,6 +675,63 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     return `${diffDays}d ago`;
   };
 
+  const loadSentCircleInvites = async () => {
+    try {
+      // Get circles I created
+      const { data: myCircles } = await supabase
+        .from('connection_groups')
+        .select('id, name')
+        .eq('creator_id', currentUser.id);
+
+      if (!myCircles || myCircles.length === 0) { setSentCircleInvites([]); return; }
+
+      const circleIds = myCircles.map(c => c.id);
+      const circleNameMap = {};
+      myCircles.forEach(c => { circleNameMap[c.id] = c.name; });
+
+      // Get pending invited members
+      const { data: pendingMembers } = await supabase
+        .from('connection_group_members')
+        .select('id, user_id, group_id, invited_at')
+        .eq('status', 'invited')
+        .in('group_id', circleIds);
+
+      if (!pendingMembers || pendingMembers.length === 0) { setSentCircleInvites([]); return; }
+
+      const userIds = [...new Set(pendingMembers.map(m => m.user_id))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, career, profile_picture')
+        .in('id', userIds);
+
+      const profileMap = {};
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+
+      setSentCircleInvites(pendingMembers.map(m => ({
+        id: m.id,
+        user: profileMap[m.user_id] || { id: m.user_id, name: 'Unknown' },
+        circleName: circleNameMap[m.group_id],
+        groupId: m.group_id,
+        invited_at: m.invited_at,
+      })).filter(i => i.user.name !== 'Unknown'));
+    } catch (err) {
+      console.error('Error loading sent circle invites:', err);
+    }
+  };
+
+  const handleWithdrawCircleInvite = async (membershipId) => {
+    try {
+      const { error } = await supabase
+        .from('connection_group_members')
+        .delete()
+        .eq('id', membershipId);
+      if (error) throw error;
+      setSentCircleInvites(prev => prev.filter(i => i.id !== membershipId));
+    } catch (err) {
+      console.error('Error withdrawing circle invite:', err);
+    }
+  };
+
   const loadConnectionGroups = async () => {
     const t0 = Date.now();
     try {
@@ -651,7 +791,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      alert('Please enter a group name');
+      alert('Please enter a circle name');
       return;
     }
 
@@ -663,16 +803,20 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     try {
       await createConnectionGroup({
         name: groupName.trim(),
+        description: groupDescription.trim(),
         invitedUserIds: selectedConnections
       });
 
-      alert(`Group "${groupName}" created! Invitations sent.`);
+      const createdName = groupName;
+      const inviteCount = selectedConnections.length;
       setShowCreateModal(false);
       setGroupName('');
+      setGroupDescription('');
       setSelectedConnections([]);
+      setCreateSuccess({ name: createdName, inviteCount });
       await loadConnectionGroups();
     } catch (error) {
-      alert('Error creating group: ' + error.message);
+      alert('Error creating circle: ' + error.message);
     }
   };
 
@@ -827,14 +971,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   return (
     <div style={{...styles.container, padding: isMobile ? '16px 0' : '24px 0'}} className="circles-container">
 
-      {/* Title Section */}
-      <section style={{...styles.titleSection, marginBottom: isMobile ? '16px' : '24px', margin: isMobile ? '0 auto 16px auto' : '0 auto 24px auto', paddingBottom: isMobile ? '14px' : '20px'}} className="circles-title-section">
-        <div style={styles.titleContent}>
-          <h1 style={{...styles.pageTitle, fontSize: isMobile ? '24px' : '32px'}} className="circles-page-title">Circles</h1>
-          <p style={{...styles.tagline, fontSize: isMobile ? '13px' : '15px'}}>Where meaningful connections grow deeper</p>
-        </div>
-      </section>
-
       {/* Pending Invitations Alert */}
       {groupInvites.length > 0 && (
         <div style={{...styles.inviteAlert, padding: isMobile ? '12px 14px' : '16px 20px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center'}} className="circles-invite-alert">
@@ -864,8 +1000,247 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {/* Single Column Layout */}
       <div style={styles.singleColumn}>
 
+        {/* Pending Requests */}
+        {sentRequestProfiles.length > 0 && (
+          <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
+                  Pending Requests
+                </h2>
+                <span style={{
+                  fontSize: '11px',
+                  color: '#FFF8F0',
+                  backgroundColor: '#8B6F5C',
+                  borderRadius: '10px',
+                  padding: '2px 8px',
+                  fontWeight: '600',
+                }}>
+                  {sentRequestProfiles.length}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {sentRequestProfiles.map((person) => (
+                  <div
+                    key={person.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      backgroundColor: 'rgba(139, 111, 92, 0.06)',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(139, 111, 92, 0.1)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '40px', height: '40px', borderRadius: '50%',
+                        backgroundColor: '#8B6F5C',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '16px', color: 'white', fontWeight: '600',
+                        flexShrink: 0, overflow: 'hidden', cursor: 'pointer',
+                      }}
+                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
+                    >
+                      {person.profile_picture ? (
+                        <img src={person.profile_picture} alt={person.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (person.name?.[0] || '?').toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {person.name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#8B7355',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {person.career || 'Professional'}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '11px', color: '#A89080', flexShrink: 0 }}>
+                      {formatTimeAgo(person.requested_at)}
+                    </span>
+                    <button
+                      onClick={() => handleWithdrawRequest(person.id)}
+                      style={{
+                        padding: '5px 12px', fontSize: '12px', fontWeight: '600',
+                        color: '#8B6F5C', backgroundColor: 'transparent',
+                        border: '1.5px solid rgba(139, 111, 92, 0.3)',
+                        borderRadius: '8px', cursor: 'pointer', flexShrink: 0,
+                      }}
+                    >
+                      Withdraw
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Sent Circle Invitations */}
+        {sentCircleInvites.length > 0 && (
+          <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
+                Pending Circle Invitations
+              </h2>
+              <span style={{
+                fontSize: '11px', color: '#FFF8F0', backgroundColor: '#8B6F5C',
+                borderRadius: '10px', padding: '2px 8px', fontWeight: '600',
+              }}>
+                {sentCircleInvites.length}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {sentCircleInvites.map((invite) => (
+                <div
+                  key={invite.id}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '10px 12px',
+                    backgroundColor: 'rgba(139, 111, 92, 0.06)',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(139, 111, 92, 0.1)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '40px', height: '40px', borderRadius: '50%',
+                      backgroundColor: '#8B6F5C',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '16px', color: 'white', fontWeight: '600',
+                      flexShrink: 0, overflow: 'hidden', cursor: 'pointer',
+                    }}
+                    onClick={() => onNavigate?.('userProfile', { userId: invite.user.id })}
+                  >
+                    {invite.user.profile_picture ? (
+                      <img src={invite.user.profile_picture} alt={invite.user.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (invite.user.name?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {invite.user.name}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#8B7355' }}>
+                      Invited to <span style={{ fontWeight: '600' }}>{invite.circleName}</span> · pending
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#A89080', flexShrink: 0 }}>
+                    {invite.invited_at ? formatTimeAgo(invite.invited_at) : ''}
+                  </span>
+                  <button
+                    onClick={() => handleWithdrawCircleInvite(invite.id)}
+                    style={{
+                      padding: '5px 12px', fontSize: '12px', fontWeight: '600',
+                      color: '#8B6F5C', backgroundColor: 'transparent',
+                      border: '1.5px solid rgba(139, 111, 92, 0.3)',
+                      borderRadius: '8px', cursor: 'pointer', flexShrink: 0,
+                    }}
+                  >
+                    Withdraw
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Recent Chats */}
+        {recentChats.length > 0 && (
+          <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '14px' }}>
+              <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
+                Recent Chats
+              </h2>
+              <button
+                onClick={() => onNavigate?.('messages')}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '4px',
+                  background: 'none', border: 'none', color: '#8B6F5C',
+                  fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+                }}>
+                See all <ChevronRight size={14} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {recentChats.map((chat) => (
+                <div
+                  key={chat.id}
+                  onClick={() => onNavigate?.('messages', { chatId: chat.partner.id, chatType: 'user' })}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    padding: '10px 12px',
+                    backgroundColor: chat.unread ? 'rgba(139, 111, 92, 0.06)' : 'transparent',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(139, 111, 92, 0.06)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = chat.unread ? 'rgba(139, 111, 92, 0.06)' : 'transparent'; }}
+                >
+                  <div style={{
+                    width: '40px', height: '40px', borderRadius: '50%',
+                    backgroundColor: '#8B6F5C',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '16px', color: 'white', fontWeight: '600',
+                    flexShrink: 0, overflow: 'hidden',
+                  }}>
+                    {chat.partner.profile_picture ? (
+                      <img src={chat.partner.profile_picture} alt={chat.partner.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (chat.partner.name?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '14px',
+                        fontWeight: chat.unread ? '700' : '600', color: '#2C1810',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {chat.partner.name}
+                      </span>
+                      {chat.unread && (
+                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#8B6F5C', flexShrink: 0 }} />
+                      )}
+                    </div>
+                    <p style={{
+                      fontFamily: '"DM Sans", sans-serif', fontSize: '12px',
+                      color: chat.unread ? '#5C4033' : '#8B7A6B',
+                      fontWeight: chat.unread ? '500' : '400',
+                      margin: '2px 0 0',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {chat.isFromMe ? 'You: ' : ''}{chat.content?.slice(0, 50)}{chat.content?.length > 50 ? '...' : ''}
+                    </p>
+                  </div>
+                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#A89080', flexShrink: 0 }}>
+                    {(() => {
+                      const diff = Date.now() - new Date(chat.created_at).getTime();
+                      const mins = Math.floor(diff / 60000);
+                      if (mins < 60) return `${mins}m`;
+                      const hours = Math.floor(mins / 60);
+                      if (hours < 24) return `${hours}h`;
+                      return `${Math.floor(hours / 24)}d`;
+                    })()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Connections Section */}
         <section style={styles.section} className="circles-card">
+          <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px', marginBottom: isMobile ? '10px' : '14px'}}>
+            My Connections
+          </h2>
           {/* Existing connections - slide bar */}
           <div style={styles.slideBar}>
             {connections.map((user, index) => (
@@ -946,122 +1321,219 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
           </div>
 
-          {/* Pending Requests */}
-          {sentRequestProfiles.length > 0 && (
-            <div style={{ marginTop: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                <h2 style={styles.cardTitle}>
-                  Pending Requests
-                </h2>
-                <span style={{
-                  fontSize: '11px',
-                  color: '#FFF8F0',
-                  backgroundColor: '#8B6F5C',
-                  borderRadius: '10px',
-                  padding: '2px 8px',
-                  fontWeight: '600',
-                }}>
-                  {sentRequestProfiles.length}
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {sentRequestProfiles.map((person) => (
-                  <div
-                    key={person.id}
+          {/* My Active Circles */}
+          {enrichedGroups.length > 0 && (
+            <>
+              <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.1)', margin: '20px 0 0' }} />
+              <div style={{ marginTop: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '14px' }}>
+                  <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
+                    My Active Circles
+                  </h2>
+                  <button
+                    onClick={() => onNavigate?.('allCircles')}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '10px 12px',
-                      backgroundColor: 'rgba(139, 111, 92, 0.06)',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(139, 111, 92, 0.1)',
-                    }}
-                  >
-                    {/* Avatar */}
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      background: 'none', border: 'none', color: '#8B6F5C',
+                      fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+                    }}>
+                    Discover <ChevronRight size={14} />
+                  </button>
+                </div>
+
+                <div style={styles.circlesList}>
+                  {enrichedGroups.map(({ group, acceptedMembers, activeMembers, activeNames, theme, hasUpcoming, sessionCount, daysUntilMeetup, hasNoActivity }, index) => (
                     <div
+                      key={group.id}
+                      className="circles-circle-card"
                       style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        backgroundColor: '#8B6F5C',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '16px',
-                        color: 'white',
-                        fontWeight: '600',
-                        flexShrink: 0,
-                        overflow: 'hidden',
-                        cursor: 'pointer',
+                        ...styles.circleCard,
+                        animationDelay: `${index * 0.12}s`,
+                        ...(hasNoActivity ? { border: '1.5px dashed rgba(139, 111, 92, 0.25)' } : {}),
                       }}
-                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
                     >
-                      {person.profile_picture ? (
-                        <img
-                          src={person.profile_picture}
-                          alt={person.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        />
-                      ) : (
-                        (person.name?.[0] || '?').toUpperCase()
+                      <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'stretch', gap: isMobile ? '10px' : '14px', flexDirection: isMobile ? 'column' : 'row' }}>
+                        <div style={{
+                          ...styles.circleEmoji,
+                          height: 'auto',
+                          background: group.image_url
+                            ? `url(${group.image_url}) center/cover no-repeat`
+                            : '#5E472F',
+                          position: 'relative',
+                        }} className="circles-circle-emoji">
+                          {!group.image_url && (
+                            <img src="/tutorial-logo.png" alt="" style={{ width: '110%', height: 'auto', objectFit: 'contain' }} />
+                          )}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h3 style={styles.circleName}>{group.name}</h3>
+                            {sessionCount > 0 && (
+                              <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0 }}>
+                                {sessionCount} past session{sessionCount !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                            {acceptedMembers.length > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                {acceptedMembers.slice(0, 4).map((member, idx) => (
+                                  <div key={member.id} style={{
+                                    width: '28px', height: '28px', borderRadius: '50%',
+                                    background: member.user?.profile_picture ? 'none'
+                                      : `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E', '#A67B5B'][idx % 4]}, #7A5C42)`,
+                                    border: '2px solid rgba(255,255,255,0.9)',
+                                    marginLeft: idx > 0 ? '-6px' : 0,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '10px', fontWeight: '600', color: 'white',
+                                    overflow: 'hidden', flexShrink: 0,
+                                  }}>
+                                    {member.user?.profile_picture ? (
+                                      <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (member.user?.name?.[0] || '?').toUpperCase()}
+                                  </div>
+                                ))}
+                                {acceptedMembers.length > 4 && (
+                                  <div style={{
+                                    width: '28px', height: '28px', borderRadius: '50%',
+                                    backgroundColor: 'rgba(189, 173, 162, 0.5)',
+                                    border: '2px solid rgba(255,255,255,0.9)',
+                                    marginLeft: '-6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '9px', fontWeight: '600', color: '#605045',
+                                  }}>
+                                    +{acceptedMembers.length - 4}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <span style={{ fontSize: '12px', color: '#6B5344' }}>
+                              {acceptedMembers.length} member{acceptedMembers.length !== 1 ? 's' : ''}
+                            </span>
+                            {activeNames.length > 0 && (
+                              <span style={styles.activeCount}>
+                                <span style={styles.activeDot}></span>
+                                {activeNames.length <= 2
+                                  ? activeNames.join(' & ') + (activeNames.length === 1 ? ' is' : ' are') + ' online'
+                                  : `${activeNames[0]} + ${activeNames.length - 1} online`}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Recent Activity */}
+                          {!hasNoActivity && (group.lastMessage || group.lastTopic) ? (
+                            <div style={{ marginTop: '6px', fontSize: '12px', color: '#6B5344', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              {group.lastMessage && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
+                                  <MessageCircle size={11} style={{ color: '#A89080', flexShrink: 0 }} />
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <span style={{ fontWeight: '600' }}>{group.lastMessage.sender?.name?.split(' ')[0] || 'Someone'}</span>
+                                    {': '}{group.lastMessage.content?.slice(0, 60)}{group.lastMessage.content?.length > 60 ? '...' : ''}
+                                  </span>
+                                  {group.lastMessage.created_at && (
+                                    <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0, marginLeft: 'auto' }}>
+                                      {(() => {
+                                        const diff = Date.now() - new Date(group.lastMessage.created_at).getTime();
+                                        const mins = Math.floor(diff / 60000);
+                                        if (mins < 60) return `${mins}m`;
+                                        const hours = Math.floor(mins / 60);
+                                        if (hours < 24) return `${hours}h`;
+                                        return `${Math.floor(hours / 24)}d`;
+                                      })()}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {group.lastTopic && !group.lastMessage && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#8B7355', fontSize: '11px', overflow: 'hidden' }}>
+                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    Last discussed: {group.lastTopic}
+                                  </span>
+                                  {group.lastRecap?.created_at && (
+                                    <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0 }}>
+                                      {(() => {
+                                        const diff = Date.now() - new Date(group.lastRecap.created_at).getTime();
+                                        const mins = Math.floor(diff / 60000);
+                                        if (mins < 60) return `${mins}m ago`;
+                                        const hours = Math.floor(mins / 60);
+                                        if (hours < 24) return `${hours}h ago`;
+                                        return `${Math.floor(hours / 24)}d ago`;
+                                      })()}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              {group.lastRecap && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}
+                                  onClick={(e) => { e.stopPropagation(); onNavigate?.('meetups', { recapId: group.lastRecap.id }); }}>
+                                  <FileText size={11} style={{ color: '#8B6F5C', flexShrink: 0 }} />
+                                  <span style={{ color: '#8B6F5C', fontWeight: '600', fontSize: '11px' }}>View meeting recap</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : hasNoActivity ? (
+                            <div style={{ marginTop: '4px', fontSize: '11px', color: '#A89080', fontStyle: 'italic' }}>
+                              Schedule a meetup or start a conversation
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="circle-card-actions" style={{ display: 'flex', gap: '6px', flexShrink: 0, alignSelf: 'center' }}>
+                          <button style={{ ...styles.enterBtn, padding: '7px 14px', fontSize: '12px' }}
+                            onClick={() => onNavigate?.('messages', { chatId: group.id, chatType: 'circle' })}>Message</button>
+                          <button style={{
+                            ...styles.enterBtn, padding: '7px 14px', fontSize: '12px',
+                            backgroundColor: hasUpcoming ? `${theme.color}12` : hasNoActivity ? '#8B6F5C' : `${theme.color}08`,
+                            color: hasNoActivity ? 'white' : '#6B5344',
+                            borderColor: hasNoActivity ? '#8B6F5C' : 'rgba(139, 111, 92, 0.3)',
+                          }} className="circles-enter-btn"
+                            onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}>
+                            {hasUpcoming ? 'Open' : hasNoActivity ? 'Get Started' : 'Enter'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {hasUpcoming && (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: '8px',
+                          marginTop: '10px', marginLeft: isMobile ? 0 : '78px',
+                          padding: '8px 12px',
+                          backgroundColor: daysUntilMeetup === 0 ? '#4CAF5010' : 'rgba(139, 111, 92, 0.05)',
+                          borderRadius: '10px',
+                        }}>
+                          <span style={{ fontSize: '16px' }}>📅</span>
+                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#5C4033' }}>
+                            Next: {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {group.nextMeetup.time && ` · ${group.nextMeetup.time}`}
+                          </span>
+                          {daysUntilMeetup !== null && (
+                            <span style={{
+                              fontSize: '11px', fontWeight: '600',
+                              color: daysUntilMeetup === 0 ? '#4CAF50' : theme.color,
+                              backgroundColor: daysUntilMeetup === 0 ? '#4CAF5020' : `${theme.color}15`,
+                              padding: '2px 8px', borderRadius: '8px', marginLeft: 'auto',
+                            }}>
+                              {daysUntilMeetup === 0 ? 'Today' : daysUntilMeetup === 1 ? 'Tomorrow' : `in ${daysUntilMeetup} days`}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </div>
+                  ))}
+                </div>
 
-                    {/* Info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: '#3E2723',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {person.name}
-                      </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: '#8B7355',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {person.career || 'Professional'}
-                      </div>
-                    </div>
-
-                    {/* Time ago */}
-                    <span style={{
-                      fontSize: '11px',
-                      color: '#A89080',
-                      flexShrink: 0,
-                    }}>
-                      {formatTimeAgo(person.requested_at)}
-                    </span>
-
-                    {/* Withdraw button */}
-                    <button
-                      onClick={() => handleWithdrawRequest(person.id)}
-                      style={{
-                        padding: '5px 12px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        color: '#8B6F5C',
-                        backgroundColor: 'transparent',
-                        border: '1.5px solid rgba(139, 111, 92, 0.3)',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                      }}
-                    >
-                      Withdraw
-                    </button>
-                  </div>
-                ))}
+                <button onClick={handleCreateClick} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  width: '100%', padding: '12px', marginTop: '12px',
+                  backgroundColor: 'transparent', border: '1.5px dashed rgba(139, 111, 92, 0.25)',
+                  borderRadius: '12px', color: '#8B6F5C', fontSize: '14px', fontWeight: '600',
+                  cursor: 'pointer', fontFamily: '"Lora", serif', transition: 'all 0.2s ease',
+                }}>
+                  <UserPlus size={16} /> Create a Circle
+                </button>
               </div>
-            </div>
+            </>
           )}
 
           {/* People you may know */}
@@ -1085,22 +1557,21 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 </div>
 
                 <div style={{
-                  display: 'flex', gap: isMobile ? '10px' : '12px', overflowX: 'auto',
-                  paddingBottom: '8px', WebkitOverflowScrolling: 'touch',
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr',
+                  gap: isMobile ? '10px' : '12px',
                 }}>
-                  {peerSuggestions.map((person) => (
+                  {peerSuggestions.slice(0, 4).map((person) => (
                     <div
                       key={person.id}
-                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
                       style={{
-                        minWidth: isMobile ? '220px' : '250px',
-                        maxWidth: isMobile ? '220px' : '250px',
+                        width: '100%',
                         background: '#FFFBF7',
-                        border: '1px solid rgba(139, 111, 92, 0.12)',
-                        borderRadius: isMobile ? '14px' : '16px',
-                        padding: isMobile ? '14px' : '16px',
-                        flexShrink: 0, cursor: 'pointer',
+                        border: '1px solid rgba(124, 96, 65, 0.12)',
+                        borderRadius: '20px',
+                        padding: isMobile ? '16px' : '20px',
                         display: 'flex', flexDirection: 'column',
+                        boxSizing: 'border-box',
                         transition: 'all 0.2s ease',
                       }}
                       onMouseEnter={(e) => {
@@ -1112,98 +1583,175 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         e.currentTarget.style.boxShadow = 'none';
                       }}
                     >
-                      {/* Top row: Avatar + Name/Career */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                      {/* Avatar + Name/Career */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
                         <div style={{
-                          width: isMobile ? '44px' : '48px',
-                          height: isMobile ? '44px' : '48px',
-                          borderRadius: '50%',
-                          backgroundColor: '#8B6F5C',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: isMobile ? '18px' : '20px', color: 'white', fontWeight: '600',
-                          flexShrink: 0,
-                          border: '2px solid rgba(139, 111, 92, 0.15)',
-                          overflow: 'hidden',
+                          position: 'relative', flexShrink: 0,
                         }}>
-                          {person.profile_picture ? (
-                            <img src={person.profile_picture} alt={person.name}
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : (
-                            (person.name?.[0] || '?').toUpperCase()
+                          <div style={{
+                            width: '56px', height: '56px',
+                            borderRadius: '50%',
+                            backgroundColor: '#6B5344',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '20px', color: 'white', fontWeight: '600',
+                            overflow: 'hidden',
+                          }}>
+                            {person.profile_picture ? (
+                              <img src={person.profile_picture} alt={person.name}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              (person.name?.[0] || '?').toUpperCase()
+                            )}
+                          </div>
+                          {person.last_active && (
+                            <span style={{
+                              position: 'absolute', bottom: '2px', right: '2px',
+                              width: '10px', height: '10px', borderRadius: '50%',
+                              backgroundColor: isUserActive(person.last_active, 10) ? '#4CAF50' : '#FFA726',
+                              border: '2px solid #FFFBF7',
+                            }} />
                           )}
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <h4 style={{
-                            fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '15px', fontWeight: '600',
+                            fontFamily: '"Lora", serif', fontSize: '17px', fontWeight: '700',
                             color: '#2C1810', margin: 0,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
                             {person.name}
                           </h4>
                           <p style={{
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '11px',
-                            color: '#8B7A6B', margin: '2px 0 0',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px',
+                            color: '#5C4033', margin: '2px 0 0',
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
                             {person.career || 'Professional'}
                           </p>
+                          {/* Interest Tags */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
+                            {(person.interests?.length ? person.interests : [person.industry].filter(Boolean)).slice(0, 3).map((tag, i) => (
+                              <span key={i} style={{
+                                fontFamily: '"DM Sans", sans-serif', fontSize: '10px', fontWeight: 500,
+                                color: '#5C4033', backgroundColor: '#E8DDD6',
+                                border: 'none',
+                                borderRadius: '8px', padding: '2px 8px',
+                                whiteSpace: 'nowrap',
+                              }}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Badges */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '10px' }}>
-                        {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
+                      {/* Coffee Chat */}
+                      {person.open_to_coffee_chat && (
+                        <div style={{ display: 'flex', marginBottom: '10px' }}>
                           <span style={{
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '10px',
-                            color: '#B8A089',
-                            display: 'inline-flex', alignItems: 'center', gap: '3px',
-                          }}>
-                            <Users size={10} />
-                            {person.mutualConnections || 0} mutual
-                          </span>
-                        )}
-                        {person.open_to_coffee_chat && (
-                          <span style={{
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '10px', fontWeight: 600,
-                            color: '#6B4F3A', backgroundColor: '#FDF3EB',
-                            borderRadius: '8px', padding: '2px 8px',
-                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: '11px', fontWeight: 600,
+                            color: '#5C4033', backgroundColor: '#FDF3EB',
+                            border: '1px solid rgba(124, 96, 65, 0.15)',
+                            borderRadius: '8px', padding: '3px 10px',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
                             whiteSpace: 'nowrap',
                           }}>
-                            <Coffee size={9} /> Open to Coffee Chat
+                            <Coffee size={10} /> Open to Coffee Chat this week
                           </span>
+                        </div>
+                      )}
+
+                      {/* Hook / Description */}
+                      {person.hook && (
+                        <p style={{
+                          fontFamily: '"DM Sans", sans-serif', fontSize: '13px',
+                          color: '#3D2B1F', margin: '0 0 10px', lineHeight: '1.4',
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                        }}>
+                          {person.hook}
+                        </p>
+                      )}
+
+                      {/* Mutuals + Activity */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '12px',
+                        color: '#8B7A6B', marginBottom: '12px',
+                      }}>
+                        {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
+                          <>
+                            <span style={{
+                              width: '16px', height: '16px', borderRadius: '50%',
+                              backgroundColor: '#4CAF50', display: 'inline-flex',
+                              alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <Check size={10} style={{ color: 'white' }} />
+                            </span>
+                            <span>{person.mutualConnections || person.mutualCircles || 0} mutuals</span>
+                            <span style={{ color: '#B8A089' }}>·</span>
+                          </>
                         )}
+                        <span>{(() => {
+                          if (!person.last_active) return 'Not yet active';
+                          const diff = Date.now() - new Date(person.last_active).getTime();
+                          const mins = Math.floor(diff / 60000);
+                          if (mins < 10) return 'Active now';
+                          if (mins < 60) return `Active ${mins}m ago`;
+                          const hours = Math.floor(mins / 60);
+                          if (hours < 24) return `Active ${hours}h ago`;
+                          const days = Math.floor(hours / 24);
+                          if (days < 7) return 'Active this week';
+                          if (days < 30) return `Active ${Math.floor(days / 7)}w ago`;
+                          return `Active ${Math.floor(days / 30)}mo+ ago`;
+                        })()}</span>
                       </div>
 
-                      {/* Connect button */}
-                      {sentRequests.has(person.id) ? (
-                        <div style={{
-                          width: '100%', marginTop: 'auto', padding: '6px 0',
-                          backgroundColor: 'rgba(92, 64, 51, 0.06)',
-                          color: '#8B6F5C',
-                          border: '1.5px solid rgba(139, 111, 92, 0.2)',
-                          borderRadius: '10px', fontSize: '12px', fontWeight: '600',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
-                        }}>
-                          <Check size={12} /> Requested
-                        </div>
-                      ) : (
+                      {/* Action Buttons */}
+                      <div style={{ marginTop: 'auto', display: 'flex', gap: '8px' }}>
+                        {sentRequests.has(person.id) ? (
+                          <div style={{
+                            padding: '5px 14px',
+                            backgroundColor: 'rgba(92, 64, 51, 0.06)',
+                            color: '#8B6F5C',
+                            border: '1.5px solid rgba(139, 111, 92, 0.2)',
+                            borderRadius: '10px', fontSize: '12px', fontWeight: '600',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                          }}>
+                            <Check size={11} /> Requested
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleConnect(person.id); }}
+                            style={{
+                              padding: '5px 14px',
+                              backgroundColor: '#5C4033', color: '#FFF',
+                              border: 'none', borderRadius: '10px',
+                              fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+                              display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              transition: 'background 0.2s ease',
+                            }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7A5C42'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5C4033'; }}
+                          >
+                            <UserPlus size={11} /> Connect
+                          </button>
+                        )}
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleConnect(person.id); }}
+                          onClick={(e) => { e.stopPropagation(); onNavigate?.('userProfile', { userId: person.id }); }}
                           style={{
-                            width: '100%', marginTop: 'auto', padding: '6px 0',
-                            backgroundColor: '#5C4033', color: '#FFF',
+                            padding: '5px 14px',
+                            backgroundColor: '#EDE6DF', color: '#5C4033',
                             border: 'none', borderRadius: '10px',
                             fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
                             transition: 'background 0.2s ease',
                           }}
-                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7A5C42'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5C4033'; }}
+                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E0D5CA'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#EDE6DF'; }}
                         >
-                          <UserPlus size={12} /> Connect
+                          View Profile
                         </button>
-                      )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1211,268 +1759,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             </>
           )}
         </section>
-
-        {/* My Circles Section */}
-        <section style={styles.section} className="circles-card">
-          <div style={styles.cardHeader} className="circles-card-header">
-            <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}} className="circles-card-title">
-              My Circles
-            </h2>
-            <button style={{...styles.addGroupBtn, fontSize: isMobile ? '12px' : '13px', padding: isMobile ? '6px 12px' : '8px 14px'}} onClick={() => onNavigate && onNavigate('discover')}>Discover Circles</button>
-          </div>
-
-          <div style={styles.circlesList}>
-            {connectionGroups.length === 0 ? (
-              <div
-                style={styles.emptyCardActionable}
-                onClick={handleCreateClick}
-              >
-                <span style={{ fontSize: '32px', marginBottom: '8px' }}>🌱</span>
-                <p style={styles.emptyText}>No groups yet</p>
-                <p style={styles.emptyHint}>Schedule your first meetup or start a conversation</p>
-                <button style={styles.emptyStateButton} onClick={handleCreateClick}>
-                  Get Started
-                </button>
-              </div>
-            ) : (
-              enrichedGroups.map(({ group, acceptedMembers, activeMembers, activeNames, theme, hasUpcoming, sessionCount, daysUntilMeetup, hasNoActivity }, index) => {
-                return (
-                  <div
-                    key={group.id}
-                    className="circles-circle-card"
-                    style={{
-                      ...styles.circleCard,
-                      animationDelay: `${index * 0.12}s`,
-                      ...(hasNoActivity ? { border: '1.5px dashed rgba(139, 111, 92, 0.25)' } : {}),
-                    }}
-                  >
-                    {/* Main layout: horizontal on desktop, vertical on mobile */}
-                    <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'stretch', gap: isMobile ? '10px' : '14px', flexDirection: isMobile ? 'column' : 'row' }}>
-
-                      {/* Left: Icon or Image */}
-                      <div style={{
-                        ...styles.circleEmoji,
-                        height: 'auto',
-                        background: group.image_url
-                          ? `url(${group.image_url}) center/cover no-repeat`
-                          : '#5E472F',
-                        position: 'relative',
-                      }} className="circles-circle-emoji">
-                        {!group.image_url && (
-                          <img src="/tutorial-logo.png" alt="" style={{ width: '110%', height: 'auto', objectFit: 'contain' }} />
-                        )}
-                        {sessionCount > 0 && (
-                          <div className="sparkline-container" style={{
-                            position: 'absolute',
-                            bottom: '-4px',
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                            display: 'flex',
-                            gap: '2px',
-                            alignItems: 'flex-end',
-                            padding: '2px 4px',
-                            borderRadius: '4px',
-                            backgroundColor: 'rgba(255,255,255,0.6)',
-                          }}>
-                            {[0.35, 0.6, 1, 0.5, 0.75].map((h, i) => (
-                              <div key={i} className="sparkline-bar" style={{
-                                width: '3px',
-                                height: `${h * 10}px`,
-                                borderRadius: '1.5px',
-                                backgroundColor: `${theme.color}55`,
-                                transition: 'background-color 0.3s ease, height 0.3s ease',
-                                '--bar-warm': theme.color,
-                              }} />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Center: Name + Members + Context */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        {/* Name row */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <h3 style={styles.circleName}>{group.name}</h3>
-                          {sessionCount > 0 && (
-                            <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0 }}>
-                              {sessionCount} past session{sessionCount !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Members row: avatars + count + online */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                          {acceptedMembers.length > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center' }}>
-                              {acceptedMembers.slice(0, 4).map((member, idx) => (
-                                <div key={member.id} style={{
-                                  width: '20px',
-                                  height: '20px',
-                                  borderRadius: '50%',
-                                  background: member.user?.profile_picture
-                                    ? 'none'
-                                    : `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E', '#A67B5B'][idx % 4]}, #7A5C42)`,
-                                  border: '1.5px solid rgba(255,255,255,0.9)',
-                                  marginLeft: idx > 0 ? '-5px' : 0,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: '8px',
-                                  fontWeight: '600',
-                                  color: 'white',
-                                  overflow: 'hidden',
-                                  flexShrink: 0,
-                                }}>
-                                  {member.user?.profile_picture ? (
-                                    <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  ) : (
-                                    (member.user?.name?.[0] || '?').toUpperCase()
-                                  )}
-                                </div>
-                              ))}
-                              {acceptedMembers.length > 4 && (
-                                <div style={{
-                                  width: '20px',
-                                  height: '20px',
-                                  borderRadius: '50%',
-                                  backgroundColor: 'rgba(189, 173, 162, 0.5)',
-                                  border: '1.5px solid rgba(255,255,255,0.9)',
-                                  marginLeft: '-5px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  fontSize: '7px',
-                                  fontWeight: '600',
-                                  color: '#605045',
-                                }}>
-                                  +{acceptedMembers.length - 4}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <span style={{ fontSize: '11px', color: '#6B5344' }}>
-                            {acceptedMembers.length} member{acceptedMembers.length !== 1 ? 's' : ''}
-                          </span>
-                          {activeNames.length > 0 && (
-                            <span style={styles.activeCount}>
-                              <span style={styles.activeDot}></span>
-                              {activeNames.length <= 2
-                                ? activeNames.join(' & ') + (activeNames.length === 1 ? ' is' : ' are') + ' online'
-                                : `${activeNames[0]} + ${activeNames.length - 1} online`
-                              }
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Context line: meetup / last topic / empty hint */}
-                        {hasUpcoming && (
-                          <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            marginTop: '6px',
-                            fontSize: '11px',
-                            color: '#6B5344',
-                          }}>
-                            <span>📅</span>
-                            <span style={{ fontWeight: '600' }}>
-                              {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                              {group.nextMeetup.time && ` · ${group.nextMeetup.time}`}
-                            </span>
-                            {daysUntilMeetup !== null && (
-                              <span style={{
-                                fontSize: '10px',
-                                fontWeight: '600',
-                                color: daysUntilMeetup === 0 ? '#4CAF50' : theme.color,
-                                backgroundColor: daysUntilMeetup === 0 ? '#4CAF5015' : `${theme.color}12`,
-                                padding: '2px 6px',
-                                borderRadius: '6px',
-                              }}>
-                                {daysUntilMeetup === 0 ? 'Today' : daysUntilMeetup === 1 ? 'Tomorrow' : `in ${daysUntilMeetup} days`}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {group.lastTopic && !hasNoActivity && !hasUpcoming && (
-                          <div style={{
-                            marginTop: '4px',
-                            fontSize: '11px',
-                            color: '#8B7355',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            Last discussed: {group.lastTopic}
-                          </div>
-                        )}
-                        {hasNoActivity && (
-                          <div style={{ marginTop: '4px', fontSize: '11px', color: '#A89080', fontStyle: 'italic' }}>
-                            Schedule a meetup or start a conversation
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Right: Action buttons */}
-                      <div className="circle-card-actions" style={{ display: 'flex', gap: '6px', flexShrink: 0, alignSelf: 'center' }}>
-                        <button
-                          style={{
-                            ...styles.enterBtn,
-                            padding: '7px 14px',
-                            fontSize: '12px',
-                          }}
-                          onClick={() => onNavigate?.('messages', { chatId: group.id, chatType: 'circle' })}
-                        >
-                          Message
-                        </button>
-                        <button
-                          style={{
-                            ...styles.enterBtn,
-                            padding: '7px 14px',
-                            fontSize: '12px',
-                            backgroundColor: hasUpcoming ? `${theme.color}12` : hasNoActivity ? '#8B6F5C' : `${theme.color}08`,
-                            color: hasNoActivity ? 'white' : '#6B5344',
-                            borderColor: hasNoActivity ? '#8B6F5C' : 'rgba(139, 111, 92, 0.3)',
-                          }}
-                          className="circles-enter-btn"
-                          onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}
-                        >
-                          {hasUpcoming ? 'Open' : hasNoActivity ? 'Get Started' : 'Enter'}
-                        </button>
-                      </div>
-
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <button
-            onClick={handleCreateClick}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              width: '100%',
-              padding: '12px',
-              marginTop: '12px',
-              backgroundColor: 'transparent',
-              border: '1.5px dashed rgba(139, 111, 92, 0.25)',
-              borderRadius: '12px',
-              color: '#8B6F5C',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-              fontFamily: '"Lora", serif',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <UserPlus size={16} />
-            Create a Circle
-          </button>
-        </section>
-
 
       </div>
 
@@ -1482,12 +1768,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         <div style={styles.modalOverlay}>
           <div style={styles.modal} className="circles-modal">
             <div style={styles.modalHeader}>
-              <h2 style={styles.modalTitle}>Create Connection Group</h2>
+              <h2 style={styles.modalTitle}>Create Circle</h2>
               <button
                 style={styles.modalClose}
                 onClick={() => {
                   setShowCreateModal(false);
                   setGroupName('');
+                  setGroupDescription('');
                   setSelectedConnections([]);
                 }}
               >
@@ -1497,7 +1784,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
             <div style={styles.modalBody}>
               <div style={styles.formGroup}>
-                <label style={styles.formLabel}>Group Name</label>
+                <label style={styles.formLabel}>Circle Name</label>
                 <input
                   type="text"
                   value={groupName}
@@ -1505,6 +1792,17 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   placeholder="e.g., Product Managers SF"
                   style={styles.formInput}
                   maxLength={100}
+                />
+              </div>
+
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>Description (optional)</label>
+                <textarea
+                  value={groupDescription}
+                  onChange={(e) => setGroupDescription(e.target.value)}
+                  placeholder="What is this circle about?"
+                  style={{ ...styles.formInput, minHeight: '60px', resize: 'vertical', fontFamily: 'inherit' }}
+                  maxLength={300}
                 />
               </div>
 
@@ -1543,6 +1841,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 onClick={() => {
                   setShowCreateModal(false);
                   setGroupName('');
+                  setGroupDescription('');
                   setSelectedConnections([]);
                 }}
               >
@@ -1556,9 +1855,71 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 onClick={handleCreateGroup}
                 disabled={!groupName.trim() || selectedConnections.length < 2}
               >
-                Create Group
+                Create Circle
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Circle Created Success Modal */}
+      {createSuccess && (
+        <div style={styles.modalOverlay} onClick={() => setCreateSuccess(null)}>
+          <div
+            style={{
+              ...styles.modalContent,
+              maxWidth: '360px',
+              textAlign: 'center',
+              padding: '32px 24px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+            <h2 style={{
+              fontFamily: '"Lora", serif',
+              fontSize: '20px',
+              fontWeight: '700',
+              color: '#2C1810',
+              margin: '0 0 8px',
+            }}>
+              Circle Created!
+            </h2>
+            <p style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: '14px',
+              color: '#8B7355',
+              margin: '0 0 6px',
+              lineHeight: '1.5',
+            }}>
+              <strong style={{ color: '#5C4033' }}>{createSuccess.name}</strong> is ready to go.
+            </p>
+            <p style={{
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: '13px',
+              color: '#A89080',
+              margin: '0 0 24px',
+            }}>
+              {createSuccess.inviteCount} invitation{createSuccess.inviteCount !== 1 ? 's' : ''} sent to your connections.
+            </p>
+            <button
+              onClick={() => setCreateSuccess(null)}
+              style={{
+                padding: '10px 32px',
+                backgroundColor: '#5C4033',
+                color: '#FFF',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontFamily: '"DM Sans", sans-serif',
+                transition: 'background 0.2s ease',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7A5C42'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5C4033'; }}
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}
@@ -2057,8 +2418,8 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: '8px',
-    padding: '16px 12px',
-    minWidth: '90px',
+    padding: '16px 14px',
+    minWidth: '110px',
     backgroundColor: 'transparent',
     borderRadius: '16px',
     cursor: 'pointer',
@@ -2071,47 +2432,47 @@ const styles = {
     position: 'relative',
   },
   slideAvatarImg: {
-    width: '56px',
-    height: '56px',
+    width: '72px',
+    height: '72px',
     borderRadius: '50%',
     objectFit: 'cover',
-    border: '2px solid rgba(139, 111, 92, 0.15)',
+    border: '2.5px solid rgba(139, 111, 92, 0.15)',
   },
   slideAvatarPlaceholder: {
-    width: '56px',
-    height: '56px',
+    width: '72px',
+    height: '72px',
     borderRadius: '50%',
     backgroundColor: 'rgba(139, 111, 92, 0.1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '28px',
-    border: '2px solid rgba(139, 111, 92, 0.15)',
+    fontSize: '32px',
+    border: '2.5px solid rgba(139, 111, 92, 0.15)',
   },
   slideStatusIndicator: {
     position: 'absolute',
-    bottom: '2px',
-    right: '2px',
-    width: '12px',
-    height: '12px',
+    bottom: '3px',
+    right: '3px',
+    width: '14px',
+    height: '14px',
     borderRadius: '50%',
-    border: '2px solid white',
+    border: '2.5px solid white',
   },
   slideName: {
-    fontSize: '13px',
+    fontSize: '14px',
     fontWeight: '600',
     color: '#3D2B1F',
     textAlign: 'center',
-    maxWidth: '80px',
+    maxWidth: '100px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   slideRole: {
-    fontSize: '11px',
+    fontSize: '12px',
     color: '#8B7355',
     textAlign: 'center',
-    maxWidth: '80px',
+    maxWidth: '100px',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -2129,7 +2490,7 @@ const styles = {
     height: '30px',
     borderRadius: '50%',
     border: '1px solid rgba(139, 111, 92, 0.15)',
-    backgroundColor: 'rgba(139, 111, 92, 0.06)',
+    backgroundColor: '#E8DDD6',
     color: '#8B6F5C',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
@@ -2500,15 +2861,15 @@ const styles = {
     minWidth: 0,
   },
   circleName: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#3D2B1F',
+    fontSize: '17px',
+    fontWeight: '700',
+    color: '#2C1810',
     marginBottom: '2px',
     margin: 0,
   },
   circleDesc: {
-    fontSize: '12px',
-    color: '#8B7355',
+    fontSize: '13px',
+    color: '#5C4033',
     margin: 0,
     marginBottom: '6px',
   },

@@ -759,10 +759,37 @@ export default function CircleDetailView({
       <div style={styles.content}>
         {/* Title Section */}
         <div style={styles.titleSection}>
-          <h1 style={styles.circleName}>{circle.name}</h1>
-          {circle.description && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <h1 style={{ ...styles.circleName, flex: 1 }}>{circle.name}</h1>
+            {isHost && (
+              <button
+                onClick={handleOpenEdit}
+                style={{
+                  background: 'none', border: '1px solid ' + colors.border,
+                  borderRadius: '8px', padding: '6px 10px',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                  color: colors.textLight, fontSize: '12px', fontWeight: '600',
+                  flexShrink: 0,
+                }}
+              >
+                <Edit3 size={13} /> Edit
+              </button>
+            )}
+          </div>
+          {circle.description ? (
             <p style={styles.description}>{circle.description}</p>
-          )}
+          ) : isHost ? (
+            <button
+              onClick={handleOpenEdit}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: colors.textMuted, fontSize: '14px', fontStyle: 'italic',
+                padding: '4px 0', fontFamily: fonts.sans,
+              }}
+            >
+              + Add a description
+            </button>
+          ) : null}
         </div>
 
         {/* Regular Schedule */}
