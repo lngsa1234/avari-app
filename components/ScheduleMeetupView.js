@@ -639,6 +639,15 @@ export default function ScheduleMeetupView({
                   style={styles.input}
                 />
               </div>
+              <div style={styles.inputGroup}>
+                <Clock size={18} style={styles.inputIcon} />
+                <input
+                  type="time"
+                  value={scheduledTime}
+                  onChange={(e) => setScheduledTime(e.target.value)}
+                  style={styles.input}
+                />
+              </div>
             </div>
             {/* Duration */}
             <div style={styles.section}>
