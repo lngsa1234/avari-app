@@ -1,5 +1,5 @@
 // components/AllPeopleView.js
-// All People page with search and filters
+// All People page — redesigned to match circlew_people_page UX reference
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -13,70 +13,46 @@ import {
   ChevronLeft,
   Users,
   Coffee,
+  Sparkles,
 } from 'lucide-react';
 
-// Color palette - Mocha Brown theme
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#6B5344',
-  primaryLight: '#A89080',
-  cream: '#FDF8F3',
+  mocha: '#6B4F3A',
+  mochaLight: '#8B6F5A',
+  mochaPale: '#F5EFE8',
+  mochaMuted: '#C4A882',
+  cream: '#FAF6F1',
   warmWhite: '#FFFAF5',
-  text: '#4A3728',
-  textLight: '#7A6855',
+  text: '#3D2B1F',
+  textLight: '#6B5344',
   textMuted: '#A89080',
-  border: '#EDE6DF',
+  border: 'rgba(107,79,58,0.15)',
+  borderHover: 'rgba(107,79,58,0.3)',
+  tagBg: '#EFE6DB',
+  tagText: '#6B4F3A',
+  chatBg: '#FFF8F0',
+  chatBorder: '#D4956A',
+  chatText: '#A0522D',
   success: '#6B8E7B',
+  primary: '#8B6F5C',
 };
 
-// Font families
 const fonts = {
   serif: "'Lora', Georgia, serif",
-  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-// Interest filter options
 const INTEREST_FILTERS = [
-  'All',
-  'Tech',
-  'Entrepreneurship',
-  'Wellness',
-  'Finance',
-  'Parenting',
-  'Creative',
-  'Leadership',
+  'All', 'Tech', 'Entrepreneurship', 'Wellness', 'Finance', 'Parenting', 'Creative', 'Leadership',
 ];
 
-// Avatar gradients
-const GRADIENTS = [
-  'linear-gradient(135deg, #E8D5C4 0%, #D4C4B0 100%)',
-  'linear-gradient(135deg, #E5F0E5 0%, #C8DEC8 100%)',
-  'linear-gradient(135deg, #F5E6D3 0%, #E8D4BC 100%)',
-  'linear-gradient(135deg, #F0E6F5 0%, #DED0E8 100%)',
-  'linear-gradient(135deg, #F5E0E5 0%, #E8CCD4 100%)',
-  'linear-gradient(135deg, #E5E8D4 0%, #D4D8C0 100%)',
-  'linear-gradient(135deg, #FCE4EC 0%, #F8BBD9 100%)',
-  'linear-gradient(135deg, #D4E5F7 0%, #B8D4E8 100%)',
+// Banner colors for cards without profile pictures
+const BANNER_COLORS = [
+  '#EDE3D8', '#D8E8D5', '#E8DFF5', '#F5E2D0', '#EEE0F5', '#E5E8D4', '#F0E6F5', '#D4E5F7',
 ];
-
-// Custom hook for responsive design
-const useWindowSize = () => {
-  const [windowSize, setWindowSize] = useState({
-    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowSize({ width: window.innerWidth });
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  return windowSize;
-};
+const AVATAR_COLORS = [
+  '#7A5C44', '#4A7A5C', '#6A5A8A', '#A06030', '#7A5A8A', '#5A7A4A', '#8A5A6A', '#4A6A8A',
+];
 
 export default function AllPeopleView({
   currentUser,
@@ -88,21 +64,25 @@ export default function AllPeopleView({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInterest, setSelectedInterest] = useState('All');
+  const [sortBy, setSortBy] = useState('default');
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [connectionRequested, setConnectionRequested] = useState(false);
 
-  const { width: windowWidth } = useWindowSize();
-  const isMobile = windowWidth < 768;
-  const isSmallMobile = windowWidth < 400;
+  const [searchFocused, setSearchFocused] = useState(false);
 
+  const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    loadPeople();
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
+
+  useEffect(() => { loadPeople(); }, []);
 
   const loadPeople = async () => {
     setLoading(true);
     try {
-      // Fetch all profiles except current user
       const { data: profilesData, error } = await supabase
         .from('profiles')
         .select('*')
@@ -110,142 +90,117 @@ export default function AllPeopleView({
         .not('name', 'is', null)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching profiles:', error);
-        setPeople([]);
-        return;
-      }
-
-      if (!profilesData || profilesData.length === 0) {
+      if (error || !profilesData?.length) {
         setPeople([]);
         setLoading(false);
         return;
       }
 
-      // Get mutual matches (connections) using the database function
-      const { data: mutualMatches, error: matchError } = await supabase
-        .rpc('get_mutual_matches', { for_user_id: currentUser.id });
+      // Fetch mutual matches, circle data, interests in parallel
+      const profileIds = profilesData.map(p => p.id);
+      const [matchRes, myCirclesRes, myInterestsRes] = await Promise.all([
+        supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
+        supabase.from('connection_group_members').select('group_id').eq('user_id', currentUser.id).eq('status', 'accepted'),
+        supabase.from('user_interests').select('interested_in_user_id').eq('user_id', currentUser.id),
+      ]);
 
-      console.log('🔍 Current user ID:', currentUser.id);
-      console.log('🔍 Mutual matches result:', mutualMatches);
-      console.log('🔍 Mutual matches error:', matchError);
+      const myConnectionIds = new Set((matchRes.data || []).map(m => m.matched_user_id));
+      const myCircleIds = (myCirclesRes.data || []).map(c => c.group_id);
+      const myInterestIds = new Set((myInterestsRes.data || []).map(i => i.interested_in_user_id));
 
-      const myConnectionIds = new Set((mutualMatches || []).map(m => m.matched_user_id));
-      console.log('🔍 My connection IDs:', [...myConnectionIds]);
-
-      // Fetch current user's circle memberships
-      const { data: myCircles } = await supabase
-        .from('connection_group_members')
-        .select('group_id')
-        .eq('user_id', currentUser.id)
-        .eq('status', 'accepted');
-
-      const myCircleIds = (myCircles || []).map(c => c.group_id);
-
-      // Fetch all circle memberships for other users
+      // Fetch circle memberships and meetup counts
       let circleMembers = [];
       if (myCircleIds.length > 0) {
-        const { data: allCircleMembers } = await supabase
+        const { data } = await supabase
           .from('connection_group_members')
           .select('user_id, group_id')
           .in('group_id', myCircleIds)
           .eq('status', 'accepted')
           .neq('user_id', currentUser.id);
-
-        circleMembers = allCircleMembers || [];
+        circleMembers = data || [];
       }
 
-      // Calculate mutual circles for each person
       const userCircleCount = {};
-      circleMembers.forEach(member => {
-        if (!userCircleCount[member.user_id]) {
-          userCircleCount[member.user_id] = 0;
-        }
-        userCircleCount[member.user_id]++;
+      circleMembers.forEach(m => {
+        userCircleCount[m.user_id] = (userCircleCount[m.user_id] || 0) + 1;
       });
 
-      // Get all user_interests to calculate mutual connections
-      // Mutual connections = people who are connected to both current user and the person
-      const profileIds = profilesData.map(p => p.id);
+      // Calculate mutual connections
+      const [byOthers, inOthers] = await Promise.all([
+        supabase.from('user_interests').select('user_id, interested_in_user_id').in('user_id', profileIds),
+        supabase.from('user_interests').select('user_id, interested_in_user_id').in('interested_in_user_id', profileIds),
+      ]);
 
-      // Get interests expressed BY other users
-      const { data: interestsByOthers } = await supabase
-        .from('user_interests')
-        .select('user_id, interested_in_user_id')
-        .in('user_id', profileIds);
-
-      // Get interests expressed IN other users
-      const { data: interestsInOthers } = await supabase
-        .from('user_interests')
-        .select('user_id, interested_in_user_id')
-        .in('interested_in_user_id', profileIds);
-
-      // Build a map of each person's mutual matches (connections)
-      const personConnections = {};
-      profileIds.forEach(id => { personConnections[id] = new Set(); });
-
-      // Find mutual matches for each person
       const interestsByUser = {};
       const interestsInUser = {};
-
-      (interestsByOthers || []).forEach(i => {
+      (byOthers.data || []).forEach(i => {
         if (!interestsByUser[i.user_id]) interestsByUser[i.user_id] = new Set();
         interestsByUser[i.user_id].add(i.interested_in_user_id);
       });
-
-      (interestsInOthers || []).forEach(i => {
+      (inOthers.data || []).forEach(i => {
         if (!interestsInUser[i.interested_in_user_id]) interestsInUser[i.interested_in_user_id] = new Set();
         interestsInUser[i.interested_in_user_id].add(i.user_id);
       });
 
-      // A mutual match exists when user A expressed interest in B AND B expressed interest in A
+      const personConnections = {};
+      profileIds.forEach(id => { personConnections[id] = new Set(); });
       profileIds.forEach(personId => {
         const theyLike = interestsByUser[personId] || new Set();
         const likedThem = interestsInUser[personId] || new Set();
-        theyLike.forEach(otherId => {
-          if (likedThem.has(otherId)) {
-            personConnections[personId].add(otherId);
-          }
-        });
+        theyLike.forEach(otherId => { if (likedThem.has(otherId)) personConnections[personId].add(otherId); });
       });
 
-      // Calculate mutual connections for each person (shared connections with current user)
       const userMutualConnections = {};
       profileIds.forEach(personId => {
         let count = 0;
-        personConnections[personId].forEach(connId => {
-          if (myConnectionIds.has(connId)) {
-            count++;
-          }
-        });
+        personConnections[personId].forEach(connId => { if (myConnectionIds.has(connId)) count++; });
         userMutualConnections[personId] = count;
       });
 
-      // Get current user's sent interests (pending requests)
-      const { data: myInterests } = await supabase
-        .from('user_interests')
-        .select('interested_in_user_id')
-        .eq('user_id', currentUser.id);
-      const myInterestIds = new Set((myInterests || []).map(i => i.interested_in_user_id));
+      // Fetch meetup attendance counts per user
+      const { data: attendeeData } = await supabase
+        .from('meetup_attendees')
+        .select('user_id')
+        .in('user_id', profileIds);
+      const userMeetupCount = {};
+      (attendeeData || []).forEach(a => {
+        userMeetupCount[a.user_id] = (userMeetupCount[a.user_id] || 0) + 1;
+      });
 
-      // Enrich profiles with mutual data and connection status
-      const enrichedProfiles = profilesData.map(person => ({
+      // Fetch user's circles for profile modal
+      const { data: allMemberships } = await supabase
+        .from('connection_group_members')
+        .select('user_id, group_id, connection_groups(id, name, connection_group_members(count))')
+        .in('user_id', profileIds)
+        .eq('status', 'accepted');
+
+      const userCircles = {};
+      (allMemberships || []).forEach(m => {
+        if (!userCircles[m.user_id]) userCircles[m.user_id] = [];
+        if (m.connection_groups) {
+          const exists = userCircles[m.user_id].find(c => c.id === m.connection_groups.id);
+          if (!exists) {
+            userCircles[m.user_id].push({
+              id: m.connection_groups.id,
+              name: m.connection_groups.name,
+              members: m.connection_groups.connection_group_members?.[0]?.count || 0,
+            });
+          }
+        }
+      });
+
+      const enriched = profilesData.map(person => ({
         ...person,
         mutualCircles: userCircleCount[person.id] || 0,
         mutualConnections: userMutualConnections[person.id] || 0,
+        meetupsAttended: userMeetupCount[person.id] || 0,
+        totalCircles: (userCircles[person.id] || []).length,
+        circles: userCircles[person.id] || [],
         isConnected: myConnectionIds.has(person.id),
         hasPendingRequest: !myConnectionIds.has(person.id) && myInterestIds.has(person.id),
       }));
 
-      console.log('🔍 Enriched profiles:', enrichedProfiles.map(p => ({
-        name: p.name,
-        id: p.id,
-        isConnected: p.isConnected,
-        mutualConnections: p.mutualConnections,
-        mutualCircles: p.mutualCircles,
-      })));
-
-      setPeople(enrichedProfiles);
+      setPeople(enriched);
     } catch (error) {
       console.error('Error loading people:', error);
       setPeople([]);
@@ -253,188 +208,147 @@ export default function AllPeopleView({
     setLoading(false);
   };
 
-  // Filter people based on search and interest
   const filteredPeople = useMemo(() => {
-    return people.filter(person => {
-      const query = searchQuery.toLowerCase();
+    let result = people.filter(person => {
+      const q = searchQuery.toLowerCase();
       const matchesSearch = !searchQuery ||
-        person.name?.toLowerCase().includes(query) ||
-        person.hook?.toLowerCase().includes(query) ||
-        person.career?.toLowerCase().includes(query) ||
-        person.industry?.toLowerCase().includes(query) ||
-        person.city?.toLowerCase().includes(query);
+        person.name?.toLowerCase().includes(q) ||
+        person.hook?.toLowerCase().includes(q) ||
+        person.career?.toLowerCase().includes(q) ||
+        person.industry?.toLowerCase().includes(q) ||
+        person.city?.toLowerCase().includes(q) ||
+        (person.interests || []).some(i => i.toLowerCase().includes(q));
 
       const matchesInterest = selectedInterest === 'All' ||
         person.industry?.toLowerCase().includes(selectedInterest.toLowerCase()) ||
-        person.career?.toLowerCase().includes(selectedInterest.toLowerCase());
+        person.career?.toLowerCase().includes(selectedInterest.toLowerCase()) ||
+        (person.interests || []).some(i => i.toLowerCase().includes(selectedInterest.toLowerCase()));
 
       return matchesSearch && matchesInterest;
     });
-  }, [people, searchQuery, selectedInterest]);
 
-  const clearFilters = () => {
-    setSearchQuery('');
-    setSelectedInterest('All');
-  };
+    if (sortBy === 'chat') result.sort((a, b) => (b.open_to_coffee_chat ? 1 : 0) - (a.open_to_coffee_chat ? 1 : 0));
+    if (sortBy === 'mutual') result.sort((a, b) => b.mutualConnections - a.mutualConnections);
+
+    return result;
+  }, [people, searchQuery, selectedInterest, sortBy]);
+
+  const clearFilters = () => { setSearchQuery(''); setSelectedInterest('All'); };
 
   const handleRequestConnect = async (personId) => {
     try {
       const { error } = await supabase
         .from('user_interests')
-        .insert({
-          user_id: currentUser.id,
-          interested_in_user_id: personId,
-        });
-
-      if (error) {
-        if (error.code === '23505') {
-          // Duplicate — already sent
-        } else {
-          console.error('Error sending connection request:', error);
-        }
-      }
-
+        .insert({ user_id: currentUser.id, interested_in_user_id: personId });
+      if (error && error.code !== '23505') console.error('Connect error:', error);
       setConnectionRequested(true);
-      setTimeout(() => {
-        setSelectedPerson(null);
-        setConnectionRequested(false);
-      }, 2000);
-    } catch (err) {
-      console.error('Error sending connection request:', err);
-    }
+      setTimeout(() => { setSelectedPerson(null); setConnectionRequested(false); }, 2000);
+    } catch (err) { console.error('Connect error:', err); }
   };
 
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            border: `4px solid ${colors.primary}`,
-            borderTopColor: 'transparent',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 16px'
-          }} />
-          <p style={{ color: colors.textLight }}>Loading people...</p>
+          <div style={{ width: '32px', height: '32px', border: `4px solid ${colors.primary}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: colors.textLight, fontFamily: fonts.sans }}>Loading people...</p>
         </div>
-        <style>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div style={{ fontFamily: fonts.sans, paddingBottom: '100px' }}>
-      {/* Header with back button */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        marginBottom: '8px',
-      }}>
-        <button
-          onClick={() => onNavigate?.(previousView || 'home')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '40px',
-            height: '40px',
-            borderRadius: '12px',
-            border: `1px solid ${colors.border}`,
-            backgroundColor: 'white',
-            cursor: 'pointer',
-          }}
-        >
-          <ChevronLeft size={20} style={{ color: colors.text }} />
-        </button>
-        <div>
-          <h1 style={{
-            fontSize: isMobile ? '24px' : '32px',
-            fontWeight: '500',
-            color: colors.text,
-            margin: 0,
-            fontFamily: fonts.serif,
-          }}>
+    <div style={{ fontFamily: fonts.sans, maxWidth: '820px', margin: '0 auto', paddingBottom: '100px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+          <button
+            onClick={() => onNavigate?.(previousView || 'home')}
+            aria-label="Go back"
+            style={{
+              width: '34px', height: '34px', borderRadius: '50%',
+              border: `1px solid ${colors.border}`, background: 'white',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <ChevronLeft size={16} style={{ color: colors.mocha }} />
+          </button>
+          <h1 style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: 0, letterSpacing: '0.01em' }}>
             Connect with Women
           </h1>
         </div>
+        <p style={{ fontSize: '13px', color: colors.mochaLight, margin: 0, paddingLeft: '46px' }}>
+          Find inspiring women in your community
+        </p>
       </div>
 
-      <p style={{
-        fontSize: isMobile ? '13px' : '14px',
-        color: colors.textLight,
-        margin: '0 0 20px',
-        paddingLeft: isMobile ? '52px' : '52px',
-      }}>
-        Find inspiring women in your community
-      </p>
-
-      {/* Search bar */}
-      <div style={{
-        position: 'relative',
-        marginBottom: '16px',
-      }}>
-        <Search
-          size={18}
-          style={{
-            position: 'absolute',
-            left: '14px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: colors.textMuted,
-          }}
-        />
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: '12px' }}>
+        <span style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', color: colors.mochaMuted, pointerEvents: 'none', zIndex: 1 }}>
+          <Search size={15} />
+        </span>
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by name, role, or interests..."
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+          placeholder="Search by name, role, or interest..."
           style={{
-            width: '100%',
-            padding: isMobile ? '12px 36px 12px 40px' : '14px 40px 14px 44px',
-            borderRadius: '16px',
-            border: `2px solid ${colors.border}`,
-            backgroundColor: 'white',
-            fontSize: '14px',
-            outline: 'none',
-            boxSizing: 'border-box',
-            color: colors.text,
+            width: '100%', height: '44px', padding: '0 40px 0 42px',
+            borderRadius: '24px', border: `1px solid ${searchFocused ? colors.mochaMuted : colors.border}`,
+            background: 'white', fontSize: '14px', color: colors.mocha,
+            outline: 'none', fontFamily: fonts.sans, boxSizing: 'border-box',
+            boxShadow: searchFocused ? '0 0 0 3px rgba(107,79,58,0.07)' : 'none',
+            transition: 'border-color 0.15s, box-shadow 0.15s',
           }}
         />
         {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            style={{
-              position: 'absolute',
-              right: '14px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '4px',
-            }}
-          >
-            <X size={18} style={{ color: colors.textMuted }} />
+          <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+            <X size={16} style={{ color: colors.mochaMuted }} />
           </button>
         )}
       </div>
 
-      {/* Interest filter pills */}
-      <div style={{
-        display: 'flex',
-        gap: '8px',
-        overflowX: 'auto',
-        paddingBottom: '4px',
-        marginBottom: '20px',
-        WebkitOverflowScrolling: 'touch',
-      }}>
+      {/* Search hints — show when focused and no query yet */}
+      {searchFocused && !searchQuery && (() => {
+        // Build hints from actual data: top cities, careers, industries
+        const hints = [];
+        const cityCounts = {};
+        const careerCounts = {};
+        people.forEach(p => {
+          if (p.city) cityCounts[p.city] = (cityCounts[p.city] || 0) + 1;
+          if (p.career) careerCounts[p.career] = (careerCounts[p.career] || 0) + 1;
+        });
+        const topCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([c]) => c);
+        const topCareers = Object.entries(careerCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
+        topCareers.forEach(c => hints.push(c));
+        topCities.forEach(c => hints.push(c));
+        return hints.length > 0 ? (
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
+            <span style={{ fontSize: '11px', color: colors.mochaMuted, lineHeight: '28px' }}>Try:</span>
+            {hints.slice(0, 5).map((hint, i) => (
+              <button
+                key={i}
+                onMouseDown={(e) => { e.preventDefault(); setSearchQuery(hint); }}
+                style={{
+                  height: '28px', padding: '0 12px', borderRadius: '14px',
+                  border: `1px solid ${colors.border}`, background: 'white',
+                  fontSize: '12px', color: colors.mochaLight, cursor: 'pointer',
+                  fontFamily: fonts.sans, transition: 'all 0.15s', whiteSpace: 'nowrap',
+                }}
+              >
+                {hint}
+              </button>
+            ))}
+          </div>
+        ) : null;
+      })()}
+
+      {/* Filter chips */}
+      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '12px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {INTEREST_FILTERS.map((interest) => {
           const isActive = selectedInterest === interest;
           return (
@@ -442,16 +356,13 @@ export default function AllPeopleView({
               key={interest}
               onClick={() => setSelectedInterest(interest)}
               style={{
-                padding: isMobile ? '8px 12px' : '10px 16px',
-                borderRadius: '20px',
-                border: isActive ? 'none' : `2px solid ${colors.border}`,
-                backgroundColor: isActive ? colors.primary : 'white',
-                color: isActive ? 'white' : colors.text,
-                fontSize: '13px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.2s ease',
+                height: '36px', padding: '0 16px', borderRadius: '20px',
+                border: `1px solid ${isActive ? colors.mocha : colors.border}`,
+                background: isActive ? colors.mocha : 'white',
+                color: isActive ? 'white' : colors.mochaLight,
+                fontSize: '13px', fontWeight: isActive ? '500' : '400',
+                cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                fontFamily: fonts.sans, transition: 'all 0.15s',
               }}
             >
               {interest}
@@ -460,514 +371,256 @@ export default function AllPeopleView({
         })}
       </div>
 
-      {/* How it works banner */}
-      <div style={{
-        background: 'linear-gradient(to right, #FFF8F0, #FDF5ED)',
-        borderRadius: '16px',
-        padding: '14px 16px',
-        marginBottom: '20px',
-        border: `1px solid ${colors.border}`,
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '12px',
-      }}>
-        <span style={{ fontSize: '24px' }}>✨</span>
-        <div>
-          <h3 style={{
-            fontSize: '13px',
-            fontWeight: '600',
-            color: colors.text,
-            margin: '0 0 4px',
-          }}>
-            How connecting works
-          </h3>
-          <p style={{
-            fontSize: '12px',
-            color: colors.textLight,
-            margin: 0,
-            lineHeight: '1.4',
-          }}>
-            Attend a group meetup first to unlock 1-on-1 coffee chats. This helps build authentic connections!
-          </p>
-        </div>
+      {/* Toolbar: count + sort */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <span style={{ fontSize: '13px', color: colors.mochaLight }}>
+          <strong style={{ color: colors.mocha, fontWeight: '500' }}>{filteredPeople.length}</strong> women to connect with
+        </span>
+        <select
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value)}
+          style={{
+            height: '34px', padding: '0 12px', borderRadius: '8px',
+            border: `1px solid ${colors.border}`, background: 'white',
+            fontSize: '13px', color: colors.mocha, fontFamily: fonts.sans,
+            cursor: 'pointer', outline: 'none',
+          }}
+        >
+          <option value="default">Sort: Recommended</option>
+          <option value="chat">Coffee chat open</option>
+          <option value="mutual">Most connections</option>
+        </select>
       </div>
 
-      {/* Results count */}
+      {/* How it works banner */}
       <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '16px',
+        display: 'flex', gap: '12px', alignItems: 'flex-start',
+        background: 'white', border: `1px solid ${colors.border}`,
+        borderLeft: `3px solid ${colors.mochaMuted}`,
+        borderRadius: '12px', padding: '14px 16px', marginBottom: '20px',
       }}>
-        <p style={{ fontSize: '13px', color: colors.textLight, margin: 0 }}>
-          {filteredPeople.length} women to connect with
-        </p>
-        {(searchQuery || selectedInterest !== 'All') && (
-          <button
-            onClick={clearFilters}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: colors.primary,
-              fontSize: '13px',
-              fontWeight: '500',
-              cursor: 'pointer',
-            }}
-          >
-            Clear filters
-          </button>
-        )}
+        <Sparkles size={16} style={{ color: colors.mochaMuted, flexShrink: 0, marginTop: '1px' }} />
+        <div>
+          <strong style={{ fontSize: '13px', fontWeight: '500', color: colors.mocha, display: 'block', marginBottom: '3px' }}>
+            How connecting works
+          </strong>
+          <span style={{ fontSize: '12px', color: colors.mochaLight, lineHeight: '1.6' }}>
+            Attend a group meetup first to unlock 1-on-1 coffee chats — this builds authentic connections!
+          </span>
+        </div>
       </div>
 
       {/* People Grid */}
       {filteredPeople.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '48px 20px',
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
-          <h3 style={{
-            fontSize: '18px',
-            fontWeight: '600',
-            color: colors.text,
-            margin: '0 0 8px',
-            fontFamily: fonts.serif,
-          }}>
-            No matches found
-          </h3>
-          <p style={{ fontSize: '14px', color: colors.textLight, margin: '0 0 20px' }}>
-            Try adjusting your search or filters
-          </p>
-          <button
-            onClick={clearFilters}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: colors.primary,
-              color: 'white',
-              border: 'none',
-              borderRadius: '12px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-            }}
-          >
-            Clear Search
-          </button>
+        <div style={{ textAlign: 'center', padding: '48px 16px', color: colors.mochaMuted, fontSize: '14px' }}>
+          No results found. Try a different search or filter.
         </div>
       ) : (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-          gap: isMobile ? '12px' : '16px',
-        }}>
-          {filteredPeople.map((person, index) => (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
+          {filteredPeople.map((person, idx) => (
             <PersonCard
               key={person.id}
               person={person}
-              gradient={GRADIENTS[index % GRADIENTS.length]}
-              isMobile={isMobile}
-              onClick={() => setSelectedPerson(person)}
+              bannerColor={BANNER_COLORS[idx % BANNER_COLORS.length]}
+              avatarColor={AVATAR_COLORS[idx % AVATAR_COLORS.length]}
+              onClick={() => onNavigate?.('userProfile', { userId: person.id })}
+              onConnect={() => setSelectedPerson(person)}
             />
           ))}
 
-          {/* Invite Card */}
-          <div
-            style={{
-              backgroundColor: colors.warmWhite,
-              borderRadius: '24px',
-              border: `2px dashed ${colors.border}`,
-              padding: '24px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              textAlign: 'center',
-              minHeight: '200px',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-          >
+          {/* Invite card */}
+          <div style={{
+            background: 'white', borderRadius: '14px', border: `2px dashed ${colors.border}`,
+            padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', textAlign: 'center', minHeight: '200px', cursor: 'pointer',
+          }}>
             <div style={{ fontSize: '40px', marginBottom: '12px' }}>💌</div>
-            <h3 style={{
-              fontSize: '16px',
-              fontWeight: '600',
-              color: colors.text,
-              margin: '0 0 4px',
-              fontFamily: fonts.serif,
-            }}>
+            <h3 style={{ fontSize: '15px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: '0 0 4px' }}>
               Know someone amazing?
             </h3>
-            <p style={{
-              fontSize: '13px',
-              color: colors.textLight,
-              margin: '0 0 16px',
+            <p style={{ fontSize: '13px', color: colors.mochaLight, margin: '0 0 16px' }}>Invite her to join!</p>
+            <button style={{
+              padding: '8px 20px', background: colors.mocha, color: 'white',
+              border: 'none', borderRadius: '20px', fontSize: '12px', fontWeight: '500',
+              cursor: 'pointer', fontFamily: fonts.sans,
             }}>
-              Invite her to join!
-            </p>
-            <button
-              style={{
-                padding: '10px 20px',
-                backgroundColor: colors.primary,
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '13px',
-                fontWeight: '600',
-                cursor: 'pointer',
-              }}
-            >
               Send Invite
             </button>
           </div>
         </div>
       )}
 
-      {/* Profile Preview Modal */}
+      {/* Profile overlay */}
       {selectedPerson && (
-        <ProfilePreviewModal
+        <ProfileOverlay
           person={selectedPerson}
-          gradient={GRADIENTS[people.indexOf(selectedPerson) % GRADIENTS.length]}
+          bannerColor={BANNER_COLORS[people.indexOf(selectedPerson) % BANNER_COLORS.length]}
+          avatarColor={AVATAR_COLORS[people.indexOf(selectedPerson) % AVATAR_COLORS.length]}
           isMobile={isMobile}
           connectionRequested={connectionRequested}
-          onClose={() => {
-            setSelectedPerson(null);
-            setConnectionRequested(false);
-          }}
+          onClose={() => { setSelectedPerson(null); setConnectionRequested(false); }}
           onRequestConnect={() => handleRequestConnect(selectedPerson.id)}
           onNavigate={onNavigate}
         />
       )}
 
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        div::-webkit-scrollbar {
-          height: 0;
-          width: 0;
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        div::-webkit-scrollbar { height: 0; width: 0; }
       `}</style>
     </div>
   );
 }
 
-function PersonCard({ person, gradient, isMobile, onClick }) {
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name.charAt(0).toUpperCase();
-  };
+// === Person Card (matches reference: banner + overlapping avatar) ===
+function PersonCard({ person, bannerColor, avatarColor, onClick, onConnect }) {
+  const initial = person.name ? person.name.charAt(0).toUpperCase() : '?';
+  const interests = person.interests || [];
+  const tags = interests.length > 0
+    ? interests.slice(0, 3)
+    : [person.industry, person.career_stage].filter(Boolean).slice(0, 3);
 
   return (
     <div
       onClick={onClick}
       style={{
-        backgroundColor: 'white',
-        borderRadius: isMobile ? '16px' : '24px',
-        overflow: 'hidden',
-        boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
-        border: `1px solid ${colors.border}`,
-        cursor: 'pointer',
-        transition: 'all 0.2s ease',
+        background: 'white', borderRadius: '14px', border: `1px solid ${colors.border}`,
+        overflow: 'hidden', cursor: 'pointer', transition: 'border-color 0.2s, transform 0.18s, box-shadow 0.18s',
       }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(107,79,58,0.1)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
     >
-      {/* Avatar Header */}
-      <div style={{
-        height: isMobile ? '80px' : '96px',
-        background: gradient,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-      }}>
-        {person.photo_url ? (
+      {/* Banner with overlapping avatar */}
+      <div style={{ height: '68px', background: bannerColor, display: 'flex', alignItems: 'flex-end', padding: '0 16px' }}>
+        {person.profile_picture ? (
           <img
-            src={person.photo_url}
+            src={person.profile_picture}
             alt={person.name}
             style={{
-              width: isMobile ? '52px' : '64px',
-              height: isMobile ? '52px' : '64px',
-              borderRadius: '50%',
-              objectFit: 'cover',
-              border: '3px solid white',
+              width: '46px', height: '46px', borderRadius: '50%', border: '3px solid white',
+              objectFit: 'cover', position: 'relative', top: '23px', flexShrink: 0,
+              background: bannerColor,
             }}
+            onLoad={(e) => { e.currentTarget.style.opacity = '1'; }}
           />
         ) : (
           <div style={{
-            width: isMobile ? '52px' : '64px',
-            height: isMobile ? '52px' : '64px',
-            borderRadius: '50%',
-            backgroundColor: colors.primary,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: isMobile ? '22px' : '28px',
-            fontWeight: '600',
-            color: 'white',
-            border: '3px solid white',
+            width: '46px', height: '46px', borderRadius: '50%', border: '3px solid white',
+            background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '17px', fontWeight: '500', color: 'white', position: 'relative', top: '23px',
+            flexShrink: 0, fontFamily: fonts.serif,
           }}>
-            {getInitials(person.name)}
+            {initial}
           </div>
         )}
-
-        {/* Badge */}
-        {person.isConnected ? (
-          <span style={{
-            position: 'absolute',
-            top: '12px',
-            left: '12px',
-            padding: '4px 10px',
-            backgroundColor: colors.success,
-            color: 'white',
-            fontSize: '11px',
-            fontWeight: '600',
-            borderRadius: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-          }}>
-            <Heart size={10} fill="white" />
-            Connected
-          </span>
-        ) : person.is_new ? (
-          <span style={{
-            position: 'absolute',
-            top: '12px',
-            left: '12px',
-            padding: '4px 10px',
-            backgroundColor: '#4DB6AC',
-            color: 'white',
-            fontSize: '11px',
-            fontWeight: '600',
-            borderRadius: '12px',
-          }}>
-            New
-          </span>
-        ) : null}
       </div>
 
-      {/* Content */}
-      <div style={{ padding: isMobile ? '12px' : '16px' }}>
-        {/* Name */}
-        <h3 style={{
-          fontSize: isMobile ? '15px' : '17px',
-          fontWeight: '600',
-          color: colors.text,
-          margin: '0 0 4px',
-          fontFamily: fonts.serif,
-        }}>
-          {person.name}
-        </h3>
-
-        {/* Hook */}
-        {person.hook && (
-          <p style={{
-            fontSize: '13px',
-            color: colors.textLight,
-            margin: '0 0 10px',
-            lineHeight: '1.4',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-          }}>
-            {person.hook}
-          </p>
-        )}
-
-        {/* Title & Industry */}
-        {person.career && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '12px',
-            color: colors.textLight,
-            marginBottom: '6px',
-          }}>
-            <Briefcase size={12} style={{ color: colors.textMuted, flexShrink: 0 }} />
+      {/* Card body */}
+      <div style={{ padding: '30px 16px 16px' }}>
+        {/* Name + chat badge */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+          <span style={{ fontSize: '15px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif }}>
+            {person.name}
+          </span>
+          {person.open_to_coffee_chat && (
             <span style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              fontSize: '11px', background: colors.chatBg, border: `1px solid ${colors.chatBorder}`,
+              color: colors.chatText, padding: '2px 9px', borderRadius: '12px', whiteSpace: 'nowrap', flexShrink: 0,
             }}>
-              {person.career}{person.industry ? ` • ${person.industry}` : ''}
+              ☕ Open to chat
             </span>
+          )}
+        </div>
+
+        {/* Role + industry */}
+        {person.career && (
+          <div style={{ fontSize: '12px', color: colors.mochaLight, marginBottom: '2px' }}>
+            {person.career}{person.industry ? ` · ${person.industry}` : ''}
           </div>
         )}
 
         {/* Location */}
-        {person.city && (
+        {person.city ? (
+          <div style={{ fontSize: '12px', color: colors.mochaMuted, marginBottom: '10px' }}>
+            📍 {person.city}{person.state ? `, ${person.state}` : ''}
+          </div>
+        ) : (
+          <div style={{ marginBottom: '10px' }} />
+        )}
+
+        {/* Bio preview */}
+        {person.hook && (
           <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            fontSize: '12px',
-            color: colors.textLight,
-            marginBottom: '10px',
+            fontSize: '12px', color: colors.mochaLight, marginBottom: '10px', lineHeight: '1.55',
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
-            <MapPin size={12} style={{ color: colors.textMuted, flexShrink: 0 }} />
-            <span>{person.city}{person.state ? `, ${person.state}` : ''}</span>
+            {person.hook}
           </div>
         )}
 
-        {/* Tags */}
-        {(person.industry || person.career_stage || person.open_to_coffee_chat) && (
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '6px',
-            marginBottom: '10px',
-          }}>
-            {person.industry && (
-              <span style={{
-                padding: '4px 10px',
-                backgroundColor: colors.cream,
-                color: colors.text,
-                fontSize: '11px',
-                borderRadius: '12px',
-              }}>
-                {person.industry}
+        {/* Interest tags */}
+        {tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginBottom: '14px', minHeight: '26px' }}>
+            {tags.map((tag, i) => (
+              <span key={i} style={{ fontSize: '11px', background: colors.tagBg, color: colors.tagText, padding: '3px 10px', borderRadius: '12px' }}>
+                {tag}
               </span>
-            )}
-            {person.career_stage && (
-              <span style={{
-                padding: '4px 10px',
-                backgroundColor: colors.cream,
-                color: colors.text,
-                fontSize: '11px',
-                borderRadius: '12px',
-              }}>
-                {person.career_stage}
-              </span>
-            )}
-            {person.open_to_coffee_chat && (
-              <span style={{
-                padding: '4px 10px',
-                backgroundColor: '#FDF3EB',
-                color: '#6B4F3A',
-                fontSize: '11px',
-                borderRadius: '12px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '4px',
-                fontWeight: 600,
-              }}>
-                <Coffee size={10} /> Open to Coffee Chat
-              </span>
-            )}
+            ))}
           </div>
         )}
 
-        {/* Connection Status - Last Line */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          fontSize: '11px',
-          paddingTop: '10px',
-          borderTop: `1px solid ${colors.border}`,
-          flexWrap: 'wrap',
-        }}>
-          {person.isConnected && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              color: colors.success,
-              fontWeight: '600',
-            }}>
-              <Heart size={12} fill={colors.success} />
-              <span>Connected</span>
-            </div>
+        {/* Footer: social proof + view button */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: `1px solid ${colors.border}` }}>
+          <span style={{ fontSize: '11px', color: colors.mochaMuted }}>
+            👥 {person.mutualConnections || 0} mutual · {person.mutualCircles || 0} circle{person.mutualCircles !== 1 ? 's' : ''}
+          </span>
+          {person.isConnected ? (
+            <span style={{ fontSize: '11px', color: colors.success, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Heart size={10} fill={colors.success} /> Connected
+            </span>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); onConnect?.(); }}
+              style={{
+                height: '32px', padding: '0 18px', borderRadius: '20px', fontSize: '12px',
+                fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans,
+                background: person.hasPendingRequest ? colors.mochaPale : colors.mocha,
+                color: person.hasPendingRequest ? colors.mochaMuted : 'white',
+                border: 'none', transition: 'background 0.15s',
+              }}
+              disabled={person.hasPendingRequest}
+            >
+              {person.hasPendingRequest ? 'Requested' : 'Connect'}
+            </button>
           )}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            color: person.mutualConnections > 0 ? colors.success : colors.textMuted,
-          }}>
-            <Users size={12} />
-            <span>{person.mutualConnections || 0} mutual</span>
-          </div>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            color: person.mutualCircles > 0 ? colors.success : colors.textMuted,
-          }}>
-            <span>•</span>
-            <span>{person.mutualCircles || 0} circles</span>
-          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, onClose, onRequestConnect, onNavigate }) {
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name.charAt(0).toUpperCase();
-  };
+// === Profile Overlay (matches reference: stats, circles, actions) ===
+function ProfileOverlay({ person, bannerColor, avatarColor, isMobile, connectionRequested, onClose, onRequestConnect, onNavigate }) {
+  const initial = person.name ? person.name.charAt(0).toUpperCase() : '?';
+  const interests = person.interests || [];
+  const tags = interests.length > 0
+    ? interests
+    : [person.industry, person.career_stage].filter(Boolean);
 
   if (connectionRequested) {
     return (
-      <div style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 100,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.4)',
-          }}
-          onClick={onClose}
-        />
-        <div style={{
-          position: 'relative',
-          backgroundColor: colors.warmWhite,
-          borderRadius: '24px',
-          width: '90%',
-          maxWidth: '400px',
-          padding: '48px 24px',
-          textAlign: 'center',
-        }}>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(60,35,18,0.45)' }} onClick={onClose} />
+        <div style={{ position: 'relative', background: colors.cream, borderRadius: '20px', width: '90%', maxWidth: '400px', padding: '48px 24px', textAlign: 'center', animation: 'slideUp 0.28s ease' }}>
           <div style={{ fontSize: '64px', marginBottom: '16px' }}>🎉</div>
-          <h3 style={{
-            fontSize: '20px',
-            fontWeight: '600',
-            color: colors.text,
-            margin: '0 0 8px',
-            fontFamily: fonts.serif,
-          }}>
+          <h3 style={{ fontSize: '20px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: '0 0 8px' }}>
             Connection Request Sent!
           </h3>
-          <p style={{
-            fontSize: '14px',
-            color: colors.textLight,
-            margin: '0 0 24px',
-          }}>
-            {person.name?.split(' ')[0]} will be notified. We'll let you know when she responds!
+          <p style={{ fontSize: '14px', color: colors.mochaLight, margin: '0 0 24px' }}>
+            {person.name?.split(' ')[0]} will be notified.
           </p>
-          <button
-            onClick={onClose}
-            style={{
-              padding: '14px 32px',
-              backgroundColor: colors.primary,
-              color: 'white',
-              border: 'none',
-              borderRadius: '12px',
-              fontSize: '14px',
-              fontWeight: '600',
-              cursor: 'pointer',
-            }}
-          >
+          <button onClick={onClose} style={{ padding: '12px 32px', background: colors.mocha, color: 'white', border: 'none', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans }}>
             Done
           </button>
         </div>
@@ -976,340 +629,217 @@ function ProfilePreviewModal({ person, gradient, isMobile, connectionRequested, 
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 100,
-      display: 'flex',
-      alignItems: isMobile ? 'flex-end' : 'center',
-      justifyContent: 'center',
-    }}>
-      {/* Backdrop */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.4)',
-        }}
-        onClick={onClose}
-      />
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(60,35,18,0.45)' }} onClick={onClose} />
 
-      {/* Modal */}
       <div style={{
-        position: 'relative',
-        backgroundColor: colors.warmWhite,
-        borderRadius: isMobile ? '24px 24px 0 0' : '24px',
-        width: isMobile ? '100%' : '90%',
-        maxWidth: '400px',
-        maxHeight: isMobile ? '90vh' : '85vh',
-        overflowY: 'auto',
+        position: 'relative', background: colors.cream, width: '100%', maxWidth: '520px',
+        maxHeight: isMobile ? '92vh' : '88vh',
+        borderRadius: isMobile ? '20px 20px 0 0' : '20px',
+        overflowY: 'auto', display: 'flex', flexDirection: 'column',
+        animation: 'slideUp 0.28s ease',
       }}>
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '16px',
-            right: '16px',
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            backgroundColor: 'rgba(255,255,255,0.8)',
-            border: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            zIndex: 10,
-          }}
-        >
-          <X size={20} style={{ color: colors.textLight }} />
-        </button>
-
-        {/* Header with Avatar */}
-        <div style={{
-          height: '128px',
-          background: gradient,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          {person.photo_url ? (
+        {/* Header banner */}
+        <div style={{ position: 'relative', height: '110px', flexShrink: 0 }}>
+          <div style={{ position: 'absolute', inset: 0, background: bannerColor, borderRadius: isMobile ? '20px 20px 0 0' : '20px 20px 0 0' }} />
+          <button onClick={onClose} style={{
+            position: 'absolute', top: '14px', right: '14px', width: '32px', height: '32px',
+            borderRadius: '50%', background: 'rgba(255,255,255,0.85)', border: 'none',
+            cursor: 'pointer', fontSize: '16px', color: colors.mocha,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2,
+          }}>✕</button>
+          {person.profile_picture ? (
             <img
-              src={person.photo_url}
+              src={person.profile_picture}
               alt={person.name}
               style={{
-                width: '80px',
-                height: '80px',
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: '4px solid white',
+                position: 'absolute', bottom: '-28px', left: '20px',
+                width: '56px', height: '56px', borderRadius: '50%', border: '3px solid white',
+                objectFit: 'cover', background: bannerColor,
               }}
             />
           ) : (
             <div style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '50%',
-              backgroundColor: colors.primary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '36px',
-              fontWeight: '600',
-              color: 'white',
-              border: '4px solid white',
+              position: 'absolute', bottom: '-28px', left: '20px',
+              width: '56px', height: '56px', borderRadius: '50%', border: '3px solid white',
+              background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '22px', fontWeight: '500', color: 'white', fontFamily: fonts.serif,
             }}>
-              {getInitials(person.name)}
+              {initial}
             </div>
           )}
         </div>
 
-        {/* Content */}
-        <div style={{ padding: '24px' }}>
-          {/* Name & Hook */}
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <h2 style={{
-              fontSize: '24px',
-              fontWeight: '600',
-              color: colors.text,
-              margin: '0 0 4px',
-              fontFamily: fonts.serif,
-            }}>
+        {/* Profile body */}
+        <div style={{ padding: '40px 20px 28px' }}>
+          {/* Name + chat badge */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px', marginBottom: '4px' }}>
+            <span style={{ fontSize: '22px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, lineHeight: '1.2' }}>
               {person.name}
-            </h2>
-            <p style={{
-              fontSize: '14px',
-              color: colors.textLight,
-              margin: 0,
-            }}>
-              {person.hook || 'Member'}
-            </p>
-          </div>
-
-          {/* Info Cards */}
-          <div style={{ marginBottom: '20px' }}>
-            {person.career && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                backgroundColor: 'white',
-                borderRadius: '12px',
-                border: `1px solid ${colors.border}`,
-                marginBottom: '8px',
+            </span>
+            {person.open_to_coffee_chat && (
+              <span style={{
+                fontSize: '11px', background: colors.chatBg, border: `1px solid ${colors.chatBorder}`,
+                color: colors.chatText, padding: '3px 10px', borderRadius: '12px', whiteSpace: 'nowrap',
+                marginTop: '4px', flexShrink: 0,
               }}>
-                <span style={{
-                  width: '40px',
-                  height: '40px',
-                  backgroundColor: colors.cream,
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '18px',
-                }}>
-                  💼
-                </span>
-                <div>
-                  <p style={{ fontSize: '14px', fontWeight: '500', color: colors.text, margin: 0 }}>
-                    {person.career}
-                  </p>
-                  {person.industry && (
-                    <p style={{ fontSize: '12px', color: colors.textLight, margin: 0 }}>
-                      {person.industry}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {person.city && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                backgroundColor: 'white',
-                borderRadius: '12px',
-                border: `1px solid ${colors.border}`,
-              }}>
-                <span style={{
-                  width: '40px',
-                  height: '40px',
-                  backgroundColor: colors.cream,
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '18px',
-                }}>
-                  📍
-                </span>
-                <div>
-                  <p style={{ fontSize: '14px', fontWeight: '500', color: colors.text, margin: 0 }}>
-                    {person.city}{person.state ? `, ${person.state}` : ''}
-                  </p>
-                  <p style={{ fontSize: '12px', color: colors.textLight, margin: 0 }}>
-                    Local to you
-                  </p>
-                </div>
-              </div>
+                ☕ Open to chat
+              </span>
             )}
           </div>
 
-          {/* Coffee Chat Badge */}
-          {person.open_to_coffee_chat && (
-            <div style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '6px 14px',
-              backgroundColor: '#FDF3EB',
-              color: '#6B4F3A',
-              fontSize: '13px',
-              fontWeight: 600,
-              borderRadius: '20px',
-              marginBottom: '16px',
-            }}>
-              <Coffee size={14} /> Open to Coffee Chat
+          {/* Role */}
+          {person.career && (
+            <div style={{ fontSize: '13px', color: colors.mochaLight, marginBottom: '2px' }}>
+              {person.career}{person.industry ? ` · ${person.industry}` : ''}
             </div>
           )}
 
-          {/* Looking For / Hook */}
+          {/* Location */}
+          {person.city && (
+            <div style={{ fontSize: '12px', color: colors.mochaMuted, marginBottom: '14px' }}>
+              📍 {person.city}{person.state ? `, ${person.state}` : ''}
+            </div>
+          )}
+
+          {/* Bio */}
           {person.hook && (
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{
-                fontSize: '13px',
-                fontWeight: '600',
-                color: colors.text,
-                margin: '0 0 8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-              }}>
-                <span>🎯</span> About
-              </h3>
-              <p style={{
-                fontSize: '13px',
-                color: colors.textLight,
-                backgroundColor: '#FFF8F0',
-                padding: '12px',
-                borderRadius: '12px',
-                border: `1px solid ${colors.border}`,
-                margin: 0,
-                lineHeight: '1.5',
-              }}>
-                "{person.hook}"
-              </p>
+            <div style={{
+              fontSize: '13px', color: colors.mochaLight, lineHeight: '1.65',
+              padding: '14px', background: 'white', borderRadius: '10px',
+              border: `1px solid ${colors.border}`, marginBottom: '4px',
+            }}>
+              {person.hook}
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div style={{ marginBottom: '16px' }}>
-            {person.isConnected ? (
-              <button
-                onClick={() => { onClose(); onNavigate?.('userProfile', { userId: person.id }); }}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  backgroundColor: colors.primary,
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  marginBottom: '10px',
-                }}
-              >
-                <MessageCircle size={18} />
-                View Profile
-              </button>
-            ) : (person.hasPendingRequest || connectionRequested) ? (
-              <button
-                disabled
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  backgroundColor: colors.border,
-                  color: colors.textMuted,
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'default',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  marginBottom: '10px',
-                }}
-              >
-                <Heart size={18} />
-                Requested
-              </button>
-            ) : (
-              <button
-                onClick={onRequestConnect}
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  backgroundColor: colors.primary,
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  marginBottom: '10px',
-                }}
-              >
-                <MessageCircle size={18} />
-                Request to Connect
-              </button>
-            )}
+          {/* Interests */}
+          {tags.length > 0 && (
+            <>
+              <div style={{ fontSize: '11px', fontWeight: '500', color: colors.mochaMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px', marginTop: '18px' }}>
+                Interests
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {tags.map((tag, i) => (
+                  <span key={i} style={{ fontSize: '11px', background: colors.tagBg, color: colors.tagText, padding: '3px 10px', borderRadius: '12px' }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
 
-            <button
-              onClick={() => { onClose(); onNavigate?.('userProfile', { userId: person.id }); }}
-              style={{
-                width: '100%',
-                padding: '14px',
-                backgroundColor: 'white',
-                color: colors.text,
-                border: `2px solid ${colors.border}`,
-                borderRadius: '12px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-              }}
-            >
-              View Profile
-            </button>
+          {/* Stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '18px', marginBottom: '4px' }}>
+            <div style={{ background: 'white', border: `1px solid ${colors.border}`, borderRadius: '10px', padding: '12px 10px', textAlign: 'center' }}>
+              <span style={{ fontSize: '20px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, display: 'block' }}>
+                {person.mutualConnections || 0}
+              </span>
+              <span style={{ fontSize: '11px', color: colors.mochaMuted, marginTop: '2px', display: 'block' }}>Mutual</span>
+            </div>
+            <div style={{ background: 'white', border: `1px solid ${colors.border}`, borderRadius: '10px', padding: '12px 10px', textAlign: 'center' }}>
+              <span style={{ fontSize: '20px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, display: 'block' }}>
+                {person.totalCircles || 0}
+              </span>
+              <span style={{ fontSize: '11px', color: colors.mochaMuted, marginTop: '2px', display: 'block' }}>Circles</span>
+            </div>
+            <div style={{ background: 'white', border: `1px solid ${colors.border}`, borderRadius: '10px', padding: '12px 10px', textAlign: 'center' }}>
+              <span style={{ fontSize: '20px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, display: 'block' }}>
+                {person.meetupsAttended || 0}
+              </span>
+              <span style={{ fontSize: '11px', color: colors.mochaMuted, marginTop: '2px', display: 'block' }}>Meetups</span>
+            </div>
           </div>
 
-          {/* Footer Note */}
-          <p style={{
-            fontSize: '11px',
-            color: colors.textMuted,
-            textAlign: 'center',
-            margin: 0,
-          }}>
-            Attend a meetup together to unlock 1-on-1 coffee chats
-          </p>
+          {/* Active circles */}
+          {(person.circles?.length > 0) && (
+            <>
+              <div style={{ fontSize: '11px', fontWeight: '500', color: colors.mochaMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px', marginTop: '18px' }}>
+                Active circles
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '4px' }}>
+                {person.circles.map((c) => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'white', border: `1px solid ${colors.border}`, borderRadius: '10px', padding: '10px 14px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors.mochaMuted, flexShrink: 0 }} />
+                    <span style={{ fontSize: '13px', color: colors.mocha, fontWeight: '500' }}>{c.name}</span>
+                    <span style={{ fontSize: '11px', color: colors.mochaMuted, marginLeft: 'auto' }}>{c.members} members</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {person.circles?.length === 0 && (
+            <>
+              <div style={{ fontSize: '11px', fontWeight: '500', color: colors.mochaMuted, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px', marginTop: '18px' }}>
+                Active circles
+              </div>
+              <div style={{ fontSize: '12px', color: colors.mochaMuted, padding: '4px 0' }}>Not in any circles yet</div>
+            </>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '10px', paddingTop: '20px' }}>
+            {person.isConnected ? (
+              <>
+                <button
+                  onClick={() => { onClose(); onNavigate?.('userProfile', { userId: person.id }); }}
+                  style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans, background: colors.mocha, color: 'white', border: 'none' }}
+                >
+                  View Profile
+                </button>
+                {person.open_to_coffee_chat && (
+                  <button
+                    onClick={() => { onClose(); onNavigate?.('scheduleMeetup', { type: 'coffee', connectionId: person.id, connectionName: person.name }); }}
+                    style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans, background: colors.chatBg, color: colors.chatText, border: `1px solid ${colors.chatBorder}` }}
+                  >
+                    ☕ Request coffee chat
+                  </button>
+                )}
+              </>
+            ) : person.hasPendingRequest ? (
+              <>
+                <button disabled style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', fontFamily: fonts.sans, background: colors.mochaPale, color: colors.mochaMuted, border: 'none', cursor: 'default' }}>
+                  Requested
+                </button>
+                <button
+                  onClick={() => { onClose(); onNavigate?.('userProfile', { userId: person.id }); }}
+                  style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans, background: 'white', color: colors.mocha, border: `1px solid ${colors.borderHover}` }}
+                >
+                  View Profile
+                </button>
+              </>
+            ) : person.open_to_coffee_chat ? (
+              <>
+                <button
+                  onClick={onRequestConnect}
+                  style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans, background: colors.chatBg, color: colors.chatText, border: `1px solid ${colors.chatBorder}` }}
+                >
+                  ☕ Request coffee chat
+                </button>
+                <button
+                  onClick={onRequestConnect}
+                  style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans, background: 'white', color: colors.mocha, border: `1px solid ${colors.borderHover}` }}
+                >
+                  Connect
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={onRequestConnect}
+                  style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans, background: colors.mocha, color: 'white', border: 'none' }}
+                >
+                  Connect
+                </button>
+                <button
+                  onClick={() => { onClose(); onNavigate?.('userProfile', { userId: person.id }); }}
+                  style={{ flex: 1, height: '44px', borderRadius: '24px', fontSize: '14px', fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans, background: 'white', color: colors.mocha, border: `1px solid ${colors.borderHover}` }}
+                >
+                  View Profile
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
