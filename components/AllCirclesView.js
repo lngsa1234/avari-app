@@ -1,1197 +1,467 @@
 // components/AllCirclesView.js
-// All Circles page with search and filters - based on UX reference
+// All Circles page — redesigned to match circlew_circles_page UX reference
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Search,
-  Users,
-  Calendar,
-  Clock,
-  MapPin,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Check,
-  Heart,
+  Search, Users, ChevronLeft, ChevronRight, X, Check, Clock, Heart,
 } from 'lucide-react';
 
-// Color palette - matching Home page warm browns
 const colors = {
-  primary: '#584233',
-  primaryDark: '#3F1906',
-  primaryLight: '#9C8068',
-  cream: '#FAF5EF',
-  warmWhite: '#F5EDE9',
-  text: '#3F1906',
-  textLight: '#6B5647',
-  textMuted: '#B8A089',
-  border: 'rgba(139, 111, 92, 0.1)',
+  mocha: '#6B4F3A',
+  mochaDark: '#4A3527',
+  mochaLight: '#8B6F5A',
+  mochaPale: '#F5EFE8',
+  mochaMuted: '#C4A882',
+  cream: '#FAF6F1',
+  border: 'rgba(107,79,58,0.14)',
+  borderHover: 'rgba(107,79,58,0.28)',
+  tagBg: '#EFE6DB',
+  tagText: '#6B4F3A',
   success: '#4DB6AC',
-  warning: '#FFB74D',
-  danger: '#E57373',
+  warning: '#C4784A',
 };
 
-// Font families - matching Home page
 const fonts = {
-  serif: "'Lora', serif",
-  sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  serif: "'Lora', 'Cormorant Garamond', Georgia, serif",
+  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
 };
 
-// Category filters
 const CATEGORIES = ['All', 'Career', 'Business', 'Wellness', 'Tech', 'Creative', 'Finance', 'Learning', 'Parenting'];
 
-// Circle emojis and gradients
-const CIRCLE_EMOJIS = ['🦋', '👩‍💻', '🧘‍♀️', '🚀', '🎨', '💰', '📚', '👶', '💫', '🌸'];
-const CIRCLE_GRADIENTS = [
-  'linear-gradient(135deg, #E8D5C4 0%, #D4C4B0 100%)',
-  'linear-gradient(135deg, #D4E5F7 0%, #B8D4E8 100%)',
-  'linear-gradient(135deg, #E5F0E5 0%, #C8DEC8 100%)',
-  'linear-gradient(135deg, #F5E6D3 0%, #E8D4BC 100%)',
-  'linear-gradient(135deg, #F5E0E5 0%, #E8CCD4 100%)',
-  'linear-gradient(135deg, #E5E8D4 0%, #D4D8C0 100%)',
-  'linear-gradient(135deg, #F0E6F5 0%, #DED0E8 100%)',
-  'linear-gradient(135deg, #FCE4EC 0%, #F8BBD9 100%)',
+const COVER_COLORS = [
+  '#E8DDD3', '#D8E8E0', '#EEE0D5', '#F5E8D0', '#EAD8F0', '#D8EAD8', '#F0E8F0', '#F5E8D8',
 ];
+const COVER_ICONS = ['🚀', '🤖', '🛠️', '💰', '🎨', '🌱', '🌸', '👩‍👧', '📚', '💫'];
+const AVATAR_COLORS = ['#7A5C44', '#4A7A5C', '#6A5A8A', '#A06030', '#7A5A8A', '#6B4F3A', '#C4A882'];
 
-// Custom hook for responsive design
-const useWindowSize = () => {
-  const [windowSize, setWindowSize] = useState({
-    width: typeof window !== 'undefined' ? window.innerWidth : 1024,
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowSize({ width: window.innerWidth });
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  return windowSize;
-};
-
-export default function AllCirclesView({
-  currentUser,
-  supabase,
-  onNavigate,
-}) {
+export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
   const [circles, setCircles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [selectedCircle, setSelectedCircle] = useState(null);
+  const [searchFocused, setSearchFocused] = useState(false);
 
-  const { width: windowWidth } = useWindowSize();
-  const isMobile = windowWidth < 480;
-
+  const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
-    loadCircles();
+    const check = () => setIsMobile(window.innerWidth < 560);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
+
+  useEffect(() => { loadCircles(); }, []);
 
   const loadCircles = async () => {
     setLoading(true);
     try {
-      // Fetch all active circles
       const { data: groupsData, error } = await supabase
         .from('connection_groups')
-        .select('id, name, creator_id, is_active, vibe_category, created_at, image_url')
+        .select('id, name, description, creator_id, is_active, vibe_category, cadence, meeting_day, max_members, created_at, image_url')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching circles:', error);
-        setCircles([]);
-        return;
-      }
+      if (error || !groupsData?.length) { setCircles([]); setLoading(false); return; }
 
-      if (!groupsData || groupsData.length === 0) {
-        setCircles([]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch all members for these groups
       const groupIds = groupsData.map(g => g.id);
-      const { data: membersData, error: membersError } = await supabase
-        .from('connection_group_members')
-        .select('id, group_id, user_id, status')
-        .in('group_id', groupIds)
-        .eq('status', 'accepted');
+      const [membersRes, creatorsRes] = await Promise.all([
+        supabase.from('connection_group_members').select('id, group_id, user_id, status').in('group_id', groupIds).eq('status', 'accepted'),
+        supabase.from('profiles').select('id, name, career, profile_picture').in('id', [...new Set(groupsData.map(g => g.creator_id))]),
+      ]);
 
-      if (membersError) {
-        console.error('Error fetching members:', membersError);
-      }
-
-      // Get unique member user IDs
-      const memberUserIds = [...new Set((membersData || []).map(m => m.user_id))];
-
-      // Fetch profiles for all members
+      const memberUserIds = [...new Set((membersRes.data || []).map(m => m.user_id))];
       let profileMap = {};
       if (memberUserIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name, career')
-          .in('id', memberUserIds);
-
-        profileMap = (profiles || []).reduce((acc, p) => {
-          acc[p.id] = p;
-          return acc;
-        }, {});
+        const { data: profiles } = await supabase.from('profiles').select('id, name, career, profile_picture').in('id', memberUserIds);
+        (profiles || []).forEach(p => { profileMap[p.id] = p; });
       }
+      const creatorMap = {};
+      (creatorsRes.data || []).forEach(p => { creatorMap[p.id] = p; });
 
-      // Get creator profiles
-      const creatorIds = [...new Set(groupsData.map(g => g.creator_id))];
-      let creatorMap = {};
-      if (creatorIds.length > 0) {
-        const { data: creators } = await supabase
-          .from('profiles')
-          .select('id, name, career')
-          .in('id', creatorIds);
-
-        creatorMap = (creators || []).reduce((acc, p) => {
-          acc[p.id] = p;
-          return acc;
-        }, {});
-      }
-
-      // Enrich groups with member data
-      const enrichedGroups = groupsData.map((group, index) => {
-        const groupMembers = (membersData || [])
+      const enriched = groupsData.map((group, idx) => {
+        const groupMembers = (membersRes.data || [])
           .filter(m => m.group_id === group.id)
-          .map(m => ({
-            ...m,
-            user: profileMap[m.user_id] || null,
-          }));
-
+          .map(m => ({ ...m, user: profileMap[m.user_id] || null }));
+        const maxSpots = group.max_members || 10;
         const memberCount = groupMembers.length;
-        const totalSpots = 10;
-        const spotsLeft = Math.max(0, totalSpots - memberCount);
-        const isOpen = spotsLeft > 0;
-        const isMember = groupMembers.some(m => m.user_id === currentUser.id);
+        const spotsLeft = Math.max(0, maxSpots - memberCount);
 
         return {
           ...group,
           members: groupMembers,
           memberCount,
-          totalSpots,
+          totalSpots: maxSpots,
           spotsLeft,
-          isOpen,
-          isMember,
+          isFull: spotsLeft === 0,
+          isMember: groupMembers.some(m => m.user_id === currentUser.id),
           host: creatorMap[group.creator_id] || { name: 'Unknown' },
-          emoji: CIRCLE_EMOJIS[index % CIRCLE_EMOJIS.length],
-          gradient: CIRCLE_GRADIENTS[index % CIRCLE_GRADIENTS.length],
+          coverColor: COVER_COLORS[idx % COVER_COLORS.length],
+          coverIcon: COVER_ICONS[idx % COVER_ICONS.length],
           category: mapVibeToCategory(group.vibe_category),
+          freq: group.cadence || 'Flexible',
         };
       });
-
-      setCircles(enrichedGroups);
-    } catch (error) {
-      console.error('Error loading circles:', error);
-      setCircles([]);
-    }
+      setCircles(enriched);
+    } catch (e) { console.error('Error loading circles:', e); setCircles([]); }
     setLoading(false);
   };
 
-  // Map vibe_category to display category
   const mapVibeToCategory = (vibe) => {
-    const vibeMap = {
-      advice: 'Career',
-      peers: 'Wellness',
-      grow: 'Business',
-    };
-    return vibeMap[vibe] || 'General';
+    const map = { advice: 'Career', peers: 'Wellness', grow: 'Business' };
+    return map[vibe] || 'General';
   };
 
-  // Filter circles
   const filteredCircles = useMemo(() => {
-    return circles.filter(circle => {
+    return circles.filter(c => {
+      const q = searchQuery.toLowerCase();
       const matchesSearch = !searchQuery ||
-        circle.name?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'All' || circle.category === selectedCategory;
-
-      return matchesSearch && matchesCategory;
+        c.name?.toLowerCase().includes(q) ||
+        c.description?.toLowerCase().includes(q) ||
+        c.category?.toLowerCase().includes(q);
+      const matchesCat = selectedCategory === 'All' || c.category === selectedCategory;
+      return matchesSearch && matchesCat;
     });
   }, [circles, searchQuery, selectedCategory]);
 
-  // Separate into categories: my circles, open circles, waitlist circles
+  const openCircles = filteredCircles.filter(c => !c.isMember && !c.isFull);
+  const fullCircles = filteredCircles.filter(c => !c.isMember && c.isFull);
   const myCircles = filteredCircles.filter(c => c.isMember);
-  const openCircles = filteredCircles.filter(c => !c.isMember && c.isOpen);
-  const waitlistCircles = filteredCircles.filter(c => !c.isMember && !c.isOpen);
-
-  const clearFilters = () => {
-    setSearchQuery('');
-    setSelectedCategory('All');
-  };
 
   if (loading) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            border: `4px solid ${colors.primary}`,
-            borderTopColor: 'transparent',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 16px'
-          }} />
-          <p style={{ color: colors.textLight }}>Loading circles...</p>
+          <div style={{ width: '32px', height: '32px', border: `4px solid ${colors.mocha}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: colors.mochaLight, fontFamily: fonts.sans }}>Loading circles...</p>
         </div>
-        <style>{`
-          @keyframes spin {
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   return (
-    <div style={{ fontFamily: fonts.serif, paddingBottom: '100px', position: 'relative', padding: isMobile ? '16px 0' : '24px 0' }}>
-      {/* Title Section */}
-      <section style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: isMobile ? 'flex-start' : 'flex-end',
-        flexDirection: isMobile ? 'column' : 'row',
-        marginBottom: isMobile ? '20px' : '24px',
-        paddingBottom: '20px',
-        borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
-        flexWrap: 'wrap',
-        gap: '16px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <div style={{ fontFamily: fonts.sans, maxWidth: '860px', margin: '0 auto', paddingBottom: '100px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
           <button
-            onClick={() => onNavigate?.('discover')}
+            onClick={() => onNavigate?.('home')}
+            aria-label="Go back"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
-              border: 'none',
-              backgroundColor: 'rgba(168, 132, 98, 0.15)',
-              cursor: 'pointer',
+              width: '34px', height: '34px', borderRadius: '50%',
+              border: `1px solid ${colors.border}`, background: 'white',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}
           >
-            <ChevronLeft size={20} style={{ color: colors.text }} />
+            <ChevronLeft size={16} style={{ color: colors.mocha }} />
           </button>
-          <div>
-            <h1 style={{
-              fontFamily: fonts.serif,
-              fontSize: isMobile ? '24px' : '32px',
-              fontWeight: '500',
-              color: '#584233',
-              letterSpacing: '0.15px',
-              margin: 0,
-              lineHeight: 1.28,
-            }}>
-              Intimate Circles
-            </h1>
-            <p style={{
-              fontFamily: fonts.serif,
-              fontSize: isMobile ? '14px' : '15px',
-              fontWeight: '500',
-              margin: 0,
-              marginTop: '6px',
-              background: 'linear-gradient(89.8deg, #7E654D 27.14%, #B9A594 72.64%, #ECDDD2 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-            }}>
-              Small groups that meet regularly & grow together
-            </p>
-          </div>
+          <span style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, letterSpacing: '0.01em' }}>
+            Circles
+          </span>
         </div>
-      </section>
+        <p style={{ fontSize: '13px', color: colors.mochaLight, margin: 0, paddingLeft: '46px' }}>
+          Small groups that meet regularly around a shared interest
+        </p>
+      </div>
 
-      {/* Search Bar */}
-      <div style={{
-        position: 'relative',
-        marginBottom: '16px',
-      }}>
-        <Search
-          size={16}
-          style={{
-            position: 'absolute',
-            left: '16px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: '#B8A089',
-          }}
-        />
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: '12px' }}>
+        <span style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', color: colors.mochaMuted, pointerEvents: 'none', zIndex: 1 }}>
+          <Search size={15} />
+        </span>
         <input
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search circles by name..."
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+          placeholder="Search circles by name or topic..."
           style={{
-            width: '100%',
-            padding: '12px 40px 12px 44px',
-            borderRadius: '50px',
-            border: '1px solid rgba(232, 221, 208, 0.8)',
-            backgroundColor: 'white',
-            fontSize: '13px',
-            fontFamily: fonts.sans,
-            outline: 'none',
-            boxSizing: 'border-box',
-            color: colors.text,
+            width: '100%', height: '44px', padding: '0 40px 0 42px',
+            borderRadius: '24px', border: `1px solid ${searchFocused ? colors.mochaMuted : colors.border}`,
+            background: 'white', fontSize: '14px', color: colors.mocha,
+            outline: 'none', fontFamily: fonts.sans, boxSizing: 'border-box',
+            boxShadow: searchFocused ? '0 0 0 3px rgba(107,79,58,0.07)' : 'none',
+            transition: 'border-color 0.15s, box-shadow 0.15s',
           }}
         />
         {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            style={{
-              position: 'absolute',
-              right: '14px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: '4px',
-            }}
-          >
-            <X size={18} style={{ color: colors.textMuted }} />
+          <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+            <X size={16} style={{ color: colors.mochaMuted }} />
           </button>
         )}
       </div>
 
-      {/* Category Pills */}
-      <div style={{
-        display: 'flex',
-        gap: '8px',
-        overflowX: 'auto',
-        paddingBottom: '4px',
-        marginBottom: '20px',
-        WebkitOverflowScrolling: 'touch',
-      }}>
-        {CATEGORIES.map((category) => {
-          const isActive = selectedCategory === category;
+      {/* Filter chips */}
+      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '20px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        {CATEGORIES.map(cat => {
+          const active = selectedCategory === cat;
           return (
-            <button
-              key={category}
-              onClick={() => setSelectedCategory(category)}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '50px',
-                border: 'none',
-                backgroundColor: isActive ? '#5E4530' : 'rgba(168, 132, 98, 0.12)',
-                color: isActive ? '#FAF5EF' : '#9C8068',
-                fontSize: '13px',
-                fontWeight: '500',
-                fontFamily: fonts.sans,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.25s ease',
-              }}
-            >
-              {category}
+            <button key={cat} onClick={() => setSelectedCategory(cat)} style={{
+              height: '36px', padding: '0 16px', borderRadius: '20px',
+              border: `1px solid ${active ? colors.mocha : colors.border}`,
+              background: active ? colors.mocha : 'white',
+              color: active ? 'white' : colors.mochaLight,
+              fontSize: '13px', fontWeight: active ? '500' : '400',
+              cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+              fontFamily: fonts.sans, transition: 'all 0.15s',
+            }}>
+              {cat}
             </button>
           );
         })}
       </div>
 
-      {/* What's an Intimate Circle - styled like AI Insights banner */}
+      {/* Explainer banner */}
       <div style={{
-        background: 'linear-gradient(93.28deg, #7A624B 9.73%, #BC9972 95.71%)',
-        borderRadius: '15px',
-        padding: isMobile ? '14px 16px' : '16px 20px',
-        marginBottom: '20px',
-        display: 'flex',
-        alignItems: 'flex-start',
-        gap: '12px',
-        position: 'relative',
-        overflow: 'hidden',
-        opacity: 0.83,
-        boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
+        display: 'flex', gap: '14px', alignItems: 'flex-start',
+        background: 'white', border: `1px solid ${colors.border}`,
+        borderLeft: `3px solid ${colors.mochaMuted}`,
+        borderRadius: '14px', padding: '16px 18px', marginBottom: '24px',
       }}>
-        {/* Decorative circle */}
         <div style={{
-          position: 'absolute',
-          top: '-50%',
-          right: '-20%',
-          width: '200px',
-          height: '200px',
-          background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
-          borderRadius: '50%',
-        }} />
-        <span style={{ fontSize: '24px', position: 'relative', zIndex: 1 }}>💫</span>
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          <h3 style={{
-            fontSize: '13px',
-            fontWeight: '600',
-            color: 'rgba(255,255,255,0.95)',
-            margin: '0 0 4px',
-            fontFamily: fonts.serif,
-          }}>
+          width: '38px', height: '38px', borderRadius: '50%', background: colors.mochaPale,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0,
+        }}>☀️</div>
+        <div>
+          <strong style={{ fontSize: '14px', fontWeight: '500', color: colors.mocha, display: 'block', marginBottom: '4px' }}>
             What's an Intimate Circle?
-          </h3>
-          <p style={{
-            fontSize: '12px',
-            color: 'rgba(255,255,255,0.75)',
-            margin: 0,
-            lineHeight: '1.4',
-            fontFamily: fonts.sans,
-          }}>
-            A small group (up to 10 women) that meets regularly around a shared interest. It's where lasting friendships are built over time.
-          </p>
+          </strong>
+          <span style={{ fontSize: '13px', color: colors.mochaLight, lineHeight: '1.6' }}>
+            A small group of up to 10 women that meets regularly around a shared interest. It's where real friendships are built over time — not just networking.
+          </span>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }}>
+            <span style={{ fontSize: '11px', background: colors.tagBg, color: colors.tagText, padding: '3px 10px', borderRadius: '12px' }}>Up to 10 members</span>
+            <span style={{ fontSize: '11px', background: colors.tagBg, color: colors.tagText, padding: '3px 10px', borderRadius: '12px' }}>Regular meetups</span>
+            <span style={{ fontSize: '11px', background: colors.tagBg, color: colors.tagText, padding: '3px 10px', borderRadius: '12px' }}>Unlock 1-on-1 chats after 5 meetups</span>
+          </div>
         </div>
-      </div>
-
-      {/* Results Count */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '16px',
-      }}>
-        <p style={{ fontSize: '13px', color: colors.textMuted, margin: 0, fontFamily: fonts.sans }}>
-          {filteredCircles.length} circle{filteredCircles.length !== 1 ? 's' : ''} found
-        </p>
-        {(searchQuery || selectedCategory !== 'All') && (
-          <button
-            onClick={clearFilters}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'rgba(107, 86, 71, 0.77)',
-              fontSize: '13px',
-              fontWeight: '500',
-              fontFamily: fonts.serif,
-              cursor: 'pointer',
-              letterSpacing: '0.15px',
-            }}
-          >
-            Clear filters
-          </button>
-        )}
       </div>
 
       {/* My Circles */}
       {myCircles.length > 0 && (
-        <section style={{
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
-          borderRadius: '19px',
-          padding: isMobile ? '16px 0' : '24px 0',
-          marginBottom: isMobile ? '16px' : '20px',
-          backdropFilter: 'blur(2px)',
-        }}>
-          <h2 style={{
-            fontFamily: fonts.serif,
-            fontSize: isMobile ? '20px' : '24px',
-            fontWeight: '500',
-            color: '#3F1906',
-            marginBottom: '16px',
-            letterSpacing: '0.15px',
-          }}>
-            My Circles
-          </h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-            gap: '16px',
-          }}>
-            {myCircles.map((circle) => (
-              <CircleCard
-                key={circle.id}
-                circle={circle}
-                isMobile={isMobile}
-                onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
-                isMember={true}
-              />
-            ))}
-          </div>
-        </section>
+        <CircleSection title="My Circles" count={myCircles.length} isMobile={isMobile}>
+          {myCircles.map(c => <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} isMember />)}
+        </CircleSection>
       )}
 
-      {/* Open Circles */}
+      {/* Open to Join */}
       {openCircles.length > 0 && (
-        <section style={{
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
-          borderRadius: '19px',
-          padding: isMobile ? '16px 0' : '24px 0',
-          marginBottom: isMobile ? '16px' : '20px',
-          backdropFilter: 'blur(2px)',
-        }}>
-          <h2 style={{
-            fontFamily: fonts.serif,
-            fontSize: isMobile ? '20px' : '24px',
-            fontWeight: '500',
-            color: '#3F1906',
-            marginBottom: '16px',
-            letterSpacing: '0.15px',
-          }}>
-            Open to Join
-          </h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-            gap: '16px',
-          }}>
-            {openCircles.map((circle) => (
-              <CircleCard
-                key={circle.id}
-                circle={circle}
-                isMobile={isMobile}
-                onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
-              />
-            ))}
-          </div>
-        </section>
+        <CircleSection title="Open to Join" count={openCircles.length} isMobile={isMobile}>
+          {openCircles.map(c => <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />)}
+        </CircleSection>
       )}
 
-      {/* Waitlist Circles */}
-      {waitlistCircles.length > 0 && (
-        <section style={{
-          background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
-          borderRadius: '19px',
-          padding: isMobile ? '16px 0' : '24px 0',
-          marginBottom: isMobile ? '16px' : '20px',
-          backdropFilter: 'blur(2px)',
-        }}>
-          <h2 style={{
-            fontFamily: fonts.serif,
-            fontSize: isMobile ? '20px' : '24px',
-            fontWeight: '500',
-            color: '#3F1906',
-            marginBottom: '16px',
-            letterSpacing: '0.15px',
-          }}>
-            Waitlist
-          </h2>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
-            gap: '16px',
-          }}>
-            {waitlistCircles.map((circle) => (
-              <CircleCard
-                key={circle.id}
-                circle={circle}
-                isMobile={isMobile}
-                onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
-              />
-            ))}
-          </div>
-        </section>
+      {/* Currently Full */}
+      {fullCircles.length > 0 && (
+        <CircleSection title="Currently Full" count={fullCircles.length} isMobile={isMobile} marginTop="40px">
+          {fullCircles.map(c => <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />)}
+        </CircleSection>
       )}
 
       {/* Start Your Own Circle */}
       <div
         onClick={() => onNavigate?.('createCircle')}
         style={{
-          background: 'linear-gradient(135deg, #F5EDE4 0%, #E8DDD0 100%)',
-          borderRadius: '19px',
-          border: '1px dashed rgba(139, 111, 92, 0.2)',
-          padding: '32px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          textAlign: 'center',
-          cursor: 'pointer',
-          transition: 'all 0.2s ease',
-          backdropFilter: 'blur(2px)',
+          background: colors.mochaPale, borderRadius: '16px',
+          border: `2px dashed ${colors.border}`, padding: '32px 24px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', textAlign: 'center', cursor: 'pointer',
+          marginTop: '32px',
         }}
       >
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🌱</div>
-        <h3 style={{
-          fontSize: '18px',
-          fontWeight: '500',
-          color: '#584233',
-          margin: '0 0 8px',
-          fontFamily: fonts.serif,
-          letterSpacing: '0.15px',
-        }}>
+        <div style={{ fontSize: '48px', marginBottom: '12px' }}>🌱</div>
+        <h3 style={{ fontSize: '16px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: '0 0 4px' }}>
           Start Your Own Circle
         </h3>
-        <p style={{
-          fontSize: '14px',
-          color: colors.textLight,
-          margin: '0 0 20px',
-          maxWidth: '280px',
-          lineHeight: '1.5',
-          fontFamily: fonts.sans,
-        }}>
+        <p style={{ fontSize: '13px', color: colors.mochaLight, margin: '0 0 16px', maxWidth: '280px', lineHeight: '1.5' }}>
           Have a topic you're passionate about? Gather your people and create a space for connection.
         </p>
-        <button
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '12px 24px',
-            background: 'linear-gradient(88.65deg, rgba(134, 112, 96, 0.63) 56.79%, rgba(197, 172, 150, 0.63) 98.85%)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '12px',
-            fontSize: '14px',
-            fontWeight: '600',
-            fontFamily: fonts.sans,
-            cursor: 'pointer',
-          }}
-        >
-          <span style={{ fontSize: '18px' }}>+</span>
-          Create a Circle
+        <button style={{
+          padding: '10px 24px', background: colors.mocha, color: 'white',
+          border: 'none', borderRadius: '20px', fontSize: '13px', fontWeight: '500',
+          cursor: 'pointer', fontFamily: fonts.sans, display: 'flex', alignItems: 'center', gap: '6px',
+        }}>
+          <span style={{ fontSize: '16px' }}>+</span> Create a Circle
         </button>
       </div>
 
-      {/* Empty State */}
+      {/* Empty state */}
       {filteredCircles.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '48px 20px',
-        }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
-          <h3 style={{
-            fontSize: '18px',
-            fontWeight: '500',
-            color: '#584233',
-            margin: '0 0 8px',
-            fontFamily: fonts.serif,
-            letterSpacing: '0.15px',
-          }}>
-            No circles found
-          </h3>
-          <p style={{ fontSize: '14px', color: colors.textLight, margin: '0 0 20px', fontFamily: fonts.sans }}>
-            Try a different search or start your own!
-          </p>
-          <button
-            onClick={clearFilters}
-            style={{
-              padding: '12px 24px',
-              background: 'linear-gradient(88.65deg, rgba(134, 112, 96, 0.63) 56.79%, rgba(197, 172, 150, 0.63) 98.85%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '12px',
-              fontSize: '14px',
-              fontWeight: '600',
-              fontFamily: fonts.sans,
-              cursor: 'pointer',
-            }}
-          >
-            Clear Search
-          </button>
+        <div style={{ textAlign: 'center', padding: '48px 16px', color: colors.mochaMuted, fontSize: '14px' }}>
+          No circles match your search. Try a different filter or start your own!
         </div>
       )}
 
-      {/* Circle Detail Modal */}
-      {selectedCircle && (
-        <CircleDetailModal
-          circle={selectedCircle}
-          currentUser={currentUser}
-          supabase={supabase}
-          isMobile={isMobile}
-          onClose={() => setSelectedCircle(null)}
-          onNavigate={onNavigate}
-        />
-      )}
-
       <style>{`
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        div::-webkit-scrollbar {
-          height: 0;
-          width: 0;
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        div::-webkit-scrollbar { height: 0; width: 0; }
       `}</style>
     </div>
   );
 }
 
-function CircleCard({ circle, isMobile, onClick, isMember = false }) {
-  const avatarColors = ['#9C8068', '#C9A96E', '#8B9E7E'];
-
-  const spotsColor = isMember
-    ? { bg: 'rgba(168, 132, 98, 0.75)', text: 'white' }
-    : circle.spotsLeft === 0
-      ? { bg: colors.warning, text: 'white' }
-      : circle.spotsLeft <= 2
-        ? { bg: colors.danger, text: 'white' }
-        : { bg: 'rgba(77, 182, 172, 0.8)', text: 'white' };
-
+// === Section header with count badge ===
+function CircleSection({ title, count, isMobile, marginTop = '0', children }) {
   return (
-    <div
-      onClick={onClick}
-      style={{
-        background: 'rgba(255, 255, 255, 0.35)',
-        borderRadius: '19px',
-        overflow: 'hidden',
-        border: isMember ? '1px solid rgba(168, 132, 98, 0.3)' : '1px solid rgba(139, 111, 92, 0.08)',
-        cursor: 'pointer',
-        transition: 'all 0.3s ease',
-        backdropFilter: 'blur(2px)',
-      }}
-    >
-      {/* Header with Emoji or Image */}
-      <div style={{
-        height: isMobile ? '90px' : '100px',
-        background: circle.image_url
-          ? `url(${circle.image_url}) center/cover no-repeat`
-          : '#5E472F',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-      }}>
-        {!circle.image_url && <img src="/tutorial-logo.png" alt="" style={{ width: '50%', maxWidth: '60px', height: 'auto', objectFit: 'contain' }} />}
-
-        {/* Spots/Member Badge */}
-        <span style={{
-          position: 'absolute',
-          top: '10px',
-          right: '10px',
-          padding: '4px 10px',
-          backgroundColor: spotsColor.bg,
-          color: spotsColor.text,
-          borderRadius: '20px',
-          fontSize: '10px',
-          fontWeight: '600',
-          fontFamily: fonts.sans,
-          letterSpacing: '0.3px',
-        }}>
-          {isMember ? 'Member' : circle.spotsLeft === 0 ? 'Waitlist' : `${circle.spotsLeft} spot${circle.spotsLeft !== 1 ? 's' : ''} left`}
-        </span>
-
-        {/* Category Badge */}
-        <span style={{
-          position: 'absolute',
-          top: '10px',
-          left: '10px',
-          padding: '4px 10px',
-          backgroundColor: 'rgba(255,255,255,0.75)',
-          color: '#584233',
-          borderRadius: '20px',
-          fontSize: '10px',
-          fontWeight: '500',
-          fontFamily: fonts.sans,
-        }}>
-          {circle.category}
+    <div style={{ marginTop }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <span style={{ fontSize: '18px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif }}>{title}</span>
+        <span style={{ fontSize: '12px', color: colors.mochaMuted, background: colors.tagBg, padding: '3px 10px', borderRadius: '12px' }}>
+          {count} circle{count !== 1 ? 's' : ''}
         </span>
       </div>
-
-      {/* Content */}
-      <div style={{ padding: '14px 16px' }}>
-        <h3 style={{
-          fontSize: '15px',
-          fontWeight: '500',
-          color: '#3F1906',
-          margin: '0 0 10px',
-          fontFamily: fonts.serif,
-          letterSpacing: '0.15px',
-        }}>
-          {circle.name}
-        </h3>
-
-        {/* Members Preview */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingTop: '10px',
-          borderTop: '1px solid rgba(139, 111, 92, 0.08)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <div style={{ display: 'flex' }}>
-              {circle.members?.slice(0, 3).map((member, idx) => (
-                <div key={member.id} style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${avatarColors[idx % 3]}, #7A5C42)`,
-                  border: '2px solid rgba(255,255,255,0.8)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '10px',
-                  fontWeight: '600',
-                  color: 'white',
-                  marginLeft: idx > 0 ? '-6px' : 0,
-                }}>
-                  {member.user?.name?.charAt(0) || '?'}
-                </div>
-              ))}
-              {circle.memberCount > 3 && (
-                <div style={{
-                  width: '24px',
-                  height: '24px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(189, 173, 162, 0.5)',
-                  border: '2px solid rgba(255,255,255,0.8)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '9px',
-                  fontWeight: '600',
-                  color: '#605045',
-                  marginLeft: '-6px',
-                }}>
-                  +{circle.memberCount - 3}
-                </div>
-              )}
-            </div>
-            <span style={{ fontSize: '11px', color: '#B8A089', marginLeft: '8px', fontFamily: fonts.sans }}>
-              {circle.memberCount}/{circle.totalSpots}
-            </span>
-          </div>
-          <ChevronRight size={18} style={{ color: '#B8A089' }} />
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: '16px', marginBottom: '24px' }}>
+        {children}
       </div>
     </div>
   );
 }
 
-function CircleDetailModal({ circle, currentUser, supabase, isMobile, onClose, onNavigate }) {
-  const [isRequesting, setIsRequesting] = useState(false);
-  const [requestSent, setRequestSent] = useState(false);
-
-  const handleRequest = async () => {
-    setIsRequesting(true);
-    try {
-      // Check if already a member or has pending request
-      const { data: existing } = await supabase
-        .from('connection_group_members')
-        .select('id, status')
-        .eq('group_id', circle.id)
-        .eq('user_id', currentUser.id)
-        .single();
-
-      if (existing) {
-        alert(existing.status === 'accepted' ? 'You are already a member!' : 'You already have a pending request.');
-        setIsRequesting(false);
-        return;
-      }
-
-      // Create join request
-      const { error } = await supabase
-        .from('connection_group_members')
-        .insert({
-          group_id: circle.id,
-          user_id: currentUser.id,
-          status: 'invited', // Will be reviewed by host
-        });
-
-      if (error) throw error;
-
-      setRequestSent(true);
-    } catch (error) {
-      console.error('Error requesting to join:', error);
-      alert('Failed to send request. Please try again.');
-    }
-    setIsRequesting(false);
-  };
+// === Circle Card (matches reference: cover, desc, progress, join button) ===
+function CircleCard({ circle, isMobile, onClick, isMember = false }) {
+  const pct = Math.round((circle.memberCount / circle.totalSpots) * 100);
+  const spotsLeft = circle.spotsLeft;
+  const isFew = spotsLeft <= 3 && spotsLeft > 0;
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 100,
-      display: 'flex',
-      alignItems: isMobile ? 'flex-end' : 'center',
-      justifyContent: 'center',
-    }}>
-      {/* Backdrop */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: 'rgba(0,0,0,0.4)',
-        }}
-        onClick={onClose}
-      />
-
-      {/* Modal */}
+    <div
+      onClick={onClick}
+      style={{
+        background: 'white', borderRadius: '16px', border: `1px solid ${colors.border}`,
+        overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column',
+        transition: 'border-color 0.2s, transform 0.18s, box-shadow 0.18s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(107,79,58,0.1)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      {/* Cover */}
       <div style={{
-        position: 'relative',
-        background: 'linear-gradient(180deg, #F5EDE4 0%, #EDE3D7 40%, #E8DDD0 100%)',
-        borderRadius: isMobile ? '24px 24px 0 0' : '24px',
-        width: '100%',
-        maxWidth: '400px',
-        maxHeight: isMobile ? '90vh' : '85vh',
-        overflowY: 'auto',
+        height: '110px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: circle.image_url ? `url(${circle.image_url}) center/cover no-repeat` : circle.coverColor,
+        overflow: 'hidden',
       }}>
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          style={{
-            position: 'absolute',
-            top: '16px',
-            right: '16px',
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            backgroundColor: 'rgba(255,255,255,0.8)',
-            border: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            zIndex: 10,
-          }}
-        >
-          <X size={20} style={{ color: colors.textLight }} />
-        </button>
+        {!circle.image_url && (
+          <span style={{ fontSize: '34px', position: 'relative', zIndex: 1 }}>{circle.coverIcon}</span>
+        )}
+        {circle.image_url && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.25))' }} />}
 
-        {/* Header with Emoji or Image */}
-        <div style={{
-          height: '140px',
-          background: circle.image_url
-            ? `url(${circle.image_url}) center/cover no-repeat`
-            : '#5E472F',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          position: 'relative',
+        {/* Category badge */}
+        <span style={{
+          position: 'absolute', top: '10px', left: '10px', fontSize: '11px', fontWeight: '500',
+          background: 'rgba(255,255,255,0.88)', color: colors.mocha, padding: '3px 10px', borderRadius: '12px',
+          backdropFilter: 'blur(4px)',
         }}>
-          {!circle.image_url && <img src="/tutorial-logo.png" alt="" style={{ width: '40%', maxWidth: '80px', height: 'auto', objectFit: 'contain' }} />}
-          <span style={{
-            position: 'absolute',
-            bottom: '12px',
-            left: '12px',
-            padding: '4px 12px',
-            backgroundColor: 'rgba(255,255,255,0.9)',
-            color: colors.text,
-            borderRadius: '12px',
-            fontSize: '12px',
-            fontWeight: '500',
+          {circle.category}
+        </span>
+
+        {/* Spots badge */}
+        <span style={{
+          position: 'absolute', top: '10px', right: '10px', fontSize: '11px', fontWeight: '500',
+          padding: '3px 10px', borderRadius: '12px',
+          background: isMember ? 'rgba(107,79,58,0.15)' : circle.isFull ? 'rgba(160,160,160,0.2)' : isFew ? 'rgba(180,100,40,0.15)' : 'rgba(107,79,58,0.15)',
+          color: isMember ? colors.mochaDark : circle.isFull ? '#666' : isFew ? '#7A3A10' : colors.mochaDark,
+        }}>
+          {isMember ? 'Member' : circle.isFull ? 'Full' : `${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left`}
+        </span>
+      </div>
+
+      {/* Body */}
+      <div style={{ padding: '14px 16px 16px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontSize: '16px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, marginBottom: '5px', lineHeight: '1.3' }}>
+          {circle.name}
+        </div>
+
+        {/* Description */}
+        {circle.description && (
+          <div style={{
+            fontSize: '12px', color: colors.mochaLight, lineHeight: '1.55', marginBottom: '12px',
+            flex: 1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
           }}>
-            {circle.category}
+            {circle.description}
+          </div>
+        )}
+        {!circle.description && <div style={{ flex: 1, marginBottom: '12px' }} />}
+
+        {/* Meta row: avatars + count + frequency */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <div style={{ display: 'flex', marginRight: '2px' }}>
+            {circle.members?.slice(0, 4).map((m, i) => (
+              m.user?.profile_picture ? (
+                <img key={m.id} src={m.user.profile_picture} alt="" style={{
+                  width: '22px', height: '22px', borderRadius: '50%', border: '2px solid white',
+                  objectFit: 'cover', marginLeft: i > 0 ? '-6px' : 0, position: 'relative', zIndex: 4 - i,
+                }} />
+              ) : (
+                <div key={m.id} style={{
+                  width: '22px', height: '22px', borderRadius: '50%', border: '2px solid white',
+                  background: AVATAR_COLORS[i % AVATAR_COLORS.length],
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '9px', fontWeight: '500', color: 'white',
+                  marginLeft: i > 0 ? '-6px' : 0, position: 'relative', zIndex: 4 - i,
+                }}>
+                  {m.user?.name?.charAt(0) || '?'}
+                </div>
+              )
+            ))}
+            {circle.memberCount > 4 && (
+              <div style={{
+                width: '22px', height: '22px', borderRadius: '50%', border: '2px solid white',
+                background: colors.mochaMuted, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '9px', fontWeight: '500', color: 'white', marginLeft: '-6px', position: 'relative', zIndex: 0,
+              }}>
+                +{circle.memberCount - 4}
+              </div>
+            )}
+          </div>
+          <span style={{ fontSize: '11px', color: colors.mochaMuted }}>{circle.memberCount}/{circle.totalSpots} members</span>
+          <span style={{ fontSize: '11px', background: colors.tagBg, color: colors.tagText, padding: '2px 8px', borderRadius: '10px', marginLeft: 'auto' }}>
+            {circle.freq}
           </span>
         </div>
 
-        {/* Content */}
-        <div style={{ padding: '24px' }}>
-          {/* Title */}
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <h2 style={{
-              fontSize: '24px',
-              fontWeight: '500',
-              color: '#584233',
-              margin: '0 0 4px',
-              fontFamily: fonts.serif,
-              letterSpacing: '0.15px',
-            }}>
-              {circle.name}
-            </h2>
+        {/* Progress bar */}
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: colors.mochaMuted, marginBottom: '5px' }}>
+            <span>Spots filled</span>
+            <span>{pct}%</span>
           </div>
-
-          {/* Host */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '12px',
-            backgroundColor: 'rgba(255, 255, 255, 0.35)',
-            borderRadius: '12px',
-            marginBottom: '20px',
-            border: '1px solid rgba(139, 111, 92, 0.08)',
-            backdropFilter: 'blur(2px)',
-          }}>
+          <div style={{ height: '4px', background: colors.tagBg, borderRadius: '4px', overflow: 'hidden' }}>
             <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #9C8068, #7A5C42)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '18px',
-              fontWeight: '600',
-              color: 'white',
-            }}>
-              {circle.host?.name?.charAt(0) || '?'}
-            </div>
-            <div>
-              <p style={{ fontSize: '12px', color: colors.textMuted, margin: 0, fontFamily: fonts.sans }}>Hosted by</p>
-              <p style={{ fontSize: '14px', fontWeight: '500', color: '#3F1906', margin: 0, fontFamily: fonts.serif }}>
-                {circle.host?.name || 'Unknown'}
-              </p>
-            </div>
+              height: '100%', borderRadius: '4px', transition: 'width 0.4s',
+              width: `${pct}%`,
+              background: isFew ? colors.warning : colors.mochaMuted,
+            }} />
           </div>
+        </div>
 
-          {/* Members */}
-          <div style={{ marginBottom: '20px' }}>
-            <h3 style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#3F1906',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              fontFamily: fonts.serif,
-            }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Users size={16} />
-                Members ({circle.memberCount}/{circle.totalSpots})
-              </span>
-              {circle.spotsLeft > 0 ? (
-                <span style={{ fontSize: '12px', fontWeight: 'normal', color: colors.success, fontFamily: fonts.sans }}>
-                  {circle.spotsLeft} spots open
-                </span>
-              ) : (
-                <span style={{ fontSize: '12px', fontWeight: 'normal', color: colors.warning, fontFamily: fonts.sans }}>
-                  Waitlist
-                </span>
-              )}
-            </h3>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {circle.members?.map((member, idx) => (
-                <div key={member.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '6px 12px',
-                  backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                  borderRadius: '20px',
-                  border: '1px solid rgba(139, 111, 92, 0.08)',
-                }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E'][idx % 3]}, #7A5C42)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '11px',
-                    fontWeight: '600',
-                    color: 'white',
-                  }}>
-                    {member.user?.name?.charAt(0) || '?'}
-                  </div>
-                  <span style={{ fontSize: '13px', color: '#3F1906', fontFamily: fonts.sans }}>
-                    {member.user?.name || 'Unknown'}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* What to Expect */}
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.35)',
-            borderRadius: '15px',
-            padding: '16px',
-            marginBottom: '24px',
-            backdropFilter: 'blur(2px)',
-            border: '1px solid rgba(139, 111, 92, 0.08)',
-          }}>
-            <h3 style={{
-              fontSize: '14px',
-              fontWeight: '500',
-              color: '#3F1906',
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              fontFamily: fonts.serif,
-            }}>
-              <span>✨</span> What to expect
-            </h3>
-            <ul style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              fontSize: '13px',
-              color: colors.textLight,
-              fontFamily: fonts.sans,
-            }}>
-              <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
-                <span style={{ color: colors.success }}>•</span>
-                <span>Regular meetups with the same core group</span>
-              </li>
-              <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
-                <span style={{ color: colors.success }}>•</span>
-                <span>Safe space to share and grow together</span>
-              </li>
-              <li style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                <span style={{ color: colors.success }}>•</span>
-                <span>Deeper connections over time</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Action Button */}
-          {!requestSent ? (
-            <button
-              onClick={handleRequest}
-              disabled={isRequesting}
-              style={{
-                width: '100%',
-                padding: '16px',
-                background: 'linear-gradient(88.65deg, rgba(134, 112, 96, 0.63) 56.79%, rgba(197, 172, 150, 0.63) 98.85%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                fontSize: '15px',
-                fontWeight: '600',
-                fontFamily: fonts.sans,
-                cursor: isRequesting ? 'not-allowed' : 'pointer',
-                opacity: isRequesting ? 0.7 : 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-              }}
-            >
-              {isRequesting ? (
-                'Sending request...'
-              ) : circle.isOpen ? (
-                <>
-                  <Heart size={18} />
-                  Request to Join
-                </>
-              ) : (
-                <>
-                  <Clock size={18} />
-                  Join Waitlist
-                </>
-              )}
-            </button>
-          ) : (
-            <div style={{
-              textAlign: 'center',
-              padding: '16px',
-              backgroundColor: 'rgba(77, 182, 172, 0.1)',
-              borderRadius: '12px',
-              border: '1px solid rgba(77, 182, 172, 0.15)',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                color: colors.success,
-                fontWeight: '600',
-                fontFamily: fonts.sans,
-              }}>
-                <Check size={18} />
-                {circle.isOpen ? 'Request Sent!' : 'Added to Waitlist!'}
-              </div>
-              <p style={{ fontSize: '12px', color: colors.textLight, marginTop: '4px', fontFamily: fonts.sans }}>
-                {circle.host?.name?.split(' ')[0] || 'The host'} will review your request
-              </p>
-            </div>
-          )}
-
-          {/* Footer Note */}
-          <p style={{
-            fontSize: '11px',
-            color: colors.textMuted,
-            textAlign: 'center',
-            marginTop: '16px',
-            fontFamily: fonts.sans,
-          }}>
-            Circle hosts review requests to ensure a good fit for everyone
-          </p>
+        {/* Footer: join + peek */}
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); onClick(); }}
+            disabled={isMember}
+            style={{
+              flex: 1, height: '36px', borderRadius: '20px', fontSize: '13px', fontWeight: '500',
+              cursor: isMember ? 'default' : 'pointer', fontFamily: fonts.sans, border: 'none',
+              background: isMember ? colors.tagBg : colors.mocha,
+              color: isMember ? colors.mochaMuted : 'white',
+              transition: 'background 0.15s',
+            }}
+          >
+            {isMember ? 'View circle' : circle.isFull ? 'Join waitlist' : 'Join circle'}
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onClick(); }}
+            style={{
+              height: '36px', width: '36px', borderRadius: '50%',
+              border: `1px solid ${colors.border}`, background: 'white',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: colors.mochaLight, fontSize: '14px', flexShrink: 0,
+              transition: 'all 0.15s',
+            }}
+          >
+            <ChevronRight size={16} />
+          </button>
         </div>
       </div>
     </div>
