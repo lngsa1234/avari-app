@@ -91,6 +91,10 @@ function MainApp({ currentUser, onSignOut }) {
   const [userSignups, setUserSignups] = useState([]) // Store current user's signups
   const [connections, setConnections] = useState([]) // Store mutual matches
   const [potentialConnections, setPotentialConnections] = useState([]) // People from same meetups
+  const [homeEventRecs, setHomeEventRecs] = useState([])
+  const [homeCircleRecs, setHomeCircleRecs] = useState([])
+  const [homePeopleRecs, setHomePeopleRecs] = useState([])
+  const [homeRecsLoaded, setHomeRecsLoaded] = useState(false)
   const [myInterests, setMyInterests] = useState([]) // People current user is interested in
   const [meetupPeople, setMeetupPeople] = useState({}) // People grouped by meetup
   const [unreadMessageCount, setUnreadMessageCount] = useState(0) // Unread messages from database
@@ -482,6 +486,164 @@ function MainApp({ currentUser, onSignOut }) {
             setSignups(signupsByMeetup)
           } else {
             setSignups({})
+          }
+
+          // === Load home page recommendation sections ===
+          try {
+            const [eventRes, circleRes, peopleRes] = await Promise.allSettled([
+              supabase
+                .from('event_recommendations')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .in('status', ['pending', 'viewed'])
+                .order('match_score', { ascending: false })
+                .limit(4),
+              supabase
+                .from('circle_match_scores')
+                .select('*, circle:connection_groups(id, name, is_active, connection_group_members(count))')
+                .eq('user_id', currentUser.id)
+                .order('match_score', { ascending: false })
+                .limit(4),
+              supabase
+                .from('connection_recommendations')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .neq('status', 'dismissed')
+                .order('match_score', { ascending: false })
+                .limit(6),
+            ])
+
+            // Process event recs
+            let eventRecs = []
+            const eventData = eventRes.status === 'fulfilled' && !eventRes.value.error ? eventRes.value.data : []
+            if (eventData.length > 0) {
+              const recMeetupIds = eventData.map(r => r.meetup_id).filter(Boolean)
+              if (recMeetupIds.length > 0) {
+                const { data: recMeetups } = await supabase
+                  .from('meetups')
+                  .select('id, topic, date, time, location')
+                  .in('id', recMeetupIds)
+                const recMeetupMap = {}
+                ;(recMeetups || []).forEach(m => { recMeetupMap[m.id] = m })
+                const todayStart = new Date()
+                todayStart.setHours(0, 0, 0, 0)
+                eventRecs = eventData
+                  .map(r => ({ ...r, meetup: recMeetupMap[r.meetup_id] || null }))
+                  .filter(r => r.meetup && parseLocalDate(r.meetup.date) >= todayStart)
+                  .slice(0, 2)
+              }
+            }
+            // Event fallback: upcoming meetups user hasn't signed up for
+            if (eventRecs.length === 0 && meetupsData.length > 0) {
+              const todayStart = new Date()
+              todayStart.setHours(0, 0, 0, 0)
+              const signupSet = new Set(userSignupsData)
+              eventRecs = meetupsData
+                .filter(m => { try { return !signupSet.has(m.id) && parseLocalDate(m.date) >= todayStart } catch { return false } })
+                .slice(0, 2)
+                .map(m => ({ id: m.id, meetup_id: m.id, match_score: 0.7, match_reasons: [], meetup: { id: m.id, topic: m.topic, date: m.date, time: m.time, location: m.location } }))
+            }
+
+            // Process circle recs
+            let circleRecs = []
+            const circleData = circleRes.status === 'fulfilled' && !circleRes.value.error ? circleRes.value.data : []
+            if (circleData.length > 0) {
+              circleRecs = circleData.filter(m => m.circle?.is_active).slice(0, 2)
+            }
+            // Circle fallback: active circles user hasn't joined
+            if (circleRecs.length === 0) {
+              try {
+                const { data: myMemberships } = await supabase
+                  .from('connection_group_members')
+                  .select('group_id')
+                  .eq('user_id', currentUser.id)
+                const myGroupIds = new Set((myMemberships || []).map(m => m.group_id))
+                const { data: activeCircles } = await supabase
+                  .from('connection_groups')
+                  .select('id, name, is_active, connection_group_members(count)')
+                  .eq('is_active', true)
+                  .order('created_at', { ascending: false })
+                  .limit(6)
+                if (activeCircles?.length > 0) {
+                  circleRecs = activeCircles
+                    .filter(c => !myGroupIds.has(c.id))
+                    .slice(0, 2)
+                    .map(c => ({ id: c.id, circle_id: c.id, match_score: 0.65, match_reasons: [], circle: c }))
+                }
+              } catch (e) { console.error('[HomeRecs] Circle fallback:', e) }
+            }
+
+            // Process people recs
+            let peopleRecs = []
+            const peopleData = peopleRes.status === 'fulfilled' && !peopleRes.value.error ? peopleRes.value.data : []
+            if (peopleData.length > 0) {
+              const { data: existingConn } = await supabase
+                .from('user_interests')
+                .select('interested_in_user_id')
+                .eq('user_id', currentUser.id)
+              const connectedIds = new Set((existingConn || []).map(c => c.interested_in_user_id))
+              const seen = new Set()
+              const deduped = peopleData.filter(r => {
+                if (connectedIds.has(r.recommended_user_id)) return false
+                if (seen.has(r.recommended_user_id)) return false
+                seen.add(r.recommended_user_id)
+                return true
+              }).slice(0, 3)
+              if (deduped.length > 0) {
+                const profileIds = deduped.map(r => r.recommended_user_id)
+                const { data: recProfiles } = await supabase
+                  .from('profiles')
+                  .select('id, name, career, profile_picture')
+                  .in('id', profileIds)
+                const recProfileMap = {}
+                ;(recProfiles || []).forEach(p => { recProfileMap[p.id] = p })
+                peopleRecs = deduped.map(r => ({ ...r, profile: recProfileMap[r.recommended_user_id] || null })).filter(r => r.profile)
+              }
+            }
+            // People fallback: recently active community members (active in last 30 days)
+            if (peopleRecs.length === 0) {
+              try {
+                const activeCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+                const { data: communityProfiles } = await supabase
+                  .from('profiles')
+                  .select('id, name, career, profile_picture, last_active')
+                  .neq('id', currentUser.id)
+                  .not('name', 'is', null)
+                  .not('last_active', 'is', null)
+                  .gte('last_active', activeCutoff)
+                  .order('last_active', { ascending: false })
+                  .limit(6)
+                if (communityProfiles?.length > 0) {
+                  peopleRecs = communityProfiles.slice(0, 3).map(p => ({
+                    id: p.id, recommended_user_id: p.id, match_score: 0, match_reasons: [], profile: p,
+                  }))
+                }
+              } catch (e) { console.error('[HomeRecs] People fallback:', e) }
+            }
+
+            // Final activity filter: exclude anyone inactive for 30+ days
+            if (peopleRecs.length > 0) {
+              const activityCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+              const profileIds = peopleRecs.map(r => r.profile?.id || r.recommended_user_id).filter(Boolean)
+              const { data: activityCheck } = await supabase
+                .from('profiles')
+                .select('id, last_active')
+                .in('id', profileIds)
+              const activeIds = new Set(
+                (activityCheck || [])
+                  .filter(p => p.last_active && p.last_active >= activityCutoff)
+                  .map(p => p.id)
+              )
+              peopleRecs = peopleRecs.filter(r => activeIds.has(r.profile?.id || r.recommended_user_id))
+            }
+
+            setHomeEventRecs(eventRecs)
+            setHomeCircleRecs(circleRecs)
+            setHomePeopleRecs(peopleRecs)
+            setHomeRecsLoaded(true)
+          } catch (e) {
+            console.error('[HomeRecs] Error:', e)
+            setHomeRecsLoaded(true)
           }
 
           console.log(`⏱️ Secondary data loaded in ${Date.now() - t0}ms`)
@@ -2129,6 +2291,19 @@ function MainApp({ currentUser, onSignOut }) {
     }
     const weeklyProgress = getWeeklyProgress()
 
+    // Shared section header style
+    const sectionHeaderStyle = {
+      fontFamily: '"Lora", serif',
+      fontSize: isMobile ? '18px' : '20px',
+      fontWeight: '600',
+      color: '#3F1906',
+      margin: '0 0 12px 0',
+      letterSpacing: '0.15px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    }
+
     // Event Date Badge Component — timezone-aware
     const EventDateBadge = ({ date, time, timezone }) => {
       const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -3198,253 +3373,293 @@ function MainApp({ currentUser, onSignOut }) {
             </div>
 
 
-          {/* Smart Quick Actions - 3 personalized cards based on user progress */}
-            <div style={{ marginBottom: '16px' }}>
-              <h3 style={{
-                fontFamily: '"Lora", serif',
-                fontSize: isMobile ? '20px' : '24px',
-                fontWeight: '500',
-                color: '#3F1906',
-                margin: '0 0 4px 0',
-                letterSpacing: '0.15px',
-              }}>Suggested for you</h3>
-              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', color: '#584233', margin: 0, opacity: 0.74, letterSpacing: '0.15px' }}>Swipe for next actions</p>
+          {/* === Three Recommendation Sections === */}
+          {!homeRecsLoaded ? null : (<>
+
+          {/* Section 1: People to Meet */}
+          {homePeopleRecs.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <div style={sectionHeaderStyle}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
+                  People to Meet
+                </span>
+                <span
+                  onClick={() => handleNavigate('allPeople')}
+                  style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
+                >
+                  See all <ChevronRight style={{ width: '14px', height: '14px' }} />
+                </span>
+              </div>
+              <div style={{
+                display: 'flex',
+                gap: '12px',
+                overflowX: isMobile ? 'auto' : 'visible',
+                scrollSnapType: isMobile ? 'x mandatory' : 'none',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+                WebkitOverflowScrolling: 'touch',
+                paddingBottom: '4px',
+                ...(isMobile ? {} : { display: 'grid', gridTemplateColumns: `repeat(${Math.min(homePeopleRecs.length, 3)}, 1fr)` }),
+              }}>
+                {homePeopleRecs.map((rec) => (
+                  <div
+                    key={rec.id}
+                    onClick={() => handleNavigate('userProfile', { userId: rec.recommended_user_id })}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.75)',
+                      backdropFilter: 'blur(10px)',
+                      borderRadius: '16px',
+                      padding: isMobile ? '16px' : '20px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      border: '1px solid rgba(139, 111, 92, 0.1)',
+                      boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      textAlign: 'center',
+                      gap: '10px',
+                      ...(isMobile ? { minWidth: '160px', scrollSnapAlign: 'start', flex: '0 0 auto' } : {}),
+                    }}
+                    onMouseEnter={isMobile ? undefined : (e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 111, 92, 0.15)'
+                    }}
+                    onMouseLeave={isMobile ? undefined : (e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 2px 12px rgba(139, 111, 92, 0.08)'
+                    }}
+                  >
+                    {rec.profile?.profile_picture ? (
+                      <img
+                        src={rec.profile.profile_picture}
+                        alt={rec.profile.name}
+                        style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(139, 111, 92, 0.15)', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', opacity: 0, transition: 'opacity 0.3s ease' }}
+                        onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
+                      />
+                    ) : (
+                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <User style={{ width: '24px', height: '24px', color: '#8B6F5C' }} />
+                      </div>
+                    )}
+                    <div>
+                      <p style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#3F1906', margin: '0 0 2px 0', lineHeight: '20px' }}>
+                        {rec.profile?.name?.split(' ')[0] || 'Someone'}
+                      </p>
+                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#6B5344', margin: 0, lineHeight: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                        {rec.profile?.career || 'Community member'}
+                      </p>
+                    </div>
+                    {rec.match_reasons?.length > 0 && (
+                      <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033', padding: '3px 10px', borderRadius: '100px', whiteSpace: 'nowrap' }}>
+                        {rec.match_reasons[0].reason || `${Math.round(rec.match_score * 100)}% match`}
+                      </span>
+                    )}
+                    {!rec.match_reasons?.length && rec.match_score > 0 && (
+                      <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.08)', color: '#8B7355', padding: '3px 10px', borderRadius: '100px' }}>
+                        {Math.round(rec.match_score * 100)}% match
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            {(() => {
-              // Determine best actions based on user's networking progress
-              const allActions = [
-                {
-                  id: 'recaps',
-                  priority: pendingRecaps.length > 0 ? 100 : 10,
-                  title: 'Review Recaps',
-                  description: pendingRecaps.length > 0 ? `${pendingRecaps.length} new insights waiting` : 'Revisit your conversations',
-                  icon: <FileText style={{ width: '20px', height: '20px', color: '#8B6F5C' }} />,
-                  gradient: 'linear-gradient(135deg, #F5EDE4 0%, #E8DDD0 100%)',
-                  iconBg: '#E8E0D8',
-                  onClick: () => handleNavigate('pastMeetings'),
-                  badge: pendingRecaps.length > 0 ? pendingRecaps.length : null,
-                  thumbnail: '/thumbnails/review-recaps.svg'
-                },
-                {
-                  id: 'circles',
-                  priority: connections.length < 5 ? 90 : 40,
-                  title: 'Discover Circles',
-                  description: connections.length < 3 ? 'Find your first community' : 'Explore new groups',
-                  icon: <Search style={{ width: '20px', height: '20px', color: '#7A5C42' }} />,
-                  gradient: 'linear-gradient(135deg, #FAF3E6 0%, #E8D5A8 100%)',
-                  iconBg: '#E8D5A8',
-                  onClick: () => setCurrentView('discover'),
-                  badge: null,
-                  thumbnail: '/thumbnails/discover-circles.svg'
-                },
-                {
-                  id: 'messages',
-                  priority: unreadMessageCount > 0 ? 95 : 5,
-                  title: 'Check Messages',
-                  description: unreadMessageCount > 0 ? `${unreadMessageCount} unread messages` : 'Stay connected',
-                  icon: <MessageCircle style={{ width: '20px', height: '20px', color: '#6B8E7A' }} />,
-                  gradient: 'linear-gradient(135deg, #EDF5EB 0%, #D4DECE 100%)',
-                  iconBg: '#D4DECE',
-                  onClick: () => setCurrentView('messages'),
-                  badge: unreadMessageCount > 0 ? unreadMessageCount : null
-                },
-                {
-                  id: 'meetup',
-                  priority: userSignups.length >= 2 ? 70 : 30,
-                  title: 'Host a Meetup',
-                  description: userSignups.length >= 3 ? 'Share your expertise' : 'Bring people together',
-                  icon: <Calendar style={{ width: '20px', height: '20px', color: '#C4868B' }} />,
-                  gradient: 'linear-gradient(135deg, #FCF0F1 0%, #F0D4D6 100%)',
-                  iconBg: '#F0D4D6',
-                  onClick: () => setCurrentView('scheduleMeetup'),
-                  badge: null
-                },
-                {
-                  id: 'invite',
-                  priority: connections.length >= 5 ? 60 : 20,
-                  title: 'Invite Friends',
-                  description: 'Grow your network',
-                  icon: <Send style={{ width: '20px', height: '20px', color: '#8B9E7E' }} />,
-                  gradient: 'linear-gradient(135deg, #EDF5EB 0%, #D4DECE 100%)',
-                  iconBg: '#D4DECE',
-                  onClick: () => {
-                    if (navigator.share) {
-                      navigator.share({
-                        title: 'Join me on CircleW',
-                        text: 'I\'d love for you to join my professional community on CircleW!',
-                        url: window.location.origin,
-                      }).catch(() => {})
-                    } else {
-                      navigator.clipboard.writeText(window.location.origin)
-                      toast.success('Link copied to clipboard!')
-                    }
-                  },
-                  badge: null,
-                  thumbnail: '/thumbnails/invite-friends.svg'
-                },
-                {
-                  id: 'connections',
-                  priority: potentialConnections.length > 0 ? 75 : 15,
-                  title: 'View Connections',
-                  description: potentialConnections.length > 0 ? `${potentialConnections.length} people to meet` : 'See your network',
-                  icon: <Users style={{ width: '20px', height: '20px', color: '#9B7EC4' }} />,
-                  gradient: 'linear-gradient(135deg, #F5F0FA 0%, #E8DEF5 100%)',
-                  iconBg: '#E8DEF5',
-                  onClick: () => setCurrentView('connectionGroups'),
-                  badge: potentialConnections.length > 3 ? potentialConnections.length : null,
-                  thumbnail: '/thumbnails/coffee-chat.svg'
-                }
-              ]
+          )}
 
-              // Sort by priority and take top 3
-              const topActions = allActions
-                .sort((a, b) => b.priority - a.priority)
-                .slice(0, 3)
-
-              return (<>
-                <div
-                  ref={isMobile ? (el) => {
-                    if (!el) return
-                    const dots = el.nextElementSibling
-                    if (!dots) return
-                    const handleScroll = () => {
-                      const scrollLeft = el.scrollLeft
-                      const cardWidth = el.firstElementChild?.offsetWidth || 1
-                      const activeIdx = Math.round(scrollLeft / (cardWidth + 12))
-                      dots.querySelectorAll('span').forEach((dot, i) => {
-                        dot.style.background = i === activeIdx ? '#5E4530' : '#D4C4B0'
-                        dot.style.width = i === activeIdx ? '18px' : '6px'
-                      })
-                    }
-                    el.addEventListener('scroll', handleScroll, { passive: true })
-                    handleScroll()
-                  } : undefined}
-                  style={isMobile ? {
-                  display: 'flex',
-                  overflowX: 'auto',
-                  scrollSnapType: 'x mandatory',
-                  scrollBehavior: 'smooth',
-                  WebkitOverflowScrolling: 'touch',
-                  scrollbarWidth: 'none',
-                  msOverflowStyle: 'none',
-                  gap: '12px',
-                  paddingBottom: '4px',
-                } : {
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '16px',
-                }}>
-                  {topActions.map((action, actionIdx) => {
-                    const cardGradients = [
-                      'linear-gradient(204.68deg, #E4D5C7 17.23%, rgba(232, 218, 205, 0.55) 84.26%)',
-                      'linear-gradient(225.11deg, #F2DDBF 5.71%, rgba(245, 228, 212, 0.52) 84.44%)',
-                      'linear-gradient(224.84deg, rgba(211, 195, 184, 0.3825) -1.29%, rgba(191, 144, 112, 0.3825) 54.17%)',
-                    ]
-                    return (
-                    <div
-                      key={action.id}
-                      onClick={action.onClick}
-                      style={{
-                        background: cardGradients[actionIdx % 3],
-                        borderRadius: '21px',
-                        padding: 0,
-                        cursor: 'pointer',
-                        transition: isMobile ? 'none' : 'all 0.2s ease',
-                        border: 'none',
-                        boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        ...(isMobile ? { minWidth: 'calc(100% - 40px)', scrollSnapAlign: 'start', flex: '0 0 auto' } : {}),
-                      }}
-                      onMouseEnter={isMobile ? undefined : (e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)'
-                        e.currentTarget.style.boxShadow = '0 8px 24px rgba(139, 111, 92, 0.25)'
-                      }}
-                      onMouseLeave={isMobile ? undefined : (e) => {
-                        e.currentTarget.style.transform = 'translateY(0)'
-                        e.currentTarget.style.boxShadow = '0px 4px 4px rgba(0, 0, 0, 0.25)'
-                      }}
-                    >
-                      {action.thumbnail && (
-                        <div style={{
-                          width: '100%',
-                          height: isMobile ? '140px' : '180px',
-                          overflow: 'hidden',
-                          borderRadius: '21px 21px 0 0',
-                        }}>
-                          <img
-                            src={action.thumbnail}
-                            alt={action.title}
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                              objectPosition: 'top',
-                            }}
-                          />
-                        </div>
-                      )}
-                      <div style={{
-                        padding: isMobile ? '14px 16px' : '16px 20px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '8px',
-                      }}>
-                        <h4 style={{
-                          fontFamily: '"Lora", serif',
-                          fontSize: isMobile ? '16px' : '18px',
-                          fontWeight: '600',
-                          color: '#4F3B2E',
-                          margin: 0,
-                          letterSpacing: '0.15px',
-                          lineHeight: '22px',
-                        }}>
-                          {action.title}
-                        </h4>
-                        <p style={{
-                          fontFamily: '"Lora", serif',
-                          fontSize: isMobile ? '13px' : '14px',
-                          color: '#584233',
-                          margin: 0,
-                          opacity: 0.89,
-                          letterSpacing: '0.15px',
-                          lineHeight: '20px',
-                        }}>
-                          {action.description}
-                        </p>
-                        <span style={{
-                          fontFamily: '"DM Sans", sans-serif',
-                          fontSize: '13px',
-                          fontWeight: '600',
-                          color: '#6B4632',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          marginTop: '4px',
-                          cursor: 'pointer',
-                        }}>
-                          Start
-                          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 16 16"><path d="M5 8h8M9 4l4 4-4 4"/></svg>
+          {/* Section 2: Events for You */}
+          {homeEventRecs.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <div style={sectionHeaderStyle}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
+                  Events for You
+                </span>
+                <span
+                  onClick={() => handleNavigate('allEvents')}
+                  style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
+                >
+                  See all <ChevronRight style={{ width: '14px', height: '14px' }} />
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {homeEventRecs.map((rec) => (
+                  <div
+                    key={rec.id}
+                    onClick={() => handleNavigate('meetupDetail', { meetupId: rec.meetup_id })}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.75)',
+                      backdropFilter: 'blur(10px)',
+                      borderRadius: '16px',
+                      padding: isMobile ? '14px 16px' : '16px 20px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      border: '1px solid rgba(139, 111, 92, 0.1)',
+                      boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                    }}
+                    onMouseEnter={isMobile ? undefined : (e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(139, 111, 92, 0.14)'
+                    }}
+                    onMouseLeave={isMobile ? undefined : (e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 2px 12px rgba(139, 111, 92, 0.08)'
+                    }}
+                  >
+                    {/* Date badge */}
+                    <div style={{
+                      minWidth: '52px',
+                      padding: '10px 8px',
+                      backgroundColor: 'rgba(168, 132, 98, 0.12)',
+                      borderRadius: '10px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                    }}>
+                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '10px', fontWeight: '600', color: '#8B6F5C', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        {rec.meetup?.date ? parseLocalDate(rec.meetup.date).toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : ''}
+                      </span>
+                      <span style={{ fontFamily: '"Lora", serif', fontSize: '20px', fontWeight: '600', color: '#5E4530' }}>
+                        {rec.meetup?.date ? parseLocalDate(rec.meetup.date).getDate() : ''}
+                      </span>
+                    </div>
+                    {/* Event info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '16px', fontWeight: '600', color: '#3F1906', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {rec.meetup?.topic || 'Community Event'}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                        {rec.meetup?.time && (
+                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#6B5344', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <Clock style={{ width: '12px', height: '12px' }} />
+                            {(() => { const [h, m] = rec.meetup.time.split(':'); const d = new Date(); d.setHours(parseInt(h), parseInt(m)); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); })()}
+                          </span>
+                        )}
+                        {(rec.match_reasons || []).slice(0, 1).map((reason, i) => (
+                          <span key={i} style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033', padding: '2px 8px', borderRadius: '100px' }}>
+                            {reason.reason}
+                          </span>
+                        ))}
+                        <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.06)', color: '#8B7355', padding: '2px 8px', borderRadius: '100px' }}>
+                          {Math.round(rec.match_score * 100)}% match
                         </span>
                       </div>
                     </div>
-                  )})}
-                </div>
-                {isMobile && (
-                  <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', marginTop: '10px' }}>
-                    {topActions.map((_, i) => (
-                      <span key={i} style={{
-                        width: i === 0 ? '18px' : '6px', height: '6px', borderRadius: '3px',
-                        background: i === 0 ? '#5E4530' : '#D4C4B0',
-                        transition: 'all 0.3s ease',
-                      }} />
-                    ))}
+                    <ChevronRight style={{ width: '18px', height: '18px', color: '#B8A089', flexShrink: 0 }} />
                   </div>
-                )}
-              </>)
-            })()}
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section 3: Circles to Join */}
+          {homeCircleRecs.length > 0 && (
+            <div style={{ marginBottom: '24px' }}>
+              <div style={sectionHeaderStyle}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Users style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
+                  Circles to Join
+                </span>
+                <span
+                  onClick={() => handleNavigate('allCircles')}
+                  style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
+                >
+                  See all <ChevronRight style={{ width: '14px', height: '14px' }} />
+                </span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {homeCircleRecs.map((match) => (
+                  <div
+                    key={match.id}
+                    onClick={() => handleNavigate('circleDetail', { circleId: match.circle_id })}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.75)',
+                      backdropFilter: 'blur(10px)',
+                      borderRadius: '16px',
+                      padding: isMobile ? '14px 16px' : '16px 20px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      border: '1px solid rgba(139, 111, 92, 0.1)',
+                      boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '14px',
+                    }}
+                    onMouseEnter={isMobile ? undefined : (e) => {
+                      e.currentTarget.style.transform = 'translateY(-1px)'
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(139, 111, 92, 0.14)'
+                    }}
+                    onMouseLeave={isMobile ? undefined : (e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 2px 12px rgba(139, 111, 92, 0.08)'
+                    }}
+                  >
+                    {/* Circle icon */}
+                    <div style={{
+                      minWidth: '48px', height: '48px',
+                      borderRadius: '14px',
+                      background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Users style={{ width: '22px', height: '22px', color: '#7A5C42' }} />
+                    </div>
+                    {/* Circle info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '16px', fontWeight: '600', color: '#3F1906', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {match.circle?.name || 'Community Circle'}
+                      </p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#6B5344' }}>
+                          {match.circle?.connection_group_members?.[0]?.count || 0} members
+                        </span>
+                        {(match.match_reasons || []).slice(0, 1).map((reason, i) => (
+                          <span key={i} style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033', padding: '2px 8px', borderRadius: '100px' }}>
+                            {reason.reason}
+                          </span>
+                        ))}
+                        <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.06)', color: '#8B7355', padding: '2px 8px', borderRadius: '100px' }}>
+                          {Math.round(match.match_score * 100)}% match
+                        </span>
+                      </div>
+                    </div>
+                    <ChevronRight style={{ width: '18px', height: '18px', color: '#B8A089', flexShrink: 0 }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state when no recommendations exist yet */}
+          {homePeopleRecs.length === 0 && homeEventRecs.length === 0 && homeCircleRecs.length === 0 && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(232, 221, 208, 0.4), rgba(212, 196, 176, 0.25))',
+              borderRadius: '16px',
+              padding: isMobile ? '24px 20px' : '32px',
+              textAlign: 'center',
+              marginBottom: '24px',
+            }}>
+              <Sparkles style={{ width: '28px', height: '28px', color: '#B8A089', marginBottom: '12px' }} />
+              <p style={{ fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '600', color: '#5E4530', margin: '0 0 6px 0' }}>
+                Your recommendations are brewing
+              </p>
+              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', color: '#8B7355', margin: '0 0 16px 0' }}>
+                Attend a meetup or join a circle to unlock personalized suggestions
+              </p>
+              <span
+                onClick={() => setCurrentView('discover')}
+                style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                Explore Circles <ChevronRight style={{ width: '16px', height: '16px' }} />
+              </span>
+            </div>
+          )}
+
+          </>)}
 
         </div>
       </div>
