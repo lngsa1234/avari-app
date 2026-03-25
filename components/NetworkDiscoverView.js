@@ -1654,105 +1654,6 @@ export default function NetworkDiscoverView({
                 </button>
               </div>
 
-              <div
-                onClick={() => onNavigate?.('createCircle')}
-                style={{
-                  background: 'linear-gradient(135deg, #F5EDE4 0%, #EDE3D7 50%, #E8DDD0 100%)',
-                  borderRadius: '16px',
-                  padding: isMobile ? '20px 16px' : '24px',
-                  textAlign: 'center',
-                  cursor: 'pointer',
-                  border: '1px solid #E0D5C7',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  backgroundColor: '#D8CFC6',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: '10px',
-                }}>
-                  <span style={{ fontSize: '18px' }}>✨</span>
-                </div>
-
-                <h3 style={{
-                  fontSize: isMobile ? '17px' : '20px',
-                  fontWeight: '600',
-                  color: '#3E2C1E',
-                  margin: '0 0 6px',
-                  fontFamily: fonts.serif,
-                }}>
-                  Start your own Circle
-                </h3>
-
-                <p style={{
-                  fontSize: isMobile ? '12px' : '13px',
-                  color: '#7A6855',
-                  margin: '0 0 14px',
-                  lineHeight: '1.5',
-                  maxWidth: '300px',
-                  fontStyle: 'italic',
-                }}>
-                  Start a trusted small group of 6-10 women to meet weekly and help each other move forward.
-                </p>
-
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  marginBottom: '16px',
-                  alignItems: 'flex-start',
-                }}>
-                  {['6-10 women per Circle', 'Weekly check-ins', 'Clear next steps'].map((item) => (
-                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      <div style={{
-                        width: '18px',
-                        height: '18px',
-                        borderRadius: '50%',
-                        backgroundColor: '#8B6F5C',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                      }}>
-                        <Check size={10} style={{ color: 'white' }} />
-                      </div>
-                      <span style={{
-                        fontSize: isMobile ? '12px' : '13px',
-                        fontWeight: '500',
-                        color: '#3E2C1E',
-                      }}>
-                        {item}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNavigate?.('createCircle');
-                  }}
-                  style={{
-                    padding: isMobile ? '9px 24px' : '10px 28px',
-                    backgroundColor: '#8B6F5C',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '999px',
-                    fontSize: isMobile ? '13px' : '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                  }}
-                >
-                  Create a circle
-                </button>
-              </div>
             </div>
           );
         }
@@ -1939,20 +1840,6 @@ export default function NetworkDiscoverView({
                           animation: 'slideDown 0.25s ease-out',
                         }}
                       >
-                        {/* Description */}
-                        <p style={{
-                          fontSize: isMobile ? '12px' : '13px',
-                          color: colors.textLight,
-                          margin: '0 0 12px',
-                          lineHeight: '1.5',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                        }}>
-                          {description}
-                        </p>
-
                         {/* Avatar stack + spots */}
                         <div style={{
                           display: 'flex',
