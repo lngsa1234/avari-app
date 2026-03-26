@@ -3565,6 +3565,23 @@ function MainApp({ currentUser, onSignOut }) {
                         </span>
                       </div>
                     )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleNavigate('userProfile', { userId: rec.recommended_user_id }) }}
+                      style={{
+                        marginTop: '4px',
+                        padding: '5px 16px',
+                        background: '#5C4033', color: '#FAF5EF',
+                        border: 'none', borderRadius: '20px',
+                        fontFamily: '"DM Sans", sans-serif',
+                        fontSize: '11px', fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'background 0.15s ease',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#4A3228' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#5C4033' }}
+                    >
+                      Connect
+                    </button>
                   </div>
                   )
                 })}
