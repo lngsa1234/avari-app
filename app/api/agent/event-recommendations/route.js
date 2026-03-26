@@ -81,7 +81,7 @@ export async function GET(request) {
         .in('id', meetupIds);
 
       const { data: attendeeCounts } = await supabase
-        .from('meetup_attendees')
+        .from('meetup_signups')
         .select('meetup_id')
         .in('meetup_id', meetupIds);
 
@@ -93,7 +93,7 @@ export async function GET(request) {
       (meetups || []).forEach(m => {
         meetupMap[m.id] = {
           ...m,
-          meetup_attendees: [{ count: countMap[m.id] || 0 }]
+          meetup_signups: [{ count: countMap[m.id] || 0 }]
         };
       });
     }
@@ -173,7 +173,7 @@ async function generateUserEventRecs(supabase, userId) {
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userId).single(),
 
-    supabase.from('meetup_attendees')
+    supabase.from('meetup_signups')
       .select('meetup_id, meetups(id, title, description)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
@@ -192,7 +192,7 @@ async function generateUserEventRecs(supabase, userId) {
       .select(`
         id, title, description, date, location, is_virtual,
         created_by,
-        meetup_attendees(user_id)
+        meetup_signups(user_id)
       `)
       .gt('date', new Date().toISOString())
       .eq('is_public', true)
@@ -318,7 +318,7 @@ function scoreEvents(profile, events, connectionIds, pastAttendance) {
     }
 
     // 3. Connections attending (weight: up to 0.20)
-    const attendeeIds = (event.meetup_attendees || []).map(a => a.user_id);
+    const attendeeIds = (event.meetup_signups || []).map(a => a.user_id);
     const connectionsAttending = attendeeIds.filter(id => connectionIds.includes(id));
     if (connectionsAttending.length > 0) {
       const connectionScore = Math.min(connectionsAttending.length * 0.08, 0.20);

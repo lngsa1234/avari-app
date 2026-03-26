@@ -140,7 +140,7 @@ async function generateUserNudges(supabase, userId) {
   ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', userId).single(),
 
-    supabase.from('meetup_attendees')
+    supabase.from('meetup_signups')
       .select('meetup_id, created_at, meetups(id, title, date)')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })

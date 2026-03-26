@@ -33,6 +33,7 @@ import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/c
 import NudgeBanner from './NudgeBanner'
 import { ToastContainer, useToast } from './Toast'
 import { parseLocalDate, formatEventTime, isEventPast, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
+import LiveFeed from './LiveFeed'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -576,13 +577,14 @@ function MainApp({ currentUser, onSignOut }) {
 
             // Process people recs
             let peopleRecs = []
+            // Get mutual connections once — shared by AI recs and fallback
+            const { data: mutualMatchesForRecs } = await supabase
+              .rpc('get_mutual_matches', { for_user_id: currentUser.id })
+            const mutualConnectedIds = new Set((mutualMatchesForRecs || []).map(m => m.matched_user_id))
+
             const peopleData = peopleRes.status === 'fulfilled' && !peopleRes.value.error ? peopleRes.value.data : []
             if (peopleData.length > 0) {
-              const { data: existingConn } = await supabase
-                .from('user_interests')
-                .select('interested_in_user_id')
-                .eq('user_id', currentUser.id)
-              const connectedIds = new Set((existingConn || []).map(c => c.interested_in_user_id))
+              const connectedIds = mutualConnectedIds
               const seen = new Set()
               const deduped = peopleData.filter(r => {
                 if (connectedIds.has(r.recommended_user_id)) return false
@@ -598,7 +600,15 @@ function MainApp({ currentUser, onSignOut }) {
                   .in('id', profileIds)
                 const recProfileMap = {}
                 ;(recProfiles || []).forEach(p => { recProfileMap[p.id] = p })
-                peopleRecs = deduped.map(r => ({ ...r, profile: recProfileMap[r.recommended_user_id] || null })).filter(r => r.profile)
+                peopleRecs = deduped.map(r => {
+                  // Build match_reasons from DB fields
+                  const reasons = []
+                  if (r.reason) reasons.push({ reason: r.reason })
+                  if (r.shared_topics?.length > 0) {
+                    r.shared_topics.forEach(t => reasons.push({ reason: t }))
+                  }
+                  return { ...r, match_reasons: reasons, profile: recProfileMap[r.recommended_user_id] || null }
+                }).filter(r => r.profile)
               }
             }
             // People fallback: recently active community members (active in last 30 days)
@@ -615,9 +625,58 @@ function MainApp({ currentUser, onSignOut }) {
                   .order('last_active', { ascending: false })
                   .limit(6)
                 if (communityProfiles?.length > 0) {
-                  peopleRecs = communityProfiles.slice(0, 3).map(p => ({
-                    id: p.id, recommended_user_id: p.id, match_score: 0, match_reasons: [], profile: p,
-                  }))
+                  // Fetch industry/hook for tags
+                  const fallbackIds = communityProfiles.filter(p => !mutualConnectedIds.has(p.id)).map(p => p.id)
+                  let extraFields = {}
+                  if (fallbackIds.length > 0) {
+                    const { data: extraProfiles } = await supabase
+                      .from('profiles')
+                      .select('id, industry, hook, city, state')
+                      .in('id', fallbackIds)
+                    ;(extraProfiles || []).forEach(p => { extraFields[p.id] = p })
+                  }
+                  // Detect career/role similarity
+                  const myCareer = (currentUser.career || '').toLowerCase()
+                  const myIndustry = (currentUser.industry || '').toLowerCase()
+                  const careerKeywords = myCareer.split(/[\s,\/]+/).filter(w => w.length > 2)
+                  peopleRecs = communityProfiles
+                    .filter(p => !mutualConnectedIds.has(p.id))
+                    .map(p => {
+                      const extra = extraFields[p.id] || {}
+                      const reasons = []
+                      let score = 0
+
+                      // Career similarity
+                      const theirCareer = (p.career || '').toLowerCase()
+                      const hasSimilarRole = careerKeywords.some(kw => theirCareer.includes(kw))
+                      if (hasSimilarRole) {
+                        reasons.push({ reason: 'Similar role' })
+                        score += 2
+                      }
+
+                      // Industry match
+                      if (extra.industry) {
+                        if (myIndustry && extra.industry.toLowerCase().includes(myIndustry)) {
+                          reasons.push({ reason: `Same industry: ${extra.industry}` })
+                          score += 2
+                        } else {
+                          reasons.push({ reason: extra.industry })
+                        }
+                      }
+
+                      if (extra.hook) reasons.push({ reason: `Ask me about: ${extra.hook}` })
+                      // Only show location if it matches current user's location or there are other reasons
+                      const myCity = (currentUser.city || '').toLowerCase()
+                      if (extra.city && myCity && extra.city.toLowerCase() === myCity) {
+                        reasons.push({ reason: `Same city: ${extra.city}` })
+                        score += 1
+                      }
+
+                      return { id: p.id, recommended_user_id: p.id, match_score: score, match_reasons: reasons, profile: p }
+                    })
+                    .filter(r => r.match_reasons.length > 0)
+                    .sort((a, b) => b.match_score - a.match_score)
+                    .slice(0, 3)
                 }
               } catch (e) { console.error('[HomeRecs] People fallback:', e) }
             }
@@ -636,6 +695,39 @@ function MainApp({ currentUser, onSignOut }) {
                   .map(p => p.id)
               )
               peopleRecs = peopleRecs.filter(r => activeIds.has(r.profile?.id || r.recommended_user_id))
+            }
+
+            // Compute shared meetup counts for people recs
+            if (peopleRecs.length > 0) {
+              try {
+                // Get all meetups Admin signed up for
+                const { data: mySignups } = await supabase
+                  .from('meetup_signups')
+                  .select('meetup_id')
+                  .eq('user_id', currentUser.id)
+                const myMeetupIds = (mySignups || []).map(s => s.meetup_id)
+
+                if (myMeetupIds.length > 0) {
+                  const recUserIds = peopleRecs.map(r => r.recommended_user_id)
+                  // Get signups for recommended users in the same meetups
+                  const { data: theirSignups } = await supabase
+                    .from('meetup_signups')
+                    .select('user_id, meetup_id')
+                    .in('meetup_id', myMeetupIds)
+                    .in('user_id', recUserIds)
+
+                  // Count shared meetups per user
+                  const sharedCounts = {}
+                  ;(theirSignups || []).forEach(s => {
+                    sharedCounts[s.user_id] = (sharedCounts[s.user_id] || 0) + 1
+                  })
+
+                  peopleRecs = peopleRecs.map(r => ({
+                    ...r,
+                    sharedMeetups: sharedCounts[r.recommended_user_id] || 0,
+                  }))
+                }
+              } catch (e) { console.error('[HomeRecs] Shared meetups:', e) }
             }
 
             setHomeEventRecs(eventRecs)
@@ -3241,14 +3333,6 @@ function MainApp({ currentUser, onSignOut }) {
                                 Live
                               </span>
                             )}
-                            {meetup.connection_groups?.name && (
-                              <>
-                                <span style={{ width: '1px', height: '14px', background: '#D4B896', flexShrink: 0 }} />
-                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#6B4632', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {meetup.connection_groups.name}
-                                </span>
-                              </>
-                            )}
                           </div>
 
                           <h4 style={{
@@ -3374,11 +3458,13 @@ function MainApp({ currentUser, onSignOut }) {
             </div>
 
 
-          {/* === Three Recommendation Sections === */}
+          {/* === Recommendation Sections === */}
           {!homeRecsLoaded ? null : (<>
 
           {/* Section 1: People to Meet */}
-          {homePeopleRecs.length > 0 && (
+          {(() => {
+            const filteredPeopleRecs = homePeopleRecs
+            return filteredPeopleRecs.length > 0 && (
             <div style={{ marginBottom: '24px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3401,9 +3487,10 @@ function MainApp({ currentUser, onSignOut }) {
                 msOverflowStyle: 'none',
                 WebkitOverflowScrolling: 'touch',
                 paddingBottom: '4px',
-                ...(isMobile ? {} : { display: 'grid', gridTemplateColumns: `repeat(${Math.min(homePeopleRecs.length, 3)}, 1fr)` }),
+                ...(isMobile ? {} : { display: 'grid', gridTemplateColumns: `repeat(${Math.min(filteredPeopleRecs.length, 3)}, 1fr)` }),
               }}>
-                {homePeopleRecs.map((rec) => (
+                {filteredPeopleRecs.map((rec) => {
+                  return (
                   <div
                     key={rec.id}
                     onClick={() => handleNavigate('userProfile', { userId: rec.recommended_user_id })}
@@ -3452,111 +3539,41 @@ function MainApp({ currentUser, onSignOut }) {
                         {rec.profile?.career || 'Community member'}
                       </p>
                     </div>
-                    {rec.match_reasons?.length > 0 && (
-                      <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033', padding: '3px 10px', borderRadius: '100px', whiteSpace: 'nowrap' }}>
-                        {rec.match_reasons[0].reason || `${Math.round(rec.match_score * 100)}% match`}
-                      </span>
-                    )}
-                    {!rec.match_reasons?.length && rec.match_score > 0 && (
-                      <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.08)', color: '#8B7355', padding: '3px 10px', borderRadius: '100px' }}>
-                        {Math.round(rec.match_score * 100)}% match
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Section 2: Events for You */}
-          {homeEventRecs.length > 0 && (
-            <div style={{ marginBottom: '24px' }}>
-              <div style={sectionHeaderStyle}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Calendar style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
-                  Events for You
-                </span>
-                <span
-                  onClick={() => handleNavigate('allEvents')}
-                  style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
-                >
-                  See all <ChevronRight style={{ width: '14px', height: '14px' }} />
-                </span>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {homeEventRecs.map((rec) => (
-                  <div
-                    key={rec.id}
-                    onClick={() => handleNavigate('meetupDetail', { meetupId: rec.meetup_id })}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.75)',
-                      backdropFilter: 'blur(10px)',
-                      borderRadius: '16px',
-                      padding: isMobile ? '14px 16px' : '16px 20px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      border: '1px solid rgba(139, 111, 92, 0.1)',
-                      boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                    }}
-                    onMouseEnter={isMobile ? undefined : (e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(139, 111, 92, 0.14)'
-                    }}
-                    onMouseLeave={isMobile ? undefined : (e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.boxShadow = '0 2px 12px rgba(139, 111, 92, 0.08)'
-                    }}
-                  >
-                    {/* Date badge */}
-                    <div style={{
-                      minWidth: '52px',
-                      padding: '10px 8px',
-                      backgroundColor: 'rgba(168, 132, 98, 0.12)',
-                      borderRadius: '10px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                    }}>
-                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '10px', fontWeight: '600', color: '#8B6F5C', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        {rec.meetup?.date ? parseLocalDate(rec.meetup.date).toLocaleDateString('en-US', { month: 'short' }).toUpperCase() : ''}
-                      </span>
-                      <span style={{ fontFamily: '"Lora", serif', fontSize: '20px', fontWeight: '600', color: '#5E4530' }}>
-                        {rec.meetup?.date ? parseLocalDate(rec.meetup.date).getDate() : ''}
-                      </span>
-                    </div>
-                    {/* Event info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '16px', fontWeight: '600', color: '#3F1906', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {rec.meetup?.topic || 'Community Event'}
-                      </p>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                        {rec.meetup?.time && (
-                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#6B5344', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <Clock style={{ width: '12px', height: '12px' }} />
-                            {(() => { const [h, m] = rec.meetup.time.split(':'); const d = new Date(); d.setHours(parseInt(h), parseInt(m)); return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); })()}
-                          </span>
-                        )}
-                        {(rec.match_reasons || []).slice(0, 1).map((reason, i) => (
-                          <span key={i} style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033', padding: '2px 8px', borderRadius: '100px' }}>
-                            {reason.reason}
+                    {rec.match_reasons?.length > 0 ? (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
+                        {rec.match_reasons.slice(0, 3).map((r, i) => (
+                          <span key={i} style={{
+                            fontFamily: '"DM Sans", sans-serif',
+                            fontSize: '10px', fontWeight: 500,
+                            backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033',
+                            padding: '2px 8px', borderRadius: '100px',
+                          }}>
+                            {r.reason}
                           </span>
                         ))}
-                        <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.06)', color: '#8B7355', padding: '2px 8px', borderRadius: '100px' }}>
-                          {Math.round(rec.match_score * 100)}% match
+                      </div>
+                    ) : rec.match_score > 0 ? (
+                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.08)', color: '#8B7355', padding: '3px 10px', borderRadius: '100px' }}>
+                        {Math.round(rec.match_score * 100)}% match
+                      </span>
+                    ) : null}
+                    {rec.sharedMeetups > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                        <Users style={{ width: '12px', height: '12px', color: '#A89080' }} />
+                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '10px', color: '#A89080' }}>
+                          {rec.sharedMeetups} shared {rec.sharedMeetups === 1 ? 'meetup' : 'meetups'}
                         </span>
                       </div>
-                    </div>
-                    <ChevronRight style={{ width: '18px', height: '18px', color: '#B8A089', flexShrink: 0 }} />
+                    )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
-          )}
+          )
+          })()}
 
-          {/* Section 3: Circles to Join */}
+          {/* Section 2: Circles to Join */}
           {homeCircleRecs.length > 0 && (
             <div style={{ marginBottom: '24px' }}>
               <div style={sectionHeaderStyle}>
@@ -3636,7 +3653,7 @@ function MainApp({ currentUser, onSignOut }) {
           )}
 
           {/* Empty state when no recommendations exist yet */}
-          {homePeopleRecs.length === 0 && homeEventRecs.length === 0 && homeCircleRecs.length === 0 && (
+          {homePeopleRecs.length === 0 && homeCircleRecs.length === 0 && (
             <div style={{
               background: 'linear-gradient(135deg, rgba(232, 221, 208, 0.4), rgba(212, 196, 176, 0.25))',
               borderRadius: '16px',
@@ -3661,6 +3678,22 @@ function MainApp({ currentUser, onSignOut }) {
           )}
 
           </>)}
+
+          {/* === Live Feed === */}
+          <div style={{ marginTop: '8px' }}>
+            <LiveFeed
+              currentUserId={currentUser.id}
+              onCtaClick={(event) => {
+                if (event.event_type === 'coffee_available' || event.event_type === 'member_joined') {
+                  handleNavigate('userProfile', { userId: event.actor?.id })
+                } else if (event.event_type === 'circle_join' || event.event_type === 'circle_schedule') {
+                  handleNavigate('circleDetail', { circleId: event.circle_id || event.circle?.id })
+                } else if (event.event_type === 'community_event') {
+                  handleNavigate('eventDetail', { meetupId: event.metadata?.meetup_id })
+                }
+              }}
+            />
+          </div>
 
         </div>
       </div>

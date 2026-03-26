@@ -79,7 +79,7 @@ export default function EventRecommendations({
 
         // Fetch attendee counts
         const { data: attendeeCounts } = await supabase
-          .from('meetup_attendees')
+          .from('meetup_signups')
           .select('meetup_id')
           .in('meetup_id', meetupIds);
 
@@ -93,7 +93,7 @@ export default function EventRecommendations({
         (meetups || []).forEach(m => {
           meetupMap[m.id] = {
             ...m,
-            meetup_attendees: [{ count: countMap[m.id] || 0 }]
+            meetup_signups: [{ count: countMap[m.id] || 0 }]
           };
         });
       }
@@ -153,7 +153,7 @@ export default function EventRecommendations({
       if (!user) return;
 
       const { error: attendeeError } = await supabase
-        .from('meetup_attendees')
+        .from('meetup_signups')
         .upsert({
           meetup_id: rec.meetup_id,
           user_id: user.id,
@@ -379,7 +379,7 @@ export default function EventRecommendations({
                   )}
                   <span style={styles.eventMeta}>
                     <Users size={14} />
-                    {rec.meetup?.meetup_attendees?.[0]?.count || 0} attending
+                    {rec.meetup?.meetup_signups?.[0]?.count || 0} attending
                   </span>
                 </div>
 

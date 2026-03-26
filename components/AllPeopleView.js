@@ -159,7 +159,7 @@ export default function AllPeopleView({
 
       // Fetch meetup attendance counts per user
       const { data: attendeeData } = await supabase
-        .from('meetup_attendees')
+        .from('meetup_signups')
         .select('user_id')
         .in('user_id', profileIds);
       const userMeetupCount = {};
