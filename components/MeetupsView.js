@@ -1183,14 +1183,14 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                     return;
                   }
                 }} style={{
-                  display: 'flex', alignItems: 'center',
-                  padding: isMobile ? '14px 16px' : '18px 22px',
-                  borderRadius: '16px',
+                  display: 'flex', alignItems: isMobile ? 'flex-start' : 'center',
+                  padding: isMobile ? '12px 14px' : '18px 22px',
+                  borderRadius: isMobile ? '14px' : '16px',
                   background: isToday
                     ? 'linear-gradient(135deg, #7A5C42 0%, #9B7A5C 50%, #8B6B4F 100%)'
                     : '#FFFBF7',
                   border: isToday ? 'none' : '1px solid rgba(180, 160, 137, 0.12)',
-                  marginBottom: '8px',
+                  marginBottom: isMobile ? '6px' : '8px',
                   cursor: 'pointer',
                   transition: 'all 0.2s ease',
                 }}
@@ -1206,9 +1206,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                 }}>
                   {/* Time column with host avatar */}
                   <div style={{
-                    minWidth: isMobile ? '65px' : '80px', flexShrink: 0,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
-                    paddingRight: isMobile ? '12px' : '18px',
+                    minWidth: isMobile ? '52px' : '80px', flexShrink: 0,
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: isMobile ? '3px' : '4px',
+                    paddingRight: isMobile ? '10px' : '18px',
                     borderRight: isToday
                       ? '1px solid rgba(255,255,255,0.2)'
                       : '1px solid rgba(180, 160, 137, 0.15)',
@@ -1217,17 +1217,18 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                     {(() => {
                       const avatarSrc = isCoffee ? (item.requester_id === currentUser.id ? currentUser.profile_picture : coffeeAvatar?.profile_picture) : item.hostProfile?.profile_picture;
                       const avatarName = isCoffee ? (item.requester_id === currentUser.id ? (currentUser.name || '?') : (coffeeAvatar?.name || '?')) : (item.host || '?');
+                      const avatarSize = isMobile ? 32 : 40;
                       return avatarSrc ? (
                         <img src={avatarSrc} alt="" style={{
-                          width: 40, height: 40, borderRadius: '50%', objectFit: 'cover',
+                          width: avatarSize, height: avatarSize, borderRadius: '50%', objectFit: 'cover',
                           border: `2px solid ${isToday ? 'rgba(255,255,255,0.3)' : 'rgba(180, 160, 137, 0.2)'}`,
                         }} />
                       ) : (
                         <div style={{
-                          width: 40, height: 40, borderRadius: '50%',
+                          width: avatarSize, height: avatarSize, borderRadius: '50%',
                           background: isToday ? 'rgba(255,255,255,0.2)' : '#C4A97D',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '15px', fontWeight: 600, color: '#FFF',
+                          fontSize: isMobile ? '12px' : '15px', fontWeight: 600, color: '#FFF',
                           border: `2px solid ${isToday ? 'rgba(255,255,255,0.3)' : 'rgba(180, 160, 137, 0.2)'}`,
                         }}>
                           {avatarName[0].toUpperCase()}
@@ -1235,21 +1236,21 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       );
                     })()}
                     <span style={{
-                      fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '14px' : '15px', fontWeight: '700',
-                      color: isToday ? '#FFF' : '#5C4033',
+                      fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '15px', fontWeight: '700',
+                      color: isToday ? '#FFF' : '#5C4033', textAlign: 'center', lineHeight: 1.2,
                     }}>
                       {time || 'TBD'}
                     </span>
                   </div>
 
                   {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0, paddingLeft: isMobile ? '12px' : '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingLeft: isMobile ? '10px' : '18px', display: 'flex', flexDirection: 'column', gap: isMobile ? '3px' : '4px' }}>
                     {/* Tags row: Category + Vibe + Topic + Format */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '5px', flexWrap: 'wrap' }}>
                       {/* Category tag (1:1 / Circle / Event) */}
                       <span style={{
-                        fontSize: '10px', fontWeight: '700',
-                        padding: '3px 9px', borderRadius: '6px',
+                        fontSize: isMobile ? '9px' : '10px', fontWeight: '700',
+                        padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                         background: isToday ? 'rgba(255,255,255,0.2)' : (categoryColors[categoryTag]?.bg || 'rgba(139, 111, 71, 0.12)'),
                         color: isToday ? 'rgba(255,255,255,0.9)' : (categoryColors[categoryTag]?.color || '#7A5C42'),
                         letterSpacing: '0.3px', textTransform: 'uppercase',
@@ -1260,7 +1261,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       {/* Vibe tag (Advice / Vent / Grow) */}
                       {vibe && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
+                          fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : vibe.bg,
                           color: isToday ? 'rgba(255,255,255,0.8)' : vibe.color,
                           fontFamily: '"DM Sans", sans-serif',
@@ -1271,7 +1272,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       {/* Topic tag (AI & Tech, Career, etc.) */}
                       {topicTag && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
+                          fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.12)' : 'rgba(201, 169, 110, 0.12)',
                           color: isToday ? 'rgba(255,255,255,0.7)' : '#8B7355',
                           fontFamily: '"DM Sans", sans-serif',
@@ -1282,7 +1283,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       {/* Format tag (In-Person / Hybrid) */}
                       {!isCoffee && item.meeting_format && item.meeting_format !== 'virtual' && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
+                          fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : (item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4'),
                           color: isToday ? 'rgba(255,255,255,0.8)' : (item.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46'),
                           fontFamily: '"DM Sans", sans-serif',
@@ -1293,7 +1294,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       {/* Pending status for coffee chats */}
                       {isCoffee && item.isPending && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
+                          fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : 'rgba(196, 149, 106, 0.2)',
                           color: isToday ? 'rgba(255,255,255,0.8)' : '#8B6F5C',
                           fontFamily: '"DM Sans", sans-serif',
@@ -1311,10 +1312,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       {title}
                     </h4>
 
-                    {/* Description */}
-                    {item.description && (
+                    {/* Description - hidden on mobile */}
+                    {!isMobile && item.description && (
                       <p style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px', fontWeight: '400',
+                        fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '400',
                         color: isToday ? 'rgba(255,255,255,0.55)' : '#A89080',
                         margin: 0, lineHeight: 1.4,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -1324,12 +1325,12 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                     )}
 
                     {/* Participant avatars + count */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '6px', marginTop: '2px' }}>
                       {attendees.length > 0 && (
                         <span style={{ display: 'flex', alignItems: 'center' }}>
-                          {attendees.slice(0, 3).map((a, idx) => (
+                          {attendees.slice(0, isMobile ? 2 : 3).map((a, idx) => (
                             <span key={a.id || idx} style={{
-                              width: 22, height: 22, borderRadius: '50%',
+                              width: isMobile ? 18 : 22, height: isMobile ? 18 : 22, borderRadius: '50%',
                               border: `1.5px solid ${isToday ? 'rgba(122,92,66,0.8)' : '#FFFBF7'}`,
                               marginLeft: idx > 0 ? -6 : 0,
                               overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1361,7 +1362,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         </span>
                       )}
                       <span style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
+                        fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '13px', fontWeight: '500',
                         color: isToday ? 'rgba(255,255,255,0.55)' : '#C4956A',
                       }}>
                         {isCoffee
@@ -1402,46 +1403,46 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   </div>
 
                   {/* Action button */}
-                  <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingLeft: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, paddingLeft: isMobile ? '8px' : '12px' }}>
                     {isCoffee ? (
                       item.isInviteReceived ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                           <button onClick={(e) => { e.stopPropagation(); handleAcceptChat(item); }} style={{
                             background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                             color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                            padding: '9px 18px', borderRadius: '14px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                            padding: isMobile ? '7px 14px' : '9px 18px', borderRadius: isMobile ? '10px' : '14px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
                             cursor: 'pointer', whiteSpace: 'nowrap',
                           }}>Accept</button>
                           <button onClick={(e) => { e.stopPropagation(); handleDeclineChat(item); }} style={{
                             background: 'none', color: isToday ? 'rgba(255,255,255,0.5)' : '#9B8A7E',
                             border: isToday ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(139,111,92,0.2)',
-                            padding: '7px 14px', borderRadius: '14px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
+                            padding: isMobile ? '5px 10px' : '7px 14px', borderRadius: isMobile ? '10px' : '14px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', fontWeight: '500',
                             cursor: 'pointer', whiteSpace: 'nowrap',
                           }}>Decline</button>
                         </div>
                       ) : item.isPending ? (
                         <span style={{
-                          fontSize: '11px', fontWeight: '600',
+                          fontSize: isMobile ? '10px' : '11px', fontWeight: '600',
                           color: isToday ? 'rgba(255,255,255,0.7)' : '#8B6F5C',
                           fontFamily: '"DM Sans", sans-serif',
-                          padding: '8px 14px', borderRadius: '12px',
+                          padding: isMobile ? '6px 10px' : '8px 14px', borderRadius: isMobile ? '10px' : '12px',
                           background: isToday ? 'rgba(255,255,255,0.12)' : 'rgba(196, 149, 106, 0.15)',
-                          display: 'inline-flex', alignItems: 'center', gap: '5px',
+                          display: 'inline-flex', alignItems: 'center', gap: isMobile ? '3px' : '5px',
                           letterSpacing: '0.2px', whiteSpace: 'nowrap',
                         }}>
-                          <Clock size={12} />
-                          Awaiting response
+                          <Clock size={isMobile ? 10 : 12} />
+                          {isMobile ? 'Awaiting' : 'Awaiting response'}
                         </span>
                       ) : (
                         <button onClick={(e) => { e.stopPropagation(); handleJoinCall(item); }} style={{
                           background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                           color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                          padding: '10px 22px', borderRadius: '14px',
-                          fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                          padding: isMobile ? '8px 14px' : '10px 22px', borderRadius: isMobile ? '10px' : '14px',
+                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
                           cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                          gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
+                          gap: isMobile ? '5px' : '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
                         }}
                         onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
@@ -1454,20 +1455,20 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       (item.status === 'going' || item.isCircleMeetup) ? (
                         item.meeting_format === 'in_person' ? (
                           <span style={{
-                            fontSize: '13px', fontWeight: '600',
+                            fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
                             color: isToday ? 'rgba(255,255,255,0.8)' : '#4E6B46',
                             fontFamily: '"DM Sans", sans-serif',
-                            padding: '10px 18px', borderRadius: '14px',
+                            padding: isMobile ? '7px 12px' : '10px 18px', borderRadius: isMobile ? '10px' : '14px',
                             backgroundColor: isToday ? 'rgba(255,255,255,0.15)' : '#E8F0E4',
                           }}>Going</span>
                         ) : (
                           <button onClick={(e) => { e.stopPropagation(); handleJoinCall(item); }} style={{
                             background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                             color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                            padding: '10px 22px', borderRadius: '14px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                            padding: isMobile ? '8px 14px' : '10px 22px', borderRadius: isMobile ? '10px' : '14px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
                             cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                            gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
+                            gap: isMobile ? '5px' : '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
                           }}
                           onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
@@ -1480,10 +1481,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         <button onClick={(e) => { e.stopPropagation(); handleRsvpMeetup(item); }} style={{
                           background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                           color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
-                          padding: '10px 22px', borderRadius: '14px',
-                          fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '700',
+                          padding: isMobile ? '8px 14px' : '10px 22px', borderRadius: isMobile ? '10px' : '14px',
+                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
                           cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
-                          gap: '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
+                          gap: isMobile ? '5px' : '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
                         }}
                         onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.03)'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
