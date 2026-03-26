@@ -102,11 +102,9 @@ const EVENT_CONFIG = {
   },
   community_event: {
     typeLabel: 'Community event',
-    getHeadline: (e) => `${firstName(e.actor)} created a community event`,
+    getHeadline: (e) => `${firstName(e.actor)} hosts ${e.metadata?.title || 'a community event'}`,
     getSubline: (e) => {
-      const title = e.metadata?.title
       const parts = []
-      if (title) parts.push(title)
       const d = e.metadata?.date
       const t = e.metadata?.time
       if (d && t) {
