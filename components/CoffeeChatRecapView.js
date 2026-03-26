@@ -391,12 +391,20 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
           if (response.ok) {
             const summaryData = await response.json();
             const aiSummaryJson = JSON.stringify(summaryData);
-            await supabase
-              .from('call_recaps')
-              .update({ ai_summary: aiSummaryJson })
-              .eq('id', data.id);
+            // Save via server-side API to bypass RLS
+            const saveResponse = await fetch('/api/save-recap-summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recapId: data.id, aiSummary: aiSummaryJson })
+            });
+            if (!saveResponse.ok) {
+              console.error('[RecapDetail] Failed to save AI summary:', await saveResponse.text());
+            } else {
+              console.log('[RecapDetail] AI summary generated and saved');
+            }
             setParsed(parseAISummary(aiSummaryJson));
-            console.log('[RecapDetail] Lazy AI summary generated and saved');
+          } else {
+            console.error('[RecapDetail] AI generation API failed:', response.status, await response.text());
           }
         } catch (genErr) {
           console.error('[RecapDetail] Lazy generation failed:', genErr);

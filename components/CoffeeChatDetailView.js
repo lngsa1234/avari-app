@@ -434,13 +434,14 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
             if (response.ok) {
               const summaryData = await response.json();
               const aiSummaryJson = JSON.stringify(summaryData);
-              await sb
-                .from('call_recaps')
-                .update({ ai_summary: aiSummaryJson })
-                .eq('id', recapRecord.id);
+              await fetch('/api/save-recap-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recapId: recapRecord.id, aiSummary: aiSummaryJson })
+              });
               setParsed(parseAISummary(aiSummaryJson));
               setRecap(prev => ({ ...prev, ai_summary: aiSummaryJson }));
-              console.log('[EventDetail] Lazy AI summary generated and saved');
+              console.log('[EventDetail] AI summary generated and saved');
             }
           } catch (genErr) {
             console.error('[EventDetail] Lazy generation failed:', genErr);

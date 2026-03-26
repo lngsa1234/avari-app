@@ -2082,9 +2082,10 @@ export default function UnifiedCallPage() {
     const schedTime = relatedData?.time || relatedData?.meetupTime || null;
     const schedDuration = relatedData?.duration || relatedData?.meetupDuration || null;
 
-    // Step 5: Save this user's transcript to the recap (no AI summary yet)
+    // Step 5: Save this user's transcript to the recap
+    let savedRecap = null;
     try {
-      await saveCallRecap({
+      savedRecap = await saveCallRecap({
         channelName: roomId,
         callType: config.internalType,
         provider: config.provider,
@@ -2104,9 +2105,35 @@ export default function UnifiedCallPage() {
       console.error('[UnifiedCall] Failed to save transcript:', saveErr);
     }
 
-    // Step 6: If last person, generate AI recap from combined transcripts
-    if (isLastPerson && (currentTranscript.length > 0 || currentMessages.length > 0)) {
-      console.log('[UnifiedCall] Last person left — generating AI recap');
+    // Step 6: Show recap screen immediately, generate AI summary in background
+    const callDuration = startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0;
+
+    setRecapData({
+      startedAt: startTime,
+      endedAt: endTime,
+      duration: callDuration,
+      participants: allParticipants,
+    });
+
+    // If recap already has an AI summary (generated recently), use it immediately
+    if (savedRecap?.ai_summary) {
+      try {
+        setAiSummary(JSON.parse(savedRecap.ai_summary));
+      } catch { /* ignore parse error */ }
+    } else {
+      setLoadingSummary(true);
+    }
+
+    setShowRecap(true);
+    setIsLeaving(false);
+
+    // Generate AI recap in background if needed
+    const hasContent = currentTranscript.length > 0 || currentMessages.length > 0;
+    const recentlySummarized = savedRecap?.ai_summary && savedRecap?.updated_at &&
+      (Date.now() - new Date(savedRecap.updated_at).getTime() < 2 * 60 * 1000);
+
+    if (hasContent && !recentlySummarized) {
+      console.log('[UnifiedCall] Generating AI recap in background...');
 
       // Fetch combined transcript from all participants
       let combinedTranscript = currentTranscript;
@@ -2136,9 +2163,8 @@ export default function UnifiedCallPage() {
         console.warn('[UnifiedCall] Failed to fetch combined transcript, using local:', fetchErr);
       }
 
-      // Generate AI summary
+      // Generate AI summary and save via server API (bypasses RLS)
       try {
-        const duration = startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0;
         const response = await fetch('/api/generate-recap-summary', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2146,7 +2172,7 @@ export default function UnifiedCallPage() {
             transcript: combinedTranscript,
             messages: currentMessages,
             participants: allParticipants.map(p => p.name || p.email?.split('@')[0]),
-            duration,
+            duration: callDuration,
             meetingTitle: relatedData?.topic || relatedData?.name || config.ui.title,
             meetingType: callType === 'coffee' ? '1:1 coffee chat' : callType === 'meetup' ? 'group meetup' : 'circle meeting'
           })
@@ -2154,34 +2180,26 @@ export default function UnifiedCallPage() {
 
         if (response.ok) {
           const summaryData = await response.json();
+          setAiSummary(summaryData);
+          setLoadingSummary(false);
 
-          // Store as JSON string so SessionRecapDetailView can parse all fields
-          const aiSummaryJson = JSON.stringify(summaryData);
-
-          // Save recap WITH AI summary
-          try {
-            await saveCallRecap({
-              channelName: roomId,
-              callType: config.internalType,
-              provider: config.provider,
-              startedAt: startTime,
-              endedAt: endTime,
-              participants: allParticipants,
-              transcript: combinedTranscript,
-              aiSummary: aiSummaryJson,
-              metrics: {},
-              userId: user?.id,
-              scheduledDate: schedDate,
-              scheduledTime: schedTime,
-              scheduledDuration: schedDuration,
-            });
-            console.log('[UnifiedCall] AI recap saved to database');
-          } catch (saveErr) {
-            console.error('[UnifiedCall] Failed to save AI recap:', saveErr);
+          // Persist to database
+          const recapId = savedRecap?.id;
+          if (recapId) {
+            const aiSummaryJson = JSON.stringify(summaryData);
+            fetch('/api/save-recap-summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recapId, aiSummary: aiSummaryJson })
+            }).then(() => console.log('[UnifiedCall] AI recap saved to database'))
+              .catch(err => console.error('[UnifiedCall] Failed to save AI recap:', err));
           }
+        } else {
+          setLoadingSummary(false);
         }
       } catch (err) {
         console.error('[UnifiedCall] Failed to generate AI summary:', err);
+        setLoadingSummary(false);
       }
 
       // Clean up raw transcripts from call_transcripts table
@@ -2198,11 +2216,12 @@ export default function UnifiedCallPage() {
       } catch (cleanupErr) {
         console.warn('[UnifiedCall] Failed to clean up transcripts:', cleanupErr);
       }
+    } else {
+      setLoadingSummary(false);
+      if (recentlySummarized) {
+        console.log('[UnifiedCall] AI recap exists and was generated recently — skipping regeneration');
+      }
     }
-
-    // Step 7: Navigate back (no recap screen shown — recap is on the event page)
-    setIsLeaving(false);
-    router.push('/');
   };
 
   const handleRecapClose = () => {
