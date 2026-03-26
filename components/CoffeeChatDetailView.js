@@ -181,7 +181,7 @@ function formatDuration(seconds) {
   return `${mins}m`;
 }
 
-export default function CoffeeChatDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, previousView, onMeetupChanged, toast }) {
+export default function CoffeeChatDetailView({ currentUser, supabase: supabaseProp, onNavigate, meetupId, meetupCategory, previousView, onMeetupChanged, toast }) {
   const sb = supabaseProp || supabase;
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 640;
@@ -271,7 +271,63 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
     try {
       setLoading(true);
 
-      // Fetch meetup with host profile and circle info
+      // 1:1 coffee chat — load from coffee_chats table
+      if (meetupCategory === 'coffee') {
+        const { data: chatData, error: chatError } = await sb
+          .from('coffee_chats')
+          .select('*')
+          .eq('id', meetupId)
+          .single();
+
+        if (chatError) throw chatError;
+
+        // Fetch both participant profiles
+        const participantIds = [chatData.requester_id, chatData.recipient_id];
+        const { data: profiles } = await sb
+          .from('profiles')
+          .select('id, name, profile_picture, career')
+          .in('id', participantIds);
+
+        const requesterProfile = (profiles || []).find(p => p.id === chatData.requester_id);
+        const recipientProfile = (profiles || []).find(p => p.id === chatData.recipient_id);
+        const otherPerson = chatData.requester_id === currentUser.id ? recipientProfile : requesterProfile;
+
+        // Normalize coffee chat to meetup shape
+        const scheduledTime = chatData.scheduled_time ? new Date(chatData.scheduled_time) : null;
+        const normalizedMeetup = {
+          id: chatData.id,
+          _isCoffeeChat: true,
+          _coffeeChatData: chatData,
+          topic: chatData.topic || `Coffee Chat with ${otherPerson?.name || 'Unknown'}`,
+          description: chatData.notes || null,
+          date: scheduledTime ? scheduledTime.toISOString().split('T')[0] : null,
+          time: scheduledTime ? scheduledTime.toTimeString().slice(0, 5) : null,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          duration: String(chatData.duration || 30),
+          location: 'Virtual',
+          meeting_format: 'virtual',
+          status: chatData.status,
+          created_by: chatData.requester_id,
+          created_at: chatData.created_at,
+          circle_id: null,
+        };
+
+        setMeetup(normalizedMeetup);
+        setHost(requesterProfile);
+
+        const attendeesData = (profiles || []).map(p => ({
+          user_id: p.id,
+          signup_type: 'video',
+          profiles: p,
+        }));
+        setAttendees(attendeesData);
+        setAttendeeCounts({ in_person: 0, video: attendeesData.length });
+        setIsSignedUp(true);
+        setLoading(false);
+        return;
+      }
+
+      // Circle or community event — load from meetups table
       const { data: meetupData, error: meetupError } = await sb
         .from('meetups')
         .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture, career)')
@@ -516,8 +572,10 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
   function handleCancelEvent() {
     setConfirmAction({
       type: 'cancelEvent',
-      title: 'Cancel Event',
-      message: 'Are you sure you want to cancel this event? This will remove it for all attendees.',
+      title: meetup?._isCoffeeChat ? 'Cancel Coffee Chat' : 'Cancel Event',
+      message: meetup?._isCoffeeChat
+        ? 'Are you sure you want to cancel this coffee chat?'
+        : 'Are you sure you want to cancel this event? This will remove it for all attendees.',
     });
   }
 
@@ -548,11 +606,12 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
     } else if (action.type === 'cancelEvent') {
       try {
         setActionLoading(true);
-        const { error } = await sb.from('meetups')
+        const table = meetup?._isCoffeeChat ? 'coffee_chats' : 'meetups';
+        const { error } = await sb.from(table)
           .update({ status: 'cancelled', updated_at: new Date().toISOString() })
           .eq('id', meetupId);
         if (error) {
-          toast?.error('Error canceling event: ' + error.message);
+          toast?.error('Error canceling: ' + error.message);
         } else {
           await onMeetupChanged?.();
           onNavigate?.(previousView || 'meetups');
@@ -568,7 +627,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
   function startEdit(field) {
     setEditing(field);
     if (field === 'time') {
-      setEditValues({ date: meetup.date, time: meetup.time || '' });
+      setEditValues({ date: meetup.date, time: meetup.time || '', duration: parseInt(meetup.duration || '60') });
     } else if (field === 'location') {
       setEditValues({ location: meetup.location || '' });
     } else if (field === 'description') {
@@ -579,20 +638,40 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
   async function saveEdit() {
     setSaving(true);
     try {
+      const isCoffee = meetup?._isCoffeeChat;
       const updates = { updated_at: new Date().toISOString() };
       if (editing === 'time') {
-        updates.date = editValues.date;
-        updates.time = editValues.time;
+        if (isCoffee) {
+          updates.scheduled_time = new Date(`${editValues.date}T${editValues.time}`).toISOString();
+        } else {
+          updates.date = editValues.date;
+          updates.time = editValues.time;
+        }
+        if (editValues.duration) {
+          updates.duration = editValues.duration;
+        }
       } else if (editing === 'location') {
         updates.location = editValues.location;
       } else if (editing === 'description') {
-        updates.description = editValues.description;
+        if (isCoffee) {
+          updates.notes = editValues.description;
+        } else {
+          updates.description = editValues.description;
+        }
       }
-      const { error } = await sb.from('meetups').update(updates).eq('id', meetupId);
+      const table = isCoffee ? 'coffee_chats' : 'meetups';
+      const { error } = await sb.from(table).update(updates).eq('id', meetupId);
       if (error) {
         alert('Error saving: ' + error.message);
       } else {
-        setMeetup(prev => ({ ...prev, ...updates }));
+        const localUpdates = { ...updates };
+        // For coffee chats, also update the normalized date/time fields
+        if (isCoffee && updates.scheduled_time) {
+          const dt = new Date(updates.scheduled_time);
+          localUpdates.date = dt.toISOString().split('T')[0];
+          localUpdates.time = dt.toTimeString().slice(0, 5);
+        }
+        setMeetup(prev => ({ ...prev, ...localUpdates }));
         setEditing(null);
         onMeetupChanged?.();
       }
@@ -624,7 +703,10 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
 
   function handleJoinCall() {
     if (!meetup) return;
-    if (meetup.circle_id) {
+    if (meetup._isCoffeeChat) {
+      // 1:1 coffee chat — WebRTC peer-to-peer
+      window.location.href = `/call/coffee/${meetup.id || meetupId}`;
+    } else if (meetup.circle_id) {
       // Use meetup ID for session-isolated channel names
       const channelName = `connection-group-${meetup.id || meetupId}`;
       window.location.href = `/call/circle/${channelName}`;
@@ -953,13 +1035,30 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
 
           {/* Meta info */}
           {editing === 'time' ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-              <input type="date" value={editValues.date || ''} onChange={e => setEditValues(v => ({ ...v, date: e.target.value }))}
-                style={{ padding: '4px 8px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: metaFontSize, fontFamily: fonts.sans, color: colors.text }} />
-              <input type="time" value={editValues.time || ''} onChange={e => setEditValues(v => ({ ...v, time: e.target.value }))}
-                style={{ padding: '4px 8px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: metaFontSize, fontFamily: fonts.sans, color: colors.text }} />
-              <button onClick={saveEdit} disabled={saving} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#5C7A4E' }}><Check size={16} /></button>
-              <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: colors.textMuted }}><X size={16} /></button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <input type="date" value={editValues.date || ''} onChange={e => setEditValues(v => ({ ...v, date: e.target.value }))}
+                  style={{ padding: '4px 8px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: metaFontSize, fontFamily: fonts.sans, color: colors.text }} />
+                <input type="time" value={editValues.time || ''} onChange={e => setEditValues(v => ({ ...v, time: e.target.value }))}
+                  style={{ padding: '4px 8px', borderRadius: '8px', border: `1px solid ${colors.border}`, fontSize: metaFontSize, fontFamily: fonts.sans, color: colors.text }} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                {[30, 45, 60, 90, 120].map((min) => (
+                  <button key={min} onClick={() => setEditValues(v => ({ ...v, duration: min }))}
+                    style={{
+                      padding: '3px 10px', borderRadius: '8px', fontSize: metaFontSize, fontWeight: 600, cursor: 'pointer', fontFamily: fonts.sans,
+                      border: `1.5px solid ${editValues.duration === min ? colors.primary : colors.border}`,
+                      background: editValues.duration === min ? colors.primary : 'transparent',
+                      color: editValues.duration === min ? '#FFF' : colors.text,
+                    }}>
+                    {min < 60 ? `${min}m` : `${min / 60}h`}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button onClick={saveEdit} disabled={saving} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: '#5C7A4E' }}><Check size={16} /></button>
+                <button onClick={() => setEditing(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: colors.textMuted }}><X size={16} /></button>
+              </div>
             </div>
           ) : (
             <div style={{
@@ -974,7 +1073,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
               </span>
               {meetup.time && (
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
-                  <Clock size={isMobile ? 12 : 14} /> {formatEventTime(meetup.date, meetup.time, meetup.timezone)}
+                  <Clock size={isMobile ? 12 : 14} /> {formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false })}
                 </span>
               )}
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: metaFontSize, color: colors.textMuted }}>
@@ -1024,9 +1123,11 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                 <Users size={isMobile ? 12 : 14} /> {
                   showRecapView
                     ? `${actualParticipants.length || recap?.participant_count || 0} attended`
-                    : meetup.meeting_format === 'hybrid'
-                      ? `${attendeeCounts.in_person} in-person, ${attendeeCounts.video} virtual`
-                      : `${attendees.length} signed up`
+                    : meetup._isCoffeeChat
+                      ? (meetup.status === 'accepted' ? 'Accepted' : meetup.status === 'pending' ? 'Pending' : meetup.status)
+                      : meetup.meeting_format === 'hybrid'
+                        ? `${attendeeCounts.in_person} in-person, ${attendeeCounts.video} virtual`
+                        : `${attendees.length} signed up`
                 }
               </span>
             </div>
@@ -1123,7 +1224,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                           flex: meetup.meeting_format === 'in_person' ? 1 : undefined,
                         }}
                       >
-                        <XCircle size={16} /> Cancel Event
+                        <XCircle size={16} /> {meetup._isCoffeeChat ? 'Cancel Chat' : 'Cancel Event'}
                       </button>
                     ) : (
                       <button
@@ -1165,7 +1266,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                       const url = `${window.location.origin}/?event=${meetupId}`;
                       const title = meetup.topic || 'Event';
                       const dateStr = meetup.date ? formatEventDate(meetup.date, meetup.time, meetup.timezone, { weekday: 'long', month: 'long', day: 'numeric' }) : '';
-                      const timeStr = meetup.time ? formatEventTime(meetup.date, meetup.time, meetup.timezone) : '';
+                      const timeStr = meetup.time ? formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false }) : '';
                       const location = meetup.location || '';
                       const desc = meetup.description ? meetup.description.substring(0, 120) + (meetup.description.length > 120 ? '...' : '') : '';
                       const attendeeCount = attendees.length;
@@ -1484,7 +1585,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                 <>
                   <h3 style={{ ...styles.sectionTitle, fontSize: sectionTitleSize }}>
                     <Users size={isMobile ? 14 : 16} style={{ color: colors.primary }} />
-                    Attendees ({attendees.length})
+                    {meetup._isCoffeeChat ? 'Participants' : 'Attendees'} ({attendees.length})
                   </h3>
                   {attendees.length > 0 ? (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? '6px' : '10px' }}>

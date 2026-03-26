@@ -143,10 +143,16 @@ export default function ScheduleMeetupView({
       // Get profiles for matches
       if (matches && matches.length > 0) {
         const userIds = matches.map(m => m.matched_user_id);
-        const { data: profiles } = await supabase
+        const { data: profiles, error: profileError } = await supabase
           .from('profiles')
-          .select('id, name, career, profile_picture, open_to_coffee_chat, coffee_chat_slots')
+          .select('id, name, career, city, state, profile_picture, last_active')
           .in('id', userIds);
+
+        if (profileError) {
+          console.error('Error loading profiles:', profileError);
+          setAvailableConnections([]);
+          return;
+        }
 
         setAvailableConnections(profiles || []);
       } else {
@@ -279,12 +285,22 @@ export default function ScheduleMeetupView({
         topic: topic.trim(),
         notes: notes || null,
         status: 'pending',
+        duration,
       });
 
     if (error) throw error;
 
-    alert(`Request sent to ${selectedConnection.name}!`);
-    onNavigate?.(previousView || 'meetups');
+    const eventDate = new Date(scheduledDate + 'T00:00:00');
+    const formattedTime = scheduledTime.includes(':') ? scheduledTime : `${scheduledTime}:00`;
+    setCreatedEvent({
+      id: null,
+      title: `Coffee Chat with ${selectedConnection.name}`,
+      date: eventDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+      time: new Date(`2000-01-01T${formattedTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      format: 'virtual',
+      location: 'Virtual',
+      isCoffeeChat: true,
+    });
   };
 
   const scheduleCircleMeetup = async () => {
@@ -938,13 +954,15 @@ export default function ScheduleMeetupView({
               fontFamily: fonts.serif, fontSize: '20px', fontWeight: '600',
               color: colors.text, margin: '0 0 6px',
             }}>
-              Event Created!
+              {createdEvent.isCoffeeChat ? 'Request Sent!' : 'Event Created!'}
             </h3>
             <p style={{
               fontSize: '14px', color: colors.textMuted,
               margin: '0 0 20px',
             }}>
-              Your event is live and ready to share
+              {createdEvent.isCoffeeChat
+                ? "They'll be notified and can accept your invite"
+                : 'Your event is live and ready to share'}
             </p>
 
             <div style={{
@@ -987,8 +1005,14 @@ export default function ScheduleMeetupView({
               </button>
               <button
                 onClick={() => {
+                  const isCoffee = createdEvent.isCoffeeChat;
+                  const eventId = createdEvent.id;
                   setCreatedEvent(null);
-                  onNavigate?.('eventDetail', { meetupId: createdEvent.id });
+                  if (isCoffee) {
+                    onNavigate?.(previousView || 'meetups');
+                  } else {
+                    onNavigate?.('eventDetail', { meetupId: eventId });
+                  }
                 }}
                 style={{
                   flex: 1, padding: '12px',

@@ -24,7 +24,6 @@ import AllCirclesView from './AllCirclesView'
 import CreateCircleView from './CreateCircleView'
 import CircleDetailView from './CircleDetailView'
 import MessagesPageView from './MessagesPageView'
-import CoffeeChatsView from './CoffeeChatsView'
 import UserProfileView from './UserProfileView'
 import ScheduleMeetupView from './ScheduleMeetupView'
 import CoffeeChatRecapView from './CoffeeChatRecapView'
@@ -75,6 +74,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [selectedUserId, setSelectedUserId] = useState(null)
   const [selectedRecapId, setSelectedRecapId] = useState(null)
   const [selectedMeetupId, setSelectedMeetupId] = useState(null)
+  const [selectedMeetupCategory, setSelectedMeetupCategory] = useState(null) // 'coffee', 'circle', or null (community)
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -146,6 +146,7 @@ function MainApp({ currentUser, onSignOut }) {
     }
     if (data.meetupId) {
       setSelectedMeetupId(data.meetupId)
+      setSelectedMeetupCategory(data.meetupCategory || null)
     }
     // Handle meetups initial view (e.g., 'past' for review recaps)
     if (view === 'meetups' && data.initialView) {
@@ -853,7 +854,7 @@ function MainApp({ currentUser, onSignOut }) {
       }
 
       const matchedUserIds = matches.map(m => m.matched_user_id)
-      
+
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
         .select('id, name, career, city, state, bio, last_active')
@@ -4164,7 +4165,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <span>Home</span>
               </button>
               <button
-                onClick={() => setCurrentView('discover')}
+                onClick={() => handleNavigate('discover')}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'discover'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
@@ -4175,7 +4176,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <span>Discover</span>
               </button>
               <button
-                onClick={() => setCurrentView('meetups')}
+                onClick={() => handleNavigate('meetups')}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'meetups'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
@@ -4186,7 +4187,7 @@ function MainApp({ currentUser, onSignOut }) {
                 <span>Coffee</span>
               </button>
               <button
-                onClick={() => setCurrentView('connectionGroups')}
+                onClick={() => handleNavigate('connectionGroups')}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
                   currentView === 'connectionGroups'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
@@ -4244,6 +4245,7 @@ function MainApp({ currentUser, onSignOut }) {
             supabase={supabase}
             onNavigate={handleNavigate}
             meetupId={selectedMeetupId}
+            meetupCategory={selectedMeetupCategory}
             previousView={previousView}
             onMeetupChanged={loadMeetupsFromDatabase}
             toast={toast}
@@ -4253,7 +4255,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'allCircles' && <AllCirclesView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} />}
         {currentView === 'createCircle' && <CreateCircleView currentUser={currentUser} supabase={supabase} onNavigate={setCurrentView} />}
         {currentView === 'circleDetail' && <CircleDetailView currentUser={currentUser} supabase={supabase} onNavigate={handleNavigate} circleId={selectedCircleId} previousView={previousView} />}
-        {currentView === 'coffeeChats' && <CoffeeChatsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
+        {currentView === 'coffeeChats' && <ScheduleMeetupView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} previousView={previousView} initialType="coffee" />}
         {currentView === 'userProfile' && <UserProfileView currentUser={currentUser} supabase={supabase} userId={selectedUserId} onNavigate={handleNavigate} previousView={previousView} onConnectionRemoved={(userId) => {
           setConnections(prev => prev.filter(c => (c.connected_user?.id || c.id) !== userId));
         }} />}

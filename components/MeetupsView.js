@@ -327,7 +327,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           rawDate: parseLocalDate(meetup.date),
           date: formatDateLocal(meetup.date, meetup.time, meetup.timezone),
           rawTime: meetup.time,
-          time: formatEventTime(meetup.date, meetup.time, meetup.timezone),
+          time: formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false }),
           duration: `${meetup.duration || 60} min`,
           location: meetup.location || 'Virtual',
           attendees: attendeeProfiles.length || meetup.signupCount || 0,
@@ -1134,12 +1134,33 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               const isCoffee = item.type === 'coffee';
               const title = isCoffee ? (item.topic ? `${item.topic} — with ${item.with}` : `Coffee Chat with ${item.with}`) : (item.title || 'Community Event');
               const time = item.time && item.time !== 'TBD' ? item.time : null;
-              const attendees = isCoffee ? [] : (item.attendeeProfiles || []);
-              const coffeeAvatar = isCoffee ? { name: item.with, profile_picture: item.avatar } : null;
-              const attendeeCount = isCoffee ? 2 : (attendees.length || 0);
+              const attendees = isCoffee
+                ? [
+                    { id: currentUser.id, name: currentUser.name, profile_picture: currentUser.profile_picture },
+                    { id: 'other', name: item.with, profile_picture: item.avatar },
+                  ]
+                : (item.attendeeProfiles || []);
+              const coffeeAvatar = null;
+              const attendeeCount = isCoffee ? 0 : (attendees.length || 0);
 
-              // Topic tag: use vibe_category, or derive from title keywords
-              const topicTag = isCoffee ? '1:1 Chat' : (item.vibe_category || item.category || (() => {
+              // Category tag: meeting type
+              const categoryTag = isCoffee ? '1:1' : (item.isCircleMeetup ? 'Circle' : 'Event');
+              const categoryColors = {
+                '1:1': { bg: 'rgba(155, 126, 196, 0.15)', color: '#7B5EA7' },
+                'Circle': { bg: 'rgba(139, 158, 126, 0.15)', color: '#5C7A4E' },
+                'Event': { bg: 'rgba(139, 111, 71, 0.12)', color: '#7A5C42' },
+              };
+
+              // Vibe tag
+              const vibeMap = {
+                advice: { label: 'Advice', bg: 'rgba(59, 130, 246, 0.12)', color: '#2563EB' },
+                vent: { label: 'Vent', bg: 'rgba(239, 68, 68, 0.10)', color: '#DC2626' },
+                grow: { label: 'Grow', bg: 'rgba(34, 197, 94, 0.12)', color: '#16A34A' },
+              };
+              const vibe = item.vibe_category ? vibeMap[item.vibe_category] : null;
+
+              // Topic tag: derive from title keywords
+              const topicTag = isCoffee ? null : (() => {
                 const t = (item.title || '').toLowerCase();
                 if (/\bai\b|machine learning|ml\b|tech|coding|engineer/.test(t)) return 'AI & Tech';
                 if (/founder|startup|fundrais|venture|bootstrap|mrr/.test(t)) return 'Founder Life';
@@ -1151,14 +1172,16 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                 if (/marketing|growth|content|social media|seo/.test(t)) return 'Marketing';
                 if (/remote|async|distributed/.test(t)) return 'Remote Work';
                 if (/network|community|connect|circle/.test(t)) return 'Community';
-                return 'Discussion';
-              })());
+                return null;
+              })();
 
               return (
                 <div key={item.id} onClick={(e) => {
                   if (e.target.closest('button') || e.target.closest('[data-menu]')) return;
-                  if (!isCoffee && onNavigate) { onNavigate('eventDetail', { meetupId: item.id }); return; }
-                  setActiveCardId(activeCardId === item.id ? null : item.id);
+                  if (onNavigate) {
+                    onNavigate('eventDetail', { meetupId: item.id, meetupCategory: isCoffee ? 'coffee' : undefined });
+                    return;
+                  }
                 }} style={{
                   display: 'flex', alignItems: 'center',
                   padding: isMobile ? '14px 16px' : '18px 22px',
@@ -1192,8 +1215,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   }}>
                     {/* Host avatar */}
                     {(() => {
-                      const avatarSrc = isCoffee ? coffeeAvatar?.profile_picture : item.hostProfile?.profile_picture;
-                      const avatarName = isCoffee ? (coffeeAvatar?.name || '?') : (item.host || '?');
+                      const avatarSrc = isCoffee ? (item.requester_id === currentUser.id ? currentUser.profile_picture : coffeeAvatar?.profile_picture) : item.hostProfile?.profile_picture;
+                      const avatarName = isCoffee ? (item.requester_id === currentUser.id ? (currentUser.name || '?') : (coffeeAvatar?.name || '?')) : (item.host || '?');
                       return avatarSrc ? (
                         <img src={avatarSrc} alt="" style={{
                           width: 40, height: 40, borderRadius: '50%', objectFit: 'cover',
@@ -1215,39 +1238,65 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '14px' : '15px', fontWeight: '700',
                       color: isToday ? '#FFF' : '#5C4033',
                     }}>
-                      {(time || 'TBD').replace(/\s+([A-Z]{2,5}|[\w\s]+ time)$/i, '')}
+                      {time || 'TBD'}
                     </span>
                   </div>
 
                   {/* Content */}
                   <div style={{ flex: 1, minWidth: 0, paddingLeft: isMobile ? '12px' : '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {/* Topic tag + format badge */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    {/* Tags row: Category + Vibe + Topic + Format */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                      {/* Category tag (1:1 / Circle / Event) */}
                       <span style={{
-                        fontSize: '11px', fontWeight: '700',
-                        padding: '3px 10px', borderRadius: '6px',
-                        background: isToday ? 'rgba(255,255,255,0.2)' : 'rgba(139, 111, 71, 0.12)',
-                        color: isToday ? 'rgba(255,255,255,0.9)' : '#7A5C42',
-                        letterSpacing: '0.4px', textTransform: 'capitalize',
+                        fontSize: '10px', fontWeight: '700',
+                        padding: '3px 9px', borderRadius: '6px',
+                        background: isToday ? 'rgba(255,255,255,0.2)' : (categoryColors[categoryTag]?.bg || 'rgba(139, 111, 71, 0.12)'),
+                        color: isToday ? 'rgba(255,255,255,0.9)' : (categoryColors[categoryTag]?.color || '#7A5C42'),
+                        letterSpacing: '0.3px', textTransform: 'uppercase',
                         fontFamily: '"DM Sans", sans-serif',
                       }}>
-                        {topicTag}
+                        {categoryTag}
                       </span>
+                      {/* Vibe tag (Advice / Vent / Grow) */}
+                      {vibe && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
+                          background: isToday ? 'rgba(255,255,255,0.15)' : vibe.bg,
+                          color: isToday ? 'rgba(255,255,255,0.8)' : vibe.color,
+                          fontFamily: '"DM Sans", sans-serif',
+                        }}>
+                          {vibe.label}
+                        </span>
+                      )}
+                      {/* Topic tag (AI & Tech, Career, etc.) */}
+                      {topicTag && (
+                        <span style={{
+                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
+                          background: isToday ? 'rgba(255,255,255,0.12)' : 'rgba(201, 169, 110, 0.12)',
+                          color: isToday ? 'rgba(255,255,255,0.7)' : '#8B7355',
+                          fontFamily: '"DM Sans", sans-serif',
+                        }}>
+                          {topicTag}
+                        </span>
+                      )}
+                      {/* Format tag (In-Person / Hybrid) */}
                       {!isCoffee && item.meeting_format && item.meeting_format !== 'virtual' && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '3px 10px', borderRadius: '6px',
-                          backgroundColor: isToday ? 'rgba(255,255,255,0.15)' : (item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4'),
+                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
+                          background: isToday ? 'rgba(255,255,255,0.15)' : (item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4'),
                           color: isToday ? 'rgba(255,255,255,0.8)' : (item.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46'),
-                          whiteSpace: 'nowrap',
+                          fontFamily: '"DM Sans", sans-serif',
                         }}>
                           {item.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
                         </span>
                       )}
+                      {/* Pending status for coffee chats */}
                       {isCoffee && item.isPending && (
                         <span style={{
-                          fontSize: '10px', fontWeight: '600', padding: '3px 10px', borderRadius: '6px',
+                          fontSize: '10px', fontWeight: '600', padding: '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : 'rgba(196, 149, 106, 0.2)',
                           color: isToday ? 'rgba(255,255,255,0.8)' : '#8B6F5C',
+                          fontFamily: '"DM Sans", sans-serif',
                         }}>
                           {item.isInviteReceived ? 'Invited you' : 'Awaiting response'}
                         </span>
@@ -1315,7 +1364,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
                         color: isToday ? 'rgba(255,255,255,0.55)' : '#C4956A',
                       }}>
-                        {attendeeCount} {attendeeCount === 1 ? 'attendee' : 'attendees'}
+                        {isCoffee
+                          ? (item.status === 'accepted' ? 'Accepted' : item.isPending ? 'Pending' : item.status)
+                          : `${attendeeCount} ${attendeeCount === 1 ? 'attendee' : 'attendees'}`}
                       </span>
                     </div>
 
@@ -1372,10 +1423,17 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         </div>
                       ) : item.isPending ? (
                         <span style={{
-                          fontSize: '12px', fontWeight: '600',
-                          color: isToday ? 'rgba(255,255,255,0.5)' : '#9B8A7E',
+                          fontSize: '11px', fontWeight: '600',
+                          color: isToday ? 'rgba(255,255,255,0.7)' : '#8B6F5C',
                           fontFamily: '"DM Sans", sans-serif',
-                        }}>Pending</span>
+                          padding: '8px 14px', borderRadius: '12px',
+                          background: isToday ? 'rgba(255,255,255,0.12)' : 'rgba(196, 149, 106, 0.15)',
+                          display: 'inline-flex', alignItems: 'center', gap: '5px',
+                          letterSpacing: '0.2px', whiteSpace: 'nowrap',
+                        }}>
+                          <Clock size={12} />
+                          Awaiting response
+                        </span>
                       ) : (
                         <button onClick={(e) => { e.stopPropagation(); handleJoinCall(item); }} style={{
                           background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
@@ -1600,8 +1658,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   const tag = typeTagColors[item.type] || typeTagColors.public;
 
                   return (
-                    <div key={item.id} style={{ padding: isMobile ? '10px 12px' : '12px 14px', marginBottom: isMobile ? '4px' : '6px', background: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(250,245,239,0.3) 100%)', borderRadius: isMobile ? '12px' : '14px', border: '1px solid rgba(139,111,92,0.08)', cursor: item.type !== 'coffee' ? 'pointer' : 'default' }}
-                      onClick={() => { if (item.type !== 'coffee' && item.sourceId && onNavigate) onNavigate('eventDetail', { meetupId: item.sourceId }); }}
+                    <div key={item.id} style={{ padding: isMobile ? '10px 12px' : '12px 14px', marginBottom: isMobile ? '4px' : '6px', background: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(250,245,239,0.3) 100%)', borderRadius: isMobile ? '12px' : '14px', border: '1px solid rgba(139,111,92,0.08)', cursor: 'pointer' }}
+                      onClick={() => { if (item.sourceId && onNavigate) onNavigate('eventDetail', { meetupId: item.sourceId, meetupCategory: item.type === 'coffee' ? 'coffee' : undefined }); }}
                     >
                       {/* Header row */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: isMobile ? '8px' : '10px' }}>
