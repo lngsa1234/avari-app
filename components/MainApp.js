@@ -575,6 +575,32 @@ function MainApp({ currentUser, onSignOut }) {
               } catch (e) { console.error('[HomeRecs] Circle fallback:', e) }
             }
 
+            // Enrich top circle rec with members + creator for card display
+            if (circleRecs.length > 0) {
+              try {
+                const topCircleId = circleRecs[0].circle_id || circleRecs[0].circle?.id
+                if (topCircleId) {
+                  const [{ data: circleDetail }, { data: circleMembers }] = await Promise.all([
+                    supabase.from('connection_groups').select('id, name, description, creator_id, cadence, meeting_day, time_of_day, image_url').eq('id', topCircleId).single(),
+                    supabase.from('connection_group_members').select('user_id, status').eq('group_id', topCircleId).eq('status', 'accepted'),
+                  ])
+                  if (circleDetail) {
+                    const memberUserIds = (circleMembers || []).map(m => m.user_id)
+                    let memberProfiles = []
+                    if (memberUserIds.length > 0) {
+                      const { data: profiles } = await supabase.from('profiles').select('id, name, profile_picture').in('id', memberUserIds)
+                      memberProfiles = profiles || []
+                    }
+                    circleRecs[0].circle = {
+                      ...circleRecs[0].circle,
+                      ...circleDetail,
+                      members: (circleMembers || []).map(m => ({ ...m, user: memberProfiles.find(p => p.id === m.user_id) || null })),
+                    }
+                  }
+                }
+              } catch (e) { console.error('[HomeRecs] Circle enrich:', e) }
+            }
+
             // Process people recs
             let peopleRecs = []
             // Get mutual connections once — shared by AI recs and fallback
@@ -3508,7 +3534,7 @@ function MainApp({ currentUser, onSignOut }) {
                       alignItems: 'center',
                       textAlign: 'center',
                       gap: '10px',
-                      ...(isMobile ? { minWidth: '160px', scrollSnapAlign: 'start', flex: '0 0 auto' } : {}),
+                      ...(isMobile ? { minWidth: '140px', scrollSnapAlign: 'start', flex: '0 0 auto' } : {}),
                     }}
                     onMouseEnter={isMobile ? undefined : (e) => {
                       e.currentTarget.style.transform = 'translateY(-2px)'
@@ -3523,44 +3549,44 @@ function MainApp({ currentUser, onSignOut }) {
                       <img
                         src={rec.profile.profile_picture}
                         alt={rec.profile.name}
-                        style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(139, 111, 92, 0.15)', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', opacity: 0, transition: 'opacity 0.3s ease' }}
+                        style={{ width: isMobile ? '44px' : '56px', height: isMobile ? '44px' : '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(139, 111, 92, 0.15)', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', opacity: 0, transition: 'opacity 0.3s ease' }}
                         onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
                       />
                     ) : (
-                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <User style={{ width: '24px', height: '24px', color: '#8B6F5C' }} />
+                      <div style={{ width: isMobile ? '44px' : '56px', height: isMobile ? '44px' : '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <User style={{ width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px', color: '#8B6F5C' }} />
                       </div>
                     )}
                     <div>
-                      <p style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#3F1906', margin: '0 0 2px 0', lineHeight: '20px' }}>
+                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '15px', fontWeight: '600', color: '#3F1906', margin: '0 0 2px 0', lineHeight: isMobile ? '16px' : '20px' }}>
                         {rec.profile?.name?.split(' ')[0] || 'Someone'}
                       </p>
-                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#6B5344', margin: 0, lineHeight: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '140px' }}>
+                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '12px', color: '#6B5344', margin: 0, lineHeight: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? '110px' : '140px' }}>
                         {rec.profile?.career || 'Community member'}
                       </p>
                     </div>
                     {rec.match_reasons?.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
-                        {rec.match_reasons.slice(0, 3).map((r, i) => (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', justifyContent: 'center' }}>
+                        {rec.match_reasons.slice(0, isMobile ? 2 : 3).map((r, i) => (
                           <span key={i} style={{
                             fontFamily: '"DM Sans", sans-serif',
-                            fontSize: '10px', fontWeight: 500,
+                            fontSize: isMobile ? '8px' : '10px', fontWeight: 500,
                             backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033',
-                            padding: '2px 8px', borderRadius: '100px',
+                            padding: isMobile ? '1px 6px' : '2px 8px', borderRadius: '100px',
                           }}>
                             {r.reason}
                           </span>
                         ))}
                       </div>
                     ) : rec.match_score > 0 ? (
-                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.08)', color: '#8B7355', padding: '3px 10px', borderRadius: '100px' }}>
+                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '8px' : '11px', backgroundColor: 'rgba(139, 111, 92, 0.08)', color: '#8B7355', padding: isMobile ? '1px 6px' : '3px 10px', borderRadius: '100px' }}>
                         {Math.round(rec.match_score * 100)}% match
                       </span>
                     ) : null}
                     {rec.sharedMeetups > 0 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                        <Users style={{ width: '12px', height: '12px', color: '#A89080' }} />
-                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '10px', color: '#A89080' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                        <Users style={{ width: isMobile ? '10px' : '12px', height: isMobile ? '10px' : '12px', color: '#A89080' }} />
+                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '8px' : '10px', color: '#A89080' }}>
                           {rec.sharedMeetups} shared {rec.sharedMeetups === 1 ? 'meetup' : 'meetups'}
                         </span>
                       </div>
@@ -3568,12 +3594,12 @@ function MainApp({ currentUser, onSignOut }) {
                     <button
                       onClick={(e) => { e.stopPropagation(); handleNavigate('userProfile', { userId: rec.recommended_user_id }) }}
                       style={{
-                        marginTop: '4px',
-                        padding: '5px 16px',
+                        marginTop: '2px',
+                        padding: isMobile ? '4px 12px' : '5px 16px',
                         background: '#5C4033', color: '#FAF5EF',
                         border: 'none', borderRadius: '20px',
                         fontFamily: '"DM Sans", sans-serif',
-                        fontSize: '11px', fontWeight: 600,
+                        fontSize: isMobile ? '10px' : '11px', fontWeight: 600,
                         cursor: 'pointer',
                         transition: 'background 0.15s ease',
                       }}
@@ -3590,13 +3616,42 @@ function MainApp({ currentUser, onSignOut }) {
           )
           })()}
 
-          {/* Section 2: Circles to Join */}
-          {homeCircleRecs.length > 0 && (
+          {/* Section 2: Circle to Join */}
+          {homeCircleRecs.length > 0 && (() => {
+            const match = homeCircleRecs[0];
+            const circle = match.circle;
+            if (!circle) return null;
+            const circleName = circle.name || 'Community Circle';
+            const memberCount = circle.connection_group_members?.[0]?.count || 0;
+            const maxMembers = 10;
+            const spotsLeft = maxMembers - memberCount;
+            const description = circle.description || 'Connect & grow together';
+
+            // Generate tags from name
+            const text = `${circleName} ${description}`.toLowerCase();
+            const tagKeywords = [
+              { keywords: ['founder', 'startup'], tag: 'Founders' },
+              { keywords: ['early-stage', 'early stage'], tag: 'Early-stage' },
+              { keywords: ['ai', 'machine learning'], tag: 'AI' },
+              { keywords: ['product', 'build'], tag: 'Product' },
+              { keywords: ['book', 'reading'], tag: 'Reading' },
+              { keywords: ['side project'], tag: 'Side Projects' },
+              { keywords: ['career', 'job'], tag: 'Career' },
+              { keywords: ['design', 'ux'], tag: 'Design' },
+              { keywords: ['leader', 'manage'], tag: 'Leadership' },
+            ];
+            const tags = [];
+            tagKeywords.forEach(({ keywords, tag }) => {
+              if (!tags.includes(tag) && keywords.some(kw => text.includes(kw))) tags.push(tag);
+            });
+            const displayTags = tags.slice(0, 3);
+
+            return (
             <div style={{ marginBottom: '24px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Users style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
-                  Circles to Join
+                  Circle to Join
                 </span>
                 <span
                   onClick={() => handleNavigate('allCircles')}
@@ -3605,69 +3660,170 @@ function MainApp({ currentUser, onSignOut }) {
                   See all <ChevronRight style={{ width: '14px', height: '14px' }} />
                 </span>
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {homeCircleRecs.map((match) => (
-                  <div
-                    key={match.id}
-                    onClick={() => handleNavigate('circleDetail', { circleId: match.circle_id })}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.75)',
-                      backdropFilter: 'blur(10px)',
-                      borderRadius: '16px',
-                      padding: isMobile ? '14px 16px' : '16px 20px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      border: '1px solid rgba(139, 111, 92, 0.1)',
-                      boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '14px',
-                    }}
-                    onMouseEnter={isMobile ? undefined : (e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(139, 111, 92, 0.14)'
-                    }}
-                    onMouseLeave={isMobile ? undefined : (e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.boxShadow = '0 2px 12px rgba(139, 111, 92, 0.08)'
-                    }}
-                  >
-                    {/* Circle icon */}
-                    <div style={{
-                      minWidth: '48px', height: '48px',
-                      borderRadius: '14px',
-                      background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+              <div
+                onClick={() => handleNavigate('circleDetail', { circleId: match.circle_id || circle.id })}
+                style={{
+                  background: '#FAF7F4', borderRadius: isMobile ? '14px' : '22px',
+                  border: '1px solid #E8DDD6',
+                  boxShadow: '0 4px 24px rgba(61,46,34,0.11)',
+                  overflow: 'hidden', display: 'flex', alignItems: 'stretch',
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(61,46,34,0.15)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(61,46,34,0.11)'; }}
+              >
+                {/* Left: SVG illustration */}
+                <div style={{
+                  width: isMobile ? '100px' : '160px', flexShrink: 0,
+                  position: 'relative', overflow: 'hidden',
+                }}>
+                  {circle.image_url ? (
+                    <img src={circle.image_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <svg viewBox="0 0 110 190" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}>
+                      <rect width="110" height="190" fill="#2C1F15"/>
+                      <circle cx="55" cy="95" r="60" fill="#E8C070" opacity="0.06"/>
+                      <circle cx="55" cy="95" r="38" fill="#E8C070" opacity="0.07"/>
+                      <circle cx="55" cy="95" r="50" fill="none" stroke="#5C3D20" strokeWidth="0.8" strokeDasharray="3 5" opacity="0.6"/>
+                      <ellipse cx="55" cy="98" rx="34" ry="22" fill="#5C3D20"/>
+                      <ellipse cx="55" cy="50" rx="7" ry="7" fill="#C4956A"/>
+                      <rect x="48" y="55" width="14" height="10" rx="5" fill="#C4956A"/>
+                      <ellipse cx="88" cy="77" rx="6" ry="6" fill="#A0724A"/>
+                      <rect x="82" y="82" width="12" height="9" rx="4" fill="#A0724A"/>
+                      <ellipse cx="23" cy="77" rx="6" ry="6" fill="#D4A878"/>
+                      <rect x="17" y="82" width="12" height="9" rx="4" fill="#D4A878"/>
+                      <circle cx="55" cy="33" r="3" fill="#E8C070" opacity="0.9"/>
+                    </svg>
+                  )}
+                </div>
+
+                {/* Right: content */}
+                <div style={{
+                  flex: 1, padding: isMobile ? '10px 12px' : '14px 16px',
+                  display: 'flex', flexDirection: 'column', gap: isMobile ? '6px' : '8px', minWidth: 0,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '3px',
+                      padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '20px',
+                      background: '#E8F5E9', border: '1px solid #B8DFC0',
+                      fontSize: isMobile ? '9px' : '10.5px', fontWeight: '600', color: '#2E6B40',
                     }}>
-                      <Users style={{ width: '22px', height: '22px', color: '#7A5C42' }} />
-                    </div>
-                    {/* Circle info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '16px', fontWeight: '600', color: '#3F1906', margin: '0 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {match.circle?.name || 'Community Circle'}
-                      </p>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: '#6B5344' }}>
-                          {match.circle?.connection_group_members?.[0]?.count || 0} members
-                        </span>
-                        {(match.match_reasons || []).slice(0, 1).map((reason, i) => (
-                          <span key={i} style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033', padding: '2px 8px', borderRadius: '100px' }}>
-                            {reason.reason}
-                          </span>
-                        ))}
-                        <span style={{ fontSize: '11px', backgroundColor: 'rgba(139, 111, 92, 0.06)', color: '#8B7355', padding: '2px 8px', borderRadius: '100px' }}>
-                          {Math.round(match.match_score * 100)}% match
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronRight style={{ width: '18px', height: '18px', color: '#B8A089', flexShrink: 0 }} />
+                      <span style={{ width: isMobile ? 5 : 6, height: isMobile ? 5 : 6, borderRadius: '50%', background: '#22c55e' }} />
+                      Open
+                    </span>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '3px',
+                      padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '20px',
+                      background: '#F0E8DF', border: '1px solid #E0D0BE',
+                      fontSize: isMobile ? '9px' : '10.5px', fontWeight: '600', color: '#6B4F35',
+                    }}>
+                      <Users style={{ width: isMobile ? '9px' : '11px', height: isMobile ? '9px' : '11px' }} /> {memberCount}/{maxMembers}
+                    </span>
                   </div>
-                ))}
+
+                  <h4 style={{
+                    fontSize: isMobile ? '13px' : '15px', fontWeight: '700',
+                    color: '#2C1F15', margin: 0, fontFamily: '"Lora", serif',
+                    lineHeight: '1.25',
+                  }}>
+                    {circleName}
+                  </h4>
+
+                  <p style={{
+                    fontSize: isMobile ? '11px' : '12px', color: '#8B7355', margin: 0, lineHeight: '1.5',
+                    display: '-webkit-box', WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                  }}>
+                    {description}
+                  </p>
+
+                  {displayTags.length > 0 && (
+                    <div style={{ display: 'flex', gap: isMobile ? '4px' : '5px', flexWrap: 'wrap' }}>
+                      {displayTags.map((tag, i) => (
+                        <span key={i} style={{
+                          fontSize: isMobile ? '9px' : '10.5px', fontWeight: '500', color: '#6B4F35',
+                          background: '#F0E8DF', border: '1px solid #E0D0BE',
+                          padding: isMobile ? '1px 7px' : '2px 9px', borderRadius: '10px',
+                        }}>{tag}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Member avatars + spots */}
+                  {circle.members?.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '6px' }}>
+                      <div style={{ display: 'flex' }}>
+                        {circle.members.slice(0, isMobile ? 3 : 4).map((member, idx) => {
+                          const avatarBgs = ['#E8D5C0', '#D4C4A8', '#C4956A', '#A0724A'];
+                          const avSize = isMobile ? '18px' : '22px';
+                          return (
+                            <div key={member.user_id || idx} style={{
+                              width: avSize, height: avSize, borderRadius: '50%',
+                              background: avatarBgs[idx % avatarBgs.length],
+                              border: '1.5px solid #FAF7F4',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: isMobile ? '7px' : '9px', fontWeight: '600', color: '#5C3318',
+                              marginLeft: idx > 0 ? (isMobile ? '-5px' : '-6px') : 0, flexShrink: 0,
+                              overflow: 'hidden',
+                            }}>
+                              {member.user?.profile_picture ? (
+                                <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                member.user?.name?.charAt(0) || '?'
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <span style={{ fontSize: isMobile ? '9px' : '10px', color: '#A07850' }}>{spotsLeft} left</span>
+                    </div>
+                  )}
+
+                  <div style={{ height: '1px', background: '#EDE6DF' }} />
+
+                  {/* Host + Join */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '6px' }}>
+                    {(() => {
+                      const creator = circle.members?.find(m => m.user_id === circle.creator_id);
+                      const creatorName = creator?.user?.name || 'Host';
+                      return (
+                        <>
+                          <div style={{
+                            width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', borderRadius: '50%',
+                            background: '#E8D5C0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: isMobile ? '8px' : '9.5px', fontWeight: '600', color: '#5C3318', flexShrink: 0,
+                            overflow: 'hidden',
+                          }}>
+                            {creator?.user?.profile_picture ? (
+                              <img src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : creatorName.charAt(0)}
+                          </div>
+                          <span style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: '500', color: '#6B4F35' }}>{creatorName.split(' ')[0]}</span>
+                          <span style={{ fontSize: isMobile ? '9px' : '10px', color: '#B09A8A' }}>{'\u00b7'} host</span>
+                        </>
+                      );
+                    })()}
+                    <span style={{ flex: 1 }} />
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleNavigate('circleDetail', { circleId: match.circle_id || circle.id }); }}
+                      style={{
+                        padding: isMobile ? '5px 12px' : '6px 14px', borderRadius: '14px',
+                        fontSize: isMobile ? '10px' : '11.5px', fontWeight: '600',
+                        cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                        background: '#3D2E22', color: '#FAF7F4',
+                        border: 'none', transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#2C1F15' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#3D2E22' }}
+                    >Join</button>
+                  </div>
+                </div>
               </div>
             </div>
-          )}
+            )
+          })()}
 
           {/* Empty state when no recommendations exist yet */}
           {homePeopleRecs.length === 0 && homeCircleRecs.length === 0 && (

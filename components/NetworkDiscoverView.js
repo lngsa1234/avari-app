@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { parseLocalDate, isEventPast, formatEventTime, formatEventDate } from '../lib/dateUtils';
+import { requestToJoinGroup } from '@/lib/connectionRecommendationHelpers';
 import {
   Search,
   Calendar,
@@ -191,6 +192,7 @@ export default function NetworkDiscoverView({
   const [sentRequests, setSentRequests] = useState(new Set()); // Track sent connection requests
   const [userRsvps, setUserRsvps] = useState(new Set()); // Track user's RSVPs
   const [rsvpLoading, setRsvpLoading] = useState({});
+  const [circleJoinState, setCircleJoinState] = useState({}); // { [circleId]: 'idle' | 'loading' | 'joined' | 'requested' }
   const [meetupSignups, setMeetupSignups] = useState({});
   const [searchText, setSearchText] = useState('');
   const [selectedChips, setSelectedChips] = useState([]);
@@ -434,7 +436,7 @@ export default function NetworkDiscoverView({
       if (memberUserIds.length > 0) {
         const { data: profiles } = await supabase
           .from('profiles')
-          .select('id, name, career')
+          .select('id, name, career, profile_picture')
           .in('id', memberUserIds);
 
         profileMap = (profiles || []).reduce((acc, p) => {
@@ -1507,312 +1509,316 @@ export default function NetworkDiscoverView({
               </button>
             </div>
 
-            {/* Netflix-style poster row */}
+            {/* Circle cards — vertical list */}
             <div style={{
               display: 'flex',
-              gap: isMobile ? '10px' : '12px',
-              overflowX: 'auto',
-              paddingBottom: '8px',
-              marginLeft: isMobile ? '-16px' : '-24px',
-              marginRight: isMobile ? '-16px' : '-24px',
-              paddingLeft: isMobile ? '16px' : '24px',
-              paddingRight: isMobile ? '16px' : '24px',
-              WebkitOverflowScrolling: 'touch',
-              alignItems: 'flex-start',
+              flexDirection: 'column',
+              gap: '12px',
             }}>
-              {availableCircles.slice(0, 6).map((circle, index) => {
+              {availableCircles.slice(0, 3).map((circle, index) => {
                 const memberCount = circle.members?.length || 0;
                 const maxMembers = circle.max_members || 10;
                 const spotsLeft = maxMembers - memberCount;
                 const isInviteOnly = !!circle.is_private;
-                const isExpanded = expandedCircleId === circle.id;
                 const description = circle.description
                   || (circle.vibe_category === 'advice' ? 'Mentorship & guidance'
                   : circle.vibe_category === 'peers' ? 'Peer support & community'
                   : circle.vibe_category === 'grow' ? 'Career growth & skills'
                   : 'Connect & grow together');
 
-                const cardWidth = isMobile ? 200 : 230;
-                const collapsedHeight = isMobile ? 180 : 200;
+                const creator = circle.members?.find(m => m.user_id === circle.creator_id);
+                const creatorName = creator?.user?.name || 'CircleW';
+
+                const cadence = circle.cadence || '';
+                const meetingDay = circle.meeting_day || '';
+                const timeOfDay = circle.time_of_day || '';
+                const scheduleStr = [meetingDay, timeOfDay, cadence ? `Every ${cadence.toLowerCase()}` : ''].filter(Boolean).join(' · ');
+
+                // Generate tags from vibe, name, and description
+                const tags = [];
+                if (circle.vibe_category) {
+                  const vibeLabels = { advice: 'Mentorship', vent: 'Support', grow: 'Growth' };
+                  tags.push(vibeLabels[circle.vibe_category] || circle.vibe_category);
+                }
+                const text = `${circle.name || ''} ${description}`.toLowerCase();
+                const tagKeywords = [
+                  { keywords: ['founder', 'startup', 'bootstrap'], tag: 'Founders' },
+                  { keywords: ['early-stage', 'early stage', 'seed', 'pre-seed'], tag: 'Early-stage' },
+                  { keywords: ['accountability', 'accountable'], tag: 'Accountability' },
+                  { keywords: ['ai', 'machine learning', 'ml'], tag: 'AI' },
+                  { keywords: ['product', 'pm', 'build'], tag: 'Product' },
+                  { keywords: ['design', 'ux', 'ui', 'creative'], tag: 'Design' },
+                  { keywords: ['career', 'job', 'interview', 'transition'], tag: 'Career' },
+                  { keywords: ['book', 'reading', 'read'], tag: 'Reading' },
+                  { keywords: ['leader', 'manage', 'executive', 'ceo', 'cto'], tag: 'Leadership' },
+                  { keywords: ['wellness', 'mental', 'burnout', 'balance'], tag: 'Wellness' },
+                  { keywords: ['marketing', 'growth', 'content', 'seo'], tag: 'Marketing' },
+                  { keywords: ['engineer', 'coding', 'tech', 'developer'], tag: 'Tech' },
+                  { keywords: ['network', 'community', 'connect'], tag: 'Community' },
+                  { keywords: ['side project', 'hack', 'indie'], tag: 'Side Projects' },
+                  { keywords: ['fundrais', 'investor', 'venture', 'pitch'], tag: 'Fundraising' },
+                  { keywords: ['lesson', 'learn', 'skill'], tag: 'Lessons' },
+                ];
+                tagKeywords.forEach(({ keywords, tag }) => {
+                  if (!tags.includes(tag) && keywords.some(kw => text.includes(kw))) {
+                    tags.push(tag);
+                  }
+                });
+                // Limit to 3 tags
+                const displayTags = tags.slice(0, 3);
+
                 return (
                   <div
                     key={circle.id}
-                    onClick={() => setExpandedCircleId(isExpanded ? null : circle.id)}
+                    onClick={() => onNavigate?.('circleDetail', { circleId: circle.id })}
                     style={{
-                      width: `${isExpanded ? cardWidth + 40 : cardWidth}px`,
-                      minWidth: `${isExpanded ? cardWidth + 40 : cardWidth}px`,
-                      borderRadius: '14px',
-                      overflow: 'hidden',
+                      background: '#FAF7F4', borderRadius: isMobile ? '14px' : '22px',
+                      border: '1px solid #E8DDD6',
+                      boxShadow: '0 4px 24px rgba(61,46,34,0.11)',
+                      overflow: 'hidden', display: 'flex', alignItems: 'stretch',
                       cursor: 'pointer',
-                      flexShrink: 0,
-                      position: 'relative',
-                      border: isExpanded ? `2.5px solid ${colors.primary}` : '2.5px solid transparent',
-                      transition: 'all 0.3s ease',
-                      boxShadow: isExpanded
-                        ? `0 8px 24px ${colors.primary}35`
-                        : '0 3px 12px rgba(0,0,0,0.18)',
+                      transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                     }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(61,46,34,0.15)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(61,46,34,0.11)'; }}
                   >
-                    {/* Gradient poster area */}
+                    {/* Left: image or SVG */}
                     <div style={{
-                      position: 'relative',
-                      width: '100%',
-                      height: `${collapsedHeight}px`,
+                      width: isMobile ? '100px' : '160px', flexShrink: 0,
+                      position: 'relative', overflow: 'hidden',
                     }}>
-                      {/* Image or default logo background */}
-                      <div style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: circle.image_url
-                          ? `url(${circle.image_url}) center/cover no-repeat`
-                          : '#5E472F',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}>
-                        {!circle.image_url && (
-                          <img src="/tutorial-logo.png" alt="" style={{ width: '40%', height: 'auto', objectFit: 'contain' }} />
-                        )}
+                      {circle.image_url ? (
+                        <img src={circle.image_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <svg viewBox="0 0 110 190" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}>
+                          <rect width="110" height="190" fill="#2C1F15"/>
+                          <circle cx="55" cy="95" r="60" fill="#E8C070" opacity="0.06"/>
+                          <circle cx="55" cy="95" r="38" fill="#E8C070" opacity="0.07"/>
+                          <circle cx="55" cy="95" r="50" fill="none" stroke="#5C3D20" strokeWidth="0.8" strokeDasharray="3 5" opacity="0.6"/>
+                          <ellipse cx="55" cy="98" rx="34" ry="22" fill="#5C3D20"/>
+                          <ellipse cx="55" cy="98" rx="34" ry="22" fill="none" stroke="#7A5230" strokeWidth="1.5"/>
+                          <ellipse cx="55" cy="50" rx="7" ry="7" fill="#C4956A"/>
+                          <rect x="48" y="55" width="14" height="10" rx="5" fill="#C4956A"/>
+                          <ellipse cx="88" cy="77" rx="6" ry="6" fill="#A0724A"/>
+                          <rect x="82" y="82" width="12" height="9" rx="4" fill="#A0724A"/>
+                          <ellipse cx="23" cy="77" rx="6" ry="6" fill="#D4A878"/>
+                          <rect x="17" y="82" width="12" height="9" rx="4" fill="#D4A878"/>
+                          <ellipse cx="79" cy="132" rx="6" ry="6" fill="#D4A878"/>
+                          <rect x="73" y="137" width="12" height="9" rx="4" fill="#D4A878"/>
+                          <ellipse cx="31" cy="132" rx="6" ry="6" fill="#C4956A"/>
+                          <rect x="25" y="137" width="12" height="9" rx="4" fill="#C4956A"/>
+                          <circle cx="55" cy="33" r="3" fill="#E8C070" opacity="0.9"/>
+                          <circle cx="94" cy="59" r="2.5" fill="#E8C070" opacity="0.75"/>
+                          <circle cx="16" cy="59" r="2.5" fill="#E8C070" opacity="0.75"/>
+                        </svg>
+                      )}
+                    </div>
+
+                    {/* Right: content */}
+                    <div style={{
+                      flex: 1, padding: isMobile ? '10px 12px' : '14px 16px',
+                      display: 'flex', flexDirection: 'column', gap: isMobile ? '6px' : '8px', minWidth: 0,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '4px' }}>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '3px',
+                          padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '20px',
+                          background: '#E8F5E9', border: '1px solid #B8DFC0',
+                          fontSize: isMobile ? '9px' : '10.5px', fontWeight: '600', color: '#2E6B40',
+                        }}>
+                          {!isInviteOnly && <span style={{ width: isMobile ? 5 : 6, height: isMobile ? 5 : 6, borderRadius: '50%', background: '#22c55e' }} />}
+                          {isInviteOnly ? 'Invite Only' : 'Open'}
+                        </span>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '3px',
+                          padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '20px',
+                          background: '#F0E8DF', border: '1px solid #E0D0BE',
+                          fontSize: isMobile ? '9px' : '10.5px', fontWeight: '600', color: '#6B4F35',
+                        }}>
+                          <Users size={isMobile ? 9 : 11} /> {memberCount}/{maxMembers}
+                        </span>
                       </div>
 
-                      {/* Top-left: Open/Invite Only pill */}
-                      <span style={{
-                        position: 'absolute',
-                        top: '10px',
-                        left: '10px',
-                        padding: '3px 10px',
-                        borderRadius: '999px',
-                        fontSize: isMobile ? '10px' : '11px',
-                        fontWeight: '700',
-                        letterSpacing: '0.3px',
-                        backgroundColor: 'rgba(255,255,255,0.25)',
-                        backdropFilter: 'blur(4px)',
-                        WebkitBackdropFilter: 'blur(4px)',
-                        color: 'white',
-                        zIndex: 2,
-                      }}>
-                        {isInviteOnly ? 'Invite Only' : 'Open'}
-                      </span>
-
-                      {/* Top-right: member count */}
-                      <span style={{
-                        position: 'absolute',
-                        top: '10px',
-                        right: '10px',
-                        padding: '3px 8px',
-                        borderRadius: '999px',
-                        fontSize: isMobile ? '11px' : '12px',
-                        fontWeight: '700',
-                        backgroundColor: 'rgba(0,0,0,0.3)',
-                        backdropFilter: 'blur(4px)',
-                        WebkitBackdropFilter: 'blur(4px)',
-                        color: 'white',
-                        zIndex: 2,
-                      }}>
-                        {memberCount}/{maxMembers}
-                      </span>
-
-                      {/* Bottom gradient scrim + circle name */}
-                      <div style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        padding: '48px 12px 12px',
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%)',
-                        zIndex: 2,
-                      }}>
+                      <div>
                         <h4 style={{
-                          fontSize: isMobile ? '15px' : '17px',
-                          fontWeight: '700',
-                          color: 'white',
-                          margin: 0,
-                          fontFamily: fonts.serif,
-                          lineHeight: '1.3',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
+                          fontSize: isMobile ? '13px' : '15px', fontWeight: '700',
+                          color: '#2C1F15', margin: 0, fontFamily: fonts.serif,
+                          lineHeight: '1.25', letterSpacing: '-0.2px',
                         }}>
                           {circle.name}
                         </h4>
-                        <p style={{
-                          fontSize: isMobile ? '11px' : '12px',
-                          color: 'rgba(255,255,255,0.75)',
-                          margin: '4px 0 0',
-                          lineHeight: '1.4',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                        }}>
-                          {description}
-                        </p>
+                        {scheduleStr && (
+                          <p style={{ fontSize: isMobile ? '10px' : '12px', fontWeight: '600', color: '#6B5344', margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <Calendar size={isMobile ? 10 : 12} style={{ flexShrink: 0 }} /> {scheduleStr}
+                          </p>
+                        )}
                       </div>
-                    </div>
 
-                    {/* Expanded detail section */}
-                    {isExpanded && (
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        style={{
-                          backgroundColor: colors.warmWhite,
-                          padding: isMobile ? '14px 12px 16px' : '16px 14px 18px',
-                          animation: 'slideDown 0.25s ease-out',
-                        }}
-                      >
-                        {/* Avatar stack + spots */}
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          marginBottom: '12px',
-                        }}>
-                          <div style={{ display: 'flex', marginRight: '8px' }}>
-                            {circle.members?.slice(0, 4).map((member, idx) => (
-                              <div key={member.id} style={{
-                                width: isMobile ? '24px' : '28px',
-                                height: isMobile ? '24px' : '28px',
-                                borderRadius: '50%',
-                                backgroundColor: avatarColors[idx % avatarColors.length],
-                                border: '2px solid white',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: isMobile ? '10px' : '11px',
-                                fontWeight: '600',
-                                color: 'white',
-                                marginLeft: idx > 0 ? '-7px' : 0,
-                              }}>
-                                {member.user?.name?.charAt(0) || '?'}
-                              </div>
-                            ))}
-                            {memberCount > 4 && (
+                      <p style={{
+                        fontSize: isMobile ? '11px' : '12px', color: '#8B7355', margin: 0, lineHeight: '1.5',
+                        display: '-webkit-box', WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}>
+                        {description}
+                      </p>
+
+                      {displayTags.length > 0 && (
+                        <div style={{ display: 'flex', gap: isMobile ? '4px' : '5px', flexWrap: 'wrap' }}>
+                          {displayTags.map((tag, i) => (
+                            <span key={i} style={{
+                              fontSize: isMobile ? '9px' : '10.5px', fontWeight: '500', color: '#6B4F35',
+                              background: '#F0E8DF', border: '1px solid #E0D0BE',
+                              padding: isMobile ? '1px 7px' : '2px 9px', borderRadius: '10px',
+                            }}>{tag}</span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Member avatars + spots */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '6px' }}>
+                        {memberCount > 0 && (
+                          <div style={{ display: 'flex' }}>
+                            {circle.members?.slice(0, isMobile ? 3 : 4).map((member, idx) => {
+                              const avatarBgs = ['#E8D5C0', '#D4C4A8', '#C4956A', '#A0724A'];
+                              const avSize = isMobile ? '18px' : '22px';
+                              return (
+                                <div key={member.id || idx} style={{
+                                  width: avSize, height: avSize, borderRadius: '50%',
+                                  background: avatarBgs[idx % avatarBgs.length],
+                                  border: '1.5px solid #FAF7F4',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: isMobile ? '7px' : '9px', fontWeight: '600', color: '#5C3318',
+                                  marginLeft: idx > 0 ? (isMobile ? '-5px' : '-6px') : 0, flexShrink: 0,
+                                  overflow: 'hidden',
+                                }}>
+                                  {member.user?.profile_picture ? (
+                                    <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    member.user?.name?.charAt(0) || '?'
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {memberCount > (isMobile ? 3 : 4) && (
                               <div style={{
-                                width: isMobile ? '24px' : '28px',
-                                height: isMobile ? '24px' : '28px',
-                                borderRadius: '50%',
-                                backgroundColor: colors.cream,
-                                border: '2px solid white',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: isMobile ? '8px' : '9px',
-                                fontWeight: '600',
-                                color: colors.text,
-                                marginLeft: '-7px',
-                              }}>
-                                +{memberCount - 4}
-                              </div>
+                                width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', borderRadius: '50%',
+                                background: '#F0E8DF', border: '1.5px solid #FAF7F4',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: isMobile ? '7px' : '8px', fontWeight: '600', color: '#6B4F35',
+                                marginLeft: isMobile ? '-5px' : '-6px',
+                              }}>+{memberCount - (isMobile ? 3 : 4)}</div>
                             )}
                           </div>
-                          <span style={{
-                            fontSize: isMobile ? '11px' : '12px',
-                            color: colors.textLight,
-                          }}>
-                            {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
-                          </span>
-                        </div>
-
-                        {/* CTA Buttons */}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onNavigate?.('circleDetail', { circleId: circle.id });
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: isMobile ? '9px 10px' : '10px 12px',
-                              backgroundColor: 'transparent',
-                              color: colors.primary,
-                              border: `1.5px solid ${colors.primary}`,
-                              borderRadius: '10px',
-                              fontSize: isMobile ? '12px' : '13px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            View Details
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onNavigate?.('circleDetail', { circleId: circle.id });
-                            }}
-                            style={{
-                              flex: 1,
-                              padding: isMobile ? '9px 10px' : '10px 12px',
-                              backgroundColor: isInviteOnly ? 'transparent' : colors.primary,
-                              color: isInviteOnly ? colors.primary : 'white',
-                              border: isInviteOnly ? `1.5px solid ${colors.primary}` : 'none',
-                              borderRadius: '10px',
-                              fontSize: isMobile ? '12px' : '13px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                              boxShadow: isInviteOnly ? 'none' : `0 2px 8px ${colors.primary}30`,
-                            }}
-                          >
-                            {isInviteOnly ? 'Request' : 'Join'}
-                          </button>
-                        </div>
+                        )}
+                        <span style={{ fontSize: isMobile ? '9px' : '10px', color: '#A07850' }}>{spotsLeft} left</span>
+                        <span style={{ flex: 1 }} />
+                        <span style={{ fontSize: isMobile ? '9px' : '10px', color: '#B09A8A' }}>by {creatorName.split(' ')[0]}</span>
                       </div>
-                    )}
+
+                      <div style={{ height: '1px', background: '#EDE6DF' }} />
+
+                      {/* Bottom row: host + Join button */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '6px' }}>
+                        <div style={{
+                          width: isMobile ? '18px' : '22px', height: isMobile ? '18px' : '22px', borderRadius: '50%',
+                          background: '#E8D5C0', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: isMobile ? '8px' : '9.5px', fontWeight: '600', color: '#5C3318', flexShrink: 0,
+                          overflow: 'hidden',
+                        }}>
+                          {creator?.user?.profile_picture ? (
+                            <img src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : creatorName.charAt(0)}
+                        </div>
+                        <span style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: '500', color: '#6B4F35' }}>{creatorName.split(' ')[0]}</span>
+                        <span style={{ fontSize: isMobile ? '9px' : '10px', color: '#B09A8A' }}>{'\u00b7'} host</span>
+                        <span style={{ flex: 1 }} />
+                        {(() => {
+                          const joinState = circleJoinState[circle.id] || 'idle';
+                          const isDone = joinState === 'joined' || joinState === 'requested';
+                          return (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (isDone) return;
+                                setCircleJoinState(prev => ({ ...prev, [circle.id]: 'loading' }));
+                                try {
+                                  const result = await requestToJoinGroup(supabase, circle.id, currentUser.id);
+                                  if (result.success) {
+                                    setCircleJoinState(prev => ({ ...prev, [circle.id]: isInviteOnly ? 'requested' : 'joined' }));
+                                    toast?.success(isInviteOnly ? 'Request sent!' : 'Joined!');
+                                  } else {
+                                    setCircleJoinState(prev => ({ ...prev, [circle.id]: result.error?.includes('Already') ? 'joined' : 'idle' }));
+                                    if (result.error && !result.error.includes('Already')) toast?.error(result.error);
+                                  }
+                                } catch (err) {
+                                  setCircleJoinState(prev => ({ ...prev, [circle.id]: 'idle' }));
+                                  toast?.error('Failed to join');
+                                }
+                              }}
+                              disabled={joinState === 'loading'}
+                              style={{
+                                padding: isMobile ? '5px 12px' : '6px 14px', borderRadius: '14px',
+                                fontSize: isMobile ? '10px' : '11.5px', fontWeight: '600',
+                                cursor: isDone ? 'default' : joinState === 'loading' ? 'wait' : 'pointer',
+                                fontFamily: fonts.sans,
+                                background: isDone ? '#5A8A4A' : '#3D2E22',
+                                color: '#FAF7F4',
+                                border: 'none', transition: 'background 0.15s',
+                                opacity: joinState === 'loading' ? 0.7 : 1,
+                              }}
+                              onMouseEnter={e => { if (!isDone) e.currentTarget.style.background = '#2C1F15' }}
+                              onMouseLeave={e => { if (!isDone) e.currentTarget.style.background = isDone ? '#5A8A4A' : '#3D2E22' }}
+                            >
+                              {joinState === 'loading' ? '...'
+                                : joinState === 'joined' ? 'Joined ✓'
+                                : joinState === 'requested' ? 'Requested ✓'
+                                : isInviteOnly ? 'Request' : 'Join'}
+                            </button>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
 
-              {/* Create Circle Card - poster style */}
+
+              {/* Create Circle Card */}
               <div
                 onClick={() => onNavigate?.('createCircle')}
                 style={{
-                  width: isMobile ? '200px' : '230px',
-                  minWidth: isMobile ? '200px' : '230px',
-                  height: isMobile ? '220px' : '250px',
-                  borderRadius: '14px',
-                  overflow: 'hidden',
+                  borderRadius: isMobile ? '14px' : '16px',
                   cursor: 'pointer',
-                  flexShrink: 0,
-                  position: 'relative',
-                  background: 'linear-gradient(135deg, #F5EDE4 0%, #EDE3D7 50%, #E8DDD0 100%)',
+                  background: '#F5EDE4',
                   border: '1.5px dashed #C4A882',
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '20px 14px',
-                  textAlign: 'center',
+                  gap: '12px',
+                  padding: isMobile ? '14px 16px' : '16px 20px',
+                  transition: 'background 0.15s',
                 }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#EDE3D7' }}
+                onMouseLeave={e => { e.currentTarget.style.background = '#F5EDE4' }}
               >
                 <div style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '50%',
+                  width: '36px', height: '36px', borderRadius: '50%',
                   backgroundColor: '#D8CFC6',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
                 }}>
-                  <Plus size={20} style={{ color: '#6B4226' }} />
+                  <Plus size={18} style={{ color: '#6B4226' }} />
                 </div>
-                <h4 style={{
-                  fontSize: isMobile ? '14px' : '15px',
-                  fontWeight: '600',
-                  color: '#3E2C1E',
-                  margin: '0 0 6px',
-                  fontFamily: fonts.serif,
-                  lineHeight: '1.3',
-                }}>
-                  Start your own Circle
-                </h4>
-                <p style={{
-                  fontSize: isMobile ? '11px' : '12px',
-                  color: '#7A6855',
-                  margin: 0,
-                  lineHeight: '1.4',
-                }}>
-                  6-10 women, weekly
-                </p>
+                <div>
+                  <h4 style={{
+                    fontSize: '14px', fontWeight: '600', color: '#3E2C1E',
+                    margin: 0, fontFamily: fonts.serif,
+                  }}>
+                    Start your own Circle
+                  </h4>
+                  <p style={{ fontSize: '11px', color: '#7A6855', margin: '2px 0 0' }}>
+                    6-10 women, weekly
+                  </p>
+                </div>
               </div>
             </div>
           </div>
