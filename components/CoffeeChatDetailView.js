@@ -915,6 +915,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
         alignItems: 'flex-start',
       }}>
         {/* Date badge */}
+
         <div style={{
           backgroundColor: 'white',
           borderRadius: '14px',
@@ -1134,7 +1135,55 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
             </div>
           )}
         </div>
+
+        {/* QR Code — right side, community events and circle meetups only */}
+        {!meetup._isCoffeeChat && !isMobile && (
+          <div style={{
+            flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+          }}>
+            <div style={{
+              width: '90px', height: '90px', borderRadius: '10px', overflow: 'hidden',
+              border: `1px solid ${colors.border}`, background: '#fff', padding: '5px',
+            }}>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/?event=${meetupId}` : '')}&color=5C4033&bgcolor=FFFFFF`}
+                alt="QR Code"
+                style={{ width: '100%', height: '100%' }}
+              />
+            </div>
+            <span style={{ fontSize: '10px', color: colors.textMuted, textAlign: 'center' }}>Scan to join</span>
+          </div>
+        )}
       </div>
+
+      {/* QR Code — mobile, below header */}
+      {!meetup._isCoffeeChat && isMobile && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '12px',
+          padding: '12px', marginBottom: '8px',
+          borderRadius: '12px', border: `1px solid ${colors.border}`,
+          background: 'rgba(139,111,92,0.03)',
+        }}>
+          <div style={{
+            width: '70px', height: '70px', borderRadius: '8px', overflow: 'hidden',
+            border: `1px solid ${colors.border}`, background: '#fff', padding: '4px', flexShrink: 0,
+          }}>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(typeof window !== 'undefined' ? `${window.location.origin}/?event=${meetupId}` : '')}&color=5C4033&bgcolor=FFFFFF`}
+              alt="QR Code"
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+          <div>
+            <p style={{ fontFamily: fonts.sans, fontSize: '13px', color: colors.text, margin: '0 0 2px', fontWeight: '500' }}>
+              Scan to join
+            </p>
+            <p style={{ fontFamily: fonts.sans, fontSize: '11px', color: colors.textMuted, margin: 0 }}>
+              Share so others can RSVP
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div style={{
@@ -1268,19 +1317,165 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                       const title = meetup.topic || 'Event';
                       const dateStr = meetup.date ? formatEventDate(meetup.date, meetup.time, meetup.timezone, { weekday: 'long', month: 'long', day: 'numeric' }) : '';
                       const timeStr = meetup.time ? formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false }) : '';
-                      const location = meetup.location || '';
-                      const desc = meetup.description ? meetup.description.substring(0, 120) + (meetup.description.length > 120 ? '...' : '') : '';
-                      const attendeeCount = attendees.length;
+                      const locationStr = meetup.meeting_format === 'in_person' ? (meetup.location || '') : meetup.meeting_format === 'hybrid' ? `${meetup.location} + Virtual` : 'Virtual';
 
+                      // Generate share card image with QR code
+                      if (!meetup._isCoffeeChat) {
+                        try {
+                          // Load QR code image first
+                          const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(url)}&color=5C4033&bgcolor=FFFFFF`;
+                          const qrImg = new Image();
+                          qrImg.crossOrigin = 'anonymous';
+                          await new Promise((resolve, reject) => {
+                            qrImg.onload = resolve;
+                            qrImg.onerror = reject;
+                            qrImg.src = qrUrl;
+                          });
+
+                          // Create canvas
+                          const w = 600, h = 800;
+                          const canvas = document.createElement('canvas');
+                          canvas.width = w;
+                          canvas.height = h;
+                          const ctx = canvas.getContext('2d');
+
+                          // Background gradient (warm mocha)
+                          const grad = ctx.createLinearGradient(0, 0, w, h);
+                          grad.addColorStop(0, '#F5EBE0');
+                          grad.addColorStop(0.5, '#E8D5C4');
+                          grad.addColorStop(1, '#D4B896');
+                          ctx.fillStyle = grad;
+                          ctx.fillRect(0, 0, w, h);
+
+                          // Decorative circle top-right
+                          ctx.beginPath();
+                          ctx.arc(w + 30, -30, 180, 0, Math.PI * 2);
+                          ctx.fillStyle = 'rgba(92,64,51,0.06)';
+                          ctx.fill();
+
+                          // Decorative circle bottom-left
+                          ctx.beginPath();
+                          ctx.arc(-40, h + 20, 150, 0, Math.PI * 2);
+                          ctx.fillStyle = 'rgba(92,64,51,0.05)';
+                          ctx.fill();
+
+                          // CircleW logo text
+                          ctx.fillStyle = '#5C4033';
+                          ctx.font = '600 20px "DM Sans", sans-serif';
+                          ctx.textAlign = 'center';
+                          ctx.fillText('CircleW', w / 2, 50);
+
+                          // Event title
+                          ctx.fillStyle = '#3D2B1F';
+                          ctx.font = '700 28px "Lora", Georgia, serif';
+                          ctx.textAlign = 'center';
+                          // Word wrap title
+                          const maxWidth = w - 80;
+                          const titleWords = title.split(' ');
+                          let titleLines = [];
+                          let currentLine = '';
+                          titleWords.forEach(word => {
+                            const testLine = currentLine ? currentLine + ' ' + word : word;
+                            if (ctx.measureText(testLine).width > maxWidth) {
+                              titleLines.push(currentLine);
+                              currentLine = word;
+                            } else {
+                              currentLine = testLine;
+                            }
+                          });
+                          if (currentLine) titleLines.push(currentLine);
+                          let titleY = 95;
+                          titleLines.forEach(line => {
+                            ctx.fillText(line, w / 2, titleY);
+                            titleY += 36;
+                          });
+
+                          // Date + time
+                          ctx.fillStyle = '#6B5344';
+                          ctx.font = '500 18px "DM Sans", sans-serif';
+                          const dateTimeStr = dateStr && timeStr ? `${dateStr} · ${timeStr}` : dateStr || timeStr;
+                          ctx.fillText(dateTimeStr, w / 2, titleY + 15);
+
+                          // Location
+                          if (locationStr) {
+                            ctx.fillStyle = '#8B7355';
+                            ctx.font = '500 16px "DM Sans", sans-serif';
+                            ctx.fillText(locationStr, w / 2, titleY + 42);
+                          }
+
+                          // QR code (centered, white rounded rect background)
+                          const qrSize = 280;
+                          const qrX = (w - qrSize - 40) / 2;
+                          const qrY = titleY + 70;
+                          const qrPad = 20;
+
+                          // White rounded rect behind QR
+                          const rx = qrX, ry = qrY, rw = qrSize + qrPad * 2, rh = qrSize + qrPad * 2, radius = 20;
+                          ctx.fillStyle = '#FFFFFF';
+                          ctx.beginPath();
+                          ctx.moveTo(rx + radius, ry);
+                          ctx.lineTo(rx + rw - radius, ry);
+                          ctx.quadraticCurveTo(rx + rw, ry, rx + rw, ry + radius);
+                          ctx.lineTo(rx + rw, ry + rh - radius);
+                          ctx.quadraticCurveTo(rx + rw, ry + rh, rx + rw - radius, ry + rh);
+                          ctx.lineTo(rx + radius, ry + rh);
+                          ctx.quadraticCurveTo(rx, ry + rh, rx, ry + rh - radius);
+                          ctx.lineTo(rx, ry + radius);
+                          ctx.quadraticCurveTo(rx, ry, rx + radius, ry);
+                          ctx.closePath();
+                          ctx.fill();
+
+                          // Shadow for QR container
+                          ctx.shadowColor = 'rgba(61,46,34,0.12)';
+                          ctx.shadowBlur = 20;
+                          ctx.shadowOffsetY = 4;
+                          ctx.fill();
+                          ctx.shadowColor = 'transparent';
+                          ctx.shadowBlur = 0;
+                          ctx.shadowOffsetY = 0;
+
+                          // Draw QR code
+                          ctx.drawImage(qrImg, qrX + qrPad, qrY + qrPad, qrSize, qrSize);
+
+                          // "Scan to RSVP" text
+                          ctx.fillStyle = '#5C4033';
+                          ctx.font = '600 18px "DM Sans", sans-serif';
+                          ctx.fillText('Scan to RSVP', w / 2, qrY + rh + 35);
+
+                          // Footer tagline
+                          ctx.fillStyle = '#8B7355';
+                          ctx.font = '500 14px "DM Sans", sans-serif';
+                          ctx.fillText('Join a community of women building', w / 2, h - 48);
+                          ctx.fillText('meaningful connections', w / 2, h - 28);
+
+                          // Convert to blob and share
+                          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+                          const file = new File([blob], `${title.replace(/[^a-zA-Z0-9]/g, '-')}-invite.png`, { type: 'image/png' });
+
+                          if (navigator.share && navigator.canShare?.({ files: [file] })) {
+                            await navigator.share({ title: `Join: ${title}`, files: [file] });
+                          } else {
+                            // Fallback: download the image
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = file.name;
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                          }
+                          return;
+                        } catch (e) {
+                          console.error('[Share] Card generation failed:', e);
+                        }
+                      }
+
+                      // Fallback: text-only share
                       const lines = [
-                        title,
+                        `☕ ${title}`,
                         '',
-                        dateStr && timeStr ? `${dateStr} at ${timeStr}` : dateStr || timeStr,
-                        location ? `${location}` : '',
-                        desc ? `\n${desc}` : '',
-                        attendeeCount > 0 ? `\n${attendeeCount} ${attendeeCount === 1 ? 'person' : 'people'} attending` : '',
+                        `📅 ${dateStr && timeStr ? `${dateStr} at ${timeStr}` : dateStr || timeStr}`,
+                        locationStr ? `📍 ${locationStr}` : '',
                         '',
-                        `Join here: ${url}`,
+                        `RSVP here: ${url}`,
                       ].filter(Boolean).join('\n');
 
                       if (navigator.share) {
