@@ -690,7 +690,6 @@ function MainApp({ currentUser, onSignOut }) {
                         }
                       }
 
-                      if (extra.hook) reasons.push({ reason: `Ask me about: ${extra.hook}` })
                       // Only show location if it matches current user's location or there are other reasons
                       const myCity = (currentUser.city || '').toLowerCase()
                       if (extra.city && myCity && extra.city.toLowerCase() === myCity) {
