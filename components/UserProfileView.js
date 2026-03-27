@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock } from 'lucide-react';
+import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock, Activity } from 'lucide-react';
 import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 
 const COLORS = {
@@ -59,6 +59,30 @@ const VIBE_COLORS = {
   grow: { bg: '#E8F2EB', text: '#4A7C59' },
 };
 
+const ACTIVITY_CONFIG = {
+  coffee_live: { icon: Coffee, color: '#6B4F3A', bg: '#FDF3EB', label: 'Joined a coffee chat' },
+  coffee_scheduled: { icon: Coffee, color: '#6B4F3A', bg: '#FDF3EB', label: 'Scheduled a coffee chat' },
+  connection: { icon: UserPlus, color: '#4A7C59', bg: '#E8F2EB', label: 'Made a new connection' },
+  circle_join: { icon: Users, color: '#5C6BC0', bg: '#EDE7F6', label: 'Joined a circle' },
+  community_event: { icon: BookOpen, color: '#B85C4A', bg: '#FDF0ED', label: 'Hosted a meetup' },
+  member_joined: { icon: UserPlus, color: '#4A7C59', bg: '#E8F2EB', label: 'Joined the community' },
+};
+
+function timeAgo(dateStr) {
+  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) return `${weeks}w ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
+
 export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -74,6 +98,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [accepting, setAccepting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [showReport, setShowReport] = useState(false);
+  const [activities, setActivities] = useState([]);
   const [reportReason, setReportReason] = useState(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
@@ -161,6 +186,27 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         .select('id', { count: 'exact', head: true })
         .contains('participant_ids', [userId]);
       setMeetupCount(recapCount || 0);
+
+      // Fetch recent activity
+      const { data: feedData, error: feedError } = await supabase
+        .from('feed_events')
+        .select('id, event_type, target_id, metadata, created_at')
+        .eq('actor_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(8);
+      if (feedError) console.error('Feed events error:', feedError);
+
+      // Resolve target user names for activities
+      const targetIds = [...new Set((feedData || []).filter(e => e.target_id).map(e => e.target_id))];
+      let targetNames = {};
+      if (targetIds.length > 0) {
+        const { data: targets } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', targetIds);
+        (targets || []).forEach(t => { targetNames[t.id] = t.name; });
+      }
+      setActivities((feedData || []).map(e => ({ ...e, _targetName: targetNames[e.target_id] || null })));
     } catch (err) {
       console.error('Error loading user profile:', err);
     } finally {
@@ -344,34 +390,40 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         <div style={{ textAlign: 'center', paddingTop: 8, paddingBottom: 4, ...fadeIn(0.05) }}>
           {/* Avatar */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
-            <div className="profile-avatar" style={{ position: 'relative', borderRadius: '50%' }}>
+            <div className="profile-avatar" style={{
+              position: 'relative', borderRadius: '50%',
+              background: `linear-gradient(145deg, ${COLORS.brown300}, ${COLORS.accent}, ${COLORS.brown700})`,
+              padding: 3,
+            }}>
               {profile.profile_picture ? (
                 <img
                   src={profile.profile_picture}
                   alt={profile.name}
-                  className="profile-avatar"
+                  className="profile-avatar-img"
                   style={{
                     borderRadius: '50%', objectFit: 'cover',
-                    boxShadow: `0 4px 16px ${COLORS.shadowMd}`,
+                    width: '100%', height: '100%',
+                    border: `3px solid ${COLORS.white}`,
                   }}
                 />
               ) : (
                 <div
-                  className="profile-avatar"
+                  className="profile-avatar-img"
                   style={{
                     borderRadius: '50%',
+                    width: '100%', height: '100%',
                     background: `linear-gradient(145deg, ${COLORS.accent}, ${COLORS.brown700})`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: COLORS.white, fontFamily: DISPLAY_FONT, fontWeight: 600,
                     letterSpacing: 1,
-                    boxShadow: `0 4px 16px ${COLORS.shadowMd}`,
+                    border: `3px solid ${COLORS.white}`,
                   }}
                 >
                   <span className="profile-avatar-initial">{(profile.name || '?')[0].toUpperCase()}</span>
                 </div>
               )}
               <div style={{
-                position: 'absolute', bottom: 2, right: 2,
+                position: 'absolute', bottom: 4, right: 4,
                 width: 16, height: 16, borderRadius: 8,
                 background: isActive ? COLORS.greenDot : '#9E9E9E',
                 border: `3px solid ${COLORS.white}`,
@@ -478,45 +530,86 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
         {/* ─── Quick Toggles (own profile only) ─── */}
         {isOwnProfile && (<>
-          <div style={{ display: 'flex', gap: 10, marginTop: 16, ...fadeIn(0.15) }}>
-            <button
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginTop: 16, padding: '4px 0', ...fadeIn(0.15) }}>
+            {/* Hosting toggle */}
+            <div
               onClick={async () => {
                 const newVal = !profile.open_to_hosting;
                 setProfile(prev => ({ ...prev, open_to_hosting: newVal }));
                 await supabase.from('profiles').update({ open_to_hosting: newVal }).eq('id', currentUser.id);
               }}
               style={{
-                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 14px', borderRadius: 12,
-                border: `1.5px solid ${profile.open_to_hosting ? COLORS.green : COLORS.brown200}`,
-                background: profile.open_to_hosting ? COLORS.greenLight : COLORS.white,
-                cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 500,
-                color: profile.open_to_hosting ? COLORS.green : COLORS.brown500,
-                transition: 'all 0.2s',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 0', cursor: 'pointer',
+                borderBottom: '1px solid #F0E6D8',
               }}
             >
-              <Users size={14} />
-              {profile.open_to_hosting ? 'Hosting: On' : 'Hosting: Off'}
-            </button>
-            <button
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Users size={15} style={{ color: COLORS.brown500 }} />
+                <div>
+                  <span className="profile-toggle-label" style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: COLORS.brown700, display: 'block' }}>
+                    Open to hosting meetups
+                  </span>
+                  <span className="profile-toggle-subtitle" style={{ fontFamily: FONT, fontSize: 12, color: COLORS.brown400, display: 'block', marginTop: 2 }}>
+                    You'll be notified when people need your expertise
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                width: 44, height: 26, borderRadius: 13,
+                background: profile.open_to_hosting ? COLORS.green : '#D4C4A8',
+                transition: 'background 0.2s',
+                position: 'relative', flexShrink: 0,
+              }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: 11,
+                  background: COLORS.white,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  position: 'absolute', top: 2,
+                  left: profile.open_to_hosting ? 20 : 2,
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+            </div>
+            {/* Coffee chat toggle */}
+            <div
               onClick={async () => {
                 const newVal = !profile.open_to_coffee_chat;
                 setProfile(prev => ({ ...prev, open_to_coffee_chat: newVal }));
                 await supabase.from('profiles').update({ open_to_coffee_chat: newVal }).eq('id', currentUser.id);
               }}
               style={{
-                flex: 1, display: 'flex', alignItems: 'center', gap: 8,
-                padding: '10px 14px', borderRadius: 12,
-                border: `1.5px solid ${profile.open_to_coffee_chat ? '#6B4F3A' : COLORS.brown200}`,
-                background: profile.open_to_coffee_chat ? '#FDF3EB' : COLORS.white,
-                cursor: 'pointer', fontFamily: FONT, fontSize: 13, fontWeight: 500,
-                color: profile.open_to_coffee_chat ? '#6B4F3A' : COLORS.brown500,
-                transition: 'all 0.2s',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 0', cursor: 'pointer',
               }}
             >
-              <Coffee size={14} />
-              {profile.open_to_coffee_chat ? 'Open to Coffee Chat This Week' : 'Coffee Chat: Off'}
-            </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Coffee size={15} style={{ color: COLORS.brown500 }} />
+                <div>
+                  <span className="profile-toggle-label" style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: COLORS.brown700, display: 'block' }}>
+                    Open to coffee chats
+                  </span>
+                  <span className="profile-toggle-subtitle" style={{ fontFamily: FONT, fontSize: 12, color: COLORS.brown400, display: 'block', marginTop: 2 }}>
+                    Show others you're available for 1:1 conversations
+                  </span>
+                </div>
+              </div>
+              <div style={{
+                width: 44, height: 26, borderRadius: 13,
+                background: profile.open_to_coffee_chat ? '#6B4F3A' : '#D4C4A8',
+                transition: 'background 0.2s',
+                position: 'relative', flexShrink: 0,
+              }}>
+                <div style={{
+                  width: 22, height: 22, borderRadius: 11,
+                  background: COLORS.white,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  position: 'absolute', top: 2,
+                  left: profile.open_to_coffee_chat ? 20 : 2,
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+            </div>
           </div>
 
           {/* Preferred time slots picker */}
@@ -723,7 +816,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                 flex: 1, background: COLORS.bgCard, borderRadius: 14,
                 padding: '14px 8px', textAlign: 'center',
               }}>
-                <div className="profile-stat-value" style={{ fontFamily: FONT, fontWeight: 800, color: COLORS.brown700, lineHeight: 1 }}>
+                <div className="profile-stat-value" style={{ fontFamily: DISPLAY_FONT, fontWeight: 700, color: COLORS.brown700, lineHeight: 1 }}>
                   {stat.value}
                 </div>
                 <div className="profile-stat-label" style={{ fontFamily: FONT, color: COLORS.brown400, marginTop: 4, fontWeight: 500 }}>
@@ -784,6 +877,100 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                         <path d="M4.5 2.5L8 6L4.5 9.5" stroke={COLORS.brown300} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ─── Recent Activity ─── */}
+        {activities.length > 0 && (
+          <>
+            <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '24px 0' }} />
+            <div style={fadeIn(0.24)}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                fontFamily: FONT, fontWeight: 700, fontSize: 11,
+                color: COLORS.brown700, marginBottom: 14,
+                textTransform: 'uppercase', letterSpacing: 0.8,
+              }}>
+                <Activity size={14} color={COLORS.brown400} />
+                Recent Activity
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {activities.map((activity, i) => {
+                  const config = ACTIVITY_CONFIG[activity.event_type] || ACTIVITY_CONFIG.connection;
+                  const Icon = config.icon;
+                  const meta = activity.metadata || {};
+                  let label = config.label;
+                  let subtitle = null;
+
+                  if (activity.event_type === 'coffee_scheduled' || activity.event_type === 'coffee_live') {
+                    label = activity._targetName ? `Coffee chat with ${activity._targetName}` : config.label;
+                    if (meta.topic && meta.topic !== 'Coffee Chat') subtitle = meta.topic;
+                    if (meta.scheduled_time) {
+                      const d = new Date(meta.scheduled_time);
+                      subtitle = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                    }
+                  } else if (activity.event_type === 'community_event') {
+                    label = meta.title || 'Hosted a meetup';
+                    const parts = [];
+                    if (meta.date) {
+                      const d = new Date(meta.date + 'T00:00:00');
+                      parts.push(d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }));
+                    }
+                    if (meta.location) parts.push(meta.location);
+                    if (parts.length) subtitle = parts.join(' · ');
+                  } else if (activity.event_type === 'circle_join') {
+                    label = meta.circle_name ? `Joined ${meta.circle_name}` : config.label;
+                  } else if (activity.event_type === 'connection') {
+                    label = activity._targetName ? `Connected with ${activity._targetName}` : config.label;
+                  } else if (activity.event_type === 'member_joined') {
+                    label = 'Joined the community';
+                    const parts = [meta.career, meta.industry].filter(Boolean);
+                    if (parts.length) subtitle = parts.join(' · ');
+                  }
+
+                  return (
+                    <div key={activity.id} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 12,
+                      padding: '11px 0',
+                      borderBottom: i < activities.length - 1 ? `1px solid ${COLORS.brown100}` : 'none',
+                    }}>
+                      <div style={{
+                        width: 34, height: 34, borderRadius: 10,
+                        background: config.bg,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0, marginTop: 1,
+                      }}>
+                        <Icon size={15} color={config.color} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="profile-activity-label" style={{
+                          fontFamily: FONT, fontSize: 13.5, fontWeight: 500,
+                          color: COLORS.brown700,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {label}
+                        </div>
+                        {subtitle && (
+                          <div className="profile-activity-time" style={{
+                            fontFamily: FONT, fontSize: 12, color: COLORS.brown400,
+                            marginTop: 2,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>
+                            {subtitle}
+                          </div>
+                        )}
+                      </div>
+                      <span className="profile-activity-time" style={{
+                        fontFamily: FONT, fontSize: 11, color: COLORS.brown400,
+                        flexShrink: 0, marginTop: 2,
+                      }}>
+                        {timeAgo(activity.created_at)}
+                      </span>
+                    </div>
                   );
                 })}
               </div>
@@ -1040,6 +1227,10 @@ const keyframeStyles = `
   .profile-circle-chip { padding: 12px 16px; }
   .profile-circle-name { font-size: 13.5px; }
   .profile-tagline { font-size: 16px; margin-top: 40px; }
+  .profile-toggle-label { font-size: 14px !important; }
+  .profile-toggle-subtitle { font-size: 12px !important; }
+  .profile-activity-label { font-size: 13.5px !important; }
+  .profile-activity-time { font-size: 11px !important; }
 
   @media (min-width: 640px) {
     .profile-container { padding: 0 0 72px; }
@@ -1056,6 +1247,10 @@ const keyframeStyles = `
     .profile-circle-chip { padding: 14px 18px; }
     .profile-circle-name { font-size: 14.5px; }
     .profile-tagline { font-size: 17px; margin-top: 48px; }
+    .profile-toggle-label { font-size: 15px !important; }
+    .profile-toggle-subtitle { font-size: 13px !important; }
+    .profile-activity-label { font-size: 14px !important; }
+    .profile-activity-time { font-size: 12px !important; }
   }
 
   @media (min-width: 1024px) {

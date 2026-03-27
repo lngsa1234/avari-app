@@ -4729,45 +4729,6 @@ function MainApp({ currentUser, onSignOut }) {
                 )}
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-700">Open to hosting meetups?</p>
-                  <p className="text-xs text-gray-500">You'll be notified when people need your expertise</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditedProfile({ ...editedProfile, open_to_hosting: !editedProfile.open_to_hosting })}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${
-                    editedProfile.open_to_hosting ? 'bg-[#6B4F3F]' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                      editedProfile.open_to_hosting ? 'translate-x-6' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-700">Open to coffee chats?</p>
-                  <p className="text-xs text-gray-500">Show others you're available for 1:1 conversations</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditedProfile({ ...editedProfile, open_to_coffee_chat: !editedProfile.open_to_coffee_chat })}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${
-                    editedProfile.open_to_coffee_chat ? 'bg-[#6B4F3F]' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                      editedProfile.open_to_coffee_chat ? 'translate-x-6' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
