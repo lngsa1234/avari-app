@@ -198,26 +198,6 @@ export default function NetworkDiscoverView({
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [placeholderVisible, setPlaceholderVisible] = useState(true);
   const [expandedCircleId, setExpandedCircleId] = useState(null);
-  const [meetupImages, setMeetupImages] = useState(() => {
-    // Load cached images from localStorage on mount
-    // Bump CACHE_VERSION when bgQueries change to force fresh images
-    const CACHE_VERSION = 'v2';
-    if (typeof window !== 'undefined') {
-      try {
-        const storedVersion = localStorage.getItem('meetupImagesCacheVersion');
-        if (storedVersion !== CACHE_VERSION) {
-          localStorage.removeItem('meetupImages');
-          localStorage.setItem('meetupImagesCacheVersion', CACHE_VERSION);
-          return {};
-        }
-        const cached = localStorage.getItem('meetupImages');
-        return cached ? JSON.parse(cached) : {};
-      } catch { return {}; }
-    }
-    return {};
-  });
-
-  const [imageBrightness, setImageBrightness] = useState({});
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -282,8 +262,6 @@ export default function NetworkDiscoverView({
     hasLoadedRef.current = true;
     loadData();
   }, [selectedVibe]);
-
-  // Fetch Unsplash images for meetup topics (moved after featuredMeetups is computed)
 
   // Load user's RSVPs on mount
   useEffect(() => {
@@ -799,95 +777,6 @@ export default function NetworkDiscoverView({
   // Community Events - only meetups without a circle (public events)
   const featuredMeetups = upcomingMeetups.filter(m => !m.circle_id).slice(0, 4);
 
-  // Fetch Unsplash images for featured meetups
-  const featuredMeetupIds = featuredMeetups.map(m => m.id).join(',');
-  useEffect(() => {
-    const unsplashKey = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY;
-    if (!unsplashKey || featuredMeetups.length === 0) return;
-
-    let cancelled = false;
-
-    const fetchImages = async () => {
-      const newImages = {};
-
-      await Promise.all(
-        featuredMeetups.map(async (meetup, index) => {
-          if (meetup.image_url || meetupImages[meetup.id]) return; // Has uploaded photo or already cached
-          try {
-            // Authentic, candid community-focused backgrounds
-            const bgQueries = [
-              'diverse people laughing outdoors candid',
-              'community gathering golden hour unposed',
-              'women collaboration workshop warm lighting',
-              'supportive conversation soft sunlight',
-              'neighborhood block party real people',
-              'people sharing meal long table candid',
-              'group learning craft hands-on',
-              'outdoor fitness class park vibrant',
-            ];
-            const query = bgQueries[index % bgQueries.length];
-            const page = (index % 5) + 1;
-            const res = await fetch(
-              `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=1&page=${page}&orientation=portrait`,
-              { headers: { Authorization: `Client-ID ${unsplashKey}` } }
-            );
-            if (!res.ok) return;
-            const data = await res.json();
-            const imageUrl = data.results?.[0]?.urls?.small;
-            if (imageUrl) {
-              newImages[meetup.id] = imageUrl;
-            }
-          } catch (err) {
-            // Fall back to gradient
-          }
-        })
-      );
-
-      if (!cancelled && Object.keys(newImages).length > 0) {
-        setMeetupImages(prev => {
-          const updated = { ...prev, ...newImages };
-          try { localStorage.setItem('meetupImages', JSON.stringify(updated)); } catch {}
-          return updated;
-        });
-      }
-    };
-
-    fetchImages();
-    return () => { cancelled = true; };
-  }, [featuredMeetupIds]);
-
-  // Analyze image brightness for text color adaptation
-  useEffect(() => {
-    const analyzeImages = () => {
-      Object.entries(meetupImages).forEach(([meetupId, url]) => {
-        if (imageBrightness[meetupId] !== undefined) return;
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            const size = 50;
-            canvas.width = size;
-            canvas.height = size;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, size, size);
-            const data = ctx.getImageData(0, 0, size, size).data;
-            let totalBrightness = 0;
-            const pixelCount = data.length / 4;
-            for (let i = 0; i < data.length; i += 4) {
-              totalBrightness += (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-            }
-            const avgBrightness = totalBrightness / pixelCount;
-            setImageBrightness(prev => ({ ...prev, [meetupId]: avgBrightness }));
-          } catch {
-            // CORS or other error — default to dark overlay
-          }
-        };
-        img.src = url;
-      });
-    };
-    if (Object.keys(meetupImages).length > 0) analyzeImages();
-  }, [meetupImages]);
 
   // Recommended meetups (non-RSVP'd only for "Community Events" section)
   const recommendedMeetups = upcomingMeetups.filter(m => !m.circle_id && !userRsvps.has(m.id)).slice(0, 4);
@@ -1041,14 +930,6 @@ export default function NetworkDiscoverView({
               const signups = meetupSignups[meetup.id] || [];
               const signupCount = signups.length;
               const hasUploadedImage = !!meetup.image_url;
-              const bgImage = meetup.image_url || meetupImages[meetup.id];
-              const brightness = imageBrightness[meetup.id];
-              const isLightImage = !hasUploadedImage && bgImage && brightness !== undefined && brightness > 140;
-              const textColor = isLightImage ? '#3E2C1E' : 'white';
-              const textColorMuted = isLightImage ? 'rgba(62,44,30,0.7)' : 'rgba(255,255,255,0.8)';
-              const textColorFaint = isLightImage ? 'rgba(62,44,30,0.4)' : 'rgba(255,255,255,0.4)';
-              const badgeBg = isLightImage ? 'rgba(62,44,30,0.12)' : 'rgba(255,255,255,0.2)';
-              const textShadow = isLightImage ? 'none' : '0 1px 4px rgba(0,0,0,0.4)';
               const fallbackGradient = [
                 'linear-gradient(160deg, #6B4226 0%, #A0714F 50%, #C49A6C 100%)',
                 'linear-gradient(160deg, #5C6B42 0%, #7A9455 50%, #A0B87A 100%)',
@@ -1064,168 +945,112 @@ export default function NetworkDiscoverView({
                   onClick={() => onNavigate?.('eventDetail', { meetupId: meetup.id })}
                   style={{
                     minWidth: isMobile ? '280px' : '310px',
-                    height: isMobile ? '200px' : '220px',
                     borderRadius: isMobile ? '14px' : '16px',
                     overflow: 'hidden',
-                    boxShadow: '0 3px 14px rgba(0, 0, 0, 0.18)',
+                    boxShadow: '0 3px 14px rgba(0, 0, 0, 0.12)',
                     flexShrink: 0,
-                    position: 'relative',
                     cursor: 'pointer',
+                    background: '#FAF7F4',
+                    border: '1px solid rgba(139,111,92,0.08)',
                   }}>
-                  {/* Background: uploaded image as CSS bg, or Unsplash img, or gradient fallback */}
+                  {/* Image area */}
                   <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: hasUploadedImage
-                      ? `url(${meetup.image_url}) center/cover no-repeat`
-                      : fallbackGradient,
-                  }} />
-                  {/* Unsplash image overlay (only for non-uploaded images) */}
-                  {!hasUploadedImage && bgImage && (
-                    <img
-                      src={bgImage}
-                      alt=""
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        filter: 'saturate(0.85) sepia(0.1) brightness(0.95)',
-                      }}
-                    />
-                  )}
-                  {/* Adaptive overlay for readability */}
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: hasUploadedImage
-                      ? 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.1) 30%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.65) 100%)'
-                      : bgImage
-                        ? isLightImage
-                          ? 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 35%, rgba(255,255,255,0.2) 60%, rgba(253,248,243,0.75) 100%)'
-                          : 'linear-gradient(180deg, rgba(107,66,38,0.1) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.2) 60%, rgba(30,20,12,0.75) 100%)'
-                        : 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.4) 100%)',
-                  }} />
+                    position: 'relative',
+                    height: isMobile ? '170px' : '190px',
+                    background: hasUploadedImage ? 'none' : fallbackGradient,
+                  }}>
+                    {hasUploadedImage && (
+                      <>
+                        <img src={meetup.image_url} alt="" style={{
+                          position: 'absolute', inset: 0,
+                          width: '100%', height: '100%', objectFit: 'cover', zIndex: 0,
+                        }} />
+                        <div style={{
+                          position: 'absolute', inset: 0, zIndex: 1,
+                          background: 'linear-gradient(180deg, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.05) 30%, rgba(0,0,0,0.25) 55%, rgba(0,0,0,0.7) 100%)',
+                        }} />
+                      </>
+                    )}
 
-                  {/* Top row: date + spots */}
-                  <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    padding: isMobile ? '10px' : '12px',
-                    zIndex: 2,
-                  }}>
-                    <span style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      padding: isMobile ? '3px 8px' : '4px 10px',
-                      backgroundColor: badgeBg,
-                      backdropFilter: 'blur(6px)',
-                      WebkitBackdropFilter: 'blur(6px)',
-                      borderRadius: '8px',
-                      fontSize: isMobile ? '11px' : '12px',
-                      fontWeight: '600',
-                      color: textColor,
-                    }}>
-                      <Calendar size={isMobile ? 11 : 12} />
-                      {formatEventDate(meetup.date, meetup.time, meetup.timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </span>
-                  </div>
-
-                  {/* Center: topic title */}
-                  <div style={{
-                    position: 'absolute',
-                    top: '50%',
-                    left: 0,
-                    right: 0,
-                    transform: 'translateY(-50%)',
-                    padding: isMobile ? '0 16px' : '0 20px',
-                    textAlign: 'center',
-                    zIndex: 2,
-                  }}>
-                    <h4 style={{
-                      fontSize: isMobile ? '20px' : '22px',
-                      fontWeight: '700',
-                      color: textColor,
-                      margin: 0,
-                      fontFamily: fonts.serif,
-                      lineHeight: '1.35',
-                      textShadow: textShadow,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 3,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}>
-                      {meetup.topic}
-                    </h4>
-                    {/* Time + location under title */}
+                    {/* Frosted date pill — top left */}
                     <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: isMobile ? '8px' : '10px',
-                      marginTop: '8px',
-                      fontSize: isMobile ? '11px' : '12px',
-                      color: textColorMuted,
+                      position: 'absolute', top: isMobile ? '10px' : '12px', left: isMobile ? '10px' : '12px',
+                      zIndex: 2,
                     }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <Clock size={isMobile ? 10 : 11} /> {formatEventTime(meetup.date, meetup.time, meetup.timezone)}
+                      <span style={{
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        padding: isMobile ? '5px 12px' : '6px 14px',
+                        background: 'rgba(255,255,255,0.2)',
+                        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                        borderRadius: '20px', border: '1px solid rgba(255,255,255,0.3)',
+                        fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
+                        color: '#fff', textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                      }}>
+                        <Calendar size={isMobile ? 11 : 12} />
+                        {formatEventDate(meetup.date, meetup.time, meetup.timezone, { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
-                      <span style={{ color: textColorFaint }}>|</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <MapPin size={isMobile ? 10 : 11} /> {
-                          meetup.meeting_format === 'hybrid'
-                            ? `${meetup.location} + Virtual`
-                            : meetup.meeting_format === 'in_person'
-                              ? meetup.location
-                              : 'Virtual'
-                        }
-                      </span>
+                    </div>
+
+                    {/* Title + time/location — bottom of image */}
+                    <div style={{
+                      position: 'absolute', bottom: 0, left: 0, right: 0,
+                      padding: isMobile ? '14px' : '16px',
+                      zIndex: 2,
+                    }}>
+                      <h4 style={{
+                        fontSize: isMobile ? '18px' : '20px', fontWeight: '700',
+                        color: '#fff', margin: 0, fontFamily: fonts.serif,
+                        lineHeight: '1.3', textShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                        display: '-webkit-box', WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+                      }}>
+                        {meetup.topic}
+                      </h4>
+                      <div style={{
+                        display: 'flex', alignItems: 'center',
+                        gap: isMobile ? '8px' : '10px', marginTop: '6px',
+                        fontSize: isMobile ? '11px' : '12px',
+                        color: 'rgba(255,255,255,0.85)',
+                      }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <Clock size={isMobile ? 10 : 11} /> {formatEventTime(meetup.date, meetup.time, meetup.timezone)}
+                        </span>
+                        <span style={{ color: 'rgba(255,255,255,0.4)' }}>·</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          <MapPin size={isMobile ? 10 : 11} /> {
+                            meetup.meeting_format === 'hybrid'
+                              ? `${meetup.location} + Virtual`
+                              : meetup.meeting_format === 'in_person'
+                                ? meetup.location
+                                : 'Virtual'
+                          }
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Bottom: avatars + RSVP */}
+                  {/* Bottom bar: avatars + going count + RSVP button */}
                   <div style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: isMobile ? '12px' : '14px',
-                    zIndex: 2,
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: isMobile ? '10px 14px' : '12px 16px',
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', marginRight: '6px' }}>
+                      <div style={{ display: 'flex', marginRight: '8px' }}>
                         {signups.slice(0, 3).map((signup, idx) => (
                           <div key={signup.user_id || idx} style={{
-                            width: isMobile ? '22px' : '24px',
-                            height: isMobile ? '22px' : '24px',
+                            width: isMobile ? '26px' : '28px',
+                            height: isMobile ? '26px' : '28px',
                             borderRadius: '50%',
                             backgroundColor: colors.primaryLight,
-                            border: isLightImage ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(255,255,255,0.6)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: isMobile ? '9px' : '10px',
-                            fontWeight: '600',
-                            color: 'white',
-                            marginLeft: idx > 0 ? '-6px' : 0,
+                            border: '2px solid #FAF7F4',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: isMobile ? '9px' : '10px', fontWeight: '600', color: 'white',
+                            marginLeft: idx > 0 ? '-8px' : 0,
                             overflow: 'hidden',
                           }}>
                             {signup.profile?.profile_picture ? (
-                              <img
-                                src={signup.profile.profile_picture}
-                                alt={signup.profile.name || ''}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                              />
+                              <img src={signup.profile.profile_picture} alt=""
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
                               signup.profile?.name?.[0] || '?'
                             )}
@@ -1233,24 +1058,23 @@ export default function NetworkDiscoverView({
                         ))}
                         {signupCount > 3 && (
                           <div style={{
-                            width: isMobile ? '22px' : '24px',
-                            height: isMobile ? '22px' : '24px',
+                            width: isMobile ? '26px' : '28px',
+                            height: isMobile ? '26px' : '28px',
                             borderRadius: '50%',
-                            backgroundColor: isLightImage ? 'rgba(62,44,30,0.2)' : 'rgba(255,255,255,0.25)',
-                            border: isLightImage ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(255,255,255,0.6)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: isMobile ? '8px' : '9px',
-                            fontWeight: '600',
-                            color: textColor,
-                            marginLeft: '-6px',
+                            backgroundColor: '#E8DDD6',
+                            border: '2px solid #FAF7F4',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: isMobile ? '8px' : '9px', fontWeight: '600', color: '#6B5344',
+                            marginLeft: '-8px',
                           }}>
                             +{signupCount - 3}
                           </div>
                         )}
                       </div>
-                      <span style={{ fontSize: isMobile ? '11px' : '12px', color: textColorMuted, fontWeight: '500' }}>
+                      <span style={{
+                        fontFamily: fonts.sans,
+                        fontSize: isMobile ? '12px' : '13px', color: '#8B7355', fontWeight: '500',
+                      }}>
                         {signupCount > 0 ? `${signupCount} going` : 'Be first!'}
                       </span>
                     </div>
@@ -1259,17 +1083,14 @@ export default function NetworkDiscoverView({
                         onClick={(e) => { e.stopPropagation(); handleRsvp(meetup.id); }}
                         disabled={rsvpLoading[meetup.id]}
                         style={{
-                          padding: isMobile ? '7px 14px' : '8px 18px',
-                          backgroundColor: isLightImage ? 'rgba(76,175,80,0.12)' : 'rgba(168,230,207,0.25)',
-                          color: isLightImage ? '#2E7D32' : '#A8E6CF',
-                          border: isLightImage ? '1.5px solid rgba(76,175,80,0.3)' : '1.5px solid rgba(168,230,207,0.5)',
-                          borderRadius: '8px',
-                          fontSize: isMobile ? '12px' : '13px',
-                          fontWeight: '700',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '5px',
+                          padding: isMobile ? '7px 16px' : '8px 20px',
+                          backgroundColor: 'rgba(92,64,51,0.08)',
+                          color: '#5C4033',
+                          border: '1.5px solid rgba(92,64,51,0.2)',
+                          borderRadius: '10px',
+                          fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
+                          cursor: 'pointer', fontFamily: fonts.sans,
+                          display: 'flex', alignItems: 'center', gap: '5px',
                         }}>
                         {rsvpLoading[meetup.id] ? '...' : <><Check size={isMobile ? 12 : 13} /> Going</>}
                       </button>
@@ -1279,15 +1100,15 @@ export default function NetworkDiscoverView({
                         disabled={rsvpLoading[meetup.id]}
                         style={{
                           padding: isMobile ? '7px 16px' : '8px 20px',
-                          backgroundColor: isLightImage ? colors.primary : 'rgba(255,255,255,0.95)',
-                          color: isLightImage ? 'white' : colors.text,
+                          backgroundColor: '#5C4033',
+                          color: '#FAF5EF',
                           border: 'none',
-                          borderRadius: '8px',
-                          fontSize: isMobile ? '12px' : '13px',
-                          fontWeight: '700',
+                          borderRadius: '10px',
+                          fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
                           cursor: rsvpLoading[meetup.id] ? 'not-allowed' : 'pointer',
+                          fontFamily: fonts.sans,
                         }}>
-                        {rsvpLoading[meetup.id] ? '...' : 'RSVP'}
+                        {rsvpLoading[meetup.id] ? '...' : 'Going'}
                       </button>
                     )}
                   </div>
