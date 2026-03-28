@@ -442,9 +442,10 @@ function Skeleton() {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null }) {
+export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, maxItems = 5 }) {
   const { events, loading, hasMore, loadMore, liveCount } = useLiveFeed(currentUserId)
   const [isMobile, setIsMobile] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640)
@@ -531,7 +532,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null }
                   No activity yet — be the first to connect!
                 </div>
               )
-              : events.map((event, i) => (
+              : (expanded ? events : events.slice(0, maxItems)).map((event, i) => (
                   <FeedItem
                     key={event.id}
                     event={event}
@@ -542,7 +543,20 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null }
                 ))
           }
 
-          {!loading && hasMore && (
+          {!expanded && !loading && events.length > maxItems && (
+            <button
+              onClick={() => setExpanded(true)}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontFamily: '"DM Sans", sans-serif', fontSize: 14, color: '#8B6F5C',
+                padding: '12px 0', textAlign: 'center', width: '100%',
+              }}
+            >
+              See all activity ({events.length}) &gt;
+            </button>
+          )}
+
+          {expanded && !loading && hasMore && (
             <div ref={sentinelRef} style={{ height: 1 }} />
           )}
 
