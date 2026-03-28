@@ -210,8 +210,9 @@ export function useLiveFeed(currentUserId) {
   )
 
   // Merge: live pinned to top, then available profiles, then rest chronological
-  const liveEvents = visibleEvents.filter(e => e.is_live)
-  const nonLiveEvents = visibleEvents.filter(e => !e.is_live)
+  // Only show coffee_live events once both participants have joined (target_id set)
+  const liveEvents = visibleEvents.filter(e => e.is_live && !(e.event_type === 'coffee_live' && !e.target_id))
+  const nonLiveEvents = visibleEvents.filter(e => !e.is_live && !(e.event_type === 'coffee_live' && !e.target_id))
 
   const sorted = [
     ...liveEvents,

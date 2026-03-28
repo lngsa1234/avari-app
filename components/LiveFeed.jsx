@@ -12,7 +12,7 @@ const EVENT_CONFIG = {
   coffee_live: {
     typeLabel: 'Coffee chat',
     getHeadline: (e) => `${firstName(e.actor)} & ${firstName(e.target)} are chatting`,
-    getSubline: () => 'Having a private 1:1 coffee chat',
+    getSubline: () => '1:1 coffee chat',
     isPrivate: true,
   },
   coffee_scheduled: {
