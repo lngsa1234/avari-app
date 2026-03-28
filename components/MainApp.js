@@ -2363,7 +2363,9 @@ function MainApp({ currentUser, onSignOut }) {
     )
   }
 
-  const HomeView = () => {
+  // Memoize HomeView to prevent unmount/remount flash on parent re-renders
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const HomeView = useMemo(() => function HomeViewInner() {
     // Responsive hook for mobile layout — SSR-safe initializer avoids flash
     const [isMobile, setIsMobile] = useState(() => {
       if (typeof window !== 'undefined') return window.innerWidth < 860
@@ -3897,7 +3899,7 @@ function MainApp({ currentUser, onSignOut }) {
         </div>
       </div>
     )
-  }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ConnectionsView = () => {
     // Flatten and deduplicate people by user ID
