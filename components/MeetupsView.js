@@ -1067,7 +1067,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               <span style={styles.emptyIcon}>📅</span>
               <h3 style={styles.emptyTitle}>No upcoming meetups</h3>
               <p style={styles.emptyText}>Schedule a coffee chat or join a group event!</p>
-              <button style={styles.emptyBtn} onClick={() => onNavigate && onNavigate('home')}>
+              <button style={styles.emptyBtn} onClick={() => onNavigate && onNavigate('discover')}>
                 Browse Events
               </button>
             </div>
@@ -1783,7 +1783,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           <p style={styles.suggestedText}>
             Check out upcoming circle meetups and expand your network!
           </p>
-          <button style={styles.suggestedBtn} onClick={() => onNavigate && onNavigate('home')}>
+          <button style={styles.suggestedBtn} onClick={() => onNavigate && onNavigate('discover')}>
             Browse Events
           </button>
         </section>
