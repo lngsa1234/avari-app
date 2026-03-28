@@ -3451,7 +3451,7 @@ function MainApp({ currentUser, onSignOut }) {
             <div style={{ marginBottom: '24px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
+                  <Heart style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
                   People to Meet
                 </span>
                 <span
@@ -3506,21 +3506,26 @@ function MainApp({ currentUser, onSignOut }) {
                       <img
                         src={rec.profile.profile_picture}
                         alt={rec.profile.name}
-                        style={{ width: isMobile ? '44px' : '56px', height: isMobile ? '44px' : '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(139, 111, 92, 0.15)', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', opacity: 0, transition: 'opacity 0.3s ease' }}
+                        style={{ width: isMobile ? '52px' : '64px', height: isMobile ? '52px' : '64px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(139, 111, 92, 0.15)', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', opacity: 0, transition: 'opacity 0.3s ease' }}
                         onLoad={(e) => { e.currentTarget.style.opacity = '1' }}
                       />
                     ) : (
-                      <div style={{ width: isMobile ? '44px' : '56px', height: isMobile ? '44px' : '56px', borderRadius: '50%', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <User style={{ width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px', color: '#8B6F5C' }} />
+                      <div style={{ width: isMobile ? '52px' : '64px', height: isMobile ? '52px' : '64px', borderRadius: '50%', background: 'linear-gradient(135deg, #E8DDD0, #D4C4B0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <User style={{ width: isMobile ? '22px' : '28px', height: isMobile ? '22px' : '28px', color: '#8B6F5C' }} />
                       </div>
                     )}
                     <div>
-                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '15px', fontWeight: '600', color: '#3F1906', margin: '0 0 2px 0', lineHeight: isMobile ? '16px' : '20px' }}>
-                        {rec.profile?.name?.split(' ')[0] || 'Someone'}
+                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', fontWeight: '600', color: '#3F1906', margin: '0 0 2px 0', lineHeight: isMobile ? '18px' : '22px' }}>
+                        {rec.profile?.name || 'Someone'}
                       </p>
-                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '12px', color: '#6B5344', margin: 0, lineHeight: '16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? '110px' : '140px' }}>
+                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '13px', color: '#6B5344', margin: 0, lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? '120px' : '160px' }}>
                         {rec.profile?.career || 'Community member'}
                       </p>
+                      {rec.profile?.city && (
+                        <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', color: '#A89080', margin: '2px 0 0 0', lineHeight: '14px' }}>
+                          {rec.profile.city}{rec.profile.state ? `, ${rec.profile.state}` : ''}
+                        </p>
+                      )}
                     </div>
                     {rec.match_reasons?.length > 0 ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', justifyContent: 'center' }}>
