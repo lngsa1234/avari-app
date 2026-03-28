@@ -20,17 +20,14 @@ const EVENT_CONFIG = {
     getHeadline: (e) => {
       const accepted = e.metadata?.status === 'accepted'
       return accepted
-        ? `${firstName(e.actor)} & ${firstName(e.target)} have a coffee chat`
-        : `${firstName(e.actor)} scheduled a chat with ${firstName(e.target)}`
+        ? `${firstName(e.actor)} & ${firstName(e.target)} had a coffee chat`
+        : `${firstName(e.actor)} invited ${firstName(e.target)} for coffee`
     },
     getSubline: (e) => {
       const accepted = e.metadata?.status === 'accepted'
-      return accepted
-        ? 'Confirmed ✓ · 1:1 coffee chat'
-        : 'Pending · 1:1 coffee chat'
+      return accepted ? '1:1 coffee chat' : 'Pending invitation'
     },
     isPrivate: true,
-    badgeEmoji: '☕',
   },
   member_joined: {
     typeLabel: 'New member',
@@ -51,19 +48,17 @@ const EVENT_CONFIG = {
     cta: 'Say hi',
     ctaStyle: 'solid',
     ctaAction: 'profile',
-    badgeEmoji: '👋',
   },
   coffee_available: {
     typeLabel: 'Available',
-    getHeadline: (e) => `${firstName(e.actor)} is free to chat`,
+    getHeadline: (e) => `${firstName(e.actor)} is open to coffee chat`,
     getSubline: (e) => {
       const career = e.metadata?.career
-      return career ? `${career} · Connect and schedule a coffee chat right now` : 'Connect and schedule a coffee chat right now'
+      return career || 'Community member'
     },
     cta: 'Connect',
     ctaStyle: 'solid',
     ctaAction: 'profile',
-    badgeEmoji: '☕',
   },
   connection: {
     typeLabel: 'New connection',
@@ -84,7 +79,6 @@ const EVENT_CONFIG = {
     },
     cta: 'Join',
     ctaStyle: 'solid',
-    badgeEmoji: '⭕',
   },
   circle_schedule: {
     typeLabel: 'Session scheduled',
@@ -289,18 +283,8 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
   // CTA or Private badge
   let actionPart = null
   if (config.isPrivate) {
-    actionPart = (
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', gap: 5,
-        padding: '5px 12px', borderRadius: 20,
-        background: '#f0e8df', color: '#8b6a4a',
-        fontFamily: '"DM Sans", sans-serif',
-        fontSize: isMobile ? '11px' : '11.5px', fontWeight: 500,
-        border: '1px solid #e0d0be',
-      }}>
-        <span style={{ fontSize: 12 }}>🔒</span> Private
-      </span>
-    )
+    // No badge needed — all coffee chats are private by nature
+    actionPart = null
   } else if (config.cta && event.actor_id !== currentUserId) {
     const isOutline = config.ctaStyle === 'outline'
     actionPart = (

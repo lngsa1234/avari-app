@@ -3593,7 +3593,7 @@ function MainApp({ currentUser, onSignOut }) {
                       onMouseEnter={e => { e.currentTarget.style.background = '#4A3228' }}
                       onMouseLeave={e => { e.currentTarget.style.background = '#5C4033' }}
                     >
-                      Connect
+                      Say hi
                     </button>
                   </div>
                   )
