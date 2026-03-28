@@ -3462,7 +3462,7 @@ function MainApp({ currentUser, onSignOut }) {
           {(() => {
             const filteredPeopleRecs = homePeopleRecs
             return filteredPeopleRecs.length > 0 && (
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: isMobile ? '28px' : '36px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Heart style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
@@ -3624,7 +3624,7 @@ function MainApp({ currentUser, onSignOut }) {
             const displayTags = tags.slice(0, 3);
 
             return (
-            <div style={{ marginBottom: '24px' }}>
+            <div style={{ marginBottom: isMobile ? '28px' : '36px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Users style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
@@ -3830,7 +3830,7 @@ function MainApp({ currentUser, onSignOut }) {
           </>)}
 
           {/* === Live Feed === */}
-          <div style={{ marginTop: '8px' }}>
+          <div style={{ marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
             <LiveFeed
               currentUserId={currentUser.id}
               onCtaClick={(event) => {
