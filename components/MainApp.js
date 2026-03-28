@@ -2585,6 +2585,8 @@ function MainApp({ currentUser, onSignOut }) {
         fontFamily: '"Lora", serif',
         position: 'relative',
         padding: isMobile ? '16px 0' : '24px 0',
+        maxWidth: '880px',
+        margin: '0 auto',
       },
       titleSection: {
         display: 'flex',
