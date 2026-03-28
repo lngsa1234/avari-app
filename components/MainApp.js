@@ -3197,6 +3197,24 @@ function MainApp({ currentUser, onSignOut }) {
                             </div>
 
                             {(() => {
+                              // Hide attendee count for 1:1 coffee chats (always 2, not useful)
+                              if (meetup._isCoffeeChat) {
+                                // Show partner avatar only
+                                const partner = meetupSignups.find(s => s.user_id !== currentUser.id)
+                                if (!partner) return null
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    {partner.profiles?.profile_picture ? (
+                                      <img src={partner.profiles.profile_picture} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFFCF8' }} />
+                                    ) : (
+                                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600', color: 'white', background: '#8B6347' }}>
+                                        {(partner.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                      </div>
+                                    )}
+                                    <span style={{ fontSize: '12px', color: '#6B5B50', fontWeight: '500' }}>with {partner.profiles?.name?.split(' ')[0] || 'Partner'}</span>
+                                  </div>
+                                )
+                              }
                               const meetupSignupsList = meetupSignups
                               const attendeeCount = meetupSignupsList.length
                               if (attendeeCount === 0) return null
