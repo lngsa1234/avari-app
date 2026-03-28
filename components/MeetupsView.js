@@ -1038,8 +1038,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             fontSize: isMobile ? '13px' : '14px',
             width: isMobile ? '100%' : 'auto',
             justifyContent: 'center',
+            boxShadow: isMobile ? '0 2px 8px rgba(139, 111, 92, 0.2)' : '0 4px 16px rgba(139, 111, 92, 0.25)',
           }} onClick={handleScheduleCoffeeChat}>
-            <Plus size={isMobile ? 16 : 18} />
+            <Plus size={isMobile ? 14 : 18} />
             Host a Coffee Chat
           </button>
         </section>
@@ -1063,11 +1064,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       {activeView === 'upcoming' ? (
         <div style={styles.meetupsList}>
           {filteredItems.length === 0 ? (
-            <div style={styles.emptyState}>
-              <span style={styles.emptyIcon}>📅</span>
-              <h3 style={styles.emptyTitle}>No upcoming meetups</h3>
-              <p style={styles.emptyText}>Schedule a coffee chat or join a group event!</p>
-              <button style={styles.emptyBtn} onClick={() => onNavigate && onNavigate('discover')}>
+            <div style={{...styles.emptyState, padding: isMobile ? '32px 16px' : '48px 24px'}}>
+              <span style={{...styles.emptyIcon, fontSize: isMobile ? '36px' : '48px'}}>📅</span>
+              <h3 style={{...styles.emptyTitle, fontSize: isMobile ? '17px' : '20px'}}>No upcoming meetups</h3>
+              <p style={{...styles.emptyText, fontSize: isMobile ? '13px' : '14px'}}>Schedule a coffee chat or join a group event!</p>
+              <button style={{...styles.emptyBtn, padding: isMobile ? '10px 20px' : '12px 24px', fontSize: isMobile ? '13px' : '14px'}} onClick={() => onNavigate && onNavigate('discover')}>
                 Browse Events
               </button>
             </div>
@@ -1775,15 +1776,15 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
       {/* Suggested Section */}
       {activeView !== 'past' && groupEvents.length < 3 && (
-        <section style={styles.suggestedSection}>
-          <h2 style={styles.sectionTitle}>
-            <span style={styles.sectionIcon}>✨</span>
+        <section style={{...styles.suggestedSection, padding: isMobile ? '20px 16px' : '24px'}}>
+          <h2 style={{...styles.sectionTitle, fontSize: isMobile ? '16px' : '18px'}}>
+            <span style={{...styles.sectionIcon, fontSize: isMobile ? '16px' : '18px'}}>✨</span>
             Discover More Events
           </h2>
-          <p style={styles.suggestedText}>
+          <p style={{...styles.suggestedText, fontSize: isMobile ? '13px' : '14px'}}>
             Check out upcoming community events and expand your network!
           </p>
-          <button style={styles.suggestedBtn} onClick={() => onNavigate && onNavigate('discover')}>
+          <button style={{...styles.suggestedBtn, padding: isMobile ? '10px 20px' : '12px 24px', fontSize: isMobile ? '13px' : '14px'}} onClick={() => onNavigate && onNavigate('discover')}>
             Browse Events
           </button>
         </section>
@@ -2336,12 +2337,12 @@ const styles = {
     alignItems: 'flex-start',
   },
   dateBadge: {
-    minWidth: '68px',
+    minWidth: '58px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '16px 0',
+    padding: '12px 0',
     background: '#F3EAE0',
     borderRight: '1px solid rgba(59,35,20,0.06)',
     borderRadius: '16px 0 0 16px',
@@ -2423,7 +2424,7 @@ const styles = {
   },
   cardContent: {
     flex: 1,
-    minWidth: '200px',
+    minWidth: 0,
     padding: '14px 14px',
     display: 'flex',
     flexDirection: 'column',
