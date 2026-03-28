@@ -747,6 +747,17 @@ export default function UnifiedCallPage() {
       setCallStartTime(startTime);
       callStartTimeRef.current = startTime;
 
+      // Write join signal for live call detection
+      supabase.from('video_signals').insert({
+        room_id: roomId,
+        channel_name: roomId,
+        sender_id: user?.id,
+        type: 'join',
+        data: {},
+      }).then(({ error }) => {
+        if (error) console.warn('[UnifiedCall] Failed to write join signal:', error);
+      });
+
 
       await startRoom();
 
@@ -2102,6 +2113,17 @@ export default function UnifiedCallPage() {
   const handleLeaveCall = async () => {
     // Step 1: Show "Ending call..." transition immediately
     setIsLeaving(true);
+
+    // Write leave signal for live call detection
+    supabase.from('video_signals').insert({
+      room_id: roomId,
+      channel_name: roomId,
+      sender_id: user?.id,
+      type: 'leave',
+      data: {},
+    }).then(({ error }) => {
+      if (error) console.warn('[UnifiedCall] Failed to write leave signal:', error);
+    });
 
     // Capture state before cleanup
     // Use allParticipantIdsRef for complete list of everyone who ever joined
