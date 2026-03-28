@@ -72,10 +72,18 @@ const EVENT_CONFIG = {
   },
   circle_join: {
     typeLabel: 'Circle activity',
-    getHeadline: (e) => `${firstName(e.actor)} joined a circle`,
-    getSubline: (e) => e.circle?.name || 'Joined a circle',
-    cta: 'Open',
-    ctaStyle: 'outline',
+    getHeadline: (e) => `${firstName(e.actor)} joined ${e.circle?.name || 'a circle'}`,
+    getSubline: (e) => {
+      const members = e.circle?.member_count;
+      const max = e.circle?.max_members || 10;
+      if (members != null) {
+        const spots = max - members;
+        return spots > 0 ? `${members}/${max} members · ${spots} spot${spots !== 1 ? 's' : ''} left` : `${members}/${max} members · Full`;
+      }
+      return e.circle?.name || 'Joined a circle';
+    },
+    cta: 'Join',
+    ctaStyle: 'solid',
     badgeEmoji: '⭕',
   },
   circle_schedule: {
@@ -241,7 +249,7 @@ function DualAvatars({ actor, target, isLive, isMobile }) {
   )
 }
 
-function FeedItem({ event, onCta, isMobile }) {
+function FeedItem({ event, onCta, isMobile, currentUserId }) {
   const config = EVENT_CONFIG[event.event_type]
   if (!config) return null
 
@@ -293,7 +301,7 @@ function FeedItem({ event, onCta, isMobile }) {
         <span style={{ fontSize: 12 }}>🔒</span> Private
       </span>
     )
-  } else if (config.cta) {
+  } else if (config.cta && event.actor_id !== currentUserId) {
     const isOutline = config.ctaStyle === 'outline'
     actionPart = (
       <button
@@ -529,6 +537,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null }
                     event={event}
                     onCta={onCtaClick}
                     isMobile={isMobile}
+                    currentUserId={currentUserId}
                   />
                 ))
           }

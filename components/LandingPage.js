@@ -78,6 +78,10 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
       setMessage({ type: 'error', text: 'Please enter a password.' })
       return false
     }
+    if (needsPassword && password.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters.' })
+      return false
+    }
     return true
   }
 

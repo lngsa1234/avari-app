@@ -381,7 +381,7 @@ function MainApp({ currentUser, onSignOut }) {
             deferredKeys.push('ignoredRequests')
           }
           if (createdCircleIds.length > 0) {
-            deferredPromises.push(supabase.from('connection_group_members').select('id, user_id, group_id, invited_at').eq('status', 'invited').in('group_id', createdCircleIds))
+            deferredPromises.push(supabase.from('connection_group_members').select('id, user_id, group_id, invited_at').eq('status', 'pending').in('group_id', createdCircleIds))
             deferredKeys.push('pendingMembers')
           }
           if (creatorIds.length > 0) {
@@ -2848,9 +2848,10 @@ function MainApp({ currentUser, onSignOut }) {
         {/* Main Content */}
         <div style={homeStyles.contentGrid}>
           {/* Connection & Circle Join Requests Section */}
-            {(connectionRequests.length > 0 || coffeeChatRequests.length > 0 || circleInvitations.length > 0) && (() => {
+            {(connectionRequests.length > 0 || coffeeChatRequests.length > 0 || circleInvitations.length > 0 || circleJoinRequests.length > 0) && (() => {
               const allRequests = [
                 ...connectionRequests.map(r => ({ ...r, type: r.type || 'connection_request' })),
+                ...circleJoinRequests,
                 ...circleInvitations,
                 ...coffeeChatRequests.map(r => ({ ...r, type: 'coffee_chat_request' })),
               ].sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0))
@@ -2930,7 +2931,7 @@ function MainApp({ currentUser, onSignOut }) {
                               </>
                             ) : isCircleJoin ? (
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
-                                invited to <strong>{request.circleName}</strong> · pending
+                                wants to join <strong>{request.circleName}</strong>
                               </p>
                             ) : isCircleInvitation ? (
                               <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
@@ -2999,24 +3000,48 @@ function MainApp({ currentUser, onSignOut }) {
                               </button>
                             </>
                           ) : isCircleJoin ? (
-                            <button
-                              onClick={() => handleDeclineCircleJoin(request.id)}
-                              style={{
-                                padding: isMobile ? '7px 14px' : '9px 18px',
-                                background: 'transparent',
-                                border: '1px solid rgba(184, 160, 137, 0.4)',
-                                borderRadius: '18px',
-                                color: '#6B5647',
-                                fontFamily: '"Lora", serif',
-                                fontStyle: 'italic',
-                                fontSize: isMobile ? '13px' : '15px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                letterSpacing: '0.15px',
-                              }}
-                            >
-                              Withdraw
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleDeclineCircleJoin(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 14px' : '9px 18px',
+                                  background: 'transparent',
+                                  border: '1px solid rgba(184, 160, 137, 0.4)',
+                                  borderRadius: '18px',
+                                  color: '#6B5647',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                Decline
+                              </button>
+                              <button
+                                onClick={() => handleAcceptCircleJoin(request.id)}
+                                style={{
+                                  padding: isMobile ? '7px 16px' : '9px 20px',
+                                  background: 'rgba(103, 77, 59, 0.9)',
+                                  border: 'none',
+                                  borderRadius: '18px',
+                                  color: '#F5EDE9',
+                                  fontFamily: '"Lora", serif',
+                                  fontStyle: 'italic',
+                                  fontSize: isMobile ? '13px' : '15px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  letterSpacing: '0.15px',
+                                }}
+                              >
+                                <Users style={{ width: isMobile ? '12px' : '14px', height: isMobile ? '12px' : '14px' }} />
+                                Approve
+                              </button>
+                            </>
                           ) : isCircleInvitation ? (
                             <>
                               <button
@@ -4247,7 +4272,7 @@ function MainApp({ currentUser, onSignOut }) {
                   className="pl-10 pr-4 py-2 w-36 md:w-[200px] text-[13px] rounded-full border border-[#E8DDD0] bg-white text-[#5E4530] placeholder-[#B8A089] focus:outline-none md:focus:w-[260px] focus:border-[#B8A089] transition-all duration-300"
                   style={{ boxShadow: 'none' }}
                   onFocus={(e) => { e.target.style.boxShadow = '0 0 0 3px rgba(122,92,66,0.08)'; }}
-                  onBlur={(e) => { setTimeout(() => { e.target.style.boxShadow = 'none'; setHomeSearchQuery(''); }, 200); }}
+                  onBlur={(e) => { setTimeout(() => { e.target.style.boxShadow = 'none'; setHomeSearchQuery(''); }, 400); }}
                 />
                 {homeSearchResults && homeSearchQuery && (
                   <div style={{

@@ -1744,11 +1744,12 @@ export default function NetworkDiscoverView({
                                 try {
                                   const result = await requestToJoinGroup(supabase, circle.id, currentUser.id);
                                   if (result.success) {
-                                    setCircleJoinState(prev => ({ ...prev, [circle.id]: isInviteOnly ? 'requested' : 'joined' }));
-                                    toast?.success(isInviteOnly ? 'Request sent!' : 'Joined!');
+                                    setCircleJoinState(prev => ({ ...prev, [circle.id]: 'requested' }));
+                                    toast?.success('Request sent!');
                                   } else {
-                                    setCircleJoinState(prev => ({ ...prev, [circle.id]: result.error?.includes('Already') ? 'joined' : 'idle' }));
-                                    if (result.error && !result.error.includes('Already')) toast?.error(result.error);
+                                    const errMsg = typeof result.error === 'string' ? result.error : result.error?.message || String(result.error || '');
+                                    setCircleJoinState(prev => ({ ...prev, [circle.id]: errMsg.includes('Already') ? 'joined' : 'idle' }));
+                                    if (errMsg && !errMsg.includes('Already')) toast?.error(errMsg);
                                   }
                                 } catch (err) {
                                   setCircleJoinState(prev => ({ ...prev, [circle.id]: 'idle' }));

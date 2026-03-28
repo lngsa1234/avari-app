@@ -86,6 +86,11 @@ export default function MeetupRecapsPage() {
 
   async function loadUser() {
     const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setLoading(false);
+      window.location.href = '/';
+      return;
+    }
     setCurrentUser(user);
   }
 

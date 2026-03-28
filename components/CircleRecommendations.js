@@ -103,11 +103,8 @@ export default function CircleRecommendations({
         return;
       }
 
-      // Remove from recommendations
-      setMatches(prev => prev.filter(m => m.id !== match.id));
-
-      // Navigate to circle
-      window.location.href = `/circles/${match.circle_id}`;
+      // Mark as requested in local state
+      setMatches(prev => prev.map(m => m.id === match.id ? { ...m, requested: true } : m));
     } catch (e) {
       console.error('[CircleRecs] Join error:', e);
     }

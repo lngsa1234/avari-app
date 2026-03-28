@@ -1389,21 +1389,36 @@ export default function CircleDetailView({
 
       {/* Leave Confirmation Modal */}
       {showLeaveConfirm && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modal}>
-            <h3 style={styles.modalTitle}>Leave Circle?</h3>
-            <p style={styles.modalText}>
-              Are you sure you want to leave "{circle.name}"? You'll need to request to join again.
-            </p>
+        <div style={styles.modalOverlay} onClick={() => setShowLeaveConfirm(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '12px',
+                background: 'rgba(229, 115, 115, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 12px', fontSize: '22px',
+              }}>👋</div>
+              <h3 style={{ ...styles.modalTitle, margin: '0 0 8px', textAlign: 'center' }}>Leave "{circle.name}"?</h3>
+            </div>
+            <div style={{
+              background: colors.cream, borderRadius: '12px', padding: '12px 14px', marginBottom: '20px',
+            }}>
+              <p style={{ fontSize: '13px', color: colors.textLight, lineHeight: '1.5', margin: 0 }}>
+                You'll lose access to circle messages, meetups, and recaps. You'll need to request to join again and wait for approval.
+              </p>
+            </div>
             <div style={styles.modalActions}>
               <button
                 style={styles.cancelButton}
                 onClick={() => setShowLeaveConfirm(false)}
               >
-                Cancel
+                Stay
               </button>
               <button
-                style={styles.confirmLeaveButton}
+                style={{
+                  ...styles.confirmLeaveButton,
+                  opacity: actionLoading ? 0.7 : 1,
+                }}
                 onClick={handleLeaveCircle}
                 disabled={actionLoading}
               >

@@ -58,7 +58,7 @@ async function enrichEvents(events) {
   }
   if (circleIds.size > 0) {
     promises.push(
-      supabase.from('connection_groups').select('id, name').in('id', [...circleIds])
+      supabase.from('connection_groups').select('id, name, max_members, connection_group_members(count)').eq('connection_group_members.status', 'accepted').in('id', [...circleIds])
     )
   } else {
     promises.push(Promise.resolve({ data: [] }))
@@ -68,7 +68,12 @@ async function enrichEvents(events) {
   const profileMap = {}
   ;(profilesResult.data || []).forEach(p => { profileMap[p.id] = p })
   const circleMap = {}
-  ;(circlesResult.data || []).forEach(c => { circleMap[c.id] = c })
+  ;(circlesResult.data || []).forEach(c => {
+    circleMap[c.id] = {
+      ...c,
+      member_count: c.connection_group_members?.[0]?.count || 0,
+    }
+  })
 
   return events.map(e => ({
     ...e,

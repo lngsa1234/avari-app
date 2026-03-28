@@ -42,6 +42,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
   const [groupInvites, setGroupInvites] = useState([]);
+  const [pendingJoinRequests, setPendingJoinRequests] = useState([]);
   const [sentCircleInvites, setSentCircleInvites] = useState([]);
   const [eligibleConnections, setEligibleConnections] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -379,6 +380,19 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         is_active: inv.group_is_active,
         creator: { id: inv.group_creator_id, name: inv.creator_name }
       }
+    })));
+
+    // Fetch user's own pending join requests
+    const { data: pendingReqs } = await supabase
+      .from('connection_group_members')
+      .select('id, group_id, status, invited_at, connection_groups(id, name)')
+      .eq('user_id', currentUser.id)
+      .eq('status', 'pending');
+    setPendingJoinRequests((pendingReqs || []).map(r => ({
+      id: r.id,
+      group_id: r.group_id,
+      invited_at: r.invited_at,
+      groupName: r.connection_groups?.name || 'Unknown circle',
     })));
 
     // Process unread counts from RPC data
@@ -996,6 +1010,115 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         </div>
       )}
 
+
+      {/* Pending Join Requests (user-initiated) */}
+      {pendingJoinRequests.length === 1 && (() => {
+        const req = pendingJoinRequests[0];
+        const daysAgo = req.invited_at ? Math.floor((Date.now() - new Date(req.invited_at)) / (1000 * 60 * 60 * 24)) : null;
+        const timeLabel = daysAgo === null ? '' : daysAgo === 0 ? 'sent today' : daysAgo === 1 ? 'sent 1 day ago' : `sent ${daysAgo} days ago`;
+        return (
+          <div style={{
+            background: 'white', borderRadius: '16px', border: '1px solid #E8DDD6',
+            padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '14px',
+            marginBottom: isMobile ? '16px' : '20px',
+          }}>
+            <div style={{
+              width: '40px', height: '40px', borderRadius: '10px',
+              background: '#F5E6D3', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: '18px',
+            }}>⏳</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: '15px', fontWeight: '600', color: '#2C1810',
+                fontFamily: '"DM Sans", sans-serif', marginBottom: '3px',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              }}>{req.groupName}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D4864A', flexShrink: 0 }} />
+                <span style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif' }}>
+                  Join request pending{timeLabel ? ` · ${timeLabel}` : ''}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                const { error } = await supabase.from('connection_group_members').delete().eq('id', req.id);
+                if (!error) setPendingJoinRequests(prev => prev.filter(r => r.id !== req.id));
+              }}
+              style={{
+                fontSize: '13px', fontWeight: '500', color: '#A08070',
+                background: 'none', border: '1px solid #E8DDD6', borderRadius: '100px',
+                padding: '7px 16px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                transition: 'all 0.15s', flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#C4A882'; e.currentTarget.style.color = '#6B4C3B'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8DDD6'; e.currentTarget.style.color = '#A08070'; }}
+            >Withdraw request</button>
+          </div>
+        );
+      })()}
+      {pendingJoinRequests.length > 1 && (
+        <div style={{
+          background: 'white', borderRadius: '16px', border: '1px solid #E8DDD6',
+          overflow: 'hidden', marginBottom: isMobile ? '16px' : '20px',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '12px 16px', borderBottom: '1px solid #E8DDD6',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '16px' }}>⏳</span>
+              <span style={{ fontSize: '13px', fontWeight: '600', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
+                Pending join requests
+              </span>
+              <span style={{
+                fontSize: '11px', fontWeight: '600', background: '#F5E6D3', color: '#D4864A',
+                borderRadius: '100px', padding: '2px 8px', fontFamily: '"DM Sans", sans-serif',
+              }}>{pendingJoinRequests.length}</span>
+            </div>
+          </div>
+          {pendingJoinRequests.map((req, i) => {
+            const daysAgo = req.invited_at ? Math.floor((Date.now() - new Date(req.invited_at)) / (1000 * 60 * 60 * 24)) : null;
+            const timeLabel = daysAgo === null ? '' : daysAgo === 0 ? 'Sent today' : daysAgo === 1 ? 'Sent 1 day ago' : `Sent ${daysAgo} days ago`;
+            return (
+              <div key={req.id} style={{
+                display: 'flex', alignItems: 'center', padding: '12px 16px', gap: '12px',
+                borderBottom: i < pendingJoinRequests.length - 1 ? '1px solid #E8DDD6' : 'none',
+              }}>
+                <div style={{
+                  width: '34px', height: '34px', borderRadius: '8px',
+                  background: '#F5E6D3', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '15px', flexShrink: 0,
+                }}>⭕</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
+                    {req.groupName}
+                  </div>
+                  {timeLabel && (
+                    <div style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif', marginTop: '1px' }}>
+                      {timeLabel}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase.from('connection_group_members').delete().eq('id', req.id);
+                    if (!error) setPendingJoinRequests(prev => prev.filter(r => r.id !== req.id));
+                  }}
+                  style={{
+                    fontSize: '12px', fontWeight: '500', color: '#A08070',
+                    background: 'none', border: '1px solid #E8DDD6', borderRadius: '100px',
+                    padding: '5px 13px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                    transition: 'all 0.15s', flexShrink: 0,
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#C4A882'; e.currentTarget.style.color = '#6B4C3B'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8DDD6'; e.currentTarget.style.color = '#A08070'; }}
+                >Withdraw</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Single Column Layout */}
       <div style={styles.singleColumn}>

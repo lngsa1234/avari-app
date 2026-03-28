@@ -19,7 +19,7 @@ export default function AIInsightsPage() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
-          router.push('/');
+          window.location.href = '/';
           return;
         }
         setUser(user);
