@@ -862,7 +862,7 @@ export default function NetworkDiscoverView({
   }
 
   return (
-    <div style={{ fontFamily: fonts.sans, paddingBottom: '100px' }}>
+    <div style={{ fontFamily: fonts.sans, paddingBottom: '100px', maxWidth: '880px', margin: '0 auto' }}>
 
       {/* Community Events */}
       <div style={{ marginBottom: isMobile ? '24px' : '32px' }}>

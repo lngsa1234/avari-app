@@ -1030,7 +1030,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             <p style={{
               ...styles.subtitle,
               fontSize: isMobile ? '14px' : '15px',
-            }}>Catch up over a virtual coffee</p>
+            }}>Schedule 1:1 video chats with your connections</p>
           </div>
           <button style={{
             ...styles.scheduleBtn,
@@ -1141,7 +1141,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                     { id: 'other', name: item.with, profile_picture: item.avatar },
                   ]
                 : (item.attendeeProfiles || []);
-              const coffeeAvatar = null;
+              const coffeeAvatar = isCoffee ? { name: item.with, profile_picture: item.avatar } : null;
               const attendeeCount = isCoffee ? 0 : (attendees.length || 0);
 
               // Category tag: meeting type
@@ -1778,13 +1778,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       {activeView !== 'past' && groupEvents.length < 3 && (
         <section style={{...styles.suggestedSection, padding: isMobile ? '20px 16px' : '24px'}}>
           <h2 style={{...styles.sectionTitle, fontSize: isMobile ? '16px' : '18px'}}>
-            Discover More Events
+            Explore the Community
           </h2>
           <p style={{...styles.suggestedText, fontSize: isMobile ? '13px' : '14px'}}>
-            Check out upcoming community events and expand your network!
+            Join group events, vote on topics, or find a circle to grow with.
           </p>
           <button style={{...styles.suggestedBtn, padding: isMobile ? '10px 20px' : '12px 24px', fontSize: isMobile ? '13px' : '14px'}} onClick={() => onNavigate && onNavigate('discover')}>
-            Browse Events
+            Discover
           </button>
         </section>
       )}
@@ -2021,6 +2021,8 @@ const styles = {
     minHeight: '100%',
     fontFamily: '"DM Sans", sans-serif',
     position: 'relative',
+    maxWidth: '880px',
+    margin: '0 auto',
   },
   ambientBg: {
     display: 'none',
