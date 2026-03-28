@@ -1781,7 +1781,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             Discover More Events
           </h2>
           <p style={styles.suggestedText}>
-            Check out upcoming circle meetups and expand your network!
+            Check out upcoming community events and expand your network!
           </p>
           <button style={styles.suggestedBtn} onClick={() => onNavigate && onNavigate('discover')}>
             Browse Events
