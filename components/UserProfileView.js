@@ -83,7 +83,7 @@ function timeAgo(dateStr) {
   return `${months}mo ago`;
 }
 
-export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard }) {
+export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard, refreshKey }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
@@ -107,7 +107,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
   useEffect(() => {
     if (userId) loadProfile();
-  }, [userId]);
+  }, [userId, refreshKey]);
 
   const loadProfile = async () => {
     setLoading(true);
@@ -387,11 +387,12 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         </div>
 
         {/* ─── Hero Section ─── */}
-        <div style={{ textAlign: 'center', paddingTop: 8, paddingBottom: 4, ...fadeIn(0.05) }}>
-          {/* Avatar */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+        <div style={{ paddingTop: 8, paddingBottom: 4, ...fadeIn(0.05) }}>
+          {/* Avatar + Name row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            {/* Avatar */}
             <div className="profile-avatar" style={{
-              position: 'relative', borderRadius: '50%',
+              position: 'relative', borderRadius: '50%', flexShrink: 0,
               background: `linear-gradient(145deg, ${COLORS.brown300}, ${COLORS.accent}, ${COLORS.brown700})`,
               padding: 3,
             }}>
@@ -429,68 +430,70 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                 border: `3px solid ${COLORS.white}`,
               }} />
             </div>
-          </div>
 
-          {/* Name */}
-          <h1 className="profile-name" style={{
-            fontFamily: DISPLAY_FONT, fontWeight: 700,
-            color: COLORS.brown900, letterSpacing: -0.3, margin: 0,
-          }}>
-            {profile.name}
-          </h1>
+            {/* Name + role + location */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 className="profile-name" style={{
+                fontFamily: DISPLAY_FONT, fontWeight: 700,
+                color: COLORS.brown900, letterSpacing: -0.3, margin: 0,
+              }}>
+                {profile.name}
+              </h1>
 
-          {/* Hook / Headline */}
-          {profile.hook && (
-            <p className="profile-hook" style={{
-              fontFamily: FONT, color: COLORS.brown400,
-              marginTop: 6, lineHeight: 1.4, marginLeft: 'auto', marginRight: 'auto',
-              fontStyle: 'italic',
-            }}>
-              {profile.hook}
-            </p>
-          )}
-
-          {/* Connected badge */}
-          {!isOwnProfile && isConnected && (
-            <span style={{
-              display: 'inline-block', marginTop: 10,
-              padding: '4px 14px', background: COLORS.greenLight,
-              color: COLORS.green, fontSize: 12, fontWeight: 600, borderRadius: 20,
-            }}>
-              Connected
-            </span>
-          )}
-
-          {/* Compact role + location */}
-          {(roleText || locationText) && (
-            <div className="profile-role-row" style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexWrap: 'wrap',
-            }}>
-              {roleText && (
-                <span className="profile-role-text" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  fontFamily: FONT, color: COLORS.brown500, fontWeight: 500,
+              {/* Hook / Headline */}
+              {profile.hook && (
+                <p className="profile-hook" style={{
+                  fontFamily: FONT, color: COLORS.brown400,
+                  marginTop: 4, lineHeight: 1.4, margin: '4px 0 0',
+                  fontStyle: 'italic',
                 }}>
-                  <Briefcase size={14} color={COLORS.brown300} />
-                  {roleText}
-                </span>
+                  {profile.hook}
+                </p>
               )}
-              {locationText && (
-                <span className="profile-role-text" style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontFamily: FONT, color: COLORS.brown500, fontWeight: 500,
+
+              {/* Role + location */}
+              {(roleText || locationText) && (
+                <div className="profile-role-row" style={{
+                  display: 'flex', alignItems: 'center',
+                  flexWrap: 'wrap', marginTop: 6,
                 }}>
-                  <MapPin size={14} color={COLORS.brown300} />
-                  {locationText}
+                  {roleText && (
+                    <span className="profile-role-text" style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      fontFamily: FONT, color: COLORS.brown500, fontWeight: 500,
+                    }}>
+                      <Briefcase size={14} color={COLORS.brown300} />
+                      {roleText}
+                    </span>
+                  )}
+                  {locationText && (
+                    <span className="profile-role-text" style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontFamily: FONT, color: COLORS.brown500, fontWeight: 500,
+                    }}>
+                      <MapPin size={14} color={COLORS.brown300} />
+                      {locationText}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Connected badge */}
+              {!isOwnProfile && isConnected && (
+                <span style={{
+                  display: 'inline-block', marginTop: 8,
+                  padding: '4px 14px', background: COLORS.greenLight,
+                  color: COLORS.green, fontSize: 12, fontWeight: 600, borderRadius: 20,
+                }}>
+                  Connected
                 </span>
               )}
             </div>
-          )}
+          </div>
 
           {/* Tags: career stage + vibe */}
           {(profile.career_stage || profile.vibe_category) && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
               {profile.career_stage && (
                 <span style={{
                   fontFamily: FONT, fontSize: 12, fontWeight: 600,
@@ -526,6 +529,29 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
               )}
             </div>
           )}
+        </div>
+
+        {/* ─── Stats ─── */}
+        <div style={{ marginTop: 24, ...fadeIn(0.12) }}>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {[
+              { value: meetupCount, label: 'Meetups' },
+              { value: connectionCount, label: 'Connections' },
+              { value: mutualCircles.length, label: 'Shared Circles' },
+            ].map((stat, i) => (
+              <div key={i} style={{
+                flex: 1, background: COLORS.bgCard, borderRadius: 14,
+                padding: '14px 8px', textAlign: 'center',
+              }}>
+                <div className="profile-stat-value" style={{ fontFamily: DISPLAY_FONT, fontWeight: 700, color: COLORS.brown700, lineHeight: 1 }}>
+                  {stat.value}
+                </div>
+                <div className="profile-stat-label" style={{ fontFamily: FONT, color: COLORS.brown400, marginTop: 4, fontWeight: 500 }}>
+                  {stat.label}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* ─── Quick Toggles (own profile only) ─── */}
@@ -803,30 +829,6 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             </button>
           </div>
         )}
-
-        {/* ─── Stats ─── */}
-        <div style={{ marginTop: 24, ...fadeIn(0.12) }}>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {[
-              { value: meetupCount, label: 'Meetups' },
-              { value: connectionCount, label: 'Connections' },
-              { value: mutualCircles.length, label: 'Shared Circles' },
-            ].map((stat, i) => (
-              <div key={i} style={{
-                flex: 1, background: COLORS.bgCard, borderRadius: 14,
-                padding: '14px 8px', textAlign: 'center',
-              }}>
-                <div className="profile-stat-value" style={{ fontFamily: DISPLAY_FONT, fontWeight: 700, color: COLORS.brown700, lineHeight: 1 }}>
-                  {stat.value}
-                </div>
-                <div className="profile-stat-label" style={{ fontFamily: FONT, color: COLORS.brown400, marginTop: 4, fontWeight: 500 }}>
-                  {stat.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
 
         {/* ─── Shared Circles ─── */}
         {mutualCircles.length > 0 && (

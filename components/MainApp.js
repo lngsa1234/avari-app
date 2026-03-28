@@ -79,6 +79,7 @@ function MainApp({ currentUser, onSignOut }) {
   const [showChatModal, setShowChatModal] = useState(false)
   const [selectedChat, setSelectedChat] = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0)
   const [showCreateMeetup, setShowCreateMeetup] = useState(false)
   const [showEditMeetup, setShowEditMeetup] = useState(false)
   const [editedProfile, setEditedProfile] = useState(null)
@@ -2186,9 +2187,10 @@ function MainApp({ currentUser, onSignOut }) {
       if (error) {
         toast.error('Error updating profile: ' + error.message)
       } else {
-        // Update local state — no reload needed, stays on current page
+        // Update local state and trigger profile view refresh
         Object.assign(currentUser, editedProfile)
         setShowEditProfile(false)
+        setProfileRefreshKey(k => k + 1)
         toast.success('Profile updated!')
       }
     } catch (err) {
@@ -4463,6 +4465,7 @@ function MainApp({ currentUser, onSignOut }) {
             onShowTutorial={() => setShowOnboarding(true)}
             onSignOut={handleSignOut}
             onAdminDashboard={() => setCurrentView('admin')}
+            refreshKey={profileRefreshKey}
           />
         )}
         {currentView === 'admin' && currentUser.role === 'admin' && <AdminDashboard />}
