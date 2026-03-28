@@ -2701,11 +2701,11 @@ function MainApp({ currentUser, onSignOut }) {
         {nextMeeting && (
           <h2 style={{
             fontFamily: '"Lora", serif',
-            fontSize: isMobile ? '20px' : '24px',
+            fontSize: isMobile ? '22px' : '28px',
             fontWeight: '500',
             color: '#3F1906',
             letterSpacing: '0.15px',
-            lineHeight: '22px',
+            lineHeight: isMobile ? '26px' : '32px',
             margin: '0 0 16px 0',
           }}>Starting Soon</h2>
         )}
@@ -3697,9 +3697,9 @@ function MainApp({ currentUser, onSignOut }) {
                   </div>
 
                   <h4 style={{
-                    fontSize: isMobile ? '13px' : '15px', fontWeight: '700',
+                    fontSize: isMobile ? '16px' : '18px', fontWeight: '700',
                     color: '#2C1F15', margin: 0, fontFamily: '"Lora", serif',
-                    lineHeight: '1.25',
+                    lineHeight: '1.3',
                   }}>
                     {circleName}
                   </h4>
