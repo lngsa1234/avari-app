@@ -1823,9 +1823,41 @@ function MainApp({ currentUser, onSignOut }) {
   }
 
   // Show events that haven't ended yet, with 30-min grace for meetings running over
-  const upcomingMeetups = meetups.filter(m =>
-    !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), 30)
-  )
+  const upcomingMeetups = (() => {
+    const filteredMeetups = meetups.filter(m =>
+      !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), 30)
+    )
+    // Merge upcoming coffee chats as pseudo-meetup objects (filter out past ones)
+    const now = new Date()
+    const coffeeMeetups = upcomingCoffeeChats.filter(chat => {
+      if (chat.status === 'completed' || chat.status === 'cancelled' || chat.status === 'declined') return false
+      if (!chat.scheduled_time) return true // No time = show it (pending/accepted)
+      // Coffee chats last ~30 min, add 30 min grace
+      return new Date(chat.scheduled_time).getTime() + 60 * 60 * 1000 > now.getTime()
+    }).map(chat => {
+      const otherPerson = chat._otherPerson
+      const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : new Date()
+      const dateStr = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, '0')}-${String(scheduledDate.getDate()).padStart(2, '0')}`
+      const timeStr = `${String(scheduledDate.getHours()).padStart(2, '0')}:${String(scheduledDate.getMinutes()).padStart(2, '0')}`
+      return {
+        id: chat.id,
+        topic: `Coffee chat with ${otherPerson?.name || 'Someone'}`,
+        date: dateStr,
+        time: timeStr,
+        duration: '30',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        host: otherPerson ? { id: otherPerson.id, name: otherPerson.name, profile_picture: otherPerson.profile_picture } : null,
+        created_by: chat.requester_id,
+        _isCoffeeChat: true,
+        _coffeeChatData: chat,
+      }
+    })
+    return [...filteredMeetups, ...coffeeMeetups].sort((a, b) => {
+      const aDate = new Date(`${a.date}T${a.time || '00:00'}`)
+      const bDate = new Date(`${b.date}T${b.time || '00:00'}`)
+      return aDate - bDate
+    })
+  })()
 
   // Home page search results
   const homeSearchResults = React.useMemo(() => {
