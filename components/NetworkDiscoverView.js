@@ -1223,7 +1223,7 @@ export default function NetworkDiscoverView({
                             padding: '2px 8px', borderRadius: '6px',
                             letterSpacing: '0.3px', textTransform: 'uppercase',
                           }}>
-                            {vibeInfo.emoji} {vibeInfo.label}
+                            {vibeInfo.label}
                           </span>
                         </div>
                       )}
@@ -1259,7 +1259,7 @@ export default function NetworkDiscoverView({
                   {/* Action buttons */}
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0,
-                    ...(isMobile ? { paddingLeft: '36px' } : {}),
+                    ...(isMobile ? { justifyContent: 'flex-end', marginTop: '-4px' } : {}),
                   }}>
                     <button
                       onClick={() => !hasSupported && handleSupportRequest(request.id)}
@@ -1269,11 +1269,12 @@ export default function NetworkDiscoverView({
                         background: hasSupported ? 'rgba(139, 105, 20, 0.08)' : 'linear-gradient(135deg, #6B4F1D, #8B6914)',
                         color: hasSupported ? '#8B6914' : '#FFF',
                         border: 'none', borderRadius: '10px',
-                        padding: isMobile ? '6px 12px' : '8px 14px',
+                        padding: isMobile ? '8px 14px' : '8px 14px',
                         fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
                         cursor: hasSupported ? 'default' : 'pointer',
                         boxShadow: hasSupported ? 'none' : '0 1px 4px rgba(139, 105, 20, 0.2)',
                         fontFamily: fonts.sans, whiteSpace: 'nowrap',
+                        minHeight: '36px',
                       }}
                     >
                       {hasSupported ? <><Check size={13} /> Voted</> : <><ThumbsUp size={13} /> Vote</>}
@@ -1283,14 +1284,16 @@ export default function NetworkDiscoverView({
                       title="Volunteer to host this discussion"
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        gap: '4px',
                         background: 'transparent', color: '#6B4F1D',
                         border: '1.5px solid rgba(139, 105, 20, 0.2)',
-                        borderRadius: '10px', padding: isMobile ? '5px 10px' : '7px 12px',
+                        borderRadius: '10px', padding: isMobile ? '8px 14px' : '7px 12px',
                         fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
                         cursor: 'pointer', fontFamily: fonts.sans, whiteSpace: 'nowrap',
+                        minHeight: '36px',
                       }}
                     >
-                      🎙️ Host
+                      <Users size={13} /> Host
                     </button>
                     {currentUser?.role === 'admin' && (
                       <button
