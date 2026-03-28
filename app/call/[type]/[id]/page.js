@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCallTypeConfig, isValidCallType } from '@/lib/video/callTypeConfig';
 import { saveCallRecap } from '@/lib/callRecapHelpers';
+import { io } from 'socket.io-client';
 import { useCallRoom } from '@/hooks/useCallRoom';
 import { useRecording } from '@/hooks/useRecording';
 import useTranscription from '@/hooks/useTranscription';
@@ -178,8 +179,11 @@ export default function UnifiedCallPage() {
   const peerConnectionRef = useRef(null); // WebRTC
   const iceCandidateQueueRef = useRef([]); // Buffer ICE candidates until remote description is set
   const qualityMonitorRef = useRef(null); // Adaptive bitrate stats interval
+  const disconnectGraceRef = useRef(null); // Grace period before showing "Disconnected"
   const prevStatsRef = useRef(null); // Previous stats snapshot for delta calculation
-  const realtimeChannelRef = useRef(null); // Supabase channel
+  const realtimeChannelRef = useRef(null); // Supabase channel (unused for WebRTC now)
+  const signalingSocketRef = useRef(null); // Socket.IO signaling for WebRTC
+  const remotePeerIdRef = useRef(null); // Remote peer user ID for Socket.IO targeted messages
   const agoraClientRef = useRef(null); // Agora client (camera/audio)
   const agoraScreenClientRef = useRef(null); // Agora screen share client (separate to allow simultaneous camera+screen)
   const agoraUidRef = useRef(null); // Store Agora UID for screen client
@@ -845,13 +849,33 @@ export default function UnifiedCallPage() {
 
     pc.onconnectionstatechange = () => {
       console.log('[WebRTC] Connection state:', pc.connectionState);
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+      if (pc.connectionState === 'disconnected') {
+        // 'disconnected' is transient on mobile networks — wait before showing UI
+        if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
+        disconnectGraceRef.current = setTimeout(() => {
+          // Still disconnected after grace period? Show it
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            setRemoteParticipants(prev => prev.map(p => ({
+              ...p,
+              isDisconnected: true,
+              _lastUpdate: Date.now(),
+            })));
+          }
+        }, 5000);
+      } else if (pc.connectionState === 'failed') {
+        // 'failed' is terminal — mark disconnected immediately
+        if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
         setRemoteParticipants(prev => prev.map(p => ({
           ...p,
           isDisconnected: true,
           _lastUpdate: Date.now(),
         })));
       } else if (pc.connectionState === 'connected') {
+        // Recovered — clear any pending grace timer and restore UI
+        if (disconnectGraceRef.current) {
+          clearTimeout(disconnectGraceRef.current);
+          disconnectGraceRef.current = null;
+        }
         setRemoteParticipants(prev => prev.map(p => ({
           ...p,
           isDisconnected: false,
@@ -880,88 +904,115 @@ export default function UnifiedCallPage() {
     };
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && realtimeChannelRef.current) {
-        realtimeChannelRef.current.send({
-          type: 'broadcast',
-          event: 'signal',
-          payload: { type: 'ice-candidate', candidate: event.candidate }
+      if (event.candidate && signalingSocketRef.current?.connected) {
+        signalingSocketRef.current.emit('ice-candidate', {
+          candidate: event.candidate,
+          to: remotePeerIdRef.current,
         });
       }
     };
 
-    // Setup signaling channel — role (polite/impolite) is deterministic based on user IDs
-    // so simultaneous joins don't deadlock (both ignoring each other's offers)
-    const channel = supabase.channel(`meeting:${roomId}`, {
-      config: { broadcast: { self: false }, presence: { key: user?.id || 'anon' } }
+    // Setup Socket.IO signaling — reliable delivery via Render server
+    const serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'http://localhost:3001';
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+    const socket = io(serverUrl, {
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionDelay: isMobile ? 500 : 1000,
+      reconnectionDelayMax: isMobile ? 3000 : 5000,
+      reconnectionAttempts: isMobile ? 10 : 5,
+      timeout: isMobile ? 30000 : 20000,
+      upgrade: true,
+      rememberUpgrade: true,
+      path: '/socket.io/',
     });
 
+    signalingSocketRef.current = socket;
     let remotePeerId = null;
     // Lower user ID = impolite (offerer); higher user ID = polite (answerer)
     const amIPolite = (remoteId) => (user?.id || '') > remoteId;
 
-    channel
-      .on('broadcast', { event: 'signal' }, ({ payload }) => {
-        handleWebRTCSignal(payload, pc, remotePeerId ? amIPolite(remotePeerId) : false);
-      })
-      .on('presence', { event: 'join' }, ({ newPresences }) => {
-        const otherJoins = (newPresences || []).filter(p => p.user_id !== user?.id);
-        if (otherJoins.length === 0) return;
+    socket.on('connect', () => {
+      console.log('[WebRTC] Connected to signaling server');
+      socket.emit('register', { userId: user?.id, matchId: roomId });
+    });
 
-        remotePeerId = otherJoins[0].user_id;
+    socket.on('reconnect', () => {
+      console.log('[WebRTC] Reconnected to signaling server');
+      socket.emit('register', { userId: user?.id, matchId: roomId });
+    });
+
+    // Receive signaling messages from remote peer
+    socket.on('offer', ({ offer, from }) => {
+      console.log('[WebRTC] Received offer from:', from);
+      remotePeerId = from;
+      remotePeerIdRef.current = from;
+      handleWebRTCSignal({ type: 'offer', offer }, pc, amIPolite(from));
+    });
+
+    socket.on('answer', ({ answer, from }) => {
+      console.log('[WebRTC] Received answer from:', from);
+      handleWebRTCSignal({ type: 'answer', answer }, pc, amIPolite(from));
+    });
+
+    socket.on('ice-candidate', ({ candidate, from }) => {
+      handleWebRTCSignal({ type: 'ice-candidate', candidate }, pc, false);
+    });
+
+    // Room events — peer join/leave
+    socket.on('joined', ({ participants: roomParticipants }) => {
+      console.log('[WebRTC] Joined room, participants:', roomParticipants);
+      const others = roomParticipants.filter(id => id !== user?.id);
+      if (others.length > 0) {
+        remotePeerId = others[0];
+        remotePeerIdRef.current = others[0];
         const polite = amIPolite(remotePeerId);
-        console.log('[WebRTC] Peer joined, I am', polite ? 'polite' : 'impolite');
-
+        console.log('[WebRTC] Peer already present, I am', polite ? 'polite' : 'impolite');
         if (!polite) {
-          // I'm the offerer — create offer (rollback stale one if needed)
-          if (pc.signalingState === 'have-local-offer') {
-            pc.setLocalDescription({ type: 'rollback' }).then(() => {
-              createWebRTCOffer(pc);
-            }).catch(() => {
-              createWebRTCOffer(pc);
-            });
-          } else {
+          createWebRTCOffer(pc);
+        }
+        // Polite peer waits for offer — no fallback timer needed with reliable signaling
+      } else {
+        console.log('[WebRTC] First in room, waiting for peer to join');
+      }
+    });
+
+    socket.on('user-joined', ({ userId: joinedUserId }) => {
+      if (joinedUserId === user?.id) return;
+      remotePeerId = joinedUserId;
+      remotePeerIdRef.current = joinedUserId;
+      const polite = amIPolite(remotePeerId);
+      console.log('[WebRTC] Peer joined, I am', polite ? 'polite' : 'impolite');
+      if (!polite) {
+        if (pc.signalingState === 'have-local-offer') {
+          pc.setLocalDescription({ type: 'rollback' }).then(() => {
             createWebRTCOffer(pc);
-          }
+          }).catch(() => {
+            createWebRTCOffer(pc);
+          });
         } else {
-          // I'm polite — wait for their offer, with fallback
-          setTimeout(() => {
-            if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
-              console.log('[WebRTC] No offer received, creating our own as fallback');
-              createWebRTCOffer(pc);
-            }
-          }, 2000);
+          createWebRTCOffer(pc);
         }
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: user?.id, joined_at: Date.now() });
-          const presenceState = channel.presenceState();
-          const otherPeers = Object.keys(presenceState).filter(k => k !== (user?.id || 'anon'));
-          if (otherPeers.length > 0) {
-            // Get remote peer ID from presence state
-            const otherKey = otherPeers[0];
-            const otherPresence = presenceState[otherKey];
-            remotePeerId = otherPresence?.[0]?.user_id || otherKey;
-            const polite = amIPolite(remotePeerId);
-            console.log('[WebRTC] Peer already present, I am', polite ? 'polite' : 'impolite');
+      }
+      // Polite peer waits for offer from the impolite peer
+    });
 
-            if (!polite) {
-              createWebRTCOffer(pc);
-            } else {
-              setTimeout(() => {
-                if (pc.connectionState !== 'connected' && pc.connectionState !== 'connecting') {
-                  console.log('[WebRTC] No offer received, creating our own as fallback');
-                  createWebRTCOffer(pc);
-                }
-              }, 2000);
-            }
-          } else {
-            console.log('[WebRTC] First in room, waiting for peer to join');
-          }
+    socket.on('user-left', ({ userId: leftUserId }) => {
+      console.log('[WebRTC] Peer left:', leftUserId);
+    });
+
+    // Mobile: handle visibility changes
+    if (isMobile) {
+      const handleVisibilityChange = () => {
+        if (!document.hidden && !socket.connected) {
+          console.log('[WebRTC] App foregrounded, reconnecting signaling');
+          socket.connect();
         }
-      });
-
-    realtimeChannelRef.current = channel;
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      socket._visibilityHandler = handleVisibilityChange;
+    }
   };
 
   // LiveKit initialization (meetups)
@@ -1473,10 +1524,9 @@ export default function UnifiedCallPage() {
           await flushIceCandidates(pc);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          realtimeChannelRef.current?.send({
-            type: 'broadcast',
-            event: 'signal',
-            payload: { type: 'answer', answer: pc.localDescription }
+          signalingSocketRef.current?.emit('answer', {
+            answer: pc.localDescription,
+            to: remotePeerIdRef.current,
           });
           break;
         }
@@ -1513,10 +1563,9 @@ export default function UnifiedCallPage() {
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      realtimeChannelRef.current?.send({
-        type: 'broadcast',
-        event: 'signal',
-        payload: { type: 'offer', offer: pc.localDescription }
+      signalingSocketRef.current?.emit('offer', {
+        offer: pc.localDescription,
+        to: remotePeerIdRef.current,
       });
     } catch (error) {
       console.error('[WebRTC] Error creating offer:', error);
@@ -2000,14 +2049,25 @@ export default function UnifiedCallPage() {
       clearInterval(qualityMonitorRef.current);
       qualityMonitorRef.current = null;
     }
+    if (disconnectGraceRef.current) {
+      clearTimeout(disconnectGraceRef.current);
+      disconnectGraceRef.current = null;
+    }
     if (config?.provider === 'webrtc') {
       if (localVideoTrack instanceof MediaStream) {
         localVideoTrack.getTracks().forEach(t => t.stop());
       }
       peerConnectionRef.current?.close();
       peerConnectionRef.current = null;
-      realtimeChannelRef.current?.unsubscribe();
-      realtimeChannelRef.current = null;
+      if (signalingSocketRef.current) {
+        if (signalingSocketRef.current._visibilityHandler) {
+          document.removeEventListener('visibilitychange', signalingSocketRef.current._visibilityHandler);
+        }
+        signalingSocketRef.current.removeAllListeners();
+        signalingSocketRef.current.disconnect();
+        signalingSocketRef.current = null;
+      }
+      remotePeerIdRef.current = null;
     } else if (config?.provider === 'livekit') {
       try {
         await roomRef.current?.disconnect();
