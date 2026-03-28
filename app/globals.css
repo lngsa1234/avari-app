@@ -141,6 +141,57 @@ input::placeholder {
   color: rgba(245, 237, 228, 0.3);
 }
 
+/* Home page section entrance animations */
+@keyframes section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.home-section {
+  animation: section-enter 0.4s ease-out both;
+}
+
+.home-section:nth-child(1) { animation-delay: 0s; }
+.home-section:nth-child(2) { animation-delay: 0.08s; }
+.home-section:nth-child(3) { animation-delay: 0.16s; }
+.home-section:nth-child(4) { animation-delay: 0.24s; }
+.home-section:nth-child(5) { animation-delay: 0.32s; }
+.home-section:nth-child(6) { animation-delay: 0.4s; }
+
+/* Card hover micro-interaction */
+.card-hover {
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(139, 111, 92, 0.12);
+}
+
+.card-hover:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(139, 111, 92, 0.08);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .home-section {
+    animation: none;
+  }
+  .card-hover {
+    transition: none;
+  }
+  .card-hover:hover {
+    transform: none;
+  }
+}
+
 /* Video call specific styles */
 @layer utilities {
   /* Agora video element fixes */

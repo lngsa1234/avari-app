@@ -2685,7 +2685,7 @@ function MainApp({ currentUser, onSignOut }) {
     return (
       <div style={homeStyles.container}>
         {/* Title Section */}
-        <section style={homeStyles.titleSection}>
+        <section className="home-section" style={homeStyles.titleSection}>
           <div>
             <h1 style={homeStyles.pageTitle}>{greeting}, {firstName}</h1>
             <p style={homeStyles.tagline}>
@@ -3065,7 +3065,7 @@ function MainApp({ currentUser, onSignOut }) {
             })()}
 
             {/* Upcoming Events Section with Date Badges */}
-            <div style={homeStyles.card}>
+            <div className="home-section" style={homeStyles.card}>
               <div style={homeStyles.cardHeader}>
                 <h3 style={homeStyles.cardTitle}>Upcoming Meetups</h3>
                 <button
@@ -3462,7 +3462,7 @@ function MainApp({ currentUser, onSignOut }) {
           {(() => {
             const filteredPeopleRecs = homePeopleRecs
             return filteredPeopleRecs.length > 0 && (
-            <div style={{ marginBottom: isMobile ? '28px' : '36px' }}>
+            <div className="home-section" style={{ marginBottom: isMobile ? '28px' : '36px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Heart style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
@@ -3490,6 +3490,7 @@ function MainApp({ currentUser, onSignOut }) {
                   return (
                   <div
                     key={rec.id}
+                    className="card-hover"
                     onClick={() => handleNavigate('userProfile', { userId: rec.recommended_user_id })}
                     style={{
                       background: 'rgba(255, 255, 255, 0.75)',
@@ -3497,7 +3498,6 @@ function MainApp({ currentUser, onSignOut }) {
                       borderRadius: '16px',
                       padding: isMobile ? '16px' : '20px',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
                       border: '1px solid rgba(139, 111, 92, 0.1)',
                       boxShadow: '0 2px 12px rgba(139, 111, 92, 0.08)',
                       display: 'flex',
@@ -3506,14 +3506,6 @@ function MainApp({ currentUser, onSignOut }) {
                       textAlign: 'center',
                       gap: '10px',
                       ...(isMobile ? { minWidth: '140px', scrollSnapAlign: 'start', flex: '0 0 auto' } : {}),
-                    }}
-                    onMouseEnter={isMobile ? undefined : (e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)'
-                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 111, 92, 0.15)'
-                    }}
-                    onMouseLeave={isMobile ? undefined : (e) => {
-                      e.currentTarget.style.transform = 'translateY(0)'
-                      e.currentTarget.style.boxShadow = '0 2px 12px rgba(139, 111, 92, 0.08)'
                     }}
                   >
                     {rec.profile?.profile_picture ? (
@@ -3624,7 +3616,7 @@ function MainApp({ currentUser, onSignOut }) {
             const displayTags = tags.slice(0, 3);
 
             return (
-            <div style={{ marginBottom: isMobile ? '28px' : '36px' }}>
+            <div className="home-section" style={{ marginBottom: isMobile ? '28px' : '36px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Users style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
@@ -3638,6 +3630,7 @@ function MainApp({ currentUser, onSignOut }) {
                 </span>
               </div>
               <div
+                className="card-hover"
                 onClick={() => handleNavigate('circleDetail', { circleId: match.circle_id || circle.id })}
                 style={{
                   background: '#FAF7F4', borderRadius: isMobile ? '14px' : '22px',
@@ -3645,10 +3638,7 @@ function MainApp({ currentUser, onSignOut }) {
                   boxShadow: '0 4px 24px rgba(61,46,34,0.11)',
                   overflow: 'hidden', display: 'flex', alignItems: 'stretch',
                   cursor: 'pointer',
-                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                 }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(61,46,34,0.15)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(61,46,34,0.11)'; }}
               >
                 {/* Left: SVG illustration */}
                 <div style={{
@@ -3830,7 +3820,7 @@ function MainApp({ currentUser, onSignOut }) {
           </>)}
 
           {/* === Live Feed === */}
-          <div style={{ marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
+          <div className="home-section" style={{ marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
             <LiveFeed
               currentUserId={currentUser.id}
               onCtaClick={(event) => {

@@ -331,24 +331,16 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
 
   return (
     <div
+      className="card-hover"
       style={{
         borderRadius: isMobile ? 16 : 22, padding: isMobile ? '14px' : '18px',
         border: event.is_live ? '1px solid #d4a574' : '1px solid #e8ddd6',
         background: event.is_live ? '#fdf6ee' : '#faf7f4',
         position: 'relative', overflow: 'hidden',
-        transition: 'transform 0.18s ease, box-shadow 0.18s ease',
         cursor: config.cta ? 'pointer' : 'default',
         animation: 'feedSlideDown 0.38s cubic-bezier(0.34,1.4,0.64,1) both',
       }}
       onClick={() => config.cta && onCta?.(event)}
-      onMouseEnter={e => {
-        e.currentTarget.style.transform = 'translateY(-2px)'
-        e.currentTarget.style.boxShadow = '0 8px 28px rgba(61,46,34,0.1)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = 'none'
-      }}
     >
       {/* Decorative circle */}
       <div style={{
