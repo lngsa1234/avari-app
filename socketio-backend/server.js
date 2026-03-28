@@ -583,7 +583,7 @@ server.listen(PORT, () => {
   console.log('============================================');
   console.log(`🚀 Avari Backend Server`);
   console.log(`   Port: ${PORT}`);
-  console.log(`   Frontend: ${FRONTEND_URL}`);
+  console.log(`   Frontend: ${FRONTEND_URLS.join(', ')}`);
   console.log(`   Protocol: Socket.IO`);
   console.log('============================================');
   console.log('Services:');
