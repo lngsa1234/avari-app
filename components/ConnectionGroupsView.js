@@ -985,9 +985,21 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   return (
     <div style={{...styles.container, padding: isMobile ? '16px 0' : '24px 0'}} className="circles-container">
 
+      {/* Page Header */}
+      <div style={{ marginBottom: isMobile ? '16px' : '24px', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '24px' }}>
+        <h1 style={{
+          fontFamily: '"Lora", serif', fontSize: isMobile ? '24px' : '28px',
+          fontWeight: '600', color: '#3F1906', margin: 0, letterSpacing: '-0.3px',
+        }}>Circles</h1>
+        <p style={{
+          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '13px' : '14px',
+          color: '#A08070', marginTop: '4px',
+        }}>Your deep and meaningful connections</p>
+      </div>
+
       {/* Pending Invitations Alert */}
       {groupInvites.length > 0 && (
-        <div style={{...styles.inviteAlert, padding: isMobile ? '12px 14px' : '16px 20px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center'}} className="circles-invite-alert">
+        <div style={{...styles.inviteAlert, padding: isMobile ? '12px 14px' : '16px 20px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px'}} className="circles-invite-alert">
           <div style={styles.inviteAlertContent}>
             <span style={styles.inviteAlertIcon}>✨</span>
             <span style={styles.inviteAlertText}>
@@ -1019,11 +1031,12 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         return (
           <div style={{
             background: 'white', borderRadius: '16px', border: '1px solid #E8DDD6',
-            padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '14px',
-            marginBottom: isMobile ? '16px' : '20px',
+            padding: isMobile ? '12px 14px' : '14px 16px', display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
+            maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px',
+            flexWrap: isMobile ? 'wrap' : 'nowrap',
           }}>
             <div style={{
-              width: '40px', height: '40px', borderRadius: '10px',
+              width: isMobile ? '36px' : '40px', height: isMobile ? '36px' : '40px', borderRadius: '10px',
               background: '#F5E6D3', display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0, fontSize: '18px',
             }}>⏳</div>
@@ -1046,7 +1059,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 if (!error) setPendingJoinRequests(prev => prev.filter(r => r.id !== req.id));
               }}
               style={{
-                fontSize: '13px', fontWeight: '500', color: '#A08070',
+                fontSize: isMobile ? '12px' : '13px', fontWeight: '500', color: '#A08070',
                 background: 'none', border: '1px solid #E8DDD6', borderRadius: '100px',
                 padding: '7px 16px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
                 transition: 'all 0.15s', flexShrink: 0,
@@ -1060,7 +1073,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {pendingJoinRequests.length > 1 && (
         <div style={{
           background: 'white', borderRadius: '16px', border: '1px solid #E8DDD6',
-          overflow: 'hidden', marginBottom: isMobile ? '16px' : '20px',
+          overflow: 'hidden', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px',
         }}>
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1365,6 +1378,35 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             My Connections
           </h2>
           {/* Existing connections - slide bar */}
+          {connections.length === 0 ? (
+            <div style={{
+              padding: isMobile ? '24px 16px' : '32px 20px',
+              textAlign: 'center',
+              background: 'rgba(139, 111, 92, 0.04)',
+              borderRadius: '16px',
+              border: '1.5px dashed rgba(139, 111, 92, 0.2)',
+            }}>
+              <div style={{ fontSize: '28px', marginBottom: '10px' }}>🤝</div>
+              <p style={{
+                fontFamily: '"DM Sans", sans-serif', fontSize: '14px',
+                fontWeight: '600', color: '#3F1906', margin: '0 0 4px',
+              }}>No connections yet</p>
+              <p style={{
+                fontFamily: '"DM Sans", sans-serif', fontSize: '12px',
+                color: '#A08070', margin: '0 0 16px',
+              }}>Connect with people to start building meaningful relationships</p>
+              <button
+                onClick={() => onNavigate?.('allPeople')}
+                style={{
+                  padding: '8px 20px', borderRadius: '20px',
+                  fontSize: '13px', fontWeight: '600',
+                  background: '#8B6F5C', border: 'none',
+                  color: '#FAF5EF', cursor: 'pointer',
+                  fontFamily: '"DM Sans", sans-serif',
+                }}
+              >Discover People</button>
+            </div>
+          ) : (
           <div style={styles.slideBar}>
             {connections.map((user, index) => (
               <div
@@ -1443,6 +1485,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             ))}
 
           </div>
+          )}
 
           {/* My Active Circles */}
           {enrichedGroups.length > 0 && (
@@ -1469,179 +1512,204 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     <div
                       key={group.id}
                       className="circles-circle-card"
+                      onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}
                       style={{
-                        ...styles.circleCard,
+                        background: '#FAF7F4', borderRadius: isMobile ? '14px' : '22px',
+                        border: hasNoActivity ? '1.5px dashed rgba(139, 111, 92, 0.25)' : '1px solid #E8DDD6',
+                        boxShadow: '0 4px 24px rgba(61,46,34,0.11)',
+                        overflow: 'hidden', display: 'flex', alignItems: 'stretch',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                         animationDelay: `${index * 0.12}s`,
-                        ...(hasNoActivity ? { border: '1.5px dashed rgba(139, 111, 92, 0.25)' } : {}),
                       }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(61,46,34,0.15)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(61,46,34,0.11)'; }}
                     >
-                      <div className="circle-card-layout" style={{ display: 'flex', alignItems: 'stretch', gap: isMobile ? '10px' : '14px', flexDirection: isMobile ? 'column' : 'row' }}>
-                        <div style={{
-                          ...styles.circleEmoji,
-                          height: 'auto',
-                          background: group.image_url
-                            ? `url(${group.image_url}) center/cover no-repeat`
-                            : '#5E472F',
-                          position: 'relative',
-                        }} className="circles-circle-emoji">
-                          {!group.image_url && (
-                            <img src="/tutorial-logo.png" alt="" style={{ width: '110%', height: 'auto', objectFit: 'contain' }} />
-                          )}
-                        </div>
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <h3 style={styles.circleName}>{group.name}</h3>
-                            {sessionCount > 0 && (
-                              <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0 }}>
-                                {sessionCount} past session{sessionCount !== 1 ? 's' : ''}
-                              </span>
-                            )}
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                            {acceptedMembers.length > 0 && (
-                              <div style={{ display: 'flex', alignItems: 'center' }}>
-                                {acceptedMembers.slice(0, 4).map((member, idx) => (
-                                  <div key={member.id} style={{
-                                    width: '28px', height: '28px', borderRadius: '50%',
-                                    background: member.user?.profile_picture ? 'none'
-                                      : `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E', '#A67B5B'][idx % 4]}, #7A5C42)`,
-                                    border: '2px solid rgba(255,255,255,0.9)',
-                                    marginLeft: idx > 0 ? '-6px' : 0,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '10px', fontWeight: '600', color: 'white',
-                                    overflow: 'hidden', flexShrink: 0,
-                                  }}>
-                                    {member.user?.profile_picture ? (
-                                      <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                    ) : (member.user?.name?.[0] || '?').toUpperCase()}
-                                  </div>
-                                ))}
-                                {acceptedMembers.length > 4 && (
-                                  <div style={{
-                                    width: '28px', height: '28px', borderRadius: '50%',
-                                    backgroundColor: 'rgba(189, 173, 162, 0.5)',
-                                    border: '2px solid rgba(255,255,255,0.9)',
-                                    marginLeft: '-6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '9px', fontWeight: '600', color: '#605045',
-                                  }}>
-                                    +{acceptedMembers.length - 4}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <span style={{ fontSize: '12px', color: '#6B5344' }}>
-                              {acceptedMembers.length} member{acceptedMembers.length !== 1 ? 's' : ''}
-                            </span>
-                            {activeNames.length > 0 && (
-                              <span style={styles.activeCount}>
-                                <span style={styles.activeDot}></span>
-                                {activeNames.length <= 2
-                                  ? activeNames.join(' & ') + (activeNames.length === 1 ? ' is' : ' are') + ' online'
-                                  : `${activeNames[0]} + ${activeNames.length - 1} online`}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Recent Activity */}
-                          {!hasNoActivity && (group.lastMessage || group.lastTopic) ? (
-                            <div style={{ marginTop: '6px', fontSize: '12px', color: '#6B5344', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                              {group.lastMessage && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', overflow: 'hidden' }}>
-                                  <MessageCircle size={11} style={{ color: '#A89080', flexShrink: 0 }} />
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    <span style={{ fontWeight: '600' }}>{group.lastMessage.sender?.name?.split(' ')[0] || 'Someone'}</span>
-                                    {': '}{group.lastMessage.content?.slice(0, 60)}{group.lastMessage.content?.length > 60 ? '...' : ''}
-                                  </span>
-                                  {group.lastMessage.created_at && (
-                                    <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0, marginLeft: 'auto' }}>
-                                      {(() => {
-                                        const diff = Date.now() - new Date(group.lastMessage.created_at).getTime();
-                                        const mins = Math.floor(diff / 60000);
-                                        if (mins < 60) return `${mins}m`;
-                                        const hours = Math.floor(mins / 60);
-                                        if (hours < 24) return `${hours}h`;
-                                        return `${Math.floor(hours / 24)}d`;
-                                      })()}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {group.lastTopic && !group.lastMessage && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#8B7355', fontSize: '11px', overflow: 'hidden' }}>
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    Last discussed: {group.lastTopic}
-                                  </span>
-                                  {group.lastRecap?.created_at && (
-                                    <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0 }}>
-                                      {(() => {
-                                        const diff = Date.now() - new Date(group.lastRecap.created_at).getTime();
-                                        const mins = Math.floor(diff / 60000);
-                                        if (mins < 60) return `${mins}m ago`;
-                                        const hours = Math.floor(mins / 60);
-                                        if (hours < 24) return `${hours}h ago`;
-                                        return `${Math.floor(hours / 24)}d ago`;
-                                      })()}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {group.lastRecap && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}
-                                  onClick={(e) => { e.stopPropagation(); onNavigate?.('meetups', { recapId: group.lastRecap.id }); }}>
-                                  <FileText size={11} style={{ color: '#8B6F5C', flexShrink: 0 }} />
-                                  <span style={{ color: '#8B6F5C', fontWeight: '600', fontSize: '11px' }}>View meeting recap</span>
-                                </div>
-                              )}
-                            </div>
-                          ) : hasNoActivity ? (
-                            <div style={{ marginTop: '4px', fontSize: '11px', color: '#A89080', fontStyle: 'italic' }}>
-                              Schedule a meetup or start a conversation
-                            </div>
-                          ) : null}
-                        </div>
-
-                        <div className="circle-card-actions" style={{ display: 'flex', gap: '6px', flexShrink: 0, alignSelf: 'center' }}>
-                          <button style={{ ...styles.enterBtn, padding: '7px 14px', fontSize: '12px' }}
-                            onClick={() => onNavigate?.('messages', { chatId: group.id, chatType: 'circle' })}>Message</button>
-                          <button style={{
-                            ...styles.enterBtn, padding: '7px 14px', fontSize: '12px',
-                            backgroundColor: hasUpcoming ? `${theme.color}12` : hasNoActivity ? '#8B6F5C' : `${theme.color}08`,
-                            color: hasNoActivity ? 'white' : '#6B5344',
-                            borderColor: hasNoActivity ? '#8B6F5C' : 'rgba(139, 111, 92, 0.3)',
-                          }} className="circles-enter-btn"
-                            onClick={() => onNavigate?.('circleDetail', { circleId: group.id })}>
-                            {hasUpcoming ? 'Open' : hasNoActivity ? 'Get Started' : 'Enter'}
-                          </button>
-                        </div>
+                      {/* Left: image */}
+                      <div style={{
+                        width: isMobile ? '100px' : '160px', flexShrink: 0,
+                        position: 'relative', overflow: 'hidden',
+                      }}>
+                        {group.image_url ? (
+                          <img src={group.image_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <svg viewBox="0 0 110 190" preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}>
+                            <rect width="110" height="190" fill="#2C1F15"/>
+                            <circle cx="55" cy="95" r="60" fill="#E8C070" opacity="0.06"/>
+                            <circle cx="55" cy="95" r="38" fill="#E8C070" opacity="0.07"/>
+                            <circle cx="55" cy="95" r="50" fill="none" stroke="#5C3D20" strokeWidth="0.8" strokeDasharray="3 5" opacity="0.6"/>
+                            <ellipse cx="55" cy="98" rx="34" ry="22" fill="#5C3D20"/>
+                            <ellipse cx="55" cy="98" rx="34" ry="22" fill="none" stroke="#7A5230" strokeWidth="1.5"/>
+                            <ellipse cx="55" cy="50" rx="7" ry="7" fill="#C4956A"/>
+                            <rect x="48" y="55" width="14" height="10" rx="5" fill="#C4956A"/>
+                            <ellipse cx="88" cy="77" rx="6" ry="6" fill="#A0724A"/>
+                            <rect x="82" y="82" width="12" height="9" rx="4" fill="#A0724A"/>
+                            <ellipse cx="23" cy="77" rx="6" ry="6" fill="#D4A878"/>
+                            <rect x="17" y="82" width="12" height="9" rx="4" fill="#D4A878"/>
+                          </svg>
+                        )}
                       </div>
 
-                      {hasUpcoming && (
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: '8px',
-                          marginTop: '10px', marginLeft: isMobile ? 0 : '78px',
-                          padding: '8px 12px',
-                          backgroundColor: daysUntilMeetup === 0 ? '#4CAF5010' : 'rgba(139, 111, 92, 0.05)',
-                          borderRadius: '10px',
-                        }}>
-                          <span style={{ fontSize: '16px' }}>📅</span>
-                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#5C4033' }}>
-                            Next: {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                            {group.nextMeetup.time && ` · ${group.nextMeetup.time}`}
-                          </span>
-                          {daysUntilMeetup !== null && (
+                      {/* Right: content */}
+                      <div style={{
+                        flex: 1, padding: isMobile ? '10px 12px' : '14px 16px',
+                        display: 'flex', flexDirection: 'column', gap: isMobile ? '6px' : '8px', minWidth: 0,
+                      }}>
+                        {/* Status badges */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {activeNames.length > 0 && (
                             <span style={{
-                              fontSize: '11px', fontWeight: '600',
-                              color: daysUntilMeetup === 0 ? '#4CAF50' : theme.color,
-                              backgroundColor: daysUntilMeetup === 0 ? '#4CAF5020' : `${theme.color}15`,
-                              padding: '2px 8px', borderRadius: '8px', marginLeft: 'auto',
+                              display: 'inline-flex', alignItems: 'center', gap: '3px',
+                              padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '20px',
+                              background: '#E8F5E9', border: '1px solid #B8DFC0',
+                              fontSize: isMobile ? '9px' : '10.5px', fontWeight: '600', color: '#2E6B40',
                             }}>
-                              {daysUntilMeetup === 0 ? 'Today' : daysUntilMeetup === 1 ? 'Tomorrow' : `in ${daysUntilMeetup} days`}
+                              <span style={{ width: isMobile ? 5 : 6, height: isMobile ? 5 : 6, borderRadius: '50%', background: '#22c55e' }} />
+                              {activeNames.length <= 2
+                                ? activeNames.join(' & ')
+                                : `${activeNames[0]} + ${activeNames.length - 1} more`} online
+                            </span>
+                          )}
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '3px',
+                            padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '20px',
+                            background: '#F0E8DF', border: '1px solid #E0D0BE',
+                            fontSize: isMobile ? '9px' : '10.5px', fontWeight: '600', color: '#6B4F35',
+                          }}>
+                            <Users size={isMobile ? 9 : 11} /> {acceptedMembers.length} member{acceptedMembers.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        {/* Name + sessions */}
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                          <h3 style={{
+                            fontSize: isMobile ? '13px' : '15px', fontWeight: '700',
+                            color: '#2C1F15', margin: 0, fontFamily: '"Lora", serif',
+                            lineHeight: '1.25', letterSpacing: '-0.2px',
+                          }}>
+                            {group.name}
+                          </h3>
+                          {sessionCount > 0 && (
+                            <span style={{ fontSize: isMobile ? '10px' : '11px', color: '#A89080', flexShrink: 0 }}>
+                              {sessionCount} past session{sessionCount !== 1 ? 's' : ''}
                             </span>
                           )}
                         </div>
-                      )}
+
+                        {/* Last activity + Next meetup */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          {group.lastMessage ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: isMobile ? '11px' : '12px', color: '#8B7355' }}>
+                              <MessageCircle size={11} style={{ color: '#A89080', flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span style={{ fontWeight: '600' }}>{group.lastMessage.sender?.name?.split(' ')[0] || 'Someone'}</span>: {group.lastMessage.content?.slice(0, 50)}
+                              </span>
+                              {group.lastMessage.created_at && (
+                                <span style={{ fontSize: '10px', color: '#A89080', flexShrink: 0, marginLeft: 'auto' }}>
+                                  {(() => {
+                                    const diff = Date.now() - new Date(group.lastMessage.created_at).getTime();
+                                    const mins = Math.floor(diff / 60000);
+                                    if (mins < 60) return `${mins}m`;
+                                    const hours = Math.floor(mins / 60);
+                                    if (hours < 24) return `${hours}h`;
+                                    return `${Math.floor(hours / 24)}d`;
+                                  })()}
+                                </span>
+                              )}
+                            </div>
+                          ) : group.lastTopic ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: isMobile ? '11px' : '12px', color: '#8B7355' }}>
+                              <FileText size={11} style={{ color: '#A89080', flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                Last: {group.lastTopic}
+                              </span>
+                            </div>
+                          ) : hasNoActivity ? (
+                            <div style={{ fontSize: isMobile ? '11px' : '12px', color: '#A89080', fontStyle: 'italic' }}>
+                              No activity yet
+                            </div>
+                          ) : null}
+                          {hasUpcoming && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: isMobile ? '11px' : '12px', color: '#5C4033' }}>
+                              <span style={{ fontSize: '12px', flexShrink: 0 }}>📅</span>
+                              <span style={{ fontWeight: '600' }}>
+                                Next: {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                {group.nextMeetup.time && ` · ${group.nextMeetup.time}`}
+                              </span>
+                              {daysUntilMeetup !== null && (
+                                <span style={{
+                                  fontSize: '10px', fontWeight: '600',
+                                  color: daysUntilMeetup === 0 ? '#4CAF50' : '#D4864A',
+                                  background: daysUntilMeetup === 0 ? '#4CAF5015' : '#FDF3EB',
+                                  padding: '1px 6px', borderRadius: '6px', marginLeft: 'auto',
+                                }}>
+                                  {daysUntilMeetup === 0 ? 'Today' : daysUntilMeetup === 1 ? 'Tomorrow' : `in ${daysUntilMeetup}d`}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Member avatars + CTA */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
+                            {acceptedMembers.slice(0, isMobile ? 3 : 4).map((member, idx) => (
+                              <div key={member.id} style={{
+                                width: isMobile ? '22px' : '26px', height: isMobile ? '22px' : '26px', borderRadius: '50%',
+                                background: member.user?.profile_picture ? 'none'
+                                  : `linear-gradient(135deg, ${['#9C8068', '#C9A96E', '#8B9E7E', '#A67B5B'][idx % 4]}, #7A5C42)`,
+                                border: '1.5px solid #FAF7F4',
+                                marginLeft: idx > 0 ? '-6px' : 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '9px', fontWeight: '600', color: 'white',
+                                overflow: 'hidden', flexShrink: 0,
+                              }}>
+                                {member.user?.profile_picture ? (
+                                  <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (member.user?.name?.[0] || '?').toUpperCase()}
+                              </div>
+                            ))}
+                            {acceptedMembers.length > (isMobile ? 3 : 4) && (
+                              <div style={{
+                                width: isMobile ? '22px' : '26px', height: isMobile ? '22px' : '26px', borderRadius: '50%',
+                                backgroundColor: 'rgba(189, 173, 162, 0.5)',
+                                border: '1.5px solid #FAF7F4',
+                                marginLeft: '-6px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '8px', fontWeight: '600', color: '#605045',
+                              }}>
+                                +{acceptedMembers.length - (isMobile ? 3 : 4)}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.('messages', { chatId: group.id, chatType: 'circle' }); }}
+                              style={{
+                                width: isMobile ? '30px' : '34px', height: isMobile ? '30px' : '34px', borderRadius: '50%',
+                                background: 'transparent', border: '1px solid #E0D0BE',
+                                color: '#6B4F35', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'all 0.15s', flexShrink: 0,
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.background = '#F0E8DF'; }}
+                              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                            ><MessageCircle size={isMobile ? 14 : 16} /></button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onNavigate?.('circleDetail', { circleId: group.id }); }}
+                              style={{
+                                padding: isMobile ? '6px 14px' : '7px 18px', borderRadius: '20px',
+                                fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
+                                background: hasUpcoming && daysUntilMeetup === 0 ? '#4CAF50' : '#8B6F5C',
+                                border: 'none',
+                                color: '#FAF5EF', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                                transition: 'all 0.15s',
+                              }}
+                              onMouseEnter={e => { e.currentTarget.style.opacity = '0.85'; }}
+                              onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                            >{hasUpcoming && daysUntilMeetup === 0 ? 'Join Now' : hasUpcoming ? 'View Session' : hasNoActivity ? 'Get Started' : 'Open Circle'}</button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1681,12 +1749,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr',
+                  gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
                   gap: isMobile ? '10px' : '12px',
                 }}>
                   {peerSuggestions.slice(0, 4).map((person) => (
                     <div
                       key={person.id}
+                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
                       style={{
                         width: '100%',
                         background: '#FFFBF7',
@@ -1695,6 +1764,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         padding: isMobile ? '16px' : '20px',
                         display: 'flex', flexDirection: 'column',
                         boxSizing: 'border-box',
+                        cursor: 'pointer',
                         transition: 'all 0.2s ease',
                       }}
                       onMouseEnter={(e) => {
@@ -1708,15 +1778,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     >
                       {/* Avatar + Name/Career */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-                        <div style={{
-                          position: 'relative', flexShrink: 0,
-                        }}>
+                        <div style={{ position: 'relative', flexShrink: 0 }}>
                           <div style={{
-                            width: '56px', height: '56px',
+                            width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px',
                             borderRadius: '50%',
                             backgroundColor: '#6B5344',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '20px', color: 'white', fontWeight: '600',
+                            fontSize: isMobile ? '18px' : '20px', color: 'white', fontWeight: '600',
                             overflow: 'hidden',
                           }}>
                             {person.profile_picture ? (
@@ -1737,14 +1805,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <h4 style={{
-                            fontFamily: '"Lora", serif', fontSize: '17px', fontWeight: '700',
+                            fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '17px', fontWeight: '700',
                             color: '#2C1810', margin: 0,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
                             {person.name}
                           </h4>
                           <p style={{
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '13px',
+                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px',
                             color: '#5C4033', margin: '2px 0 0',
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
@@ -1767,26 +1835,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         </div>
                       </div>
 
-                      {/* Coffee Chat */}
-                      {person.open_to_coffee_chat && (
-                        <div style={{ display: 'flex', marginBottom: '10px' }}>
-                          <span style={{
-                            fontFamily: '"DM Sans", sans-serif', fontSize: '11px', fontWeight: 600,
-                            color: '#5C4033', backgroundColor: '#FDF3EB',
-                            border: '1px solid rgba(124, 96, 65, 0.15)',
-                            borderRadius: '8px', padding: '3px 10px',
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            <Coffee size={10} /> Open to Coffee Chat this week
-                          </span>
-                        </div>
-                      )}
-
                       {/* Hook / Description */}
                       {person.hook && (
                         <p style={{
-                          fontFamily: '"DM Sans", sans-serif', fontSize: '13px',
+                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px',
                           color: '#3D2B1F', margin: '0 0 10px', lineHeight: '1.4',
                           overflow: 'hidden', textOverflow: 'ellipsis',
                           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
@@ -1798,7 +1850,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       {/* Mutuals + Activity */}
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: '6px',
-                        fontFamily: '"DM Sans", sans-serif', fontSize: '12px',
+                        fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px',
                         color: '#8B7A6B', marginBottom: '12px',
                       }}>
                         {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
@@ -1829,8 +1881,20 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         })()}</span>
                       </div>
 
-                      {/* Action Buttons */}
-                      <div style={{ marginTop: 'auto', display: 'flex', gap: '8px' }}>
+                      {/* Bottom row: Coffee Chat left, Connect right */}
+                      <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: isMobile ? '8px' : '0' }}>
+                        {person.open_to_coffee_chat ? (
+                          <span style={{
+                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', fontWeight: 600,
+                            color: '#5C4033', backgroundColor: '#FDF3EB',
+                            border: '1px solid rgba(124, 96, 65, 0.15)',
+                            borderRadius: '8px', padding: '3px 10px',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px',
+                            whiteSpace: 'nowrap',
+                          }}>
+                            <Coffee size={10} /> Open to Coffee Chat
+                          </span>
+                        ) : <div />}
                         {sentRequests.has(person.id) ? (
                           <div style={{
                             padding: '5px 14px',
@@ -1847,33 +1911,18 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                             onClick={(e) => { e.stopPropagation(); handleConnect(person.id); }}
                             style={{
                               padding: '5px 14px',
-                              backgroundColor: '#5C4033', color: '#FFF',
+                              backgroundColor: '#8B6F5C', color: '#FFF',
                               border: 'none', borderRadius: '10px',
                               fontSize: '12px', fontWeight: '600', cursor: 'pointer',
                               display: 'inline-flex', alignItems: 'center', gap: '4px',
                               transition: 'background 0.2s ease',
                             }}
                             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7A5C42'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#5C4033'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8B6F5C'; }}
                           >
                             <UserPlus size={11} /> Connect
                           </button>
                         )}
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onNavigate?.('userProfile', { userId: person.id }); }}
-                          style={{
-                            padding: '5px 14px',
-                            backgroundColor: '#EDE6DF', color: '#5C4033',
-                            border: 'none', borderRadius: '10px',
-                            fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            transition: 'background 0.2s ease',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#E0D5CA'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#EDE6DF'; }}
-                        >
-                          View Profile
-                        </button>
                       </div>
                     </div>
                   ))}
