@@ -2691,7 +2691,9 @@ function MainApp({ currentUser, onSignOut }) {
             <p style={homeStyles.tagline}>
               {upcomingMeetingCount > 0
                 ? `You have ${upcomingMeetingCount} circle${upcomingMeetingCount > 1 ? 's' : ''} starting soon`
-                : 'Your community awaits'}
+                : connections.length > 0
+                  ? `${connections.length} connection${connections.length > 1 ? 's' : ''} in your network`
+                  : 'Your community awaits'}
             </p>
           </div>
         </section>
