@@ -3072,7 +3072,7 @@ function MainApp({ currentUser, onSignOut }) {
                   onClick={() => setCurrentView('meetups')}
                   style={homeStyles.seeAllBtn}
                 >
-                  View all &gt;
+                  View all <ChevronRight style={{ width: '14px', height: '14px' }} />
                 </button>
               </div>
 
@@ -3257,7 +3257,7 @@ function MainApp({ currentUser, onSignOut }) {
                                 }}
                               >
                                 <Video style={{ width: '15px', height: '15px' }} />
-                                Join &gt;
+                                Join
                               </button>
                             ) : (
                               <button
@@ -3270,7 +3270,7 @@ function MainApp({ currentUser, onSignOut }) {
                                   gap: '5px', whiteSpace: 'nowrap',
                                 }}
                               >
-                                Reserve spot &gt;
+                                Reserve spot
                               </button>
                             )}
                           </div>
@@ -3442,7 +3442,7 @@ function MainApp({ currentUser, onSignOut }) {
                                 gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
                               }}
                             >
-                              Reserve spot &gt;
+                              Reserve spot
                             </button>
                           )}
                         </div>
