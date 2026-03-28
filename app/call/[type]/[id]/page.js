@@ -1000,6 +1000,16 @@ export default function UnifiedCallPage() {
 
     socket.on('user-left', ({ userId: leftUserId }) => {
       console.log('[WebRTC] Peer left:', leftUserId);
+      // Peer intentionally left — clear grace timer and mark disconnected immediately
+      if (disconnectGraceRef.current) {
+        clearTimeout(disconnectGraceRef.current);
+        disconnectGraceRef.current = null;
+      }
+      setRemoteParticipants(prev => prev.map(p => ({
+        ...p,
+        isDisconnected: true,
+        _lastUpdate: Date.now(),
+      })));
     });
 
     // Mobile: handle visibility changes
@@ -2457,7 +2467,10 @@ export default function UnifiedCallPage() {
   // Get subtitle based on call type
   const getSubtitle = () => {
     if (callType === 'coffee') {
-      return isJoined ? `Connected with ${relatedData?.partner_name || 'Partner'}` : 'Connecting...';
+      if (!isJoined) return 'Connecting...';
+      const partnerDisconnected = remoteParticipants.some(p => p.isDisconnected);
+      if (partnerDisconnected) return `${relatedData?.partner_name || 'Partner'} left the call`;
+      return `Connected with ${relatedData?.partner_name || 'Partner'}`;
     } else if (callType === 'meetup' && relatedData) {
       return `${relatedData.date} at ${relatedData.time}`;
     } else if (callType === 'circle' && relatedData) {
