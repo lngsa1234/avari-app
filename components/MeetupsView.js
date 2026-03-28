@@ -1778,7 +1778,6 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       {activeView !== 'past' && groupEvents.length < 3 && (
         <section style={{...styles.suggestedSection, padding: isMobile ? '20px 16px' : '24px'}}>
           <h2 style={{...styles.sectionTitle, fontSize: isMobile ? '16px' : '18px'}}>
-            <span style={{...styles.sectionIcon, fontSize: isMobile ? '16px' : '18px'}}>✨</span>
             Discover More Events
           </h2>
           <p style={{...styles.suggestedText, fontSize: isMobile ? '13px' : '14px'}}>
