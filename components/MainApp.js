@@ -2590,21 +2590,6 @@ function MainApp({ currentUser, onSignOut }) {
         flexDirection: 'column',
         gap: isMobile ? '16px' : '20px',
       },
-      aiBanner: {
-        background: 'linear-gradient(93.28deg, #7A624B 9.73%, #BC9972 95.71%)',
-        borderRadius: '15px',
-        padding: isMobile ? '16px 20px' : '20px 24px',
-        marginBottom: isMobile ? '20px' : '28px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        cursor: 'pointer',
-        position: 'relative',
-        overflow: 'hidden',
-        opacity: 0.83,
-        boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-      },
       card: {
         background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.015) 0%, rgba(255, 255, 255, 0.013) 100%)',
         borderRadius: '19px',
@@ -2677,94 +2662,6 @@ function MainApp({ currentUser, onSignOut }) {
 
         {/* AI Agent: Personalized Nudge */}
         <NudgeBanner className="mb-5" />
-
-        {/* AI Insights Banner */}
-        <div
-          onClick={() => window.location.href = '/ai-insights'}
-          style={homeStyles.aiBanner}
-          onMouseEnter={isMobile ? undefined : (e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)'
-            e.currentTarget.style.boxShadow = '0 16px 48px rgba(61,43,26,0.12)'
-          }}
-          onMouseLeave={isMobile ? undefined : (e) => {
-            e.currentTarget.style.transform = 'translateY(0)'
-            e.currentTarget.style.boxShadow = 'none'
-          }}
-        >
-          {/* Decorative circles */}
-          <div style={{
-            position: 'absolute',
-            top: '-50%',
-            right: '-20%',
-            width: '300px',
-            height: '300px',
-            background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
-            borderRadius: '50%',
-          }} />
-          <div style={{
-            position: 'absolute',
-            bottom: '-60%',
-            left: '10%',
-            width: '200px',
-            height: '200px',
-            background: 'radial-gradient(circle, rgba(201,169,110,0.15) 0%, transparent 70%)',
-            borderRadius: '50%',
-          }} />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative', zIndex: 1 }}>
-            <div style={{
-              width: '48px',
-              height: '48px',
-              background: 'rgba(255,255,255,0.15)',
-              backdropFilter: 'blur(8px)',
-              borderRadius: '14px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '22px',
-              flexShrink: 0,
-            }}>
-              <Sparkles style={{ width: '22px', height: '22px', color: 'white' }} />
-            </div>
-            <div>
-              <h3 style={{
-                fontFamily: '"Lora", serif',
-                fontSize: '15px',
-                fontWeight: '600',
-                color: '#F7F7F7',
-                margin: 0,
-                letterSpacing: '0.15px',
-                lineHeight: '22px',
-              }}>Your AI Insights — Ready</h3>
-              <p style={{
-                fontFamily: '"Lora", serif',
-                fontSize: '13px',
-                color: 'rgba(255,255,255,0.7)',
-                fontWeight: '400',
-                margin: 0,
-                letterSpacing: '0.15px',
-              }}>Quick recap + next steps</p>
-            </div>
-          </div>
-
-          <div style={{
-            background: 'rgba(255, 251, 251, 0.72)',
-            borderRadius: '11px',
-            padding: '8px 16px',
-            position: 'relative',
-            zIndex: 1,
-            boxShadow: '0px 4px 4px rgba(0, 0, 0, 0.25)',
-          }}>
-            <span style={{
-              fontFamily: '"Lora", serif',
-              fontStyle: 'italic',
-              fontWeight: '700',
-              fontSize: '14px',
-              color: '#6E564A',
-              letterSpacing: '0.15px',
-            }}>View &gt;</span>
-          </div>
-        </div>
 
         {/* Starting Soon label */}
         {nextMeeting && (
