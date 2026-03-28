@@ -2659,6 +2659,8 @@ function MainApp({ currentUser, onSignOut }) {
         gap: '4px',
         letterSpacing: '0.15px',
         transition: 'color 0.2s ease',
+        minHeight: '44px',
+        padding: '8px 4px',
       },
       quickAction: {
         display: 'flex',
@@ -3550,11 +3552,12 @@ function MainApp({ currentUser, onSignOut }) {
                       onClick={(e) => { e.stopPropagation(); handleNavigate('userProfile', { userId: rec.recommended_user_id }) }}
                       style={{
                         marginTop: '2px',
-                        padding: isMobile ? '4px 12px' : '5px 16px',
+                        padding: isMobile ? '8px 16px' : '8px 20px',
+                        minHeight: '36px',
                         background: '#5C4033', color: '#FAF5EF',
                         border: 'none', borderRadius: '20px',
                         fontFamily: '"DM Sans", sans-serif',
-                        fontSize: isMobile ? '10px' : '11px', fontWeight: 600,
+                        fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
                         cursor: 'pointer',
                         transition: 'background 0.15s ease',
                       }}
@@ -4316,7 +4319,7 @@ function MainApp({ currentUser, onSignOut }) {
             <div className="flex items-center gap-1 py-1.5">
               <button
                 onClick={() => setCurrentView('home')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-3 md:px-4 py-3 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] min-h-[44px] ${
                   currentView === 'home'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
@@ -4327,7 +4330,7 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={() => handleNavigate('discover')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-3 md:px-4 py-3 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] min-h-[44px] ${
                   currentView === 'discover'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
@@ -4338,7 +4341,7 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={() => handleNavigate('meetups')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-3 md:px-4 py-3 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] min-h-[44px] ${
                   currentView === 'meetups'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
@@ -4349,7 +4352,7 @@ function MainApp({ currentUser, onSignOut }) {
               </button>
               <button
                 onClick={() => handleNavigate('connectionGroups')}
-                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-2 md:px-4 py-2 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] ${
+                className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-3 md:px-4 py-3 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] min-h-[44px] ${
                   currentView === 'connectionGroups'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'
                     : 'text-[#9C8068] hover:text-[#5E4530] hover:bg-[#E8DDD0]'
