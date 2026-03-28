@@ -3087,12 +3087,22 @@ function MainApp({ currentUser, onSignOut }) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '12px' : '4px' }}>
                   {upcomingMeetups.slice(0, 3).map((meetup, idx) => {
                     const isSignedUp = meetup._isCoffeeChat || userSignups.includes(meetup.id) || meetup.created_by === currentUser.id
-                    // Ensure host is always included in signups list
-                    const rawSignups = signups[meetup.id] || []
-                    const hostIncluded = meetup.host && !rawSignups.some(s => s.user_id === meetup.host.id)
-                    const meetupSignups = hostIncluded
-                      ? [{ user_id: meetup.host.id, profiles: meetup.host }, ...rawSignups]
-                      : rawSignups
+                    // Build signups list — for coffee chats, use the two participants
+                    let meetupSignups
+                    if (meetup._isCoffeeChat) {
+                      const chatData = meetup._coffeeChatData
+                      const partner = meetup.host
+                      meetupSignups = [
+                        { user_id: currentUser.id, profiles: { name: currentUser.name, profile_picture: currentUser.profile_picture } },
+                        ...(partner ? [{ user_id: partner.id, profiles: partner }] : []),
+                      ]
+                    } else {
+                      const rawSignups = signups[meetup.id] || []
+                      const hostIncluded = meetup.host && !rawSignups.some(s => s.user_id === meetup.host.id)
+                      meetupSignups = hostIncluded
+                        ? [{ user_id: meetup.host.id, profiles: meetup.host }, ...rawSignups]
+                        : rawSignups
+                    }
 
                     // Determine if event is currently live (started but not ended)
                     const isLive = isEventLive(meetup.date, meetup.time, meetup.timezone, parseInt(meetup.duration || '60'))
