@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronRight, ChevronLeft, Sparkles, Compass, Users } from 'lucide-react';
+import { colors as tokens } from '@/lib/designTokens';
 
 /**
  * Onboarding - Step-by-step introduction for new users
@@ -82,7 +83,7 @@ export default function Onboarding({ onComplete, userName }) {
             borderRadius: '4px',
             border: 'none',
             cursor: 'pointer',
-            backgroundColor: idx === currentStep ? '#5E472F' : 'rgba(94, 71, 47, 0.25)',
+            backgroundColor: idx === currentStep ? tokens.primaryDark : 'rgba(94, 71, 47, 0.25)',
             transition: 'all 0.3s ease',
             padding: 0,
           }}
@@ -106,7 +107,7 @@ export default function Onboarding({ onComplete, userName }) {
         }}>
           {/* Top - dark brown with logo */}
           <div style={{
-            background: '#5E472F',
+            background: tokens.primaryDark,
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center',
             padding: '32px 32px 24px',
@@ -143,7 +144,7 @@ export default function Onboarding({ onComplete, userName }) {
             flex: 1, justifyContent: 'center',
           }}>
             <p style={{
-              fontSize: '14px', color: '#8C7B6B',
+              fontSize: '14px', color: tokens.textLight,
               margin: '0 0 32px', textAlign: 'center', lineHeight: '1.5',
             }}>
               {currentStepData.description}
@@ -153,7 +154,7 @@ export default function Onboarding({ onComplete, userName }) {
 
             <button onClick={handleNext} style={{
               width: '100%', padding: '16px', borderRadius: '16px', border: 'none',
-              background: 'linear-gradient(135deg, #5E472F, #7A5C3E)',
+              background: `linear-gradient(135deg, ${tokens.primaryDark}, ${tokens.primary})`,
               color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               boxShadow: '0 4px 12px rgba(94, 71, 47, 0.3)', letterSpacing: '0.3px',
@@ -164,7 +165,7 @@ export default function Onboarding({ onComplete, userName }) {
 
             <button onClick={handleSkip} style={{
               marginTop: '12px', background: 'none', border: 'none',
-              color: '#8C7B6B', fontSize: '14px', cursor: 'pointer', padding: '4px',
+              color: tokens.textLight, fontSize: '14px', cursor: 'pointer', padding: '4px',
             }}>
               Skip intro
             </button>
@@ -189,7 +190,7 @@ export default function Onboarding({ onComplete, userName }) {
         }}>
           {/* Top - dark brown with sparkle icon */}
           <div style={{
-            background: '#5E472F',
+            background: tokens.primaryDark,
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center',
             padding: '32px 32px 24px',
@@ -226,7 +227,7 @@ export default function Onboarding({ onComplete, userName }) {
             flex: 1, justifyContent: 'center',
           }}>
             <p style={{
-              fontSize: '14px', color: '#8C7B6B',
+              fontSize: '14px', color: tokens.textLight,
               margin: '0 0 32px', textAlign: 'center', lineHeight: '1.5',
             }}>
               {currentStepData.description}
@@ -238,7 +239,7 @@ export default function Onboarding({ onComplete, userName }) {
               <button onClick={handlePrev} style={{
                 flex: 1, padding: '16px', borderRadius: '16px',
                 border: '1.5px solid rgba(94, 71, 47, 0.3)',
-                background: 'transparent', color: '#5E472F',
+                background: 'transparent', color: tokens.primaryDark,
                 fontSize: '16px', fontWeight: '600', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               }}>
@@ -248,7 +249,7 @@ export default function Onboarding({ onComplete, userName }) {
 
               <button onClick={handleNext} style={{
                 flex: 1, padding: '16px', borderRadius: '16px', border: 'none',
-                background: 'linear-gradient(135deg, #5E472F, #7A5C3E)',
+                background: `linear-gradient(135deg, ${tokens.primaryDark}, ${tokens.primary})`,
                 color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                 boxShadow: '0 4px 12px rgba(94, 71, 47, 0.3)', letterSpacing: '0.3px',
@@ -279,8 +280,8 @@ export default function Onboarding({ onComplete, userName }) {
         {/* Top - dark brown with icon or background image, title, subtitle */}
         <div style={{
           background: currentStepData.thumbnail
-            ? `url(${currentStepData.thumbnail}) center top / cover no-repeat, #5E472F`
-            : '#5E472F',
+            ? `url(${currentStepData.thumbnail}) center top / cover no-repeat, ${tokens.primaryDark}`
+            : tokens.primaryDark,
           display: 'flex', flexDirection: 'column', alignItems: 'center',
           justifyContent: 'center',
           padding: '32px 32px 24px',
@@ -319,7 +320,7 @@ export default function Onboarding({ onComplete, userName }) {
           flex: 1,
         }}>
           <p style={{
-            fontSize: '14px', color: '#8C7B6B',
+            fontSize: '14px', color: tokens.textLight,
             margin: '0 0 20px', textAlign: 'center', lineHeight: '1.5',
           }}>
             {currentStepData.description}
@@ -335,7 +336,7 @@ export default function Onboarding({ onComplete, userName }) {
               marginBottom: '24px',
             }}>
               <p style={{
-                fontSize: '11px', color: '#8C7B6B',
+                fontSize: '11px', color: tokens.textLight,
                 textTransform: 'uppercase', letterSpacing: '0.8px',
                 margin: '0 0 10px', fontWeight: '600',
               }}>
@@ -345,10 +346,10 @@ export default function Onboarding({ onComplete, userName }) {
                 {currentStepData.tips.map((tip, idx) => (
                   <li key={idx} style={{
                     display: 'flex', alignItems: 'center', gap: '10px',
-                    fontSize: '13px', color: '#5E472F',
+                    fontSize: '13px', color: tokens.primaryDark,
                     marginBottom: idx < currentStepData.tips.length - 1 ? '8px' : 0,
                   }}>
-                    <span style={{ color: '#5E472F', fontSize: '13px', flexShrink: 0 }}>&#10003;</span>
+                    <span style={{ color: tokens.primaryDark, fontSize: '13px', flexShrink: 0 }}>&#10003;</span>
                     {tip}
                   </li>
                 ))}
@@ -363,7 +364,7 @@ export default function Onboarding({ onComplete, userName }) {
             <button onClick={handlePrev} style={{
               flex: 1, padding: '16px', borderRadius: '16px',
               border: '1.5px solid rgba(94, 71, 47, 0.3)',
-              background: 'transparent', color: '#5E472F',
+              background: 'transparent', color: tokens.primaryDark,
               fontSize: '16px', fontWeight: '600', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
             }}>
@@ -373,7 +374,7 @@ export default function Onboarding({ onComplete, userName }) {
 
             <button onClick={handleNext} style={{
               flex: 1, padding: '16px', borderRadius: '16px', border: 'none',
-              background: 'linear-gradient(135deg, #5E472F, #7A5C3E)',
+              background: `linear-gradient(135deg, ${tokens.primaryDark}, ${tokens.primary})`,
               color: 'white', fontSize: '16px', fontWeight: '600', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
               boxShadow: '0 4px 12px rgba(94, 71, 47, 0.3)', letterSpacing: '0.3px',
@@ -386,7 +387,7 @@ export default function Onboarding({ onComplete, userName }) {
           {/* Skip */}
           <button onClick={handleSkip} style={{
             marginTop: '12px', background: 'none', border: 'none',
-            color: '#8C7B6B', fontSize: '14px', cursor: 'pointer', padding: '4px',
+            color: tokens.textLight, fontSize: '14px', cursor: 'pointer', padding: '4px',
           }}>
             Skip intro
           </button>

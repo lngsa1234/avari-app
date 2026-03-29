@@ -113,7 +113,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl">
             {/* Header */}
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
+            <div className="bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] p-6 text-white">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <MessageSquarePlus className="w-6 h-6" />
@@ -126,7 +126,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
                   <X className="w-6 h-6" />
                 </button>
               </div>
-              <p className="text-purple-100 mt-1 text-sm">
+              <p className="text-[#E8DDD0] mt-1 text-sm">
                 We'd love to hear your thoughts!
               </p>
             </div>
@@ -144,7 +144,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
                   </p>
                   <button
                     onClick={handleClose}
-                    className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium transition"
+                    className="bg-[#8B6F5C] hover:bg-[#6B5344] text-white px-6 py-2 rounded-lg font-medium transition"
                   >
                     Close
                   </button>
@@ -166,7 +166,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
                             onClick={() => setCategory(cat.value)}
                             className={`flex items-center gap-2 p-3 rounded-lg border-2 transition ${
                               category === cat.value
-                                ? 'border-purple-500 bg-purple-50'
+                                ? 'border-[#8B6F5C] bg-[#FDF8F3]'
                                 : 'border-gray-200 hover:border-gray-300'
                             }`}
                           >
@@ -188,7 +188,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
                       placeholder="Brief summary of your feedback"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B6F5C] focus:border-transparent"
                       maxLength={200}
                     />
                     <p className="text-xs text-gray-400 mt-1">{subject.length}/200</p>
@@ -203,7 +203,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       placeholder="Please describe your feedback in detail..."
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#8B6F5C] focus:border-transparent resize-none"
                       rows={5}
                       maxLength={5000}
                     />
@@ -258,7 +258,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
                     <button
                       type="submit"
                       disabled={isSubmitting || !category || !subject || !message}
-                      className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-400 disabled:to-gray-500 text-white px-4 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
+                      className="flex-1 bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] hover:from-[#5C4033] hover:to-[#6B5344] disabled:from-gray-400 disabled:to-gray-500 text-white px-4 py-3 rounded-lg font-medium transition flex items-center justify-center gap-2"
                     >
                       {isSubmitting ? (
                         <>
