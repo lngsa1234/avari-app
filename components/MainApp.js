@@ -4178,7 +4178,7 @@ function MainApp({ currentUser, onSignOut }) {
         <div className="max-w-4xl mx-auto px-4 pt-4 pb-2 md:px-6">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <h1 className="text-xl md:text-2xl font-bold flex items-center text-[#5E4530]" style={{ fontFamily: '"Lora", serif', letterSpacing: '-0.3px' }}>
+            <div className="text-xl md:text-2xl font-bold flex items-center text-[#5E4530]" style={{ fontFamily: '"Lora", serif', letterSpacing: '-0.3px' }} role="banner" aria-label="CircleW">
               <svg width="44" height="44" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-12 md:h-12">
                 <circle
                   cx="50"
@@ -4203,7 +4203,7 @@ function MainApp({ currentUser, onSignOut }) {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <span style={{ letterSpacing: '0.5px', transform: 'scaleY(0.92)', transformOrigin: 'bottom', display: 'inline-block' }}>CircleW</span>
               </div>
-            </h1>
+            </div>
 
             {/* Right side: Search + Profile */}
             <div className="flex items-center gap-3">
