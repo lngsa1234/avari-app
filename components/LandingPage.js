@@ -526,8 +526,8 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
           </div>
         </div>
 
-        <p style={{ fontSize: 12, color: colors.textSoft, fontFamily: fonts.sans, textAlign: 'center', margin: '16px 0 0' }}>
-          By continuing, you agree to our <a href="/terms" target="_blank" style={{ color: colors.primary, textDecoration: 'underline' }}>Terms</a> and <a href="/privacy" target="_blank" style={{ color: colors.primary, textDecoration: 'underline' }}>Privacy Policy</a>.
+        <p style={{ fontSize: 12, color: colors.textSoft, fontFamily: fonts.sans, textAlign: 'center', margin: '16px 0 0', lineHeight: '44px' }}>
+          By continuing, you agree to our <a href="/terms" target="_blank" style={{ color: colors.primary, textDecoration: 'underline', padding: '12px 2px' }}>Terms</a> and <a href="/privacy" target="_blank" style={{ color: colors.primary, textDecoration: 'underline', padding: '12px 2px' }}>Privacy Policy</a>.
         </p>
 
         <div style={{ marginTop: 20, textAlign: 'center' }}>
