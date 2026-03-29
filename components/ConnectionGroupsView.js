@@ -47,6 +47,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const [eligibleConnections, setEligibleConnections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAllCircles, setShowAllCircles] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(null);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
@@ -1219,7 +1220,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 </div>
 
                 <div style={styles.circlesList}>
-                  {enrichedGroups.map(({ group, acceptedMembers, activeMembers, activeNames, theme, hasUpcoming, sessionCount, daysUntilMeetup, hasNoActivity }, index) => (
+                  {(showAllCircles ? enrichedGroups : enrichedGroups.slice(0, 3)).map(({ group, acceptedMembers, activeMembers, activeNames, theme, hasUpcoming, sessionCount, daysUntilMeetup, hasNoActivity }, index) => (
                     <div
                       key={group.id}
                       className="circles-circle-card"
@@ -1424,6 +1425,21 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     </div>
                   ))}
                 </div>
+
+                {!showAllCircles && enrichedGroups.length > 3 && (
+                  <button
+                    onClick={() => setShowAllCircles(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: '100%', padding: '10px', marginTop: '8px',
+                      background: 'none', border: 'none', color: '#8B6F5C',
+                      fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+                      fontFamily: '"DM Sans", sans-serif',
+                    }}
+                  >
+                    Show {enrichedGroups.length - 3} more circle{enrichedGroups.length - 3 > 1 ? 's' : ''}
+                  </button>
+                )}
 
                 <button onClick={handleCreateClick} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
