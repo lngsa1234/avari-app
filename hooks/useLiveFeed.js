@@ -121,23 +121,28 @@ async function fetchAvailableProfiles(currentUserId) {
  *   refresh()   — refetch from the top
  *   liveCount   — number of currently live events
  */
+// Module-level cache — persists across component remounts
+let _cachedEvents = null
+let _cachedProfiles = null
+let _channelActive = false
+
 export function useLiveFeed(currentUserId) {
-  const [events, setEvents] = useState([])
-  const [availableProfiles, setAvailableProfiles] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [events, setEvents] = useState(_cachedEvents || [])
+  const [availableProfiles, setAvailableProfiles] = useState(_cachedProfiles || [])
+  const [loading, setLoading] = useState(_cachedEvents === null)
   const [hasMore, setHasMore] = useState(true)
   const channelRef = useRef(null)
-  const hasLoadedOnce = useRef(false)
 
   // Initial load
   const refresh = useCallback(async () => {
-    // Only show loading skeleton on first load, not re-mounts
-    if (!hasLoadedOnce.current) setLoading(true)
+    if (_cachedEvents === null) setLoading(true)
     try {
       const [data, available] = await Promise.all([
         fetchFeedPage(),
         currentUserId ? fetchAvailableProfiles(currentUserId) : [],
       ])
+      _cachedEvents = data
+      _cachedProfiles = available
       setEvents(data)
       setAvailableProfiles(available)
       setHasMore(data.length === PAGE_SIZE)
@@ -145,7 +150,6 @@ export function useLiveFeed(currentUserId) {
       console.error('[useLiveFeed] initial fetch failed:', err)
     } finally {
       setLoading(false)
-      hasLoadedOnce.current = true
     }
   }, [currentUserId])
 
@@ -156,54 +160,66 @@ export function useLiveFeed(currentUserId) {
     if (!oldest) return
     try {
       const more = await fetchFeedPage({ before: oldest.created_at })
-      setEvents(prev => [...prev, ...more])
+      const updated = [...events, ...more]
+      _cachedEvents = updated
+      setEvents(updated)
       setHasMore(more.length === PAGE_SIZE)
     } catch (err) {
       console.error('[useLiveFeed] loadMore failed:', err)
     }
   }, [events, hasMore, loading])
 
-  // Realtime subscription
+  // Realtime subscription — only create one channel globally
   useEffect(() => {
+    // Always fetch fresh data on mount, but don't show loading if cached
     refresh()
 
-    channelRef.current = supabase
-      .channel('feed_events_global')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'feed_events' },
-        async (payload) => {
-          const enriched = await enrichEvent(payload.new)
-          if (!enriched) return
-          setEvents(prev => {
-            if (prev.some(e => e.id === enriched.id)) return prev
-            return [enriched, ...prev]
-          })
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'feed_events' },
-        (payload) => {
-          setEvents(prev =>
-            prev.map(e => e.id === payload.new.id ? { ...e, ...payload.new } : e)
-          )
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'feed_events' },
-        (payload) => {
-          setEvents(prev => prev.filter(e => e.id !== payload.old.id))
-        }
-      )
-      .subscribe()
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current)
-      }
+    // Only subscribe once across all mounts
+    if (!_channelActive) {
+      _channelActive = true
+      channelRef.current = supabase
+        .channel('feed_events_global')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'feed_events' },
+          async (payload) => {
+            const enriched = await enrichEvent(payload.new)
+            if (!enriched) return
+            setEvents(prev => {
+              if (prev.some(e => e.id === enriched.id)) return prev
+              const updated = [enriched, ...prev]
+              _cachedEvents = updated
+              return updated
+            })
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'feed_events' },
+          (payload) => {
+            setEvents(prev => {
+              const updated = prev.map(e => e.id === payload.new.id ? { ...e, ...payload.new } : e)
+              _cachedEvents = updated
+              return updated
+            })
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'feed_events' },
+          (payload) => {
+            setEvents(prev => {
+              const updated = prev.filter(e => e.id !== payload.old.id)
+              _cachedEvents = updated
+              return updated
+            })
+          }
+        )
+        .subscribe()
     }
+
+    // Don't remove channel on unmount — keep it alive across remounts
+    return () => {}
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Combine DB events + synthetic available profiles
