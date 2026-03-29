@@ -148,7 +148,7 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
             onClick={() => onNavigate?.('home')}
             aria-label="Go back"
             style={{
-              width: '34px', height: '34px', borderRadius: '50%',
+              width: '44px', height: '44px', borderRadius: '50%',
               border: `1px solid ${colors.border}`, background: 'white',
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}
@@ -215,14 +215,13 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
       {/* Explainer banner */}
       <div style={{
         display: 'flex', gap: '14px', alignItems: 'flex-start',
-        background: 'white', border: `1px solid ${colors.border}`,
-        borderLeft: `3px solid ${colors.mochaMuted}`,
+        background: colors.mochaPale, border: `1px solid ${colors.border}`,
         borderRadius: '14px', padding: '16px 18px', marginBottom: '24px',
       }}>
         <div style={{
-          width: '38px', height: '38px', borderRadius: '50%', background: colors.mochaPale,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0,
-        }}>☀️</div>
+          width: '38px', height: '38px', borderRadius: '50%', background: 'white',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}><Users size={18} style={{ color: colors.mocha }} /></div>
         <div>
           <strong style={{ fontSize: '14px', fontWeight: '500', color: colors.mocha, display: 'block', marginBottom: '4px' }}>
             What's an Intimate Circle?
@@ -270,7 +269,7 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
           marginTop: '32px',
         }}
       >
-        <div style={{ fontSize: '48px', marginBottom: '12px' }}>🌱</div>
+        <Users size={36} style={{ color: colors.mochaMuted, marginBottom: '12px' }} />
         <h3 style={{ fontSize: '16px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: '0 0 4px' }}>
           Start Your Own Circle
         </h3>
@@ -330,10 +329,8 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
       style={{
         background: 'white', borderRadius: '16px', border: `1px solid ${colors.border}`,
         overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column',
-        transition: 'border-color 0.2s, transform 0.18s, box-shadow 0.18s',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 28px rgba(107,79,58,0.1)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
+      className="card-hover"
     >
       {/* Cover */}
       <div style={{
@@ -342,7 +339,9 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
         overflow: 'hidden',
       }}>
         {!circle.image_url && (
-          <span style={{ fontSize: '34px', position: 'relative', zIndex: 1 }}>{circle.coverIcon}</span>
+          <span style={{ fontSize: '28px', fontWeight: '600', fontFamily: fonts.serif, color: colors.mocha, opacity: 0.4, position: 'relative', zIndex: 1 }}>
+            {circle.name?.charAt(0)?.toUpperCase() || 'C'}
+          </span>
         )}
         {circle.image_url && <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, rgba(0,0,0,0.25))' }} />}
 
