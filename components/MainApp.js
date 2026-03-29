@@ -2614,7 +2614,7 @@ function MainApp({ currentUser, onSignOut }) {
         fontWeight: '500',
         margin: 0,
         marginTop: '6px',
-        background: 'linear-gradient(89.8deg, #7E654D 27.14%, #B9A594 72.64%, #ECDDD2 100%)',
+        background: 'linear-gradient(89.8deg, #7E654D 27.14%, #9C8068 72.64%, #B8A089 100%)',
         WebkitBackgroundClip: 'text',
         WebkitTextFillColor: 'transparent',
         backgroundClip: 'text',
