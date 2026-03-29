@@ -267,10 +267,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     const t0 = Date.now();
     setLoading(true);
 
-    // Single RPC for all circles page data + mutual matches in parallel
-    const [rpcResult, mutualResult] = await Promise.all([
+    // Load all initial data in parallel: RPC + mutual matches + pending join requests
+    const [rpcResult, mutualResult, pendingReqsResult] = await Promise.all([
       supabase.rpc('get_circles_page_data', { p_user_id: currentUser.id }),
       supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
+      supabase.from('connection_group_members')
+        .select('id, group_id, status, invited_at, connection_groups(id, name)')
+        .eq('user_id', currentUser.id)
+        .eq('status', 'pending'),
     ]);
 
     const sharedMatches = mutualResult.data || [];
@@ -383,12 +387,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       }
     })));
 
-    // Fetch user's own pending join requests
-    const { data: pendingReqs } = await supabase
-      .from('connection_group_members')
-      .select('id, group_id, status, invited_at, connection_groups(id, name)')
-      .eq('user_id', currentUser.id)
-      .eq('status', 'pending');
+    // Pending join requests (loaded in parallel with RPC above)
+    const pendingReqs = pendingReqsResult.data;
     setPendingJoinRequests((pendingReqs || []).map(r => ({
       id: r.id,
       group_id: r.group_id,
@@ -999,121 +999,68 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         }}>Your deep and meaningful connections</p>
       </div>
 
-      {/* Pending Invitations Alert */}
-      {groupInvites.length > 0 && (
-        <div style={{...styles.inviteAlert, padding: isMobile ? '12px 14px' : '16px 20px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px'}} className="circles-invite-alert">
-          <div style={styles.inviteAlertContent}>
-            <UserPlus size={16} style={{ color: '#8B6914', flexShrink: 0 }} />
-            <span style={styles.inviteAlertText}>
-              {groupInvites.length} pending group invitation{groupInvites.length > 1 ? 's' : ''}
-            </span>
-          </div>
-          <div style={styles.inviteActions}>
-            {groupInvites.slice(0, 2).map(invite => (
-              <div key={invite.id} style={styles.miniInvite}>
-                <span style={styles.miniInviteName}>{invite.group?.name}</span>
-                <button
-                  style={styles.miniAcceptBtn}
-                  onClick={() => handleAcceptInvite(invite.id, invite.group?.name)}
-                >
-                  Join
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-
-      {/* Pending Join Requests (user-initiated) */}
-      {pendingJoinRequests.length === 1 && (() => {
-        const req = pendingJoinRequests[0];
-        const daysAgo = req.invited_at ? Math.floor((Date.now() - new Date(req.invited_at)) / (1000 * 60 * 60 * 24)) : null;
-        const timeLabel = daysAgo === null ? '' : daysAgo === 0 ? 'sent today' : daysAgo === 1 ? 'sent 1 day ago' : `sent ${daysAgo} days ago`;
-        return (
-          <div style={{
-            background: 'white', borderRadius: '16px', border: '1px solid #E8DDD6',
-            padding: isMobile ? '12px 14px' : '14px 16px', display: 'flex', alignItems: 'center', gap: isMobile ? '10px' : '14px',
-            maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px',
-            flexWrap: isMobile ? 'wrap' : 'nowrap',
-          }}>
-            <div style={{
-              width: isMobile ? '36px' : '40px', height: isMobile ? '36px' : '40px', borderRadius: '10px',
-              background: '#F5E6D3', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, fontSize: '18px',
-            }}>⏳</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: '15px', fontWeight: '600', color: '#2C1810',
-                fontFamily: '"DM Sans", sans-serif', marginBottom: '3px',
-                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{req.groupName}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#D4864A', flexShrink: 0 }} />
-                <span style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif' }}>
-                  Join request pending{timeLabel ? ` · ${timeLabel}` : ''}
-                </span>
-              </div>
-            </div>
-            <button
-              onClick={async () => {
-                const { error } = await supabase.from('connection_group_members').delete().eq('id', req.id);
-                if (!error) setPendingJoinRequests(prev => prev.filter(r => r.id !== req.id));
-              }}
-              style={{
-                fontSize: isMobile ? '12px' : '13px', fontWeight: '500', color: '#A08070',
-                background: 'none', border: '1px solid #E8DDD6', borderRadius: '100px',
-                padding: '7px 16px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
-                transition: 'all 0.15s', flexShrink: 0,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#C4A882'; e.currentTarget.style.color = '#6B4C3B'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8DDD6'; e.currentTarget.style.color = '#A08070'; }}
-            >Withdraw request</button>
-          </div>
-        );
-      })()}
-      {pendingJoinRequests.length > 1 && (
+      {/* Combined Pending Items (invitations + join requests) */}
+      {(groupInvites.length > 0 || pendingJoinRequests.length > 0) && (
         <div style={{
           background: 'white', borderRadius: '16px', border: '1px solid #E8DDD6',
           overflow: 'hidden', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px',
         }}>
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            display: 'flex', alignItems: 'center', gap: '8px',
             padding: '12px 16px', borderBottom: '1px solid #E8DDD6',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Clock size={16} style={{ color: '#8B6F5C' }} />
-              <span style={{ fontSize: '13px', fontWeight: '600', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
-                Pending join requests
-              </span>
-              <span style={{
-                fontSize: '11px', fontWeight: '600', background: '#F5E6D3', color: '#D4864A',
-                borderRadius: '100px', padding: '2px 8px', fontFamily: '"DM Sans", sans-serif',
-              }}>{pendingJoinRequests.length}</span>
-            </div>
+            <Clock size={16} style={{ color: '#8B6F5C' }} />
+            <span style={{ fontSize: '13px', fontWeight: '600', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
+              Pending
+            </span>
+            <span style={{
+              fontSize: '11px', fontWeight: '600', background: '#F5E6D3', color: '#D4864A',
+              borderRadius: '100px', padding: '2px 8px', fontFamily: '"DM Sans", sans-serif',
+            }}>{groupInvites.length + pendingJoinRequests.length}</span>
           </div>
+
+          {/* Invitations */}
+          {groupInvites.map((invite, i) => (
+            <div key={`inv-${invite.id}`} style={{
+              display: 'flex', alignItems: 'center', padding: '10px 16px', gap: '12px',
+              borderBottom: (i < groupInvites.length - 1 || pendingJoinRequests.length > 0) ? '1px solid #F0E8E0' : 'none',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
+                  {invite.group?.name}
+                </div>
+                <div style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif', marginTop: '1px' }}>
+                  Invited by {invite.group?.creator?.name || 'someone'}
+                </div>
+              </div>
+              <button
+                onClick={() => handleAcceptInvite(invite.id, invite.group?.name)}
+                style={{
+                  fontSize: '12px', fontWeight: '600', color: 'white',
+                  background: '#5C4033', border: 'none', borderRadius: '100px',
+                  padding: '7px 16px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                  minHeight: '36px',
+                }}
+              >Join</button>
+            </div>
+          ))}
+
+          {/* Join requests */}
           {pendingJoinRequests.map((req, i) => {
             const daysAgo = req.invited_at ? Math.floor((Date.now() - new Date(req.invited_at)) / (1000 * 60 * 60 * 24)) : null;
-            const timeLabel = daysAgo === null ? '' : daysAgo === 0 ? 'Sent today' : daysAgo === 1 ? 'Sent 1 day ago' : `Sent ${daysAgo} days ago`;
+            const timeLabel = daysAgo === null ? '' : daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`;
             return (
-              <div key={req.id} style={{
-                display: 'flex', alignItems: 'center', padding: '12px 16px', gap: '12px',
-                borderBottom: i < pendingJoinRequests.length - 1 ? '1px solid #E8DDD6' : 'none',
+              <div key={`req-${req.id}`} style={{
+                display: 'flex', alignItems: 'center', padding: '10px 16px', gap: '12px',
+                borderBottom: i < pendingJoinRequests.length - 1 ? '1px solid #F0E8E0' : 'none',
               }}>
-                <div style={{
-                  width: '34px', height: '34px', borderRadius: '8px',
-                  background: '#F5E6D3', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '15px', flexShrink: 0,
-                }}>⭕</div>
-                <div style={{ flex: 1 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
                     {req.groupName}
                   </div>
-                  {timeLabel && (
-                    <div style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif', marginTop: '1px' }}>
-                      {timeLabel}
-                    </div>
-                  )}
+                  <div style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif', marginTop: '1px' }}>
+                    Request pending{timeLabel ? ` · ${timeLabel}` : ''}
+                  </div>
                 </div>
                 <button
                   onClick={async () => {
@@ -1123,11 +1070,9 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   style={{
                     fontSize: '12px', fontWeight: '500', color: '#A08070',
                     background: 'none', border: '1px solid #E8DDD6', borderRadius: '100px',
-                    padding: '5px 13px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
-                    transition: 'all 0.15s', flexShrink: 0,
+                    padding: '7px 16px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                    minHeight: '36px',
                   }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#C4A882'; e.currentTarget.style.color = '#6B4C3B'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8DDD6'; e.currentTarget.style.color = '#A08070'; }}
                 >Withdraw</button>
               </div>
             );
