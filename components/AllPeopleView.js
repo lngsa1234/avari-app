@@ -14,6 +14,7 @@ import {
   Users,
   Coffee,
   Sparkles,
+  UserPlus,
 } from 'lucide-react';
 
 const colors = {
@@ -267,7 +268,7 @@ export default function AllPeopleView({
             onClick={() => onNavigate?.(previousView || 'home')}
             aria-label="Go back"
             style={{
-              width: '34px', height: '34px', borderRadius: '50%',
+              width: '44px', height: '44px', borderRadius: '50%',
               border: `1px solid ${colors.border}`, background: 'white',
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               flexShrink: 0,
@@ -395,11 +396,10 @@ export default function AllPeopleView({
       {/* How it works banner */}
       <div style={{
         display: 'flex', gap: '12px', alignItems: 'flex-start',
-        background: 'white', border: `1px solid ${colors.border}`,
-        borderLeft: `3px solid ${colors.mochaMuted}`,
+        background: colors.mochaPale, border: `1px solid ${colors.border}`,
         borderRadius: '12px', padding: '14px 16px', marginBottom: '20px',
       }}>
-        <Sparkles size={16} style={{ color: colors.mochaMuted, flexShrink: 0, marginTop: '1px' }} />
+        <Heart size={16} style={{ color: colors.mochaMuted, flexShrink: 0, marginTop: '1px' }} />
         <div>
           <strong style={{ fontSize: '13px', fontWeight: '500', color: colors.mocha, display: 'block', marginBottom: '3px' }}>
             How connecting works
@@ -434,7 +434,7 @@ export default function AllPeopleView({
             padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', textAlign: 'center', minHeight: '200px', cursor: 'pointer',
           }}>
-            <div style={{ fontSize: '40px', marginBottom: '12px' }}>💌</div>
+            <UserPlus size={36} style={{ color: colors.mochaMuted, marginBottom: '12px' }} />
             <h3 style={{ fontSize: '15px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: '0 0 4px' }}>
               Know someone amazing?
             </h3>
@@ -528,7 +528,7 @@ function PersonCard({ person, bannerColor, avatarColor, onClick, onConnect }) {
               fontSize: '11px', background: colors.chatBg, border: `1px solid ${colors.chatBorder}`,
               color: colors.chatText, padding: '2px 9px', borderRadius: '12px', whiteSpace: 'nowrap', flexShrink: 0,
             }}>
-              ☕ Open to chat
+              Open to chat
             </span>
           )}
         </div>
@@ -543,7 +543,7 @@ function PersonCard({ person, bannerColor, avatarColor, onClick, onConnect }) {
         {/* Location */}
         {person.city ? (
           <div style={{ fontSize: '12px', color: colors.mochaMuted, marginBottom: '10px' }}>
-            📍 {person.city}{person.state ? `, ${person.state}` : ''}
+            <MapPin size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />{person.city}{person.state ? `, ${person.state}` : ''}
           </div>
         ) : (
           <div style={{ marginBottom: '10px' }} />
@@ -573,7 +573,7 @@ function PersonCard({ person, bannerColor, avatarColor, onClick, onConnect }) {
         {/* Footer: social proof + view button */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: `1px solid ${colors.border}` }}>
           <span style={{ fontSize: '11px', color: colors.mochaMuted }}>
-            👥 {person.mutualConnections || 0} mutual · {person.mutualCircles || 0} circle{person.mutualCircles !== 1 ? 's' : ''}
+            {person.mutualConnections || 0} mutual · {person.mutualCircles || 0} circle{person.mutualCircles !== 1 ? 's' : ''}
           </span>
           {person.isConnected ? (
             <span style={{ fontSize: '11px', color: colors.success, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -583,7 +583,7 @@ function PersonCard({ person, bannerColor, avatarColor, onClick, onConnect }) {
             <button
               onClick={(e) => { e.stopPropagation(); onConnect?.(); }}
               style={{
-                height: '32px', padding: '0 18px', borderRadius: '20px', fontSize: '12px',
+                height: '36px', padding: '0 18px', borderRadius: '20px', fontSize: '13px',
                 fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans,
                 background: person.hasPendingRequest ? colors.mochaPale : colors.mocha,
                 color: person.hasPendingRequest ? colors.mochaMuted : 'white',
@@ -683,7 +683,7 @@ function ProfileOverlay({ person, bannerColor, avatarColor, isMobile, connection
                 color: colors.chatText, padding: '3px 10px', borderRadius: '12px', whiteSpace: 'nowrap',
                 marginTop: '4px', flexShrink: 0,
               }}>
-                ☕ Open to chat
+                Open to chat
               </span>
             )}
           </div>
@@ -698,7 +698,7 @@ function ProfileOverlay({ person, bannerColor, avatarColor, isMobile, connection
           {/* Location */}
           {person.city && (
             <div style={{ fontSize: '12px', color: colors.mochaMuted, marginBottom: '14px' }}>
-              📍 {person.city}{person.state ? `, ${person.state}` : ''}
+              <MapPin size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />{person.city}{person.state ? `, ${person.state}` : ''}
             </div>
           )}
 
