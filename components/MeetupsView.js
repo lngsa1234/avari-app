@@ -1048,18 +1048,39 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         </section>
       )}
 
-      {/* Back link when viewing past (only in non-pastOnly mode) */}
-      {activeView === 'past' && !pastOnly && (
-        <button
-          onClick={() => setActiveView('upcoming')}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: fonts.sans, fontSize: '13px', fontWeight: '500',
-            color: '#8B6F5C', padding: '0 0 12px', display: 'flex', alignItems: 'center', gap: '4px',
-          }}
-        >
-          ← Back to upcoming
-        </button>
+      {/* Upcoming / Past tab bar (only in normal mode, not pastOnly) */}
+      {!pastOnly && (
+        <div style={{
+          display: 'flex',
+          gap: '4px',
+          marginBottom: isMobile ? '16px' : '20px',
+          background: 'rgba(139, 111, 92, 0.06)',
+          borderRadius: '12px',
+          padding: '4px',
+          width: 'fit-content',
+        }}>
+          {['upcoming', 'past'].map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveView(tab)}
+              style={{
+                padding: isMobile ? '8px 20px' : '8px 24px',
+                borderRadius: '10px',
+                border: 'none',
+                cursor: 'pointer',
+                fontFamily: fonts.sans,
+                fontSize: isMobile ? '13px' : '14px',
+                fontWeight: activeView === tab ? '600' : '500',
+                color: activeView === tab ? '#FFFFFF' : '#8B6F5C',
+                background: activeView === tab ? '#8B6F5C' : 'transparent',
+                transition: 'all 0.2s ease',
+                minHeight: '44px',
+              }}
+            >
+              {tab === 'upcoming' ? 'Upcoming' : 'Past'}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Content */}
