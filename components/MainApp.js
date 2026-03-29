@@ -2685,7 +2685,7 @@ function MainApp({ currentUser, onSignOut }) {
     return (
       <div style={homeStyles.container}>
         {/* Title Section */}
-        <section className="home-section" style={homeStyles.titleSection}>
+        <section style={homeStyles.titleSection}>
           <div>
             <h1 style={homeStyles.pageTitle}>{greeting}, {firstName}</h1>
             <p style={homeStyles.tagline}>
@@ -3065,7 +3065,7 @@ function MainApp({ currentUser, onSignOut }) {
             })()}
 
             {/* Upcoming Events Section with Date Badges */}
-            <div className="home-section" style={homeStyles.card}>
+            <div style={homeStyles.card}>
               <div style={homeStyles.cardHeader}>
                 <h3 style={homeStyles.cardTitle}>Upcoming Meetups</h3>
                 <button
@@ -3480,7 +3480,7 @@ function MainApp({ currentUser, onSignOut }) {
           {(() => {
             const filteredPeopleRecs = homePeopleRecs
             return filteredPeopleRecs.length > 0 && (
-            <div className="home-section" style={{ marginBottom: isMobile ? '28px' : '36px' }}>
+            <div style={{ marginBottom: isMobile ? '28px' : '36px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Heart style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
@@ -3634,7 +3634,7 @@ function MainApp({ currentUser, onSignOut }) {
             const displayTags = tags.slice(0, 3);
 
             return (
-            <div className="home-section" style={{ marginBottom: isMobile ? '28px' : '36px' }}>
+            <div style={{ marginBottom: isMobile ? '28px' : '36px' }}>
               <div style={sectionHeaderStyle}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Users style={{ width: '18px', height: '18px', color: '#8B6F5C' }} />
@@ -3838,7 +3838,7 @@ function MainApp({ currentUser, onSignOut }) {
           </>)}
 
           {/* === Live Feed === */}
-          <div className="home-section" style={{ marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
+          <div style={{ marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
             <LiveFeed
               currentUserId={currentUser.id}
               onCtaClick={(event) => {
