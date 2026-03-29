@@ -149,9 +149,10 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const upcomingChats = (data || []).filter(chat => {
         // Exclude completed, declined, cancelled
         if (chat.status === 'completed' || chat.status === 'declined' || chat.status === 'cancelled') return false;
-        if (!chat.scheduled_time) return false;
+        if (!chat.scheduled_time) return true; // No time = pending, show it
         const chatTime = new Date(chat.scheduled_time);
-        return chatTime >= todayStart;
+        // Coffee chats last ~30 min, add 30 min grace
+        return chatTime.getTime() + 60 * 60 * 1000 > now.getTime();
       });
 
       // Get profile info for the other person in each chat
