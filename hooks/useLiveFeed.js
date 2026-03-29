@@ -171,8 +171,8 @@ export function useLiveFeed(currentUserId) {
 
   // Realtime subscription — only create one channel globally
   useEffect(() => {
-    // Always fetch fresh data on mount, but don't show loading if cached
-    refresh()
+    // Only fetch on first ever mount — realtime handles updates after that
+    if (_cachedEvents === null) refresh()
 
     // Only subscribe once across all mounts
     if (!_channelActive) {
