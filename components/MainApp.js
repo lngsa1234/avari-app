@@ -3837,21 +3837,6 @@ function MainApp({ currentUser, onSignOut }) {
 
           </>)}
 
-          {/* === Live Feed === */}
-          <div style={{ marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
-            <LiveFeed
-              currentUserId={currentUser.id}
-              onCtaClick={(event) => {
-                if (event.event_type === 'coffee_available' || event.event_type === 'member_joined') {
-                  handleNavigate('userProfile', { userId: event.actor?.id })
-                } else if (event.event_type === 'circle_join' || event.event_type === 'circle_schedule') {
-                  handleNavigate('circleDetail', { circleId: event.circle_id || event.circle?.id })
-                } else if (event.event_type === 'community_event') {
-                  handleNavigate('eventDetail', { meetupId: event.metadata?.meetup_id })
-                }
-              }}
-            />
-          </div>
 
         </div>
       </div>
@@ -4398,6 +4383,23 @@ function MainApp({ currentUser, onSignOut }) {
         className={`max-w-4xl mx-auto p-4 md:p-6`}
       >
         {currentView === 'home' && <HomeView />}
+        {/* LiveFeed rendered outside HomeView so it doesn't remount on every MainApp state change */}
+        {currentView === 'home' && (
+          <div style={{ maxWidth: '880px', margin: '0 auto', marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
+            <LiveFeed
+              currentUserId={currentUser.id}
+              onCtaClick={(event) => {
+                if (event.event_type === 'coffee_available' || event.event_type === 'member_joined') {
+                  handleNavigate('userProfile', { userId: event.actor?.id })
+                } else if (event.event_type === 'circle_join' || event.event_type === 'circle_schedule') {
+                  handleNavigate('circleDetail', { circleId: event.circle_id || event.circle?.id })
+                } else if (event.event_type === 'community_event') {
+                  handleNavigate('eventDetail', { meetupId: event.metadata?.meetup_id })
+                }
+              }}
+            />
+          </div>
+        )}
         {currentView === 'meetups' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={handleNavigate} initialView={meetupsInitialView} />}
         {currentView === 'pastMeetings' && <MeetupsView currentUser={currentUser} connections={connections} supabase={supabase} meetups={meetups} userSignups={userSignups} onNavigate={handleNavigate} pastOnly />}
         {currentView === 'connectionGroups' && <ConnectionGroupsView currentUser={currentUser} supabase={supabase} connections={connections} onNavigate={handleNavigate} />}
