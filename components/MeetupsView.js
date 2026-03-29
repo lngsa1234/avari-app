@@ -2783,7 +2783,7 @@ const styles = {
     marginTop: '2px',
   },
   pastCardSummary: {
-    fontFamily: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: fonts.sans,
     fontSize: '13px',
     fontWeight: '400',
     color: 'rgba(63, 25, 6, 0.65)',
@@ -2799,7 +2799,7 @@ const styles = {
     borderLeft: '3px solid rgba(139, 111, 92, 0.35)',
   },
   summaryText: {
-    fontFamily: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: fonts.sans,
     fontSize: '13px',
     fontWeight: '400',
     color: 'rgba(63, 25, 6, 0.7)',
@@ -2824,7 +2824,7 @@ const styles = {
     color: '#C4868B',
   },
   actionItemsLabel: {
-    fontFamily: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: fonts.sans,
     fontSize: '12px',
     fontWeight: '700',
     color: '#5C4033',
@@ -2832,7 +2832,7 @@ const styles = {
     letterSpacing: '0.5px',
   },
   actionItemsCount: {
-    fontFamily: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: fonts.sans,
     fontSize: '10px',
     fontWeight: '600',
     color: 'white',
@@ -2853,7 +2853,7 @@ const styles = {
     flexShrink: 0,
   },
   actionText: {
-    fontFamily: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: fonts.sans,
     fontSize: '12.5px',
     color: 'rgba(63, 25, 6, 0.8)',
     lineHeight: '1.4',
@@ -2866,7 +2866,7 @@ const styles = {
     fontSize: '10px',
     fontWeight: '600',
     borderRadius: '100px',
-    fontFamily: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: fonts.sans,
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
     flexShrink: 0,

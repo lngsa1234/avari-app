@@ -2120,7 +2120,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
             textAlign: 'center',
           }}>
             <h3 style={{
-              fontFamily: '"Lora", Georgia, serif', fontSize: '18px', fontWeight: '600',
+              fontFamily: fonts.serif, fontSize: '18px', fontWeight: '600',
               color: '#3D2B1F', margin: '0 0 8px',
             }}>
               {confirmAction.title}
@@ -2139,7 +2139,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                   backgroundColor: 'rgba(139, 111, 92, 0.08)',
                   color: '#5C4033', border: 'none', borderRadius: '12px',
                   fontSize: '14px', fontWeight: '600', cursor: 'pointer',
-                  fontFamily: '"DM Sans", -apple-system, sans-serif',
+                  fontFamily: fonts.sans,
                 }}
               >
                 Go Back
@@ -2151,7 +2151,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                   backgroundColor: '#D32F2F', color: 'white',
                   border: 'none', borderRadius: '12px',
                   fontSize: '14px', fontWeight: '600', cursor: 'pointer',
-                  fontFamily: '"DM Sans", -apple-system, sans-serif',
+                  fontFamily: fonts.sans,
                 }}
               >
                 Confirm

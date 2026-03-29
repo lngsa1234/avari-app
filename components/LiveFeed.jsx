@@ -354,7 +354,7 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
             {config.typeLabel}
           </div>
           <div style={{
-            fontFamily: '"Lora", serif',
+            fontFamily: fonts.serif,
             fontSize: isMobile ? '14px' : '15px', fontWeight: 600, color: '#523C2E',
             lineHeight: 1.3, marginTop: 3, letterSpacing: '0.15px',
           }}>
@@ -465,7 +465,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
           marginBottom: 16,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <span style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '18px' : '20px', fontWeight: 600, color: '#3F1906', letterSpacing: '0.15px' }}>
+            <span style={{ fontFamily: fonts.serif, fontSize: isMobile ? '18px' : '20px', fontWeight: 600, color: '#3F1906', letterSpacing: '0.15px' }}>
               Live Feed
             </span>
             {liveCount > 0 && (

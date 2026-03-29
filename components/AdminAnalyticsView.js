@@ -17,6 +17,7 @@ import {
   ArrowDown,
   Minus
 } from 'lucide-react';
+import { colors as tokens } from '@/lib/designTokens';
 
 export default function AdminAnalyticsView({ currentUser, supabase }) {
   const [data, setData] = useState(null);
@@ -49,7 +50,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <RefreshCw className="w-6 h-6 text-[#6B4F3F] animate-spin" />
+        <RefreshCw className="w-6 h-6 text-[#6B5344] animate-spin" />
         <span className="ml-2 text-gray-600">Loading analytics...</span>
       </div>
     );
@@ -86,7 +87,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-              <BarChart3 className="w-5 h-5 mr-2 text-[#6B4F3F]" />
+              <BarChart3 className="w-5 h-5 mr-2 text-[#6B5344]" />
               Analytics Dashboard
             </h3>
             <p className="text-sm text-gray-600 mt-1">Acquisition & retention metrics</p>
@@ -95,7 +96,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
             <select
               value={daysBack}
               onChange={(e) => setDaysBack(Number(e.target.value))}
-              className="bg-white border border-[#D4A574] rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#6B4F3F]"
+              className="bg-white border border-[#D4A574] rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#6B5344]"
             >
               <option value={30}>Last 30 days</option>
               <option value={60}>Last 60 days</option>
@@ -105,7 +106,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
             </select>
             <button
               onClick={loadAnalytics}
-              className="p-2 text-[#6B4F3F] hover:bg-[#E8DDD0] rounded-lg transition-colors"
+              className="p-2 text-[#6B5344] hover:bg-[#E8DDD0] rounded-lg transition-colors"
               title="Refresh"
             >
               <RefreshCw className="w-4 h-4" />
@@ -122,7 +123,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
             onClick={() => setActiveTab(tab.id)}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.id
-                ? 'bg-white text-[#6B4F3F] shadow-sm'
+                ? 'bg-white text-[#6B5344] shadow-sm'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -143,7 +144,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
 
 // ─── Stat Card ───────────────────────────────────────────────
 
-function StatCard({ label, value, icon: Icon, subtitle, color = 'text-[#6B4F3F]' }) {
+function StatCard({ label, value, icon: Icon, subtitle, color = 'text-[#6B5344]' }) {
   return (
     <div className="bg-white rounded-lg p-4 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
       <div className="flex items-center justify-between mb-2">
@@ -176,7 +177,7 @@ function MiniBarChart({ data, labelKey, valueKey, maxBars = 12 }) {
           <div key={i} className="flex-1 flex flex-col items-center gap-1">
             <span className="text-[10px] text-gray-500">{val}</span>
             <div
-              className="w-full bg-[#6B4F3F] rounded-t-sm min-w-[8px] transition-all"
+              className="w-full bg-[#6B5344] rounded-t-sm min-w-[8px] transition-all"
               style={{ height: `${height}%` }}
               title={`${d[labelKey]}: ${val}`}
             />
@@ -274,7 +275,7 @@ function AcquisitionTab({ data }) {
                   className="h-full rounded-full transition-all"
                   style={{
                     width: `${step.pct}%`,
-                    backgroundColor: i === 0 ? '#6B4F3F' : i === 1 ? '#8B6F5F' : i === 2 ? '#AB8F7F' : '#D4A574'
+                    backgroundColor: i === 0 ? '#6B5344' : i === 1 ? '#8B6F5F' : i === 2 ? '#AB8F7F' : '#D4A574'
                   }}
                 />
               </div>
@@ -463,7 +464,7 @@ function EngagementTab({ data }) {
                     <td className="py-2 px-2 text-right text-gray-700">{u.coffee_chats}</td>
                     <td className="py-2 px-2 text-right text-gray-700">{u.meetup_signups}</td>
                     <td className="py-2 px-2 text-right text-gray-700">{u.messages_sent}</td>
-                    <td className="py-2 px-2 text-right font-semibold text-[#6B4F3F]">{u.total_actions}</td>
+                    <td className="py-2 px-2 text-right font-semibold text-[#6B5344]">{u.total_actions}</td>
                   </tr>
                 ))}
               </tbody>

@@ -19,6 +19,7 @@ import {
   Calendar,
   X
 } from 'lucide-react';
+import { colors as tokens } from '@/lib/designTokens';
 
 /**
  * AdminFeedbackView - Admin panel to view and manage user feedback
@@ -47,7 +48,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
 
   const statuses = {
     new: { label: 'New', color: 'bg-blue-100 text-blue-700', icon: AlertCircle },
-    reviewed: { label: 'Reviewed', color: 'bg-purple-100 text-purple-700', icon: CheckCircle },
+    reviewed: { label: 'Reviewed', color: 'bg-[#F5EDE4] text-[#6B5344]', icon: CheckCircle },
     in_progress: { label: 'In Progress', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
     resolved: { label: 'Resolved', color: 'bg-green-100 text-green-700', icon: CheckCircle },
     closed: { label: 'Closed', color: 'bg-gray-100 text-gray-700', icon: XCircle }
@@ -177,7 +178,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-            <MessageSquare className="w-7 h-7 mr-3 text-purple-500" />
+            <MessageSquare className="w-7 h-7 mr-3 text-[#FDF8F3]0" />
             User Feedback
           </h1>
           <p className="text-gray-600 mt-1">Manage feedback from users</p>
@@ -187,14 +188,14 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition ${
               showFilters || statusFilter || categoryFilter
-                ? 'bg-purple-50 border-purple-300 text-purple-700'
+                ? 'bg-[#FDF8F3] border-[#A89080] text-[#6B5344]'
                 : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
             }`}
           >
             <Filter className="w-4 h-4" />
             Filters
             {(statusFilter || categoryFilter) && (
-              <span className="bg-purple-500 text-white text-xs px-2 py-0.5 rounded-full">
+              <span className="bg-[#FDF8F3]0 text-white text-xs px-2 py-0.5 rounded-full">
                 {[statusFilter, categoryFilter].filter(Boolean).length}
               </span>
             )}
@@ -217,7 +218,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FDF8F3]0"
             >
               <option value="">All Statuses</option>
               {Object.entries(statuses).map(([key, { label }]) => (
@@ -230,7 +231,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
             <select
               value={categoryFilter}
               onChange={(e) => { setCategoryFilter(e.target.value); setPage(0); }}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FDF8F3]0"
             >
               <option value="">All Categories</option>
               {Object.entries(categories).map(([key, { label }]) => (
@@ -242,7 +243,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
             <div className="flex items-end">
               <button
                 onClick={() => { setStatusFilter(''); setCategoryFilter(''); setPage(0); }}
-                className="text-sm text-purple-600 hover:text-purple-700"
+                className="text-sm text-[#8B6F5C] hover:text-[#6B5344]"
               >
                 Clear filters
               </button>
@@ -260,7 +261,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
               key={key}
               onClick={() => { setStatusFilter(statusFilter === key ? '' : key); setPage(0); }}
               className={`p-4 rounded-xl border transition ${
-                statusFilter === key ? 'border-purple-500 bg-purple-50' : 'border-gray-200 bg-white hover:border-gray-300'
+                statusFilter === key ? 'border-[#FDF8F3]0 bg-[#FDF8F3]' : 'border-gray-200 bg-white hover:border-gray-300'
               }`}
             >
               <div className="flex items-center justify-between">
@@ -278,7 +279,7 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
       {/* Feedback List */}
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-purple-500"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-[#FDF8F3]0"></div>
         </div>
       ) : feedback.length === 0 ? (
         <div className="bg-white rounded-xl shadow p-12 text-center">
@@ -320,8 +321,8 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
                             className="w-8 h-8 rounded-full object-cover"
                           />
                         ) : (
-                          <div className="w-8 h-8 rounded-full bg-purple-200 flex items-center justify-center">
-                            <span className="text-purple-700 text-sm font-medium">
+                          <div className="w-8 h-8 rounded-full bg-[#EDE6DF] flex items-center justify-center">
+                            <span className="text-[#6B5344] text-sm font-medium">
                               {(item.user?.name || 'U')[0].toUpperCase()}
                             </span>
                           </div>
@@ -428,7 +429,7 @@ function FeedbackDetailModal({ feedback, categories, statuses, onClose, onStatus
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 p-6 text-white">
+        <div className="bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] p-6 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <CatIcon className="w-6 h-6" />
@@ -458,8 +459,8 @@ function FeedbackDetailModal({ feedback, categories, statuses, onClose, onStatus
                   className="w-10 h-10 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-purple-200 flex items-center justify-center">
-                  <User className="w-5 h-5 text-purple-700" />
+                <div className="w-10 h-10 rounded-full bg-[#EDE6DF] flex items-center justify-center">
+                  <User className="w-5 h-5 text-[#6B5344]" />
                 </div>
               )}
               <div>
@@ -545,7 +546,7 @@ function FeedbackDetailModal({ feedback, categories, statuses, onClose, onStatus
               onChange={(e) => setNotes(e.target.value)}
               onBlur={handleNotesBlur}
               placeholder="Add internal notes about this feedback..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#FDF8F3]0 focus:border-transparent resize-none"
               rows={3}
             />
           </div>
