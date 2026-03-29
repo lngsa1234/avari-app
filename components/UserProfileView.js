@@ -353,7 +353,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
     <>
       <style>{keyframeStyles}</style>
 
-      <div className="profile-container" style={{ fontFamily: FONT, minHeight: '100vh' }}>
+      <div className="profile-container" style={{ fontFamily: FONT, minHeight: '100vh', maxWidth: '880px', margin: '0 auto' }}>
 
         {/* ─── Top Nav ─── */}
         <div style={{

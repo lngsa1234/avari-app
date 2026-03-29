@@ -21,7 +21,7 @@ import {
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
 import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
-import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText } from 'lucide-react';
+import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
   const [isMobile, setIsMobile] = useState(() => {
@@ -1001,7 +1001,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {groupInvites.length > 0 && (
         <div style={{...styles.inviteAlert, padding: isMobile ? '12px 14px' : '16px 20px', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px'}} className="circles-invite-alert">
           <div style={styles.inviteAlertContent}>
-            <span style={styles.inviteAlertIcon}>✨</span>
+            <UserPlus size={16} style={{ color: '#8B6914', flexShrink: 0 }} />
             <span style={styles.inviteAlertText}>
               {groupInvites.length} pending group invitation{groupInvites.length > 1 ? 's' : ''}
             </span>
@@ -1080,7 +1080,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             padding: '12px 16px', borderBottom: '1px solid #E8DDD6',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '16px' }}>⏳</span>
+              <Clock size={16} style={{ color: '#8B6F5C' }} />
               <span style={{ fontSize: '13px', fontWeight: '600', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
                 Pending join requests
               </span>
@@ -1386,7 +1386,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               borderRadius: '16px',
               border: '1.5px dashed rgba(139, 111, 92, 0.2)',
             }}>
-              <div style={{ fontSize: '28px', marginBottom: '10px' }}>🤝</div>
+              <UserPlus size={28} style={{ color: '#B8A089', marginBottom: '10px' }} />
               <p style={{
                 fontFamily: '"DM Sans", sans-serif', fontSize: '14px',
                 fontWeight: '600', color: '#3F1906', margin: '0 0 4px',
@@ -1631,7 +1631,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                           ) : null}
                           {hasUpcoming && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: isMobile ? '11px' : '12px', color: '#5C4033' }}>
-                              <span style={{ fontSize: '12px', flexShrink: 0 }}>📅</span>
+                              <Calendar size={12} style={{ flexShrink: 0, color: '#8B6F5C' }} />
                               <span style={{ fontWeight: '600' }}>
                                 Next: {parseLocalDate(group.nextMeetup.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                                 {group.nextMeetup.time && ` · ${group.nextMeetup.time}`}
@@ -2046,7 +2046,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+            <Check size={48} style={{ color: '#4A7C59', marginBottom: '16px' }} />
             <h2 style={{
               fontFamily: '"Lora", serif',
               fontSize: '20px',
@@ -2120,7 +2120,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             <div style={styles.chatMessages}>
               {groupMessages.length === 0 ? (
                 <div style={styles.chatEmpty}>
-                  <span style={styles.chatEmptyIcon}>💬</span>
+                  <MessageCircle size={32} style={{ color: '#B8A089', marginBottom: '8px' }} />
                   <p style={styles.chatEmptyText}>No messages yet</p>
                   <p style={styles.chatEmptyHint}>Start the conversation!</p>
                 </div>
