@@ -504,8 +504,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
                   textAlign: 'center', padding: '32px 16px',
                   color: '#A89080', fontFamily: '"DM Sans", sans-serif', fontSize: 14,
                 }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>☕</div>
-                  No activity yet — be the first to connect!
+                  No activity yet. Be the first to connect!
                 </div>
               )
               : (expanded ? events : events.slice(0, maxItems)).map((event, i) => (

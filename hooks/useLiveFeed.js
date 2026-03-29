@@ -127,10 +127,12 @@ export function useLiveFeed(currentUserId) {
   const [loading, setLoading] = useState(true)
   const [hasMore, setHasMore] = useState(true)
   const channelRef = useRef(null)
+  const hasLoadedOnce = useRef(false)
 
   // Initial load
   const refresh = useCallback(async () => {
-    setLoading(true)
+    // Only show loading skeleton on first load, not re-mounts
+    if (!hasLoadedOnce.current) setLoading(true)
     try {
       const [data, available] = await Promise.all([
         fetchFeedPage(),
@@ -143,6 +145,7 @@ export function useLiveFeed(currentUserId) {
       console.error('[useLiveFeed] initial fetch failed:', err)
     } finally {
       setLoading(false)
+      hasLoadedOnce.current = true
     }
   }, [currentUserId])
 

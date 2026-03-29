@@ -99,6 +99,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   };
 
   const hasLoadedRef = useRef(false);
+  const hasRenderedOnce = useRef(false);
   useEffect(() => {
     if (hasLoadedRef.current) return;
     hasLoadedRef.current = true;
@@ -972,7 +973,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     });
   }, [connectionGroups]);
 
-  if (loading) {
+  if (loading && !hasRenderedOnce.current) {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.loadingSpinner}></div>
@@ -981,6 +982,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       </div>
     );
   }
+  if (!hasRenderedOnce.current) hasRenderedOnce.current = true;
 
   return (
     <div style={{...styles.container, padding: isMobile ? '16px 0' : '24px 0'}} className="circles-container">

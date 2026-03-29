@@ -1368,7 +1368,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         color: isToday ? 'rgba(255,255,255,0.55)' : '#C4956A',
                       }}>
                         {isCoffee
-                          ? (item.status === 'accepted' ? 'Accepted' : item.isPending ? 'Pending' : item.status)
+                          ? (item.isPending ? (item.isInviteReceived ? 'Invite received' : 'Awaiting response') : '1:1 Video Call')
                           : `${attendeeCount} ${attendeeCount === 1 ? 'attendee' : 'attendees'}`}
                       </span>
                     </div>
