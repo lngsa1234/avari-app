@@ -3503,7 +3503,8 @@ function MainApp({ currentUser, onSignOut }) {
                 msOverflowStyle: 'none',
                 WebkitOverflowScrolling: 'touch',
                 paddingBottom: '4px',
-                ...(isMobile ? {} : { display: 'grid', gridTemplateColumns: `repeat(${Math.min(filteredPeopleRecs.length, 3)}, 1fr)` }),
+                position: 'relative',
+                ...(isMobile ? { maskImage: 'linear-gradient(to right, black 85%, transparent 100%)', WebkitMaskImage: 'linear-gradient(to right, black 85%, transparent 100%)' } : { display: 'grid', gridTemplateColumns: `repeat(${Math.min(filteredPeopleRecs.length, 3)}, 1fr)` }),
               }}>
                 {filteredPeopleRecs.map((rec) => {
                   return (
@@ -3795,11 +3796,12 @@ function MainApp({ currentUser, onSignOut }) {
                     <button
                       onClick={(e) => { e.stopPropagation(); handleNavigate('circleDetail', { circleId: match.circle_id || circle.id }); }}
                       style={{
-                        padding: isMobile ? '5px 12px' : '6px 14px', borderRadius: '14px',
-                        fontSize: isMobile ? '10px' : '11.5px', fontWeight: '600',
+                        padding: isMobile ? '8px 14px' : '9px 16px', borderRadius: '14px',
+                        fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
                         cursor: 'pointer', fontFamily: fonts.sans,
                         background: '#3D2E22', color: '#FAF7F4',
                         border: 'none', transition: 'background 0.15s',
+                        minHeight: '44px',
                       }}
                       onMouseEnter={e => { e.currentTarget.style.background = '#2C1F15' }}
                       onMouseLeave={e => { e.currentTarget.style.background = '#3D2E22' }}

@@ -1494,6 +1494,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         boxSizing: 'border-box',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
+                        minHeight: isMobile ? 'auto' : '200px',
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'translateY(-2px)';

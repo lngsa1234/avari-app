@@ -99,7 +99,7 @@ export default function FeedbackButton({ currentUser, pageContext }) {
       {/* Floating Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 bg-[#7A5C42] hover:bg-[#5E4530] text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all z-40 group"
+        className="fixed bottom-20 right-4 md:bottom-6 md:right-6 bg-[#7A5C42] hover:bg-[#5E4530] text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all z-40 group"
         title="Send Feedback"
       >
         <MessageSquarePlus className="w-6 h-6" />

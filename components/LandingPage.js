@@ -528,7 +528,7 @@ export default function LandingPage({ onGoogleSignIn, onEmailSignUp, onEmailSign
 
         <div style={{ marginTop: 20, textAlign: 'center' }}>
           <p style={{ fontSize: 14, color: colors.textMuted, fontFamily: fonts.sans, margin: 0 }}>
-            Join a community of women building meaningful connections
+            Small circles, real conversations, coffee chats that matter
           </p>
         </div>
       </div>
