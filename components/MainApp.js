@@ -4385,7 +4385,7 @@ function MainApp({ currentUser, onSignOut }) {
         {currentView === 'home' && <HomeView />}
         {/* LiveFeed rendered outside HomeView so it doesn't remount on every MainApp state change */}
         {currentView === 'home' && (
-          <div style={{ maxWidth: '880px', margin: '0 auto', marginTop: isMobile ? '4px' : '12px', paddingTop: isMobile ? '20px' : '28px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
+          <div style={{ maxWidth: '880px', margin: '0 auto', marginTop: '8px', paddingTop: '24px', borderTop: '1px solid rgba(139, 111, 92, 0.1)' }}>
             <LiveFeed
               currentUserId={currentUser.id}
               onCtaClick={(event) => {
