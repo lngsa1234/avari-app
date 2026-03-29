@@ -5,6 +5,7 @@
 
 import { useRef, useCallback, useState, useEffect } from 'react'
 import { useLiveFeed } from '@/hooks/useLiveFeed'
+import { colors as tokens, fonts } from '@/lib/designTokens'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -254,15 +255,15 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
   // Names under avatars
   const namesBlock = hasDualAvatar ? (
     <div style={{ display: 'flex', gap: 5, marginTop: 8, flexWrap: 'wrap' }}>
-      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', color: '#8B7355', background: '#f0e8df', padding: '2px 8px', borderRadius: 12 }}>
+      <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '10px' : '11px', color: '#8B7355', background: '#f0e8df', padding: '2px 8px', borderRadius: 12 }}>
         {firstName(event.actor)}
       </span>
-      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', color: '#8B7355', background: '#f0e8df', padding: '2px 8px', borderRadius: 12 }}>
+      <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '10px' : '11px', color: '#8B7355', background: '#f0e8df', padding: '2px 8px', borderRadius: 12 }}>
         {firstName(event.target)}
       </span>
     </div>
   ) : (
-    <div style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', color: '#A08060', marginTop: 6 }}>
+    <div style={{ fontFamily: fonts.sans, fontSize: isMobile ? '10px' : '11px', color: '#A08060', marginTop: 6 }}>
       {firstName(event.actor)}
     </div>
   )
@@ -274,10 +275,10 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
         width: 7, height: 7, borderRadius: '50%', background: '#b45309',
         animation: 'feedPulse 1.6s ease-out infinite', display: 'inline-block', flexShrink: 0,
       }} />
-      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', color: '#92400e', fontWeight: 600 }}>Live now</span>
+      <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '12px', color: '#92400e', fontWeight: 600 }}>Live now</span>
     </span>
   ) : event._synthetic ? null : (
-    <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', color: '#A89080' }}>{timeAgo(event.created_at)}</span>
+    <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '12px', color: '#A89080' }}>{timeAgo(event.created_at)}</span>
   )
 
   // CTA or Private badge
@@ -293,7 +294,7 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
         style={{
           padding: isMobile ? '7px 14px' : '8px 18px', borderRadius: 22,
           fontSize: isMobile ? '12px' : '13px', fontWeight: 600, cursor: 'pointer',
-          fontFamily: '"DM Sans", sans-serif', whiteSpace: 'nowrap', letterSpacing: '0.15px',
+          fontFamily: fonts.sans, whiteSpace: 'nowrap', letterSpacing: '0.15px',
           transition: 'all 0.15s ease',
           border: isOutline ? '1px solid #C4A882' : 'none',
           background: isOutline ? 'transparent' : '#5C4033',
@@ -346,7 +347,7 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
         {/* Right: Content */}
         <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
           <div style={{
-            fontFamily: '"DM Sans", sans-serif',
+            fontFamily: fonts.sans,
             fontSize: isMobile ? '10px' : '10.5px', fontWeight: 600, letterSpacing: 0.6,
             textTransform: 'uppercase', color: '#a07850',
           }}>
@@ -360,7 +361,7 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
             {headline}
           </div>
           <div style={{
-            fontFamily: '"DM Sans", sans-serif',
+            fontFamily: fonts.sans,
             fontSize: isMobile ? '12px' : '13px', color: '#8B7355', marginTop: 4, lineHeight: 1.4,
           }}>
             {subline}
@@ -373,7 +374,7 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 6 }}>
                 {tags.map((tag, i) => (
                   <span key={i} style={{
-                    fontFamily: '"DM Sans", sans-serif',
+                    fontFamily: fonts.sans,
                     fontSize: isMobile ? '10px' : '11px', fontWeight: 500,
                     color: '#5C4033', background: 'rgba(139,111,92,0.1)',
                     padding: '2px 8px', borderRadius: 100,
@@ -457,7 +458,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
         }
       `}</style>
 
-      <div style={{ fontFamily: '"DM Sans", sans-serif' }}>
+      <div style={{ fontFamily: fonts.sans }}>
         {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -470,7 +471,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
             {liveCount > 0 && (
               <span style={{
                 display: 'flex', alignItems: 'center', gap: 5,
-                fontFamily: '"DM Sans", sans-serif',
+                fontFamily: fonts.sans,
                 fontSize: 11, fontWeight: 600, color: '#92400e',
                 background: '#fde8c8', padding: '3px 10px', borderRadius: 20,
               }}>
@@ -502,7 +503,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
               ? (
                 <div style={{
                   textAlign: 'center', padding: '32px 16px',
-                  color: '#A89080', fontFamily: '"DM Sans", sans-serif', fontSize: 14,
+                  color: '#A89080', fontFamily: fonts.sans, fontSize: 14,
                 }}>
                   No activity yet. Be the first to connect!
                 </div>
@@ -523,7 +524,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
               onClick={() => setExpanded(true)}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: '"DM Sans", sans-serif', fontSize: 14, color: '#8B6F5C',
+                fontFamily: fonts.sans, fontSize: 14, color: '#8B6F5C',
                 padding: '12px 0', textAlign: 'center', width: '100%',
               }}
             >

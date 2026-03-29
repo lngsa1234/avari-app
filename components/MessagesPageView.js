@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, ChevronLeft, Send, MoreVertical, X, CheckCheck, Plus, Users, MessageCircle } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 export default function MessagesPageView({ currentUser, supabase, onNavigate, initialChatId, initialChatType, previousView }) {
   const [conversations, setConversations] = useState([]);
@@ -974,7 +975,7 @@ const styles = {
   container: {
     minHeight: '100%',
     backgroundColor: '#FAF6F3',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   loadingContainer: {
     display: 'flex',
@@ -1018,7 +1019,7 @@ const styles = {
     marginBottom: '16px',
   },
   inboxTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '24px',
     fontWeight: '600',
     color: '#5D4E42',
@@ -1064,7 +1065,7 @@ const styles = {
     fontSize: '15px',
     color: '#5D4E42',
     outline: 'none',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   clearSearchBtn: {
     position: 'absolute',
@@ -1193,7 +1194,7 @@ const styles = {
     borderRadius: '12px',
     border: 'none',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
 
   // Compose view
@@ -1233,7 +1234,7 @@ const styles = {
     cursor: 'pointer',
   },
   composeTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '20px',
     fontWeight: '600',
     color: '#5D4E42',
@@ -1294,7 +1295,7 @@ const styles = {
     outline: 'none',
     fontSize: '15px',
     color: '#5D4E42',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
 
   // Contact list
@@ -1331,7 +1332,7 @@ const styles = {
     cursor: 'pointer',
     textAlign: 'left',
     width: '100%',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     transition: 'background-color 0.2s',
   },
   contactAvatar: {
@@ -1612,7 +1613,7 @@ const styles = {
     outline: 'none',
     fontSize: '15px',
     color: '#5D4E42',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     maxHeight: '120px',
     backgroundColor: 'transparent',
   },

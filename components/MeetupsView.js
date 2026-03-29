@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus, ChevronLeft, FileText, Check, Circle } from 'lucide-react';
 import { parseLocalDate, isEventPast, formatEventTime, eventDateTimeToUTC } from '../lib/dateUtils';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const formatDate = (isoStr) => {
   try {
@@ -1008,12 +1009,12 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           </button>
           <div>
             <h1 style={{
-              fontFamily: '"Lora", serif', fontSize: isMobile ? '24px' : '32px',
+              fontFamily: fonts.serif, fontSize: isMobile ? '24px' : '32px',
               fontWeight: '500', color: '#584233', letterSpacing: '0.15px',
               lineHeight: 1.28, margin: 0,
             }}>Past Meetings</h1>
             <p style={{
-              fontFamily: '"Lora", serif', fontSize: isMobile ? '13px' : '14px',
+              fontFamily: fonts.serif, fontSize: isMobile ? '13px' : '14px',
               fontWeight: '500', margin: '4px 0 0',
               color: 'rgba(107, 86, 71, 0.77)',
             }}>Review recaps and follow up on action items</p>
@@ -1053,7 +1054,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           onClick={() => setActiveView('upcoming')}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
+            fontFamily: fonts.sans, fontSize: '13px', fontWeight: '500',
             color: '#8B6F5C', padding: '0 0 12px', display: 'flex', alignItems: 'center', gap: '4px',
           }}
         >
@@ -1113,13 +1114,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       }} />
                     )}
                     <span style={{
-                      fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '700',
+                      fontFamily: fonts.sans, fontSize: '12px', fontWeight: '700',
                       color: '#5C4033', letterSpacing: '1px',
                     }}>
                       {entry.dayLabel}
                     </span>
                     <span style={{
-                      fontFamily: '"DM Sans", sans-serif', fontSize: '12px', fontWeight: '500',
+                      fontFamily: fonts.sans, fontSize: '12px', fontWeight: '500',
                       color: '#B8A089', letterSpacing: '0.5px',
                     }}>
                       {entry.monthDay}
@@ -1238,7 +1239,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       );
                     })()}
                     <span style={{
-                      fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '15px', fontWeight: '700',
+                      fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '15px', fontWeight: '700',
                       color: isToday ? '#FFF' : '#5C4033', textAlign: 'center', lineHeight: 1.2,
                     }}>
                       {time || 'TBD'}
@@ -1256,7 +1257,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         background: isToday ? 'rgba(255,255,255,0.2)' : (categoryColors[categoryTag]?.bg || 'rgba(139, 111, 71, 0.12)'),
                         color: isToday ? 'rgba(255,255,255,0.9)' : (categoryColors[categoryTag]?.color || '#7A5C42'),
                         letterSpacing: '0.3px', textTransform: 'uppercase',
-                        fontFamily: '"DM Sans", sans-serif',
+                        fontFamily: fonts.sans,
                       }}>
                         {categoryTag}
                       </span>
@@ -1266,7 +1267,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : vibe.bg,
                           color: isToday ? 'rgba(255,255,255,0.8)' : vibe.color,
-                          fontFamily: '"DM Sans", sans-serif',
+                          fontFamily: fonts.sans,
                         }}>
                           {vibe.label}
                         </span>
@@ -1277,7 +1278,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.12)' : 'rgba(201, 169, 110, 0.12)',
                           color: isToday ? 'rgba(255,255,255,0.7)' : '#8B7355',
-                          fontFamily: '"DM Sans", sans-serif',
+                          fontFamily: fonts.sans,
                         }}>
                           {topicTag}
                         </span>
@@ -1288,7 +1289,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : (item.meeting_format === 'hybrid' ? '#E8EDF0' : '#E8F0E4'),
                           color: isToday ? 'rgba(255,255,255,0.8)' : (item.meeting_format === 'hybrid' ? '#4A6572' : '#4E6B46'),
-                          fontFamily: '"DM Sans", sans-serif',
+                          fontFamily: fonts.sans,
                         }}>
                           {item.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
                         </span>
@@ -1299,7 +1300,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
                           background: isToday ? 'rgba(255,255,255,0.15)' : 'rgba(196, 149, 106, 0.2)',
                           color: isToday ? 'rgba(255,255,255,0.8)' : '#8B6F5C',
-                          fontFamily: '"DM Sans", sans-serif',
+                          fontFamily: fonts.sans,
                         }}>
                           {item.isInviteReceived ? 'Invited you' : 'Awaiting response'}
                         </span>
@@ -1308,7 +1309,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
                     {/* Title */}
                     <h4 style={{
-                      fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '18px', fontWeight: '600',
+                      fontFamily: fonts.serif, fontSize: isMobile ? '15px' : '18px', fontWeight: '600',
                       color: isToday ? '#FFF' : '#2C1810', margin: 0, lineHeight: 1.3,
                     }}>
                       {title}
@@ -1317,7 +1318,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                     {/* Description - hidden on mobile */}
                     {!isMobile && item.description && (
                       <p style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '400',
+                        fontFamily: fonts.sans, fontSize: '13px', fontWeight: '400',
                         color: isToday ? 'rgba(255,255,255,0.55)' : '#A89080',
                         margin: 0, lineHeight: 1.4,
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -1364,7 +1365,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         </span>
                       )}
                       <span style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '13px', fontWeight: '500',
+                        fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '13px', fontWeight: '500',
                         color: isToday ? 'rgba(255,255,255,0.55)' : '#C4956A',
                       }}>
                         {isCoffee
@@ -1413,14 +1414,14 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                             background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                             color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
                             padding: isMobile ? '7px 14px' : '9px 18px', borderRadius: isMobile ? '10px' : '14px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
+                            fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
                             cursor: 'pointer', whiteSpace: 'nowrap',
                           }}>Accept</button>
                           <button onClick={(e) => { e.stopPropagation(); handleDeclineChat(item); }} style={{
                             background: 'none', color: isToday ? 'rgba(255,255,255,0.5)' : '#9B8A7E',
                             border: isToday ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(139,111,92,0.2)',
                             padding: isMobile ? '5px 10px' : '7px 14px', borderRadius: isMobile ? '10px' : '14px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', fontWeight: '500',
+                            fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '12px', fontWeight: '500',
                             cursor: 'pointer', whiteSpace: 'nowrap',
                           }}>Decline</button>
                         </div>
@@ -1428,7 +1429,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         <span style={{
                           fontSize: isMobile ? '10px' : '11px', fontWeight: '600',
                           color: isToday ? 'rgba(255,255,255,0.7)' : '#8B6F5C',
-                          fontFamily: '"DM Sans", sans-serif',
+                          fontFamily: fonts.sans,
                           padding: isMobile ? '6px 10px' : '8px 14px', borderRadius: isMobile ? '10px' : '12px',
                           background: isToday ? 'rgba(255,255,255,0.12)' : 'rgba(196, 149, 106, 0.15)',
                           display: 'inline-flex', alignItems: 'center', gap: isMobile ? '3px' : '5px',
@@ -1442,7 +1443,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                           color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
                           padding: isMobile ? '8px 14px' : '10px 22px', borderRadius: isMobile ? '10px' : '14px',
-                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
+                          fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
                           cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                           gap: isMobile ? '5px' : '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
                         }}
@@ -1459,7 +1460,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           <span style={{
                             fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
                             color: isToday ? 'rgba(255,255,255,0.8)' : '#4E6B46',
-                            fontFamily: '"DM Sans", sans-serif',
+                            fontFamily: fonts.sans,
                             padding: isMobile ? '7px 12px' : '10px 18px', borderRadius: isMobile ? '10px' : '14px',
                             backgroundColor: isToday ? 'rgba(255,255,255,0.15)' : '#E8F0E4',
                           }}>Going</span>
@@ -1468,7 +1469,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                             background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                             color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
                             padding: isMobile ? '8px 14px' : '10px 22px', borderRadius: isMobile ? '10px' : '14px',
-                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
+                            fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
                             cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                             gap: isMobile ? '5px' : '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
                           }}
@@ -1484,7 +1485,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           background: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(88, 66, 51, 0.9)',
                           color: isToday ? '#5C4033' : '#F5EDE9', border: 'none',
                           padding: isMobile ? '8px 14px' : '10px 22px', borderRadius: isMobile ? '10px' : '14px',
-                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
+                          fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '14px', fontWeight: '700',
                           cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                           gap: isMobile ? '5px' : '7px', whiteSpace: 'nowrap', transition: 'transform 0.15s ease',
                         }}
@@ -1507,7 +1508,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               onClick={() => onNavigate?.('pastMeetings')}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '500',
+                fontFamily: fonts.sans, fontSize: '13px', fontWeight: '500',
                 color: '#B8A089', padding: '16px 0 4px', margin: '0 auto', display: 'block',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.color = '#8B6F5C'; }}
@@ -1622,12 +1623,12 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                               : <FileText size={isMobile ? 13 : 15} style={{ color: '#F5EDE4' }} />
                             }
                           </div>
-                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '14px', fontWeight: '600', color: allDone ? '#4A7C59' : '#F5EDE4' }}>
+                          <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '14px', fontWeight: '600', color: allDone ? '#4A7C59' : '#F5EDE4' }}>
                             {allDone ? 'All done!' : 'Follow-up Progress'}
                           </span>
                         </div>
                         <span style={{
-                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
+                          fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '12px', fontWeight: '600',
                           color: allDone ? '#4A7C59' : '#F5EDE4',
                           backgroundColor: allDone ? 'rgba(74,124,89,0.12)' : 'rgba(255,255,255,0.15)',
                           padding: '2px 8px', borderRadius: '100px',
@@ -1649,7 +1650,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                 {grouped.map(entry => {
                   if (entry.type === 'date') {
                     return (
-                      <div key={entry.key} style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', fontWeight: '700', color: '#A89080', textTransform: 'uppercase', letterSpacing: '1px', padding: isMobile ? '6px 0 3px' : '8px 0 4px', marginTop: '2px' }}>
+                      <div key={entry.key} style={{ fontFamily: fonts.sans, fontSize: isMobile ? '10px' : '11px', fontWeight: '700', color: '#A89080', textTransform: 'uppercase', letterSpacing: '1px', padding: isMobile ? '6px 0 3px' : '8px 0 4px', marginTop: '2px' }}>
                         {entry.label}
                       </div>
                     );
@@ -1668,7 +1669,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: isMobile ? '8px' : '10px' }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '6px' : '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '17px', fontWeight: '600', color: '#3F1906', lineHeight: '1.3' }}>
+                            <span style={{ fontFamily: fonts.serif, fontSize: isMobile ? '14px' : '17px', fontWeight: '600', color: '#3F1906', lineHeight: '1.3' }}>
                               {item.topic || item.title}
                             </span>
                             <span style={{ fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: '2px 7px', borderRadius: '6px', backgroundColor: tag.bg, color: tag.text, flexShrink: 0 }}>
@@ -1703,7 +1704,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                               display: 'flex', alignItems: 'center', gap: '4px',
                               padding: isMobile ? '5px 10px' : '7px 14px', borderRadius: '100px', border: 'none',
                               fontSize: isMobile ? '11px' : '12px', fontWeight: '600', cursor: 'pointer',
-                              fontFamily: '"DM Sans", sans-serif', flexShrink: 0,
+                              fontFamily: fonts.sans, flexShrink: 0,
                               backgroundColor: isUnreviewed ? '#5C4033' : 'rgba(139,111,92,0.12)',
                               color: isUnreviewed ? 'white' : '#5C4033',
                               boxShadow: isUnreviewed ? '0 2px 8px rgba(92,64,51,0.35)' : 'none',
@@ -1719,12 +1720,12 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       {/* Summary with expand/collapse */}
                       {item.summary && (
                         <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: isMobile ? '8px' : '10px', borderLeft: '3px solid rgba(139,111,92,0.35)' }}>
-                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px', color: 'rgba(63,25,6,0.7)', lineHeight: '1.5', fontStyle: 'italic' }}>
+                          <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '13px', color: 'rgba(63,25,6,0.7)', lineHeight: '1.5', fontStyle: 'italic' }}>
                             {isExpanded || item.summary.length <= (isMobile ? 100 : 150) ? item.summary : item.summary.slice(0, isMobile ? 100 : 150) + '...'}
                           </span>
                           {item.summary.length > (isMobile ? 100 : 150) && (
                             <button onClick={(e) => { e.stopPropagation(); toggleSummaryExpanded(item.id); }}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8B6F5C', fontSize: isMobile ? '11px' : '12px', fontWeight: '600', padding: '3px 0 0', fontFamily: '"DM Sans", sans-serif' }}>
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8B6F5C', fontSize: isMobile ? '11px' : '12px', fontWeight: '600', padding: '3px 0 0', fontFamily: fonts.sans }}>
                               {isExpanded ? 'Show less' : 'Read more'}
                             </button>
                           )}
@@ -1736,8 +1737,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(196,134,139,0.08)', borderRadius: isMobile ? '8px' : '10px', borderLeft: '3px solid #C4868B' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <span style={{ fontSize: isMobile ? '10px' : '12px', fontWeight: '700', color: '#5C4033', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: '"DM Sans", sans-serif' }}>Follow-ups</span>
-                              <span style={{ fontSize: isMobile ? '9px' : '10px', fontWeight: '600', color: 'white', backgroundColor: '#C4868B', borderRadius: '100px', padding: '1px 5px', fontFamily: '"DM Sans", sans-serif' }}>
+                              <span style={{ fontSize: isMobile ? '10px' : '12px', fontWeight: '700', color: '#5C4033', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: fonts.sans }}>Follow-ups</span>
+                              <span style={{ fontSize: isMobile ? '9px' : '10px', fontWeight: '600', color: 'white', backgroundColor: '#C4868B', borderRadius: '100px', padding: '1px 5px', fontFamily: fonts.sans }}>
                                 {item.completedCount} / {item.actionItems.length}
                               </span>
                             </div>
@@ -1754,7 +1755,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                                   ? <Check size={isMobile ? 12 : 14} style={{ color: '#4A7C59', flexShrink: 0, marginTop: '1px' }} />
                                   : <Circle size={isMobile ? 12 : 14} style={{ color: '#C4868B', flexShrink: 0, marginTop: '1px' }} />
                                 }
-                                <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11.5px' : '12.5px', color: 'rgba(63,25,6,0.8)', lineHeight: '1.4', textDecoration: isDone ? 'line-through' : 'none' }}>
+                                <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '11.5px' : '12.5px', color: 'rgba(63,25,6,0.8)', lineHeight: '1.4', textDecoration: isDone ? 'line-through' : 'none' }}>
                                   {action}
                                 </span>
                               </div>
@@ -1763,7 +1764,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         </div>
                       ) : item.hasRecap ? (
                         <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '5px 8px' : '6px 10px', backgroundColor: 'rgba(139,111,92,0.04)', borderRadius: isMobile ? '8px' : '10px' }}>
-                          <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px', color: '#A89080', fontStyle: 'italic' }}>No follow-ups for this meeting</span>
+                          <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '12px', color: '#A89080', fontStyle: 'italic' }}>No follow-ups for this meeting</span>
                         </div>
                       ) : null}
                     </div>
@@ -1855,7 +1856,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         fontSize: '13px',
                         fontWeight: editingMeetup.meeting_format === option.value ? '600' : '500',
                         cursor: 'pointer',
-                        fontFamily: '"DM Sans", sans-serif',
+                        fontFamily: fonts.sans,
                       }}
                       onClick={() => {
                         const newFormat = option.value;
@@ -2020,7 +2021,7 @@ const keyframeStyles = `
 const styles = {
   container: {
     minHeight: '100%',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     position: 'relative',
     maxWidth: '880px',
     margin: '0 auto',
@@ -2058,7 +2059,7 @@ const styles = {
   },
   titleLeft: {},
   pageTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '32px',
     fontWeight: '500',
     color: '#584233',
@@ -2067,7 +2068,7 @@ const styles = {
     margin: 0,
   },
   subtitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '15px',
     fontWeight: '500',
     color: 'rgba(107, 86, 71, 0.77)',
@@ -2086,7 +2087,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     transition: 'all 0.3s ease',
     boxShadow: '0 4px 16px rgba(139, 111, 92, 0.25)',
   },
@@ -2113,7 +2114,7 @@ const styles = {
     flexDirection: 'column',
   },
   statNumber: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '22px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -2154,7 +2155,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   actionBtnDecline: {
     display: 'flex',
@@ -2168,7 +2169,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   actionBtnWaiting: {
     display: 'flex',
@@ -2182,7 +2183,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'default',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   pendingCard: {
     cursor: 'pointer',
@@ -2224,7 +2225,7 @@ const styles = {
     border: 'none',
     borderRadius: '0',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     letterSpacing: '0.15px',
     transition: 'all 0.2s ease',
   },
@@ -2248,7 +2249,7 @@ const styles = {
     border: '1px solid rgba(139, 111, 92, 0.15)',
     borderRadius: '100px',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     transition: 'all 0.2s ease',
   },
   filterTabActive: {
@@ -2288,7 +2289,7 @@ const styles = {
     marginBottom: '16px',
   },
   emptyTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '20px',
     fontWeight: '500',
     color: '#3F1906',
@@ -2297,7 +2298,7 @@ const styles = {
     margin: 0,
   },
   emptyText: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '14px',
     fontWeight: '400',
     color: 'rgba(107, 86, 71, 0.77)',
@@ -2313,7 +2314,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   meetupCard: {
     display: 'flex',
@@ -2351,7 +2352,7 @@ const styles = {
     flexShrink: 0,
   },
   dateBadgeMonth: {
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     fontSize: '11px',
     fontWeight: '600',
     textTransform: 'uppercase',
@@ -2360,14 +2361,14 @@ const styles = {
     marginBottom: '2px',
   },
   dateBadgeDay: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '26px',
     fontWeight: '600',
     color: '#3B2314',
     lineHeight: 1,
   },
   dateBadgeWeekday: {
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     fontSize: '11px',
     fontWeight: '500',
     color: '#9B8A7E',
@@ -2440,7 +2441,7 @@ const styles = {
     flexWrap: 'wrap',
   },
   cardTime: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '12px',
     fontWeight: '500',
     color: 'rgba(107, 86, 71, 0.77)',
@@ -2499,14 +2500,14 @@ const styles = {
     flexDirection: 'column',
   },
   personName: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '17px',
     fontWeight: '500',
     color: '#3F1906',
     letterSpacing: '0.15px',
   },
   personRole: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '13px',
     fontWeight: '400',
     color: 'rgba(107, 86, 71, 0.77)',
@@ -2521,13 +2522,13 @@ const styles = {
     color: '#8B7355',
   },
   topicText: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '13px',
     color: 'rgba(107, 86, 71, 0.77)',
     fontWeight: '400',
   },
   eventTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '18px',
     fontWeight: '500',
     color: '#3F1906',
@@ -2542,7 +2543,7 @@ const styles = {
     margin: '0 0 8px 0',
   },
   eventDesc: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '14px',
     fontWeight: '400',
     color: 'rgba(107, 86, 71, 0.77)',
@@ -2616,7 +2617,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   actionBtnGoing: {
     display: 'flex',
@@ -2630,7 +2631,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   pastList: {
     display: 'flex',
@@ -2710,7 +2711,7 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     transition: 'background-color 0.2s',
   },
   followUpBtn: {
@@ -2722,7 +2723,7 @@ const styles = {
     fontSize: '12px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   // New past card styles
   pastCardNew: {
@@ -2767,7 +2768,7 @@ const styles = {
     gap: '2px',
   },
   pastCardTopic: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '18px',
     fontWeight: '500',
     color: '#3F1906',
@@ -2775,7 +2776,7 @@ const styles = {
     lineHeight: '1.3',
   },
   pastCardMeta: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '13px',
     fontWeight: '400',
     color: 'rgba(107, 86, 71, 0.77)',
@@ -2906,7 +2907,7 @@ const styles = {
     fontSize: '12px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     flexShrink: 0,
     transition: 'all 0.2s ease',
   },
@@ -2927,7 +2928,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     transition: 'all 0.2s ease',
     boxShadow: '0 2px 8px rgba(139, 111, 92, 0.2)',
   },
@@ -2937,7 +2938,7 @@ const styles = {
   },
   pastSectionLabel: {
     display: 'block',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '11px',
     fontWeight: '500',
     color: 'rgba(107, 86, 71, 0.77)',
@@ -3034,7 +3035,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     transition: 'all 0.2s ease',
   },
   modalOverlay: {
@@ -3063,7 +3064,7 @@ const styles = {
     textAlign: 'center',
   },
   sectionTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '18px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -3092,7 +3093,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   // Action menu styles
   moreBtn: {
@@ -3133,7 +3134,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     textAlign: 'left',
     transition: 'background-color 0.15s',
   },
@@ -3149,7 +3150,7 @@ const styles = {
     fontSize: '12px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   // Edit modal styles
   editModal: {
@@ -3171,7 +3172,7 @@ const styles = {
     borderBottom: '1px solid rgba(139, 111, 92, 0.12)',
   },
   editModalTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '18px',
     fontWeight: '600',
     color: '#3F1906',
@@ -3210,7 +3211,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   editModalSave: {
     flex: 1,
@@ -3222,7 +3223,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   formGroup: {
     marginBottom: '16px',
@@ -3233,7 +3234,7 @@ const styles = {
     fontWeight: '600',
     color: '#5C4033',
     marginBottom: '6px',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   formInput: {
     width: '100%',
@@ -3243,7 +3244,7 @@ const styles = {
     borderRadius: '10px',
     backgroundColor: 'white',
     color: '#3F1906',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     outline: 'none',
     boxSizing: 'border-box',
   },
@@ -3257,7 +3258,7 @@ const styles = {
     boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
   },
   confirmTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '18px',
     fontWeight: '600',
     color: '#3F1906',
@@ -3283,7 +3284,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   confirmDelete: {
     flex: 1,
@@ -3295,6 +3296,6 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
 };

@@ -34,6 +34,7 @@ import NudgeBanner from './NudgeBanner'
 import { ToastContainer, useToast } from './Toast'
 import { parseLocalDate, formatEventTime, isEventPast, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
 import LiveFeed from './LiveFeed'
+import { colors as tokens, fonts } from '@/lib/designTokens'
 
 function MainApp({ currentUser, onSignOut }) {
   // DEBUGGING: Track renders vs mounts
@@ -2445,7 +2446,7 @@ function MainApp({ currentUser, onSignOut }) {
 
     // Shared section header style
     const sectionHeaderStyle = {
-      fontFamily: '"Lora", serif',
+      fontFamily: fonts.serif,
       fontSize: isMobile ? '18px' : '20px',
       fontWeight: '600',
       color: '#3F1906',
@@ -2516,7 +2517,7 @@ function MainApp({ currentUser, onSignOut }) {
           flexShrink: 0,
         }}>
           <span style={{
-            fontFamily: '"Lora", serif',
+            fontFamily: fonts.serif,
             fontSize: isMobile ? '9px' : '11px',
             fontWeight: '600',
             color: isHighlight ? '#FFF' : '#605045',
@@ -2524,7 +2525,7 @@ function MainApp({ currentUser, onSignOut }) {
             textTransform: 'uppercase',
           }}>{dayLabel}</span>
           <span style={{
-            fontFamily: '"Lora", serif',
+            fontFamily: fonts.serif,
             fontSize: isMobile ? '20px' : '24px',
             fontWeight: '500',
             color: isHighlight ? '#FFF' : '#605045',
@@ -2532,7 +2533,7 @@ function MainApp({ currentUser, onSignOut }) {
             letterSpacing: '0.15px',
           }}>{day}</span>
           <span style={{
-            fontFamily: '"Lora", serif',
+            fontFamily: fonts.serif,
             fontSize: isMobile ? '10px' : '12px',
             fontWeight: '500',
             color: isHighlight ? 'rgba(255,255,255,0.8)' : '#9B8A7E',
@@ -2582,7 +2583,7 @@ function MainApp({ currentUser, onSignOut }) {
 
     const homeStyles = {
       container: {
-        fontFamily: '"Lora", serif',
+        fontFamily: fonts.serif,
         position: 'relative',
         padding: isMobile ? '16px 0' : '24px 0',
         maxWidth: '880px',
@@ -2600,7 +2601,7 @@ function MainApp({ currentUser, onSignOut }) {
         gap: '16px',
       },
       pageTitle: {
-        fontFamily: '"Lora", serif',
+        fontFamily: fonts.serif,
         fontSize: isMobile ? '24px' : '32px',
         fontWeight: '500',
         color: '#584233',
@@ -2609,7 +2610,7 @@ function MainApp({ currentUser, onSignOut }) {
         lineHeight: 1.28,
       },
       tagline: {
-        fontFamily: '"Lora", serif',
+        fontFamily: fonts.serif,
         fontSize: isMobile ? '14px' : '15px',
         fontWeight: '500',
         margin: 0,
@@ -2641,7 +2642,7 @@ function MainApp({ currentUser, onSignOut }) {
         gap: '10px',
       },
       cardTitle: {
-        fontFamily: '"Lora", serif',
+        fontFamily: fonts.serif,
         fontSize: isMobile ? '20px' : '24px',
         fontWeight: '500',
         color: '#3F1906',
@@ -2649,7 +2650,7 @@ function MainApp({ currentUser, onSignOut }) {
         letterSpacing: '0.15px',
       },
       seeAllBtn: {
-        fontFamily: '"Lora", serif',
+        fontFamily: fonts.serif,
         fontSize: isMobile ? '13px' : '15px',
         color: 'rgba(107, 86, 71, 0.77)',
         fontWeight: '500',
@@ -2704,7 +2705,7 @@ function MainApp({ currentUser, onSignOut }) {
         {/* Starting Soon label */}
         {nextMeeting && (
           <h2 style={{
-            fontFamily: '"Lora", serif',
+            fontFamily: fonts.serif,
             fontSize: isMobile ? '22px' : '28px',
             fontWeight: '500',
             color: '#3F1906',
@@ -2731,7 +2732,7 @@ function MainApp({ currentUser, onSignOut }) {
               </svg>
               <div style={{ flex: 1 }}>
                 <h3 style={{
-                  fontFamily: '"Lora", serif',
+                  fontFamily: fonts.serif,
                   fontSize: isMobile ? '18px' : '24px',
                   fontWeight: '500',
                   color: '#3F1906',
@@ -2743,7 +2744,7 @@ function MainApp({ currentUser, onSignOut }) {
                   {nextMeeting.title || nextMeeting.topic || 'Meetup'} starts in {nextMeeting.minutesUntil}m
                 </h3>
                 <p style={{
-                  fontFamily: '"Lora", serif',
+                  fontFamily: fonts.serif,
                   fontSize: isMobile ? '13px' : '15px',
                   fontWeight: '500',
                   color: '#584233',
@@ -2763,7 +2764,7 @@ function MainApp({ currentUser, onSignOut }) {
                 border: 'none',
                 borderRadius: '18px',
                 color: '#F5EDE9',
-                fontFamily: '"Lora", serif',
+                fontFamily: fonts.serif,
                 fontStyle: 'italic',
                 fontSize: isMobile ? '16px' : '20px',
                 fontWeight: '700',
@@ -2796,7 +2797,7 @@ function MainApp({ currentUser, onSignOut }) {
               return (
               <div style={homeStyles.card}>
                 <h3 style={{
-                  fontFamily: '"Lora", serif',
+                  fontFamily: fonts.serif,
                   fontSize: isMobile ? '18px' : '20px',
                   fontWeight: '500',
                   color: '#3F1906',
@@ -2846,17 +2847,17 @@ function MainApp({ currentUser, onSignOut }) {
                               background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
                               boxShadow: '0px 1px 4px #9E7868',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '24px', fontWeight: '700', color: '#523C2E',
+                              fontFamily: fonts.serif, fontSize: isMobile ? '15px' : '24px', fontWeight: '700', color: '#523C2E',
                               marginRight: '10px', flexShrink: 0,
                             }}>
                               {(user.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
                             </div>
                           )}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <h4 style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
+                            <h4 style={{ fontFamily: fonts.serif, fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
                             {isCoffeeChatRequest ? (
                               <>
-                                <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
+                                <p style={{ fontFamily: fonts.serif, fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
                                   wants a coffee chat {request.scheduled_time && <>· {new Date(request.scheduled_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at {new Date(request.scheduled_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</>}
                                 </p>
                                 {user.career && (
@@ -2867,15 +2868,15 @@ function MainApp({ currentUser, onSignOut }) {
                                 )}
                               </>
                             ) : isCircleJoin ? (
-                              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
+                              <p style={{ fontFamily: fonts.serif, fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
                                 wants to join <strong>{request.circleName}</strong>
                               </p>
                             ) : isCircleInvitation ? (
-                              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
+                              <p style={{ fontFamily: fonts.serif, fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
                                 invited you to <strong>{request.circleName}</strong>
                               </p>
                             ) : (
-                              <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>{user.career || 'Professional'}</p>
+                              <p style={{ fontFamily: fonts.serif, fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>{user.career || 'Professional'}</p>
                             )}
                             {!isCircleJoin && !isCircleInvitation && !isCoffeeChatRequest && user.city && (
                               <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.city}{user.state ? `, ${user.state}` : ''}</p>
@@ -2885,13 +2886,13 @@ function MainApp({ currentUser, onSignOut }) {
                             )}
                           </div>
                           {!isMobile && (
-                            <span style={{ fontFamily: '"Lora", serif', fontSize: '14px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px', marginLeft: '8px', flexShrink: 0 }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
+                            <span style={{ fontFamily: fonts.serif, fontSize: '14px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px', marginLeft: '8px', flexShrink: 0 }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
                           )}
                         </div>
 
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: isMobile ? 'space-between' : 'flex-end', gap: '12px' }}>
                           {isMobile && (
-                            <span style={{ fontFamily: '"Lora", serif', fontSize: '12px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
+                            <span style={{ fontFamily: fonts.serif, fontSize: '12px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px' }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
                           )}
                           {isCoffeeChatRequest ? (
                             <>
@@ -2903,7 +2904,7 @@ function MainApp({ currentUser, onSignOut }) {
                                   border: '1px solid rgba(184, 160, 137, 0.4)',
                                   borderRadius: '18px',
                                   color: '#6B5647',
-                                  fontFamily: '"Lora", serif',
+                                  fontFamily: fonts.serif,
                                   fontStyle: 'italic',
                                   fontSize: isMobile ? '13px' : '15px',
                                   fontWeight: '600',
@@ -2921,7 +2922,7 @@ function MainApp({ currentUser, onSignOut }) {
                                   border: 'none',
                                   borderRadius: '18px',
                                   color: '#F5EDE9',
-                                  fontFamily: '"Lora", serif',
+                                  fontFamily: fonts.serif,
                                   fontStyle: 'italic',
                                   fontSize: isMobile ? '13px' : '15px',
                                   fontWeight: '700',
@@ -2946,7 +2947,7 @@ function MainApp({ currentUser, onSignOut }) {
                                   border: '1px solid rgba(184, 160, 137, 0.4)',
                                   borderRadius: '18px',
                                   color: '#6B5647',
-                                  fontFamily: '"Lora", serif',
+                                  fontFamily: fonts.serif,
                                   fontStyle: 'italic',
                                   fontSize: isMobile ? '13px' : '15px',
                                   fontWeight: '600',
@@ -2964,7 +2965,7 @@ function MainApp({ currentUser, onSignOut }) {
                                   border: 'none',
                                   borderRadius: '18px',
                                   color: '#F5EDE9',
-                                  fontFamily: '"Lora", serif',
+                                  fontFamily: fonts.serif,
                                   fontStyle: 'italic',
                                   fontSize: isMobile ? '13px' : '15px',
                                   fontWeight: '700',
@@ -2989,7 +2990,7 @@ function MainApp({ currentUser, onSignOut }) {
                                   border: '1px solid rgba(184, 160, 137, 0.4)',
                                   borderRadius: '18px',
                                   color: '#6B5647',
-                                  fontFamily: '"Lora", serif',
+                                  fontFamily: fonts.serif,
                                   fontStyle: 'italic',
                                   fontSize: isMobile ? '13px' : '15px',
                                   fontWeight: '600',
@@ -3007,7 +3008,7 @@ function MainApp({ currentUser, onSignOut }) {
                                   border: 'none',
                                   borderRadius: '18px',
                                   color: '#F5EDE9',
-                                  fontFamily: '"Lora", serif',
+                                  fontFamily: fonts.serif,
                                   fontStyle: 'italic',
                                   fontSize: isMobile ? '13px' : '15px',
                                   fontWeight: '700',
@@ -3031,7 +3032,7 @@ function MainApp({ currentUser, onSignOut }) {
                                 border: 'none',
                                 borderRadius: '18px',
                                 color: '#F5EDE9',
-                                fontFamily: '"Lora", serif',
+                                fontFamily: fonts.serif,
                                 fontStyle: 'italic',
                                 fontSize: isMobile ? '13px' : '15px',
                                 fontWeight: '700',
@@ -3165,18 +3166,18 @@ function MainApp({ currentUser, onSignOut }) {
                             flexShrink: 0,
                           }}>
                             <span style={{
-                              fontFamily: '"DM Sans", sans-serif',
+                              fontFamily: fonts.sans,
                               fontSize: '11px', fontWeight: '600',
                               textTransform: 'uppercase', letterSpacing: '1.2px',
                               color: '#8B6347', marginBottom: '2px',
                             }}>{cardMonth}</span>
                             <span style={{
-                              fontFamily: '"Lora", serif',
+                              fontFamily: fonts.serif,
                               fontSize: '26px', fontWeight: '600',
                               color: '#3B2314', lineHeight: 1,
                             }}>{cardDay}</span>
                             <span style={{
-                              fontFamily: '"DM Sans", sans-serif',
+                              fontFamily: fonts.sans,
                               fontSize: '11px', fontWeight: '500',
                               color: '#9B8A7E', marginTop: '3px',
                             }}>{cardWeekday}</span>
@@ -3185,7 +3186,7 @@ function MainApp({ currentUser, onSignOut }) {
                           {/* Content area */}
                           <div style={{ flex: 1, padding: '14px 14px', display: 'flex', flexDirection: 'column', gap: '6px', minWidth: 0 }}>
                             <h4 style={{
-                              fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '600',
+                              fontFamily: fonts.serif, fontSize: '16px', fontWeight: '600',
                               color: '#2C1810', margin: 0, lineHeight: 1.3, letterSpacing: '-0.2px',
                             }}>
                               {meetup.topic || 'Community Event'}
@@ -3207,7 +3208,7 @@ function MainApp({ currentUser, onSignOut }) {
                                     {partner.profiles?.profile_picture ? (
                                       <img src={partner.profiles.profile_picture} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFFCF8' }} />
                                     ) : (
-                                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600', color: 'white', background: '#8B6347' }}>
+                                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: fonts.sans, fontSize: '9px', fontWeight: '600', color: 'white', background: '#8B6347' }}>
                                         {(partner.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
                                       </div>
                                     )}
@@ -3233,7 +3234,7 @@ function MainApp({ currentUser, onSignOut }) {
                                           width: '24px', height: '24px', borderRadius: '50%',
                                           border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-7px',
                                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                          fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
+                                          fontFamily: fonts.sans, fontSize: '9px', fontWeight: '600',
                                           color: 'white',
                                           background: ['#8B6347', '#A67B5B', '#C4A07C'][i % 3],
                                         }}>
@@ -3246,7 +3247,7 @@ function MainApp({ currentUser, onSignOut }) {
                                         width: '24px', height: '24px', borderRadius: '50%',
                                         border: '2px solid #FFFCF8', marginLeft: '-7px',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontFamily: '"DM Sans", sans-serif', fontSize: '9px', fontWeight: '600',
+                                        fontFamily: fonts.sans, fontSize: '9px', fontWeight: '600',
                                         color: '#6B4632', background: '#E8D5BE',
                                       }}>
                                         +{attendeeCount - 3}
@@ -3269,7 +3270,7 @@ function MainApp({ currentUser, onSignOut }) {
                                 style={{
                                   background: '#3B2314', color: 'white', border: 'none',
                                   padding: '9px 16px', borderRadius: '10px',
-                                  fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                                  fontFamily: fonts.sans, fontSize: '13px', fontWeight: '600',
                                   cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                                   gap: '6px', whiteSpace: 'nowrap',
                                 }}
@@ -3283,7 +3284,7 @@ function MainApp({ currentUser, onSignOut }) {
                                 style={{
                                   background: '#3B2314', color: 'white', border: 'none',
                                   padding: '9px 14px', borderRadius: '10px',
-                                  fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600',
+                                  fontFamily: fonts.sans, fontSize: '13px', fontWeight: '600',
                                   cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                                   gap: '5px', whiteSpace: 'nowrap',
                                 }}
@@ -3351,21 +3352,21 @@ function MainApp({ currentUser, onSignOut }) {
                           </div>
 
                           <h4 style={{
-                            fontFamily: '"Lora", serif', fontSize: '20px', fontWeight: '600',
+                            fontFamily: fonts.serif, fontSize: '20px', fontWeight: '600',
                             color: '#523C2E', margin: 0, lineHeight: '20px', letterSpacing: '0.15px',
                           }}>
                             {meetup.topic || 'Community Event'}
                           </h4>
 
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: fonts.serif, fontSize: '15px', color: '#523C2E' }}>
                               <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                               <span style={{ fontWeight: '600' }}>{formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false })}</span>
                             </div>
                             {meetup.location && (
                               <>
                                 <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: fonts.serif, fontSize: '15px', color: '#523C2E' }}>
                                   <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
                                   <span>{meetup.location}</span>
                                 </div>
@@ -3374,7 +3375,7 @@ function MainApp({ currentUser, onSignOut }) {
                             {!meetup.location && (
                               <>
                                 <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: '"Lora", serif', fontSize: '15px', color: '#523C2E' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: fonts.serif, fontSize: '15px', color: '#523C2E' }}>
                                   <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
                                   <span>Virtual · Video Call</span>
                                 </div>
@@ -3403,7 +3404,7 @@ function MainApp({ currentUser, onSignOut }) {
                                         width: '34px', height: '34px', borderRadius: '50%',
                                         border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
                                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                        fontFamily: fonts.serif, fontSize: '10px', fontWeight: '700',
                                         color: '#523C2E',
                                         background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
                                         boxShadow: '0px 1px 4px #9E7868', letterSpacing: '0.15px',
@@ -3417,7 +3418,7 @@ function MainApp({ currentUser, onSignOut }) {
                                       width: '34px', height: '34px', borderRadius: '50%',
                                       border: '2px solid #FFFCF8', marginLeft: '-8px',
                                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      fontFamily: '"Lora", serif', fontSize: '10px', fontWeight: '700',
+                                      fontFamily: fonts.serif, fontSize: '10px', fontWeight: '700',
                                       color: '#764D31',
                                       background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 99.99%, rgba(241, 225, 213, 0.2) 100%)',
                                       boxShadow: '0px 1px 4px #9E7868',
@@ -3426,7 +3427,7 @@ function MainApp({ currentUser, onSignOut }) {
                                     </div>
                                   )}
                                 </div>
-                                <span style={{ fontFamily: '"Lora", serif', fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
+                                <span style={{ fontFamily: fonts.serif, fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
                                   {attendeeCount} attendees
                                 </span>
                               </div>
@@ -3441,7 +3442,7 @@ function MainApp({ currentUser, onSignOut }) {
                               style={{
                                 background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
                                 padding: '10px 20px', borderRadius: '18px',
-                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '16px', fontWeight: '700',
+                                fontFamily: fonts.serif, fontStyle: 'italic', fontSize: '16px', fontWeight: '700',
                                 cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                                 gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
                               }}
@@ -3455,7 +3456,7 @@ function MainApp({ currentUser, onSignOut }) {
                               style={{
                                 background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
                                 padding: '10px 20px', borderRadius: '18px',
-                                fontFamily: '"Lora", serif', fontStyle: 'italic', fontSize: '16px', fontWeight: '700',
+                                fontFamily: fonts.serif, fontStyle: 'italic', fontSize: '16px', fontWeight: '700',
                                 cursor: 'pointer', display: 'inline-flex', alignItems: 'center',
                                 gap: '6px', whiteSpace: 'nowrap', letterSpacing: '0.15px',
                               }}
@@ -3488,7 +3489,7 @@ function MainApp({ currentUser, onSignOut }) {
                 </span>
                 <span
                   onClick={() => handleNavigate('allPeople')}
-                  style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
+                  style={{ fontFamily: fonts.sans, fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
                 >
                   See all <ChevronRight style={{ width: '14px', height: '14px' }} />
                 </span>
@@ -3539,14 +3540,14 @@ function MainApp({ currentUser, onSignOut }) {
                       </div>
                     )}
                     <div>
-                      <p style={{ fontFamily: '"Lora", serif', fontSize: isMobile ? '14px' : '16px', fontWeight: '600', color: '#3F1906', margin: '0 0 2px 0', lineHeight: isMobile ? '18px' : '22px' }}>
+                      <p style={{ fontFamily: fonts.serif, fontSize: isMobile ? '14px' : '16px', fontWeight: '600', color: '#3F1906', margin: '0 0 2px 0', lineHeight: isMobile ? '18px' : '22px' }}>
                         {rec.profile?.name || 'Someone'}
                       </p>
-                      <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '13px', color: '#6B5344', margin: 0, lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? '120px' : '160px' }}>
+                      <p style={{ fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '13px', color: '#6B5344', margin: 0, lineHeight: '18px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMobile ? '120px' : '160px' }}>
                         {rec.profile?.career || 'Community member'}
                       </p>
                       {rec.profile?.city && (
-                        <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', color: '#A89080', margin: '2px 0 0 0', lineHeight: '14px' }}>
+                        <p style={{ fontFamily: fonts.sans, fontSize: isMobile ? '10px' : '11px', color: '#A89080', margin: '2px 0 0 0', lineHeight: '14px' }}>
                           {rec.profile.city}{rec.profile.state ? `, ${rec.profile.state}` : ''}
                         </p>
                       )}
@@ -3555,7 +3556,7 @@ function MainApp({ currentUser, onSignOut }) {
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', justifyContent: 'center' }}>
                         {rec.match_reasons.slice(0, isMobile ? 2 : 3).map((r, i) => (
                           <span key={i} style={{
-                            fontFamily: '"DM Sans", sans-serif',
+                            fontFamily: fonts.sans,
                             fontSize: isMobile ? '8px' : '10px', fontWeight: 500,
                             backgroundColor: 'rgba(139, 111, 92, 0.1)', color: '#5C4033',
                             padding: isMobile ? '1px 6px' : '2px 8px', borderRadius: '100px',
@@ -3565,14 +3566,14 @@ function MainApp({ currentUser, onSignOut }) {
                         ))}
                       </div>
                     ) : rec.match_score > 0 ? (
-                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '8px' : '11px', backgroundColor: 'rgba(139, 111, 92, 0.08)', color: '#8B7355', padding: isMobile ? '1px 6px' : '3px 10px', borderRadius: '100px' }}>
+                      <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '8px' : '11px', backgroundColor: 'rgba(139, 111, 92, 0.08)', color: '#8B7355', padding: isMobile ? '1px 6px' : '3px 10px', borderRadius: '100px' }}>
                         {Math.round(rec.match_score * 100)}% match
                       </span>
                     ) : null}
                     {rec.sharedMeetups > 0 && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
                         <Users style={{ width: isMobile ? '10px' : '12px', height: isMobile ? '10px' : '12px', color: '#A89080' }} />
-                        <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '8px' : '10px', color: '#A89080' }}>
+                        <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '8px' : '10px', color: '#A89080' }}>
                           {rec.sharedMeetups} shared {rec.sharedMeetups === 1 ? 'meetup' : 'meetups'}
                         </span>
                       </div>
@@ -3585,7 +3586,7 @@ function MainApp({ currentUser, onSignOut }) {
                         minHeight: '44px',
                         background: '#5C4033', color: '#FAF5EF',
                         border: 'none', borderRadius: '20px',
-                        fontFamily: '"DM Sans", sans-serif',
+                        fontFamily: fonts.sans,
                         fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
                         cursor: 'pointer',
                         transition: 'background 0.15s ease',
@@ -3642,7 +3643,7 @@ function MainApp({ currentUser, onSignOut }) {
                 </span>
                 <span
                   onClick={() => handleNavigate('allCircles')}
-                  style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
+                  style={{ fontFamily: fonts.sans, fontSize: '13px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '2px' }}
                 >
                   See all <ChevronRight style={{ width: '14px', height: '14px' }} />
                 </span>
@@ -3710,7 +3711,7 @@ function MainApp({ currentUser, onSignOut }) {
 
                   <h4 style={{
                     fontSize: isMobile ? '16px' : '18px', fontWeight: '700',
-                    color: '#2C1F15', margin: 0, fontFamily: '"Lora", serif',
+                    color: '#2C1F15', margin: 0, fontFamily: fonts.serif,
                     lineHeight: '1.3',
                   }}>
                     {circleName}
@@ -3796,7 +3797,7 @@ function MainApp({ currentUser, onSignOut }) {
                       style={{
                         padding: isMobile ? '5px 12px' : '6px 14px', borderRadius: '14px',
                         fontSize: isMobile ? '10px' : '11.5px', fontWeight: '600',
-                        cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                        cursor: 'pointer', fontFamily: fonts.sans,
                         background: '#3D2E22', color: '#FAF7F4',
                         border: 'none', transition: 'background 0.15s',
                       }}
@@ -3820,15 +3821,15 @@ function MainApp({ currentUser, onSignOut }) {
               marginBottom: '24px',
             }}>
               <Sparkles style={{ width: '28px', height: '28px', color: '#B8A089', marginBottom: '12px' }} />
-              <p style={{ fontFamily: '"Lora", serif', fontSize: '16px', fontWeight: '600', color: '#5E4530', margin: '0 0 6px 0' }}>
+              <p style={{ fontFamily: fonts.serif, fontSize: '16px', fontWeight: '600', color: '#5E4530', margin: '0 0 6px 0' }}>
                 Your recommendations are brewing
               </p>
-              <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', color: '#8B7355', margin: '0 0 16px 0' }}>
+              <p style={{ fontFamily: fonts.sans, fontSize: '14px', color: '#8B7355', margin: '0 0 16px 0' }}>
                 Attend a meetup or join a circle to unlock personalized suggestions
               </p>
               <span
                 onClick={() => setCurrentView('discover')}
-                style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                style={{ fontFamily: fonts.sans, fontSize: '14px', fontWeight: '600', color: '#8B6F5C', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
               >
                 Explore Circles <ChevronRight style={{ width: '16px', height: '16px' }} />
               </span>
@@ -4178,7 +4179,7 @@ function MainApp({ currentUser, onSignOut }) {
         <div className="max-w-4xl mx-auto px-4 pt-4 pb-2 md:px-6">
           <div className="flex items-center justify-between">
             {/* Logo */}
-            <div className="text-xl md:text-2xl font-bold flex items-center text-[#5E4530]" style={{ fontFamily: '"Lora", serif', letterSpacing: '-0.3px' }} role="banner" aria-label="CircleW">
+            <div className="text-xl md:text-2xl font-bold flex items-center text-[#5E4530]" style={{ fontFamily: fonts.serif, letterSpacing: '-0.3px' }} role="banner" aria-label="CircleW">
               <svg width="44" height="44" viewBox="0 0 100 100" className="mr-2 md:mr-3 md:w-12 md:h-12">
                 <circle
                   cx="50"
@@ -4229,14 +4230,14 @@ function MainApp({ currentUser, onSignOut }) {
                     padding: '8px 0',
                   }}>
                     {homeSearchResults.total === 0 ? (
-                      <div style={{ padding: '20px', textAlign: 'center', color: '#9B8A7E', fontSize: '13px', fontFamily: '"DM Sans", sans-serif' }}>
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#9B8A7E', fontSize: '13px', fontFamily: fonts.sans }}>
                         No results for "{homeSearchQuery}"
                       </div>
                     ) : (
                       <>
                         {homeSearchResults.meetups.length > 0 && (
                           <>
-                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: '"DM Sans", sans-serif' }}>Meetups</div>
+                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: fonts.sans }}>Meetups</div>
                             {homeSearchResults.meetups.map(m => (
                               <div key={m.id} onClick={() => { setHomeSearchQuery(''); handleNavigate('eventDetail', { meetupId: m.id }); }}
                                 style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.15s' }}
@@ -4247,8 +4248,8 @@ function MainApp({ currentUser, onSignOut }) {
                                   <Calendar style={{ width: '16px', height: '16px', color: '#8B6347' }} />
                                 </div>
                                 <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: '"DM Sans", sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.topic}</div>
-                                  <div style={{ fontSize: '11px', color: '#9B8A7E', fontFamily: '"DM Sans", sans-serif' }}>{formatEventTime(m.date, m.time, m.timezone)}{m.connection_groups?.name ? ` · ${m.connection_groups.name}` : ''}</div>
+                                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: fonts.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.topic}</div>
+                                  <div style={{ fontSize: '11px', color: '#9B8A7E', fontFamily: fonts.sans }}>{formatEventTime(m.date, m.time, m.timezone)}{m.connection_groups?.name ? ` · ${m.connection_groups.name}` : ''}</div>
                                 </div>
                               </div>
                             ))}
@@ -4256,7 +4257,7 @@ function MainApp({ currentUser, onSignOut }) {
                         )}
                         {homeSearchResults.circles.length > 0 && (
                           <>
-                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: '"DM Sans", sans-serif' }}>Circles</div>
+                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: fonts.sans }}>Circles</div>
                             {homeSearchResults.circles.map(c => (
                               <div key={c.id} onClick={() => { setHomeSearchQuery(''); handleNavigate('circleDetail', { circleId: c.id }); }}
                                 style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.15s' }}
@@ -4266,14 +4267,14 @@ function MainApp({ currentUser, onSignOut }) {
                                 <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#EDE4D8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                   <Users style={{ width: '16px', height: '16px', color: '#7A5C42' }} />
                                 </div>
-                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: '"DM Sans", sans-serif' }}>{c.name}</div>
+                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: fonts.sans }}>{c.name}</div>
                               </div>
                             ))}
                           </>
                         )}
                         {homeSearchResults.people.length > 0 && (
                           <>
-                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: '"DM Sans", sans-serif' }}>People</div>
+                            <div style={{ padding: '8px 16px 4px', fontSize: '10px', fontWeight: '700', color: '#9B8A7E', textTransform: 'uppercase', letterSpacing: '1px', fontFamily: fonts.sans }}>People</div>
                             {homeSearchResults.people.map(p => (
                               <div key={p.id} onClick={() => { setHomeSearchQuery(''); handleNavigate('userProfile', { userId: p.id }); }}
                                 style={{ padding: '10px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.15s' }}
@@ -4283,13 +4284,13 @@ function MainApp({ currentUser, onSignOut }) {
                                 {p.profile_picture ? (
                                   <img src={p.profile_picture} alt="" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
                                 ) : (
-                                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#E6D5C3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '13px', fontWeight: '600', color: '#6B4632', fontFamily: '"DM Sans", sans-serif' }}>
+                                  <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#E6D5C3', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '13px', fontWeight: '600', color: '#6B4632', fontFamily: fonts.sans }}>
                                     {(p.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
                                   </div>
                                 )}
                                 <div style={{ minWidth: 0 }}>
-                                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: '"DM Sans", sans-serif' }}>{p.name}</div>
-                                  {p.career && <div style={{ fontSize: '11px', color: '#9B8A7E', fontFamily: '"DM Sans", sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.career}</div>}
+                                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#3B2314', fontFamily: fonts.sans }}>{p.name}</div>
+                                  {p.career && <div style={{ fontSize: '11px', color: '#9B8A7E', fontFamily: fonts.sans, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.career}</div>}
                                 </div>
                               </div>
                             ))}

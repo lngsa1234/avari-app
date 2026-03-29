@@ -22,6 +22,7 @@ import {
 import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
 import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
 import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
   const [isMobile, setIsMobile] = useState(() => {
@@ -991,11 +992,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {/* Page Header */}
       <div style={{ marginBottom: isMobile ? '16px' : '24px', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '24px' }}>
         <h1 style={{
-          fontFamily: '"Lora", serif', fontSize: isMobile ? '24px' : '28px',
+          fontFamily: fonts.serif, fontSize: isMobile ? '24px' : '28px',
           fontWeight: '600', color: '#3F1906', margin: 0, letterSpacing: '-0.3px',
         }}>Circles</h1>
         <p style={{
-          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '13px' : '14px',
+          fontFamily: fonts.sans, fontSize: isMobile ? '13px' : '14px',
           color: '#A08070', marginTop: '4px',
         }}>Your deep and meaningful connections</p>
       </div>
@@ -1011,12 +1012,12 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             padding: '12px 16px', borderBottom: '1px solid #E8DDD6',
           }}>
             <Clock size={16} style={{ color: '#8B6F5C' }} />
-            <span style={{ fontSize: '13px', fontWeight: '600', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: '#2C1810', fontFamily: fonts.sans }}>
               Pending
             </span>
             <span style={{
               fontSize: '11px', fontWeight: '600', background: '#F5E6D3', color: '#D4864A',
-              borderRadius: '100px', padding: '2px 8px', fontFamily: '"DM Sans", sans-serif',
+              borderRadius: '100px', padding: '2px 8px', fontFamily: fonts.sans,
             }}>{groupInvites.length + pendingJoinRequests.length}</span>
           </div>
 
@@ -1027,10 +1028,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               borderBottom: (i < groupInvites.length - 1 || pendingJoinRequests.length > 0) ? '1px solid #F0E8E0' : 'none',
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
+                <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: fonts.sans }}>
                   {invite.group?.name}
                 </div>
-                <div style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif', marginTop: '1px' }}>
+                <div style={{ fontSize: '12px', color: '#A08070', fontFamily: fonts.sans, marginTop: '1px' }}>
                   Invited by {invite.group?.creator?.name || 'someone'}
                 </div>
               </div>
@@ -1039,7 +1040,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 style={{
                   fontSize: '12px', fontWeight: '600', color: 'white',
                   background: '#5C4033', border: 'none', borderRadius: '100px',
-                  padding: '7px 16px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                  padding: '7px 16px', cursor: 'pointer', fontFamily: fonts.sans,
                   minHeight: '36px',
                 }}
               >Join</button>
@@ -1056,10 +1057,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 borderBottom: i < pendingJoinRequests.length - 1 ? '1px solid #F0E8E0' : 'none',
               }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: '"DM Sans", sans-serif' }}>
+                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: fonts.sans }}>
                     {req.groupName}
                   </div>
-                  <div style={{ fontSize: '12px', color: '#A08070', fontFamily: '"DM Sans", sans-serif', marginTop: '1px' }}>
+                  <div style={{ fontSize: '12px', color: '#A08070', fontFamily: fonts.sans, marginTop: '1px' }}>
                     Request pending{timeLabel ? ` · ${timeLabel}` : ''}
                   </div>
                 </div>
@@ -1071,7 +1072,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   style={{
                     fontSize: '12px', fontWeight: '500', color: '#A08070',
                     background: 'none', border: '1px solid #E8DDD6', borderRadius: '100px',
-                    padding: '7px 16px', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                    padding: '7px 16px', cursor: 'pointer', fontFamily: fonts.sans,
                     minHeight: '36px',
                   }}
                 >Withdraw</button>
@@ -1100,11 +1101,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             }}>
               <UserPlus size={28} style={{ color: '#B8A089', marginBottom: '10px' }} />
               <p style={{
-                fontFamily: '"DM Sans", sans-serif', fontSize: '14px',
+                fontFamily: fonts.sans, fontSize: '14px',
                 fontWeight: '600', color: '#3F1906', margin: '0 0 4px',
               }}>No connections yet</p>
               <p style={{
-                fontFamily: '"DM Sans", sans-serif', fontSize: '12px',
+                fontFamily: fonts.sans, fontSize: '12px',
                 color: '#A08070', margin: '0 0 16px',
               }}>Connect with people to start building meaningful relationships</p>
               <button
@@ -1114,7 +1115,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   fontSize: '13px', fontWeight: '600',
                   background: '#8B6F5C', border: 'none',
                   color: '#FAF5EF', cursor: 'pointer',
-                  fontFamily: '"DM Sans", sans-serif',
+                  fontFamily: fonts.sans,
                 }}
               >Discover People</button>
             </div>
@@ -1296,7 +1297,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                           <h3 style={{
                             fontSize: isMobile ? '13px' : '15px', fontWeight: '700',
-                            color: '#2C1F15', margin: 0, fontFamily: '"Lora", serif',
+                            color: '#2C1F15', margin: 0, fontFamily: fonts.serif,
                             lineHeight: '1.25', letterSpacing: '-0.2px',
                           }}>
                             {group.name}
@@ -1413,7 +1414,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                                 fontSize: isMobile ? '12px' : '13px', fontWeight: '600',
                                 background: hasUpcoming && daysUntilMeetup === 0 ? '#4CAF50' : '#8B6F5C',
                                 border: 'none',
-                                color: '#FAF5EF', cursor: 'pointer', fontFamily: '"DM Sans", sans-serif',
+                                color: '#FAF5EF', cursor: 'pointer', fontFamily: fonts.sans,
                                 transition: 'all 0.15s',
                               }}
                               onMouseEnter={e => { e.currentTarget.style.opacity = '0.85'; }}
@@ -1434,7 +1435,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       width: '100%', padding: '10px', marginTop: '8px',
                       background: 'none', border: 'none', color: '#8B6F5C',
                       fontSize: '13px', fontWeight: '600', cursor: 'pointer',
-                      fontFamily: '"DM Sans", sans-serif',
+                      fontFamily: fonts.sans,
                     }}
                   >
                     Show {enrichedGroups.length - 3} more circle{enrichedGroups.length - 3 > 1 ? 's' : ''}
@@ -1446,7 +1447,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   width: '100%', padding: '12px', marginTop: '12px',
                   backgroundColor: 'transparent', border: '1.5px dashed rgba(139, 111, 92, 0.25)',
                   borderRadius: '12px', color: '#8B6F5C', fontSize: '14px', fontWeight: '600',
-                  cursor: 'pointer', fontFamily: '"Lora", serif', transition: 'all 0.2s ease',
+                  cursor: 'pointer', fontFamily: fonts.serif, transition: 'all 0.2s ease',
                 }}>
                   <UserPlus size={16} /> Create a Circle
                 </button>
@@ -1532,14 +1533,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <h4 style={{
-                            fontFamily: '"Lora", serif', fontSize: isMobile ? '15px' : '17px', fontWeight: '700',
+                            fontFamily: fonts.serif, fontSize: isMobile ? '15px' : '17px', fontWeight: '700',
                             color: '#2C1810', margin: 0,
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
                             {person.name}
                           </h4>
                           <p style={{
-                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px',
+                            fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '13px',
                             color: '#5C4033', margin: '2px 0 0',
                             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>
@@ -1549,7 +1550,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
                             {(person.interests?.length ? person.interests : [person.industry].filter(Boolean)).slice(0, 3).map((tag, i) => (
                               <span key={i} style={{
-                                fontFamily: '"DM Sans", sans-serif', fontSize: '10px', fontWeight: 500,
+                                fontFamily: fonts.sans, fontSize: '10px', fontWeight: 500,
                                 color: '#5C4033', backgroundColor: '#E8DDD6',
                                 border: 'none',
                                 borderRadius: '8px', padding: '2px 8px',
@@ -1565,7 +1566,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       {/* Hook / Description */}
                       {person.hook && (
                         <p style={{
-                          fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '12px' : '13px',
+                          fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '13px',
                           color: '#3D2B1F', margin: '0 0 10px', lineHeight: '1.4',
                           overflow: 'hidden', textOverflow: 'ellipsis',
                           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
@@ -1577,7 +1578,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       {/* Mutuals + Activity */}
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: '6px',
-                        fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '11px' : '12px',
+                        fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '12px',
                         color: '#8B7A6B', marginBottom: '12px',
                       }}>
                         {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
@@ -1612,7 +1613,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: isMobile ? '8px' : '0' }}>
                         {person.open_to_coffee_chat ? (
                           <span style={{
-                            fontFamily: '"DM Sans", sans-serif', fontSize: isMobile ? '10px' : '11px', fontWeight: 600,
+                            fontFamily: fonts.sans, fontSize: isMobile ? '10px' : '11px', fontWeight: 600,
                             color: '#5C4033', backgroundColor: '#FDF3EB',
                             border: '1px solid rgba(124, 96, 65, 0.15)',
                             borderRadius: '8px', padding: '3px 10px',
@@ -1685,14 +1686,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: chat.unread ? '700' : '600', color: '#2C1810', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.partner.name}</span>
+                      <span style={{ fontFamily: fonts.sans, fontSize: '14px', fontWeight: chat.unread ? '700' : '600', color: '#2C1810', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.partner.name}</span>
                       {chat.unread && <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#8B6F5C', flexShrink: 0 }} />}
                     </div>
-                    <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: chat.unread ? '#5C4033' : '#8B7A6B', fontWeight: chat.unread ? '500' : '400', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <p style={{ fontFamily: fonts.sans, fontSize: '12px', color: chat.unread ? '#5C4033' : '#8B7A6B', fontWeight: chat.unread ? '500' : '400', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {chat.isFromMe ? 'You: ' : ''}{chat.content?.slice(0, 50)}{chat.content?.length > 50 ? '...' : ''}
                     </p>
                   </div>
-                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#A89080', flexShrink: 0 }}>
+                  <span style={{ fontFamily: fonts.sans, fontSize: '11px', color: '#A89080', flexShrink: 0 }}>
                     {(() => { const diff = Date.now() - new Date(chat.created_at).getTime(); const mins = Math.floor(diff / 60000); if (mins < 60) return `${mins}m`; const hours = Math.floor(mins / 60); if (hours < 24) return `${hours}h`; return `${Math.floor(hours / 24)}d`; })()}
                   </span>
                 </div>
@@ -1853,7 +1854,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           >
             <Check size={48} style={{ color: '#4A7C59', marginBottom: '16px' }} />
             <h2 style={{
-              fontFamily: '"Lora", serif',
+              fontFamily: fonts.serif,
               fontSize: '20px',
               fontWeight: '700',
               color: '#2C1810',
@@ -1862,7 +1863,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               Circle Created!
             </h2>
             <p style={{
-              fontFamily: '"DM Sans", sans-serif',
+              fontFamily: fonts.sans,
               fontSize: '14px',
               color: '#8B7355',
               margin: '0 0 6px',
@@ -1871,7 +1872,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               <strong style={{ color: '#5C4033' }}>{createSuccess.name}</strong> is ready to go.
             </p>
             <p style={{
-              fontFamily: '"DM Sans", sans-serif',
+              fontFamily: fonts.sans,
               fontSize: '13px',
               color: '#A89080',
               margin: '0 0 24px',
@@ -1889,7 +1890,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 fontSize: '14px',
                 fontWeight: '600',
                 cursor: 'pointer',
-                fontFamily: '"DM Sans", sans-serif',
+                fontFamily: fonts.sans,
                 transition: 'background 0.2s ease',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7A5C42'; }}
@@ -2161,7 +2162,7 @@ const keyframeStyles = `
 
 const styles = {
   container: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     position: 'relative',
     padding: '24px 0',
   },
@@ -2202,7 +2203,7 @@ const styles = {
   },
   titleContent: {},
   pageTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '32px',
     fontWeight: '500',
     color: '#584233',
@@ -2212,7 +2213,7 @@ const styles = {
     margin: 0,
   },
   tagline: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '15px',
     fontWeight: '500',
     color: '#7E654D',
@@ -2233,7 +2234,7 @@ const styles = {
     alignItems: 'center',
   },
   statNumber: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '24px',
     fontWeight: '600',
     color: '#5C4033',
@@ -2347,7 +2348,7 @@ const styles = {
     gap: '10px',
   },
   cardTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '20px',
     fontWeight: '500',
     color: '#3F1906',
@@ -2538,7 +2539,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     transition: 'all 0.3s ease',
   },
   userCard: {
@@ -2629,7 +2630,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   tabGroup: {
     display: 'flex',
@@ -2648,7 +2649,7 @@ const styles = {
     borderRadius: '8px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   tabActive: {
     backgroundColor: 'white',
@@ -2752,7 +2753,7 @@ const styles = {
     fontSize: '13px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   composeBtn: {
     width: '40px',
@@ -2778,7 +2779,7 @@ const styles = {
     fontWeight: '500',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   circlesList: {
     display: 'flex',
@@ -2796,7 +2797,7 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   circleCard: {
     display: 'flex',
@@ -2912,7 +2913,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     flexShrink: 0,
   },
   exploreBtn: {
@@ -2926,7 +2927,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2955,20 +2956,20 @@ const styles = {
     minWidth: '250px',
   },
   bannerQuote: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '40px',
     color: 'rgba(255, 255, 255, 0.3)',
     lineHeight: 1,
   },
   bannerQuoteEnd: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '40px',
     color: 'rgba(255, 255, 255, 0.3)',
     lineHeight: 1,
     alignSelf: 'flex-end',
   },
   bannerText: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '17px',
     color: 'white',
     fontWeight: '400',
@@ -2989,7 +2990,7 @@ const styles = {
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     flexShrink: 0,
   },
   bannerArrow: {
@@ -3030,7 +3031,7 @@ const styles = {
     borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
   },
   modalTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '20px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -3078,7 +3079,7 @@ const styles = {
     fontSize: '15px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     boxSizing: 'border-box',
   },
   connectionsList: {
@@ -3149,7 +3150,7 @@ const styles = {
     fontSize: '15px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   submitButton: {
     flex: 1,
@@ -3161,7 +3162,7 @@ const styles = {
     fontSize: '15px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   submitButtonDisabled: {
     backgroundColor: 'rgba(139, 111, 92, 0.3)',
@@ -3187,7 +3188,7 @@ const styles = {
     borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
   },
   chatTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '18px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -3278,7 +3279,7 @@ const styles = {
     cursor: 'pointer',
     color: 'inherit',
     textDecoration: 'underline',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   chatInputBar: {
     display: 'flex',
@@ -3296,7 +3297,7 @@ const styles = {
     fontSize: '14px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
   },
   chatSendButton: {
     width: '44px',

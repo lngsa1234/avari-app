@@ -9,6 +9,7 @@ import {
   getEligibleConnections,
   createConnectionGroup
 } from '@/lib/connectionGroupHelpers';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const CATEGORIES = [
   { id: 'career', label: 'Career', emoji: '💼' },
@@ -464,7 +465,7 @@ const styles = {
   container: {
     minHeight: '100vh',
     background: 'linear-gradient(165deg, #FDF8F3 0%, #F5EDE6 50%, #EDE4DB 100%)',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
@@ -497,11 +498,11 @@ const styles = {
     fontSize: '15px',
     fontWeight: '500',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     padding: '8px 0',
   },
   headerTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '20px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -566,7 +567,7 @@ const styles = {
     paddingBottom: '100px',
   },
   stepTitle: {
-    fontFamily: '"Lora", serif',
+    fontFamily: fonts.serif,
     fontSize: '28px',
     fontWeight: '600',
     color: '#3D2B1F',
@@ -606,7 +607,7 @@ const styles = {
     fontSize: '15px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     boxSizing: 'border-box',
     transition: 'border-color 0.2s ease',
   },
@@ -619,7 +620,7 @@ const styles = {
     fontSize: '15px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     boxSizing: 'border-box',
     resize: 'none',
     transition: 'border-color 0.2s ease',
@@ -633,7 +634,7 @@ const styles = {
     fontSize: '15px',
     color: '#3D2B1F',
     outline: 'none',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     boxSizing: 'border-box',
     cursor: 'pointer',
   },
@@ -660,7 +661,7 @@ const styles = {
     borderRadius: '16px',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   categoryCardSelected: {
     backgroundColor: 'rgba(139, 111, 92, 0.1)',
@@ -689,7 +690,7 @@ const styles = {
     color: '#3D2B1F',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   optionButtonSelected: {
     backgroundColor: 'rgba(139, 111, 92, 0.1)',
@@ -713,7 +714,7 @@ const styles = {
     color: '#3D2B1F',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   locationButtonSelected: {
     backgroundColor: 'rgba(139, 111, 92, 0.1)',
@@ -862,7 +863,7 @@ const styles = {
     fontSize: '14px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
   },
   footer: {
     position: 'fixed',
@@ -889,7 +890,7 @@ const styles = {
     fontSize: '16px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     transition: 'all 0.3s ease',
   },
   submitButton: {
@@ -905,7 +906,7 @@ const styles = {
     fontSize: '16px',
     fontWeight: '600',
     cursor: 'pointer',
-    fontFamily: '"DM Sans", sans-serif',
+    fontFamily: fonts.sans,
     transition: 'all 0.3s ease',
   },
   buttonDisabled: {

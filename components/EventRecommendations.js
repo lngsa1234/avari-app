@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Clock
 } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 /**
  * EventRecommendations Component
@@ -212,13 +213,13 @@ export default function EventRecommendations({
     });
   }
 
-  // CircleW color scheme styles
+  // CircleW color scheme styles — sourced from shared design tokens
   const styles = {
     card: {
       backgroundColor: 'rgba(255, 255, 255, 0.7)',
       borderRadius: '24px',
-      boxShadow: '0 4px 24px rgba(139, 111, 92, 0.08)',
-      border: '1px solid rgba(139, 111, 92, 0.08)',
+      boxShadow: `0 4px 24px ${tokens.shadow}`,
+      border: `1px solid ${tokens.shadow}`,
       backdropFilter: 'blur(10px)',
       overflow: 'hidden',
     },
@@ -227,13 +228,13 @@ export default function EventRecommendations({
       justifyContent: 'space-between',
       alignItems: 'center',
       padding: '16px 20px',
-      borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
+      borderBottom: `1px solid rgba(139, 111, 92, 0.1)`,
     },
     cardTitle: {
-      fontFamily: '"Lora", serif',
+      fontFamily: fonts.serif,
       fontSize: '18px',
       fontWeight: '600',
-      color: '#3D2B1F',
+      color: tokens.text,
       margin: 0,
       display: 'flex',
       alignItems: 'center',
@@ -246,7 +247,7 @@ export default function EventRecommendations({
     eventTitle: {
       fontSize: '15px',
       fontWeight: '600',
-      color: '#3D2B1F',
+      color: tokens.text,
       margin: 0,
     },
     eventMeta: {
@@ -254,12 +255,12 @@ export default function EventRecommendations({
       alignItems: 'center',
       gap: '4px',
       fontSize: '13px',
-      color: '#6B5344',
+      color: tokens.textSecondary,
     },
     reasonTag: {
       fontSize: '11px',
-      backgroundColor: 'rgba(139, 111, 92, 0.1)',
-      color: '#5C4033',
+      backgroundColor: tokens.selectedBg,
+      color: tokens.buttonBg,
       padding: '4px 10px',
       borderRadius: '100px',
     },
@@ -272,7 +273,7 @@ export default function EventRecommendations({
     },
     rsvpBtn: {
       padding: '10px 20px',
-      backgroundColor: '#8B6F5C',
+      backgroundColor: tokens.primary,
       border: 'none',
       borderRadius: '100px',
       color: 'white',
@@ -283,7 +284,7 @@ export default function EventRecommendations({
     detailsBtn: {
       backgroundColor: 'transparent',
       border: 'none',
-      color: '#8B6F5C',
+      color: tokens.primary,
       fontSize: '13px',
       fontWeight: '600',
       cursor: 'pointer',
@@ -291,7 +292,7 @@ export default function EventRecommendations({
     dismissBtn: {
       background: 'none',
       border: 'none',
-      color: '#A89080',
+      color: tokens.textMuted,
       cursor: 'pointer',
       padding: '4px',
     },
@@ -302,7 +303,7 @@ export default function EventRecommendations({
     },
     footerLink: {
       fontSize: '13px',
-      color: '#8B6F5C',
+      color: tokens.primary,
       fontWeight: '600',
       textDecoration: 'none',
       display: 'inline-flex',

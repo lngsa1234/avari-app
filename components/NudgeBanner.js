@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { X, ArrowRight, Users, Calendar, Sparkles, UserPlus } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 /**
  * NudgeBanner Component
@@ -108,14 +109,14 @@ export default function NudgeBanner({ className = '' }) {
     return null;
   }
 
-  // CircleW color scheme
+  // CircleW color scheme — sourced from shared design tokens
   const styles = {
     container: {
       backgroundColor: 'rgba(255, 255, 255, 0.7)',
       borderRadius: '16px',
       padding: '16px',
-      boxShadow: '0 4px 24px rgba(139, 111, 92, 0.08)',
-      border: '1px solid rgba(139, 111, 92, 0.15)',
+      boxShadow: `0 4px 24px ${tokens.shadow}`,
+      border: `1px solid ${tokens.border}`,
       backdropFilter: 'blur(10px)',
       WebkitBackdropFilter: 'blur(10px)',
     },
@@ -130,26 +131,26 @@ export default function NudgeBanner({ className = '' }) {
       flexShrink: 0,
     },
     title: {
-      fontFamily: '"DM Sans", sans-serif',
+      fontFamily: fonts.sans,
       fontWeight: '600',
       fontSize: '15px',
-      color: '#3D2B1F',
+      color: tokens.text,
       margin: 0,
     },
     message: {
       fontSize: '14px',
-      color: '#6B5344',
+      color: tokens.textSecondary,
       margin: '4px 0 0 0',
     },
     dismissBtn: {
       background: 'none',
       border: 'none',
-      color: '#A89080',
+      color: tokens.textMuted,
       cursor: 'pointer',
       padding: '4px',
     },
     actionBtn: {
-      backgroundColor: '#8B6F5C',
+      backgroundColor: tokens.primary,
       color: 'white',
       border: 'none',
       borderRadius: '100px',
@@ -168,7 +169,7 @@ export default function NudgeBanner({ className = '' }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flex: 1 }}>
           <div style={styles.iconWrapper}>
-            <Sparkles size={18} style={{ color: '#8B6F5C' }} />
+            <Sparkles size={18} style={{ color: tokens.primary }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={styles.title}>{nudge.title}</p>
@@ -246,7 +247,7 @@ export function NudgeBannerCompact({ className = '' }) {
     text: {
       fontSize: '13px',
       fontWeight: '500',
-      color: '#5C4033',
+      color: tokens.buttonBg,
       overflow: 'hidden',
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
