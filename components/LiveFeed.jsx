@@ -179,7 +179,7 @@ function AvatarCircle({ profile, size = 62, badgeEmoji, isLive }) {
       overflow: 'hidden', position: 'relative',
     }}>
       {profile?.profile_picture
-        ? <img src={profile.profile_picture} alt={profile.name}
+        ? <img src={profile.profile_picture} alt={profile.name} loading="lazy"
             style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         : initials(profile?.name)
       }
@@ -214,7 +214,7 @@ function DualAvatars({ actor, target, isLive, isMobile }) {
         overflow: 'hidden', position: 'absolute', left: 0, bottom: 0, zIndex: 2,
       }}>
         {actor?.profile_picture
-          ? <img src={actor.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={actor.profile_picture} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : initials(actor?.name)
         }
         {isLive && (
@@ -235,7 +235,7 @@ function DualAvatars({ actor, target, isLive, isMobile }) {
         overflow: 'hidden', position: 'absolute', left: offset, bottom: 0, zIndex: 1,
       }}>
         {target?.profile_picture
-          ? <img src={target.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={target.profile_picture} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : initials(target?.name)
         }
       </div>
