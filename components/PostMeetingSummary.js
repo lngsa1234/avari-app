@@ -2,28 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import { Sparkles, Users, Clock, MapPin, MessageCircle, Lightbulb, UserPlus, Calendar, ChevronRight, Check, Share2, Download, ThumbsUp, Video, X, ChevronLeft } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
-// Color palette - Mocha Brown theme
+// Color palette — sourced from shared design tokens
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#5C4033',
-  primaryLight: '#A89080',
-  cream: '#FDF8F3',
-  warmWhite: '#FFFAF5',
+  primary: tokens.primary,
+  primaryDark: tokens.buttonBg,
+  primaryLight: tokens.primaryLight,
+  cream: tokens.bg,
+  warmWhite: tokens.bgWarm,
   background: '#F5F0EB',
   text: '#3D3D3D',
   textLight: '#5D4E42',
   textMuted: '#8C7B6B',
   border: '#E6DDD4',
-  cardBg: '#FFFFFF',
+  cardBg: tokens.white,
   highlight: '#FAF6F3',
-  success: '#4CAF50',
-  successBg: '#E8F5E9',
-};
-
-const fonts = {
-  serif: '"Lora", Georgia, serif',
-  sans: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
+  success: tokens.success,
+  successBg: tokens.successBg,
 };
 
 /**

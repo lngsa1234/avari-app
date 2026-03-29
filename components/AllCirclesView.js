@@ -6,25 +6,21 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Search, Users, ChevronLeft, ChevronRight, X, Check, Clock, Heart,
 } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const colors = {
-  mocha: '#6B4F3A',
+  mocha: tokens.tagText,
   mochaDark: '#4A3527',
-  mochaLight: '#8B6F5A',
-  mochaPale: '#F5EFE8',
+  mochaLight: tokens.primary,
+  mochaPale: tokens.bgPale,
   mochaMuted: '#C4A882',
-  cream: '#FAF6F1',
-  border: 'rgba(107,79,58,0.14)',
-  borderHover: 'rgba(107,79,58,0.28)',
-  tagBg: '#EFE6DB',
-  tagText: '#6B4F3A',
+  cream: tokens.bgAlt,
+  border: tokens.border,
+  borderHover: tokens.borderHover,
+  tagBg: tokens.tagBg,
+  tagText: tokens.tagText,
   success: '#4DB6AC',
-  warning: '#C4784A',
-};
-
-const fonts = {
-  serif: "'Lora', 'Cormorant Garamond', Georgia, serif",
-  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+  warning: tokens.warning,
 };
 
 const CATEGORIES = ['All', 'Career', 'Business', 'Wellness', 'Tech', 'Creative', 'Finance', 'Learning', 'Parenting'];

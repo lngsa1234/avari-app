@@ -3,15 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock, Activity } from 'lucide-react';
 import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const COLORS = {
-  bg: '#FAF6F1',
-  bgCard: '#F5EDE4',
-  bgCardHover: '#EDE3D7',
-  brown900: '#3D2B1F',
-  brown700: '#5C4033',
+  bg: tokens.bgAlt,
+  bgCard: tokens.bgCard,
+  bgCardHover: tokens.bgCardHover,
+  brown900: tokens.text,
+  brown700: tokens.buttonBg,
   brown600: '#6B4C3B',
-  brown500: '#8B6F5E',
+  brown500: tokens.primary,
   brown400: '#A68B7B',
   brown300: '#C4A882',
   brown200: '#D4C4A8',
@@ -20,18 +21,18 @@ const COLORS = {
   accentLight: '#A67C52',
   green: '#4A7C59',
   greenLight: '#E8F2EB',
-  greenDot: '#5BA36B',
-  white: '#FFFFFF',
-  shadow: 'rgba(61,43,31,0.08)',
-  shadowMd: 'rgba(61,43,31,0.12)',
+  greenDot: tokens.online,
+  white: tokens.white,
+  shadow: tokens.shadow,
+  shadowMd: tokens.shadowMd,
   red: '#B85C4A',
   redBg: '#FDF0ED',
-  blue: '#4A6A8B',
+  blue: tokens.blue,
   blueLight: '#EBF1F7',
 };
 
-const FONT = "'DM Sans', sans-serif";
-const DISPLAY_FONT = "'Lora', 'Georgia', serif";
+const FONT = fonts.sans;
+const DISPLAY_FONT = fonts.serif;
 
 const CAREER_STAGE_LABELS = {
   emerging: 'Early Career',

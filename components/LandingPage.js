@@ -2,31 +2,27 @@
 
 import { useState, useEffect } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
+import { colors as tokens, fonts } from '@/lib/designTokens'
 
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#6B5344',
-  cream: '#FDF8F3',
-  warmWhite: '#FFFAF5',
+  primary: tokens.primary,
+  primaryDark: tokens.primaryDark,
+  cream: tokens.bg,
+  warmWhite: tokens.bgWarm,
   text: '#3F1906',
-  textLight: '#584233',
-  textMuted: 'rgba(107, 86, 71, 0.77)',
-  textSoft: '#A89080',
-  border: 'rgba(139, 111, 92, 0.15)',
-  borderMedium: 'rgba(139, 111, 92, 0.25)',
-  selectedBg: 'rgba(139, 111, 92, 0.08)',
-  success: '#4CAF50',
-  error: '#C0392B',
-  errorBg: 'rgba(192, 57, 43, 0.06)',
-  errorBorder: 'rgba(192, 57, 43, 0.15)',
+  textLight: tokens.textSecondary,
+  textMuted: tokens.textSoft,
+  textSoft: tokens.textMuted,
+  border: tokens.border,
+  borderMedium: tokens.borderMedium,
+  selectedBg: tokens.selectedBg,
+  success: tokens.success,
+  error: tokens.error,
+  errorBg: tokens.errorBg,
+  errorBorder: tokens.errorBorder,
   successBg: 'rgba(76, 175, 80, 0.06)',
   successBorder: 'rgba(76, 175, 80, 0.15)',
-  gradient: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
-}
-
-const fonts = {
-  serif: '"Lora", Georgia, serif',
-  sans: '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  gradient: tokens.gradient,
 }
 
 const useWindowSize = () => {

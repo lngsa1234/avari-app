@@ -9,25 +9,20 @@ import { reconcileCircleMeetups } from '@/lib/circleMeetupHelpers';
 import { toLocalDateString } from '@/lib/dateUtils';
 import { useAuth } from './AuthProvider';
 import { formatCoffeeSlots } from '@/lib/coffeeChatSlots';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
-
-// Color palette - Mocha Brown theme
+// Color palette — sourced from shared design tokens
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#5C4033',
-  primaryLight: '#A89080',
-  cream: '#FDF8F3',
-  warmWhite: '#FFFAF5',
-  text: '#3D2B1F',
-  textLight: '#6B5344',
-  textMuted: '#A89080',
-  border: '#EDE6DF',
+  primary: tokens.primary,
+  primaryDark: tokens.buttonBg,
+  primaryLight: tokens.primaryLight,
+  cream: tokens.bg,
+  warmWhite: tokens.bgWarm,
+  text: tokens.text,
+  textLight: tokens.textSecondary,
+  textMuted: tokens.textMuted,
+  border: tokens.borderSolid,
   cardBg: 'rgba(255, 255, 255, 0.8)',
-};
-
-const fonts = {
-  serif: '"Lora", Georgia, serif',
-  sans: '"DM Sans", -apple-system, BlinkMacSystemFont, sans-serif',
 };
 
 export default function ScheduleMeetupView({

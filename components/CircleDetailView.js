@@ -14,25 +14,21 @@ import {
   deleteCircleMeetup,
   deleteAllFutureCircleMeetups,
 } from '@/lib/circleMeetupHelpers';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
-// Color palette
+// Color palette — sourced from shared design tokens
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#6B5344',
-  primaryLight: '#A89080',
-  cream: '#FDF8F3',
-  warmWhite: '#FFFAF5',
+  primary: tokens.primary,
+  primaryDark: tokens.primaryDark,
+  primaryLight: tokens.primaryLight,
+  cream: tokens.bg,
+  warmWhite: tokens.bgWarm,
   text: '#4A3728',
-  textLight: '#7A6855',
-  textMuted: '#A89080',
-  border: '#EDE6DF',
-  success: '#4CAF50',
+  textLight: tokens.textLight,
+  textMuted: tokens.textMuted,
+  border: tokens.borderSolid,
+  success: tokens.success,
   warning: '#FFB74D',
-};
-
-const fonts = {
-  serif: "'Lora', Georgia, serif",
-  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
 };
 
 // Circle visual data

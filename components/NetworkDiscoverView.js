@@ -40,23 +40,19 @@ const useWindowSize = () => {
   return windowSize;
 };
 
-// Color palette - Mocha Brown theme
-const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#6B5344',
-  primaryLight: '#A89080',
-  cream: '#FDF8F3',
-  warmWhite: '#FFFAF5',
-  text: '#4A3728',
-  textLight: '#7A6855',
-  textMuted: '#A89080',
-  border: '#EDE6DF',
-};
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
-// Font families
-const fonts = {
-  serif: "'Lora', Georgia, serif",
-  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+// Color palette — sourced from shared design tokens
+const colors = {
+  primary: tokens.primary,
+  primaryDark: tokens.primaryDark,
+  primaryLight: tokens.primaryLight,
+  cream: tokens.bg,
+  warmWhite: tokens.bgWarm,
+  text: '#4A3728',
+  textLight: tokens.textLight,
+  textMuted: tokens.textMuted,
+  border: tokens.borderSolid,
 };
 
 // Vibe categories

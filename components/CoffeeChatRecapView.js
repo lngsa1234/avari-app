@@ -16,25 +16,21 @@ import {
   Quote,
   Share2,
 } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#6B5344',
-  cream: '#FDF8F3',
+  primary: tokens.primary,
+  primaryDark: tokens.primaryDark,
+  cream: tokens.bg,
   text: '#3F1906',
-  textLight: '#584233',
-  textMuted: 'rgba(107, 86, 71, 0.77)',
-  textSoft: '#A89080',
+  textLight: tokens.textSecondary,
+  textMuted: tokens.textSoft,
+  textSoft: tokens.textMuted,
   border: 'rgba(139, 111, 92, 0.1)',
-  sage: '#8B9E7E',
-  gold: '#C9A96E',
-  purple: '#9B7EC4',
-  gradient: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
-};
-
-const fonts = {
-  serif: '"Lora", Georgia, serif',
-  sans: '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  sage: tokens.sage,
+  gold: tokens.gold,
+  purple: tokens.purple,
+  gradient: tokens.gradient,
 };
 
 const useWindowSize = () => {

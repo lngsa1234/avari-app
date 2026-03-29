@@ -16,31 +16,27 @@ import {
   Sparkles,
   UserPlus,
 } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const colors = {
-  mocha: '#6B4F3A',
-  mochaLight: '#8B6F5A',
-  mochaPale: '#F5EFE8',
+  mocha: tokens.tagText,
+  mochaLight: tokens.primary,
+  mochaPale: tokens.bgPale,
   mochaMuted: '#C4A882',
-  cream: '#FAF6F1',
-  warmWhite: '#FFFAF5',
-  text: '#3D2B1F',
-  textLight: '#6B5344',
-  textMuted: '#A89080',
-  border: 'rgba(107,79,58,0.15)',
-  borderHover: 'rgba(107,79,58,0.3)',
-  tagBg: '#EFE6DB',
-  tagText: '#6B4F3A',
+  cream: tokens.bgAlt,
+  warmWhite: tokens.bgWarm,
+  text: tokens.text,
+  textLight: tokens.textSecondary,
+  textMuted: tokens.textMuted,
+  border: tokens.border,
+  borderHover: tokens.borderHover,
+  tagBg: tokens.tagBg,
+  tagText: tokens.tagText,
   chatBg: '#FFF8F0',
   chatBorder: '#D4956A',
   chatText: '#A0522D',
   success: '#6B8E7B',
-  primary: '#8B6F5C',
-};
-
-const fonts = {
-  serif: "'Lora', Georgia, serif",
-  sans: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+  primary: tokens.primary,
 };
 
 const INTEREST_FILTERS = [

@@ -80,31 +80,27 @@ class ProfileSetupErrorBoundary extends React.Component {
 }
 
 // ============================================================
-// DESIGN TOKENS
+// DESIGN TOKENS — sourced from shared lib/designTokens.js
 // ============================================================
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const colors = {
-  primary: '#8B6F5C',
-  primaryDark: '#6B5344',
-  primaryLight: '#A89080',
-  cream: '#FDF8F3',
-  warmWhite: '#FFFAF5',
+  primary: tokens.primary,
+  primaryDark: tokens.primaryDark,
+  primaryLight: tokens.primaryLight,
+  cream: tokens.bg,
+  warmWhite: tokens.bgWarm,
   text: '#3F1906',
-  textLight: '#584233',
-  textMuted: 'rgba(107, 86, 71, 0.77)',
-  textSoft: '#A89080',
-  border: 'rgba(139, 111, 92, 0.15)',
-  borderMedium: 'rgba(139, 111, 92, 0.25)',
-  selectedBg: 'rgba(139, 111, 92, 0.08)',
-  success: '#4CAF50',
-  sage: '#8B9E7E',
-  gold: '#C9A96E',
-  gradient: 'linear-gradient(219.16deg, rgba(247, 242, 236, 0.96) 39.76%, rgba(240, 225, 213, 0.980157) 67.53%, rgba(236, 217, 202, 0.990231) 82.33%)',
-};
-
-const fonts = {
-  serif: '"Lora", Georgia, serif',
-  sans: '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+  textLight: tokens.textSecondary,
+  textMuted: tokens.textSoft,
+  textSoft: tokens.textMuted,
+  border: tokens.border,
+  borderMedium: tokens.borderMedium,
+  selectedBg: tokens.selectedBg,
+  success: tokens.success,
+  sage: tokens.sage,
+  gold: tokens.gold,
+  gradient: tokens.gradient,
 };
 
 // ============================================================
