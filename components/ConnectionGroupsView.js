@@ -1083,172 +1083,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       {/* Single Column Layout */}
       <div style={styles.singleColumn}>
 
-        {/* Combined: Sent connection requests + Sent circle invitations */}
-        {(sentRequestProfiles.length > 0 || sentCircleInvites.length > 0) && (
-          <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
-                Sent Requests
-              </h2>
-              <span style={{
-                fontSize: '11px', color: '#FFF8F0', backgroundColor: '#8B6F5C',
-                borderRadius: '10px', padding: '2px 8px', fontWeight: '600',
-              }}>
-                {sentRequestProfiles.length + sentCircleInvites.length}
-              </span>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {sentRequestProfiles.map((person) => (
-                <div key={`conn-${person.id}`} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
-                  backgroundColor: 'rgba(139, 111, 92, 0.06)', borderRadius: '12px',
-                  border: '1px solid rgba(139, 111, 92, 0.1)',
-                }}>
-                  <div style={{
-                    width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden', cursor: 'pointer',
-                  }} onClick={() => onNavigate?.('userProfile', { userId: person.id })}>
-                    {person.profile_picture ? (
-                      <img src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (person.name?.[0] || '?').toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {person.name}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#8B7355' }}>
-                      Connection request · {formatTimeAgo(person.requested_at)}
-                    </div>
-                  </div>
-                  <button onClick={() => handleWithdrawRequest(person.id)} style={{
-                    padding: '7px 14px', fontSize: '12px', fontWeight: '600', color: '#8B6F5C',
-                    backgroundColor: 'transparent', border: '1.5px solid rgba(139, 111, 92, 0.3)',
-                    borderRadius: '100px', cursor: 'pointer', flexShrink: 0, minHeight: '36px',
-                  }}>Withdraw</button>
-                </div>
-              ))}
-
-              {sentCircleInvites.map((invite) => (
-                <div key={`circle-${invite.id}`} style={{
-                  display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
-                  backgroundColor: 'rgba(139, 111, 92, 0.06)', borderRadius: '12px',
-                  border: '1px solid rgba(139, 111, 92, 0.1)',
-                }}>
-                  <div style={{
-                    width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden', cursor: 'pointer',
-                  }} onClick={() => onNavigate?.('userProfile', { userId: invite.user.id })}>
-                    {invite.user.profile_picture ? (
-                      <img src={invite.user.profile_picture} alt={invite.user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (invite.user.name?.[0] || '?').toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {invite.user.name}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#8B7355' }}>
-                      Invited to <span style={{ fontWeight: '600' }}>{invite.circleName}</span> · {invite.invited_at ? formatTimeAgo(invite.invited_at) : 'pending'}
-                    </div>
-                  </div>
-                  <button onClick={() => handleWithdrawCircleInvite(invite.id)} style={{
-                    padding: '7px 14px', fontSize: '12px', fontWeight: '600', color: '#8B6F5C',
-                    backgroundColor: 'transparent', border: '1.5px solid rgba(139, 111, 92, 0.3)',
-                    borderRadius: '100px', cursor: 'pointer', flexShrink: 0, minHeight: '36px',
-                  }}>Withdraw</button>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Recent Chats */}
-        {recentChats.length > 0 && (
-          <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '14px' }}>
-              <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
-                Recent Chats
-              </h2>
-              <button
-                onClick={() => onNavigate?.('messages')}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  background: 'none', border: 'none', color: '#8B6F5C',
-                  fontSize: '13px', fontWeight: '600', cursor: 'pointer',
-                }}>
-                See all <ChevronRight size={14} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {recentChats.map((chat) => (
-                <div
-                  key={chat.id}
-                  onClick={() => onNavigate?.('messages', { chatId: chat.partner.id, chatType: 'user' })}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '12px',
-                    padding: '10px 12px',
-                    backgroundColor: chat.unread ? 'rgba(139, 111, 92, 0.06)' : 'transparent',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    transition: 'background 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(139, 111, 92, 0.06)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = chat.unread ? 'rgba(139, 111, 92, 0.06)' : 'transparent'; }}
-                >
-                  <div style={{
-                    width: '40px', height: '40px', borderRadius: '50%',
-                    backgroundColor: '#8B6F5C',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '16px', color: 'white', fontWeight: '600',
-                    flexShrink: 0, overflow: 'hidden',
-                  }}>
-                    {chat.partner.profile_picture ? (
-                      <img src={chat.partner.profile_picture} alt={chat.partner.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (chat.partner.name?.[0] || '?').toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{
-                        fontFamily: '"DM Sans", sans-serif', fontSize: '14px',
-                        fontWeight: chat.unread ? '700' : '600', color: '#2C1810',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {chat.partner.name}
-                      </span>
-                      {chat.unread && (
-                        <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#8B6F5C', flexShrink: 0 }} />
-                      )}
-                    </div>
-                    <p style={{
-                      fontFamily: '"DM Sans", sans-serif', fontSize: '12px',
-                      color: chat.unread ? '#5C4033' : '#8B7A6B',
-                      fontWeight: chat.unread ? '500' : '400',
-                      margin: '2px 0 0',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {chat.isFromMe ? 'You: ' : ''}{chat.content?.slice(0, 50)}{chat.content?.length > 50 ? '...' : ''}
-                    </p>
-                  </div>
-                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#A89080', flexShrink: 0 }}>
-                    {(() => {
-                      const diff = Date.now() - new Date(chat.created_at).getTime();
-                      const mins = Math.floor(diff / 60000);
-                      if (mins < 60) return `${mins}m`;
-                      const hours = Math.floor(mins / 60);
-                      if (hours < 24) return `${hours}h`;
-                      return `${Math.floor(hours / 24)}d`;
-                    })()}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
         {/* Connections Section */}
         <section style={styles.section} className="circles-card">
           <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px', marginBottom: isMobile ? '10px' : '14px'}}>
@@ -1808,6 +1642,84 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             </>
           )}
         </section>
+
+        {/* Recent Chats */}
+        {recentChats.length > 0 && (
+          <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '14px' }}>
+              <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
+                Recent Chats
+              </h2>
+              <button onClick={() => onNavigate?.('messages')} style={{
+                display: 'flex', alignItems: 'center', gap: '4px',
+                background: 'none', border: 'none', color: '#8B6F5C',
+                fontSize: '13px', fontWeight: '600', cursor: 'pointer',
+              }}>See all <ChevronRight size={14} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {recentChats.map((chat) => (
+                <div key={chat.id} onClick={() => onNavigate?.('messages', { chatId: chat.partner.id, chatType: 'user' })} style={{
+                  display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px',
+                  backgroundColor: chat.unread ? 'rgba(139, 111, 92, 0.06)' : 'transparent',
+                  borderRadius: '12px', cursor: 'pointer', transition: 'background 0.2s ease',
+                }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(139, 111, 92, 0.06)'; }}
+                   onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = chat.unread ? 'rgba(139, 111, 92, 0.06)' : 'transparent'; }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden' }}>
+                    {chat.partner.profile_picture ? <img src={chat.partner.profile_picture} alt={chat.partner.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (chat.partner.name?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '14px', fontWeight: chat.unread ? '700' : '600', color: '#2C1810', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.partner.name}</span>
+                      {chat.unread && <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: '#8B6F5C', flexShrink: 0 }} />}
+                    </div>
+                    <p style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '12px', color: chat.unread ? '#5C4033' : '#8B7A6B', fontWeight: chat.unread ? '500' : '400', margin: '2px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {chat.isFromMe ? 'You: ' : ''}{chat.content?.slice(0, 50)}{chat.content?.length > 50 ? '...' : ''}
+                    </p>
+                  </div>
+                  <span style={{ fontFamily: '"DM Sans", sans-serif', fontSize: '11px', color: '#A89080', flexShrink: 0 }}>
+                    {(() => { const diff = Date.now() - new Date(chat.created_at).getTime(); const mins = Math.floor(diff / 60000); if (mins < 60) return `${mins}m`; const hours = Math.floor(mins / 60); if (hours < 24) return `${hours}h`; return `${Math.floor(hours / 24)}d`; })()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Sent Requests */}
+        {(sentRequestProfiles.length > 0 || sentCircleInvites.length > 0) && (
+          <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>Sent Requests</h2>
+              <span style={{ fontSize: '11px', color: '#FFF8F0', backgroundColor: '#8B6F5C', borderRadius: '10px', padding: '2px 8px', fontWeight: '600' }}>{sentRequestProfiles.length + sentCircleInvites.length}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {sentRequestProfiles.map((person) => (
+                <div key={`conn-${person.id}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', backgroundColor: 'rgba(139, 111, 92, 0.06)', borderRadius: '12px', border: '1px solid rgba(139, 111, 92, 0.1)' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }} onClick={() => onNavigate?.('userProfile', { userId: person.id })}>
+                    {person.profile_picture ? <img src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (person.name?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.name}</div>
+                    <div style={{ fontSize: '12px', color: '#8B7355' }}>Connection request · {formatTimeAgo(person.requested_at)}</div>
+                  </div>
+                  <button onClick={() => handleWithdrawRequest(person.id)} style={{ padding: '7px 14px', fontSize: '12px', fontWeight: '600', color: '#8B6F5C', backgroundColor: 'transparent', border: '1.5px solid rgba(139, 111, 92, 0.3)', borderRadius: '100px', cursor: 'pointer', flexShrink: 0, minHeight: '36px' }}>Withdraw</button>
+                </div>
+              ))}
+              {sentCircleInvites.map((invite) => (
+                <div key={`circle-${invite.id}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', backgroundColor: 'rgba(139, 111, 92, 0.06)', borderRadius: '12px', border: '1px solid rgba(139, 111, 92, 0.1)' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }} onClick={() => onNavigate?.('userProfile', { userId: invite.user.id })}>
+                    {invite.user.profile_picture ? <img src={invite.user.profile_picture} alt={invite.user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (invite.user.name?.[0] || '?').toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{invite.user.name}</div>
+                    <div style={{ fontSize: '12px', color: '#8B7355' }}>Invited to <span style={{ fontWeight: '600' }}>{invite.circleName}</span> · {invite.invited_at ? formatTimeAgo(invite.invited_at) : 'pending'}</div>
+                  </div>
+                  <button onClick={() => handleWithdrawCircleInvite(invite.id)} style={{ padding: '7px 14px', fontSize: '12px', fontWeight: '600', color: '#8B6F5C', backgroundColor: 'transparent', border: '1.5px solid rgba(139, 111, 92, 0.3)', borderRadius: '100px', cursor: 'pointer', flexShrink: 0, minHeight: '36px' }}>Withdraw</button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
       </div>
 
