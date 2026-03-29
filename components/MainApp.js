@@ -3581,8 +3581,8 @@ function MainApp({ currentUser, onSignOut }) {
                       onClick={(e) => { e.stopPropagation(); handleNavigate('userProfile', { userId: rec.recommended_user_id }) }}
                       style={{
                         marginTop: '2px',
-                        padding: isMobile ? '8px 16px' : '8px 20px',
-                        minHeight: '36px',
+                        padding: isMobile ? '10px 16px' : '10px 20px',
+                        minHeight: '44px',
                         background: '#5C4033', color: '#FAF5EF',
                         border: 'none', borderRadius: '20px',
                         fontFamily: '"DM Sans", sans-serif',
@@ -4215,7 +4215,7 @@ function MainApp({ currentUser, onSignOut }) {
                   placeholder="Search meetups, people, circles..."
                   value={homeSearchQuery}
                   onChange={(e) => setHomeSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 w-36 md:w-[200px] text-[13px] rounded-full border border-[#E8DDD0] bg-white text-[#5E4530] placeholder-[#B8A089] focus:outline-none md:focus:w-[260px] focus:border-[#B8A089] transition-all duration-300"
+                  className="pl-10 pr-4 py-2.5 w-36 md:w-[200px] text-[13px] rounded-full border border-[#E8DDD0] bg-white text-[#5E4530] placeholder-[#B8A089] focus:outline-none md:focus:w-[260px] focus:border-[#B8A089] transition-all duration-300"
                   style={{ boxShadow: 'none' }}
                   onFocus={(e) => { e.target.style.boxShadow = '0 0 0 3px rgba(122,92,66,0.08)'; }}
                   onBlur={(e) => { setTimeout(() => { e.target.style.boxShadow = 'none'; setHomeSearchQuery(''); }, 400); }}
