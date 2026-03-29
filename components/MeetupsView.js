@@ -1683,7 +1683,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                   const tag = typeTagColors[item.type] || typeTagColors.public;
 
                   return (
-                    <div key={item.id} style={{ padding: isMobile ? '10px 12px' : '12px 14px', marginBottom: isMobile ? '4px' : '6px', background: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(250,245,239,0.3) 100%)', borderRadius: isMobile ? '12px' : '14px', border: '1px solid rgba(139,111,92,0.08)', cursor: 'pointer' }}
+                    <div key={item.id} className="card-hover" style={{ padding: isMobile ? '10px 12px' : '12px 14px', marginBottom: isMobile ? '4px' : '6px', background: 'linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(250,245,239,0.3) 100%)', borderRadius: isMobile ? '12px' : '14px', border: '1px solid rgba(139,111,92,0.08)', cursor: 'pointer' }}
                       onClick={() => { if (item.sourceId && onNavigate) onNavigate('eventDetail', { meetupId: item.sourceId, meetupCategory: item.type === 'coffee' ? 'coffee' : undefined }); }}
                     >
                       {/* Header row */}
@@ -1723,9 +1723,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           <button
                             style={{
                               display: 'flex', alignItems: 'center', gap: '4px',
-                              padding: isMobile ? '5px 10px' : '7px 14px', borderRadius: '100px', border: 'none',
+                              padding: isMobile ? '8px 14px' : '9px 16px', borderRadius: '100px', border: 'none',
                               fontSize: isMobile ? '11px' : '12px', fontWeight: '600', cursor: 'pointer',
-                              fontFamily: fonts.sans, flexShrink: 0,
+                              fontFamily: fonts.sans, flexShrink: 0, minHeight: '44px',
                               backgroundColor: isUnreviewed ? '#5C4033' : 'rgba(139,111,92,0.12)',
                               color: isUnreviewed ? 'white' : '#5C4033',
                               boxShadow: isUnreviewed ? '0 2px 8px rgba(92,64,51,0.35)' : 'none',
@@ -1740,7 +1740,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
                       {/* Summary with expand/collapse */}
                       {item.summary && (
-                        <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: isMobile ? '8px' : '10px', borderLeft: '3px solid rgba(139,111,92,0.35)' }}>
+                        <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(139,111,92,0.06)', borderRadius: isMobile ? '8px' : '10px', borderTop: '2px solid rgba(139,111,92,0.2)' }}>
                           <span style={{ fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '13px', color: 'rgba(63,25,6,0.7)', lineHeight: '1.5', fontStyle: 'italic' }}>
                             {isExpanded || item.summary.length <= (isMobile ? 100 : 150) ? item.summary : item.summary.slice(0, isMobile ? 100 : 150) + '...'}
                           </span>
@@ -1755,7 +1755,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
                       {/* Follow-ups with checkable items */}
                       {item.actionItems.length > 0 ? (
-                        <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(196,134,139,0.08)', borderRadius: isMobile ? '8px' : '10px', borderLeft: '3px solid #C4868B' }}>
+                        <div style={{ marginTop: isMobile ? '6px' : '8px', padding: isMobile ? '6px 8px' : '8px 10px', backgroundColor: 'rgba(196,134,139,0.06)', borderRadius: isMobile ? '8px' : '10px', borderTop: '2px solid rgba(196,134,139,0.4)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                               <span style={{ fontSize: isMobile ? '10px' : '12px', fontWeight: '700', color: '#5C4033', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: fonts.sans }}>Follow-ups</span>
