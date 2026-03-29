@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Quote
 } from 'lucide-react';
+import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const useWindowSize = () => {
   const [width, setWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
@@ -936,7 +937,7 @@ export default function MeetupRecapsPage() {
           const parsed = recap.parsed;
 
           return (
-            <div key={recap.id} style={styles.recapCard}>
+            <div key={recap.id} style={styles.recapCard} className="card-hover">
               {/* Card Header */}
               <div
                 style={styles.cardHeader}

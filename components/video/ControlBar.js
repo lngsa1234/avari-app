@@ -171,7 +171,7 @@ const ControlBtn = ({
         className={`
           flex items-center justify-center gap-1.5 border-none cursor-pointer
           transition-all duration-200 ease-out font-medium text-sm rounded-xl
-          ${label ? 'px-3 py-2 sm:px-4 sm:py-2.5' : 'p-2 sm:p-2.5'}
+          ${label ? 'px-3 py-2.5 sm:px-4 sm:py-3' : 'p-3'}
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
           ${danger
             ? 'text-white hover:brightness-90'

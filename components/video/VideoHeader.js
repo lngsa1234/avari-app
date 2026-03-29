@@ -418,7 +418,7 @@ export default function VideoHeader({
           <Tooltip text={showTopics ? 'Hide topics' : 'Topics'}>
             <button
               onClick={onToggleTopics}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all hover:bg-white/5"
               style={{
                 background: showTopics ? 'rgba(212,165,116,0.2)' : 'rgba(245,237,228,0.08)',
                 border: `1px solid ${showTopics ? 'rgba(212,165,116,0.3)' : 'rgba(245,237,228,0.08)'}`,
