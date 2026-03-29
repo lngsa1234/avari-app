@@ -85,16 +85,16 @@ export default function NextStepPrompt({
 
   const colorClasses = {
     rose: {
-      bg: 'from-rose-500 to-pink-500',
-      light: 'bg-rose-50 border-rose-200',
-      text: 'text-rose-700',
-      button: 'bg-rose-500 hover:bg-rose-600'
+      bg: 'from-[#6B5344] to-[#8B6F5C]',
+      light: 'bg-[#FDF8F3] border-[#EDE6DF]',
+      text: 'text-[#6B5344]',
+      button: 'bg-[#8B6F5C] hover:bg-[#6B5344]'
     },
     purple: {
-      bg: 'from-purple-500 to-indigo-500',
-      light: 'bg-purple-50 border-purple-200',
-      text: 'text-purple-700',
-      button: 'bg-purple-500 hover:bg-purple-600'
+      bg: 'from-[#6B5344] to-[#8B6F5C]',
+      light: 'bg-[#FDF8F3] border-[#EDE6DF]',
+      text: 'text-[#6B5344]',
+      button: 'bg-[#8B6F5C] hover:bg-[#6B5344]'
     },
     blue: {
       bg: 'from-blue-500 to-cyan-500',

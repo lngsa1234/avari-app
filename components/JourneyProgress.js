@@ -39,7 +39,7 @@ export default function JourneyProgress({
       description: 'Connect with people you meet',
       cta: 'View Connections',
       view: 'coffeeChats',
-      color: 'purple'
+      color: 'mocha'
     },
     {
       id: 'groups',
@@ -115,8 +115,8 @@ export default function JourneyProgress({
 
     if (isCurrent) {
       const colorMap = {
-        rose: { bg: 'bg-rose-50', border: 'border-rose-300', icon: 'bg-rose-500 text-white', text: 'text-rose-700', badge: 'bg-rose-500' },
-        purple: { bg: 'bg-purple-50', border: 'border-purple-300', icon: 'bg-purple-500 text-white', text: 'text-purple-700', badge: 'bg-purple-500' },
+        rose: { bg: 'bg-[#FDF8F3]', border: 'border-[#A89080]', icon: 'bg-[#8B6F5C] text-white', text: 'text-[#6B5344]', badge: 'bg-[#8B6F5C]' },
+        mocha: { bg: 'bg-[#FDF8F3]', border: 'border-[#A89080]', icon: 'bg-[#8B6F5C] text-white', text: 'text-[#6B5344]', badge: 'bg-[#8B6F5C]' },
         blue: { bg: 'bg-blue-50', border: 'border-blue-300', icon: 'bg-blue-500 text-white', text: 'text-blue-700', badge: 'bg-blue-500' },
         amber: { bg: 'bg-amber-50', border: 'border-amber-300', icon: 'bg-amber-500 text-white', text: 'text-amber-700', badge: 'bg-amber-500' }
       };
@@ -139,7 +139,7 @@ export default function JourneyProgress({
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* Header */}
-      <div className="bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-3">
+      <div className="bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-white" />
@@ -175,7 +175,7 @@ export default function JourneyProgress({
               <div
                 key={step.id}
                 className={`${colors.bg} ${colors.border} border rounded-lg p-3 transition-all ${
-                  isCurrent ? 'ring-2 ring-offset-1 ring-rose-300' : ''
+                  isCurrent ? 'ring-2 ring-offset-1 ring-[#A89080]' : ''
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -193,7 +193,7 @@ export default function JourneyProgress({
                     <div className="flex items-center gap-2">
                       <h4 className={`font-medium ${colors.text}`}>{step.title}</h4>
                       {isCurrent && !isLocked && (
-                        <span className="bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full">
+                        <span className="bg-[#8B6F5C] text-white text-xs px-2 py-0.5 rounded-full">
                           Next
                         </span>
                       )}
@@ -216,7 +216,7 @@ export default function JourneyProgress({
                 {isCurrent && !isLocked && (
                   <button
                     onClick={() => onNavigate(step.view)}
-                    className="mt-3 w-full bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white font-medium py-2 rounded-lg transition flex items-center justify-center gap-2"
+                    className="mt-3 w-full bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] hover:from-[#5C4033] hover:to-[#6B5344] text-white font-medium py-2 rounded-lg transition flex items-center justify-center gap-2"
                   >
                     {step.cta}
                     <ChevronRight className="w-4 h-4" />
@@ -243,7 +243,7 @@ export default function JourneyProgress({
                   {/* Step card */}
                   <div
                     className={`${colors.bg} ${colors.border} border rounded-lg p-3 flex-1 transition-all cursor-pointer hover:shadow-md ${
-                      isCurrent ? 'ring-2 ring-offset-1 ring-rose-300' : ''
+                      isCurrent ? 'ring-2 ring-offset-1 ring-[#A89080]' : ''
                     }`}
                     onClick={() => !isLocked && onNavigate(step.view)}
                   >
@@ -261,7 +261,7 @@ export default function JourneyProgress({
                     </div>
                     <h4 className={`font-medium text-sm ${colors.text}`}>{step.shortTitle}</h4>
                     {isCurrent && !isLocked && (
-                      <span className="inline-block mt-1 bg-rose-500 text-white text-xs px-2 py-0.5 rounded-full">
+                      <span className="inline-block mt-1 bg-[#8B6F5C] text-white text-xs px-2 py-0.5 rounded-full">
                         Do this
                       </span>
                     )}
@@ -285,9 +285,9 @@ export default function JourneyProgress({
 
           {/* Current step CTA */}
           {!allComplete && currentStepIndex < steps.length && (
-            <div className="mt-4 flex items-center justify-between bg-gradient-to-r from-rose-50 to-pink-50 rounded-lg p-3 border border-rose-200">
+            <div className="mt-4 flex items-center justify-between bg-gradient-to-r from-[#FDF8F3] to-[#F5EDE4] rounded-lg p-3 border border-[#EDE6DF]">
               <div>
-                <p className="text-rose-800 font-medium">
+                <p className="text-[#5C4033] font-medium">
                   {steps[currentStepIndex].requiresMeetups && meetupsAttended < steps[currentStepIndex].requiresMeetups
                     ? `Attend ${steps[currentStepIndex].requiresMeetups - meetupsAttended} more meetup${steps[currentStepIndex].requiresMeetups - meetupsAttended > 1 ? 's' : ''} to unlock 1:1 Coffee Chats`
                     : `Next: ${steps[currentStepIndex].description}`
@@ -297,7 +297,7 @@ export default function JourneyProgress({
               {!(steps[currentStepIndex].requiresMeetups && meetupsAttended < steps[currentStepIndex].requiresMeetups) && (
                 <button
                   onClick={() => onNavigate(steps[currentStepIndex].view)}
-                  className="bg-rose-500 hover:bg-rose-600 text-white font-medium px-4 py-2 rounded-lg transition flex items-center gap-2"
+                  className="bg-[#8B6F5C] hover:bg-[#6B5344] text-white font-medium px-4 py-2 rounded-lg transition flex items-center gap-2"
                 >
                   {steps[currentStepIndex].cta}
                   <ChevronRight className="w-4 h-4" />

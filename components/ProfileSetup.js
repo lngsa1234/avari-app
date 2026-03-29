@@ -39,7 +39,7 @@ export default function ProfileSetup({ session, onSave }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-rose-100 via-pink-50 to-purple-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-[#F5EDE4] via-[#FDF8F3] to-[#F5EDE4] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-800 mb-2">Complete Your Profile</h2>
@@ -87,7 +87,7 @@ export default function ProfileSetup({ session, onSave }) {
           <button
             onClick={handleSubmit}
             disabled={isLoading}
-            className="w-full bg-rose-500 hover:bg-rose-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
+            className="w-full bg-[#8B6F5C] hover:bg-[#6B5344] disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
           >
             {isLoading ? (
               <>

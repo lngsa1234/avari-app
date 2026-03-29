@@ -530,7 +530,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-8 h-8 border-4 border-[#8B6F5C] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading messages...</p>
         </div>
       </div>
@@ -540,7 +540,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 shadow-lg">
+      <div className="bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] text-white p-4 shadow-lg">
         <div className="flex items-center">
           <MessageCircle className="w-6 h-6 mr-3" />
           <h1 className="text-xl font-bold">Messages</h1>
@@ -563,7 +563,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-purple-500"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#8B6F5C]"
               />
             </div>
           </div>
@@ -584,12 +584,12 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
                   key={conv.id}
                   onClick={() => setSelectedConversation(conv)}
                   className={`w-full p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left ${
-                    selectedConversation?.id === conv.id ? 'bg-purple-50 border-l-4 border-l-purple-600' : ''
+                    selectedConversation?.id === conv.id ? 'bg-[#FDF8F3] border-l-4 border-l-[#8B6F5C]' : ''
                   }`}
                 >
                   <div className="flex items-start">
-                    <div className="bg-purple-100 rounded-full p-2 mr-3">
-                      <User className="w-6 h-6 text-purple-600" />
+                    <div className="bg-[#F5EDE4] rounded-full p-2 mr-3">
+                      <User className="w-6 h-6 text-[#8B6F5C]" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-1">
@@ -613,7 +613,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
                       )}
                     </div>
                     {conv.unreadCount > 0 && (
-                      <div className="bg-purple-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ml-2 flex-shrink-0">
+                      <div className="bg-[#8B6F5C] text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center ml-2 flex-shrink-0">
                         {conv.unreadCount}
                       </div>
                     )}
@@ -643,8 +643,8 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
                 >
                   ←
                 </button>
-                <div className="bg-purple-100 rounded-full p-2 mr-3">
-                  <User className="w-6 h-6 text-purple-600" />
+                <div className="bg-[#F5EDE4] rounded-full p-2 mr-3">
+                  <User className="w-6 h-6 text-[#8B6F5C]" />
                 </div>
                 <div>
                   <h2 className="font-semibold text-gray-900">
@@ -682,7 +682,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
                           <div
                             className={`px-4 py-2 rounded-2xl ${
                               isOwn
-                                ? 'bg-purple-600 text-white rounded-br-none'
+                                ? 'bg-[#8B6F5C] text-white rounded-br-none'
                                 : 'bg-gray-200 text-gray-900 rounded-bl-none'
                             }`}
                           >
@@ -697,7 +697,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
                                 })}
                               </span>
                               {message.read ? (
-                                <CheckCheck className="w-3 h-3 text-purple-600" />
+                                <CheckCheck className="w-3 h-3 text-[#8B6F5C]" />
                               ) : (
                                 <Check className="w-3 h-3 text-gray-400" />
                               )}
@@ -721,13 +721,13 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type a message..."
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:border-purple-500"
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:border-[#8B6F5C]"
                   disabled={sending}
                 />
                 <button
                   type="submit"
                   disabled={!newMessage.trim() || sending}
-                  className="bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-full transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  className="bg-[#8B6F5C] hover:bg-[#6B5344] text-white p-3 rounded-full transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                 >
                   <Send className="w-5 h-5" />
                 </button>

@@ -372,7 +372,7 @@ export default function CallRecap({
   const getProviderColor = () => {
     switch (provider) {
       case 'livekit': return 'bg-blue-600';
-      case 'agora': return 'bg-purple-600';
+      case 'agora': return 'bg-[#8B6F5C]';
       case 'webrtc': return 'bg-green-600';
       default: return 'bg-gray-600';
     }
@@ -382,11 +382,11 @@ export default function CallRecap({
     <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
       <div className="bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-rose-500 to-pink-500 p-6 flex-shrink-0">
+        <div className="bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] p-6 flex-shrink-0">
           <div className="text-center">
             <span className="text-4xl mb-2 block">&#9996;</span>
             <h2 className="text-white text-2xl font-bold">Call Ended</h2>
-            <p className="text-rose-100 mt-1">Here's your call recap</p>
+            <p className="text-[#F5EDE4] mt-1">Here's your call recap</p>
             <div className="mt-2 flex justify-center gap-2">
               <span className={`${getProviderColor()} text-white text-xs px-2 py-1 rounded-full`}>
                 {provider.toUpperCase()}
@@ -403,7 +403,7 @@ export default function CallRecap({
           <button
             onClick={() => setActiveTab('overview')}
             className={`flex-1 py-3 text-sm font-medium transition ${
-              activeTab === 'overview' ? 'text-white border-b-2 border-rose-500' : 'text-gray-400'
+              activeTab === 'overview' ? 'text-white border-b-2 border-[#8B6F5C]' : 'text-gray-400'
             }`}
           >
             Overview
@@ -412,7 +412,7 @@ export default function CallRecap({
             <button
               onClick={() => setActiveTab('transcript')}
               className={`flex-1 py-3 text-sm font-medium transition ${
-                activeTab === 'transcript' ? 'text-white border-b-2 border-rose-500' : 'text-gray-400'
+                activeTab === 'transcript' ? 'text-white border-b-2 border-[#8B6F5C]' : 'text-gray-400'
               }`}
             >
               Transcript ({transcript.length})
@@ -422,7 +422,7 @@ export default function CallRecap({
             <button
               onClick={() => setActiveTab('metrics')}
               className={`flex-1 py-3 text-sm font-medium transition ${
-                activeTab === 'metrics' ? 'text-white border-b-2 border-rose-500' : 'text-gray-400'
+                activeTab === 'metrics' ? 'text-white border-b-2 border-[#8B6F5C]' : 'text-gray-400'
               }`}
             >
               Metrics
@@ -432,7 +432,7 @@ export default function CallRecap({
             <button
               onClick={() => setActiveTab('recommendations')}
               className={`flex-1 py-3 text-sm font-medium transition ${
-                activeTab === 'recommendations' ? 'text-white border-b-2 border-rose-500' : 'text-gray-400'
+                activeTab === 'recommendations' ? 'text-white border-b-2 border-[#8B6F5C]' : 'text-gray-400'
               }`}
             >
               <span className="mr-1">&#10024;</span>
@@ -453,11 +453,11 @@ export default function CallRecap({
                   <p className="text-gray-400 text-sm">Duration</p>
                 </div>
                 <div className="bg-gray-700 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-purple-400">{displayParticipants.length}</p>
+                  <p className="text-2xl font-bold text-[#A89080]">{displayParticipants.length}</p>
                   <p className="text-gray-400 text-sm">Participants</p>
                 </div>
                 <div className="bg-gray-700 rounded-xl p-4 text-center">
-                  <p className="text-2xl font-bold text-purple-400">{messages.length}</p>
+                  <p className="text-2xl font-bold text-[#A89080]">{messages.length}</p>
                   <p className="text-gray-400 text-sm">Messages</p>
                 </div>
               </div>
@@ -481,7 +481,7 @@ export default function CallRecap({
                   </div>
                   {generatingSummary ? (
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                      <div className="w-4 h-4 border-2 border-[#8B6F5C] border-t-transparent rounded-full animate-spin"></div>
                       <p className="text-gray-400 text-sm">Generating summary...</p>
                     </div>
                   ) : aiSummary ? (
@@ -508,14 +508,14 @@ export default function CallRecap({
                       return (
                         <div key={index}>
                           <div className="flex items-baseline gap-2">
-                            <span className="text-purple-400 font-semibold text-sm">{index + 1}.</span>
+                            <span className="text-[#A89080] font-semibold text-sm">{index + 1}.</span>
                             <span className="text-white text-sm font-medium">{topicName}</span>
                           </div>
                           {details.length > 0 && (
                             <div className="ml-5 mt-1 space-y-1">
                               {details.map((detail, di) => (
                                 <div key={di} className="flex items-start gap-2">
-                                  <span className="text-purple-400/60 mt-1">-</span>
+                                  <span className="text-[#A89080]/60 mt-1">-</span>
                                   <span className="text-gray-300 text-sm">{detail}</span>
                                 </div>
                               ))}
@@ -569,7 +569,7 @@ export default function CallRecap({
                               className="w-10 h-10 rounded-full object-cover"
                             />
                           ) : (
-                            <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center">
+                            <div className="w-10 h-10 bg-[#8B6F5C] rounded-full flex items-center justify-center">
                               <span className="text-white font-semibold">
                                 {participant.displayName.charAt(0).toUpperCase()}
                               </span>
@@ -595,7 +595,7 @@ export default function CallRecap({
                               // Update local state immediately
                               setConnectedUserIds(prev => new Set([...prev, participant.id]));
                             }}
-                            className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+                            className="bg-[#8B6F5C] hover:bg-[#6B5344] text-white px-4 py-2 rounded-lg text-sm font-medium transition"
                           >
                             Connect
                           </button>
@@ -650,7 +650,7 @@ export default function CallRecap({
               {transcript.map((entry, index) => (
                 <div key={index} className="bg-gray-700 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-purple-400 text-sm font-medium">
+                    <span className="text-[#A89080] text-sm font-medium">
                       {entry.speakerName || 'Unknown Speaker'}
                     </span>
                     <span className="text-gray-500 text-xs">
@@ -728,7 +728,7 @@ export default function CallRecap({
             <div className="space-y-6">
               {loadingRecs ? (
                 <div className="flex items-center justify-center py-8">
-                  <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-6 h-6 border-2 border-[#8B6F5C] border-t-transparent rounded-full animate-spin"></div>
                   <span className="ml-2 text-gray-400">Loading suggestions...</span>
                 </div>
               ) : (
@@ -795,7 +795,7 @@ export default function CallRecap({
         <div className="p-6 pt-0 flex-shrink-0">
           <button
             onClick={onClose}
-            className="w-full bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white py-3 rounded-xl font-semibold transition"
+            className="w-full bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] hover:from-[#5C4033] hover:to-[#6B5344] text-white py-3 rounded-xl font-semibold transition"
           >
             Done
           </button>
@@ -829,7 +829,7 @@ function ConnectionRecommendationCard({ recommendation, onConnect, onDismiss }) 
               className="w-12 h-12 rounded-full object-cover"
             />
           ) : (
-            <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center">
+            <div className="w-12 h-12 bg-[#8B6F5C] rounded-full flex items-center justify-center">
               <span className="text-white font-semibold text-lg">
                 {getDisplayName(user).charAt(0).toUpperCase()}
               </span>
@@ -855,7 +855,7 @@ function ConnectionRecommendationCard({ recommendation, onConnect, onDismiss }) 
 
       {/* AI Reason */}
       <p className="text-gray-300 text-sm mt-3 mb-2">
-        <span className="text-purple-400">Why connect: </span>
+        <span className="text-[#A89080]">Why connect: </span>
         {recommendation.reason}
       </p>
 
@@ -883,7 +883,7 @@ function ConnectionRecommendationCard({ recommendation, onConnect, onDismiss }) 
           <>
             <button
               onClick={onConnect}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm font-medium transition"
+              className="flex-1 bg-[#8B6F5C] hover:bg-[#6B5344] text-white py-2 rounded-lg text-sm font-medium transition"
             >
               Connect
             </button>
@@ -927,7 +927,7 @@ function GroupRecommendationCard({ recommendation, memberProfiles, onCreateGroup
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-            isFormNew ? 'bg-gradient-to-br from-purple-500 to-pink-500' : 'bg-blue-500'
+            isFormNew ? 'bg-gradient-to-br from-[#8B6F5C] to-[#A89080]' : 'bg-blue-500'
           }`}>
             <span className="text-white text-xl">
               {isFormNew ? '&#43;' : '&#128101;'}
@@ -959,7 +959,7 @@ function GroupRecommendationCard({ recommendation, memberProfiles, onCreateGroup
       {/* Topic badge for form_new */}
       {isFormNew && recommendation.suggested_topic && (
         <div className="mb-2">
-          <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded-full">
+          <span className="bg-[#8B6F5C] text-white text-xs px-2 py-1 rounded-full">
             {recommendation.suggested_topic}
           </span>
         </div>
@@ -975,7 +975,7 @@ function GroupRecommendationCard({ recommendation, memberProfiles, onCreateGroup
 
       {/* AI Reason */}
       <p className="text-gray-300 text-sm mb-3">
-        <span className="text-purple-400">Why: </span>
+        <span className="text-[#A89080]">Why: </span>
         {recommendation.reason}
       </p>
 
@@ -991,7 +991,7 @@ function GroupRecommendationCard({ recommendation, memberProfiles, onCreateGroup
               onClick={isFormNew ? onCreateGroup : onJoinGroup}
               className={`flex-1 py-2 rounded-lg text-sm font-medium transition ${
                 isFormNew
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'
+                  ? 'bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] hover:from-[#5C4033] hover:to-[#6B5344] text-white'
                   : 'bg-blue-600 hover:bg-blue-700 text-white'
               }`}
             >

@@ -83,9 +83,9 @@ export default function IcebreakerDisplay({
 
   if (loading) {
     return (
-      <div className={`bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 ${className}`}>
+      <div className={`bg-gradient-to-br from-[#FDF8F3] to-blue-50 rounded-xl p-6 ${className}`}>
         <div className="flex items-center gap-2 mb-4">
-          <MessageCircle className="text-purple-600" size={20} />
+          <MessageCircle className="text-[#8B6F5C]" size={20} />
           <span className="font-medium text-gray-900">Loading icebreakers...</span>
         </div>
         <div className="animate-pulse h-20 bg-white/50 rounded-lg"></div>
@@ -100,14 +100,14 @@ export default function IcebreakerDisplay({
   const currentIcebreaker = icebreakers[currentIndex];
 
   return (
-    <div className={`bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-6 ${className}`}>
+    <div className={`bg-gradient-to-br from-[#FDF8F3] to-blue-50 rounded-xl p-6 ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <MessageCircle className="text-purple-600" size={20} />
+          <MessageCircle className="text-[#8B6F5C]" size={20} />
           <span className="font-medium text-gray-900">Icebreaker</span>
           {isAI && (
-            <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
+            <span className="flex items-center gap-1 text-xs bg-[#F5EDE4] text-[#6B5344] px-2 py-0.5 rounded-full">
               <Sparkles size={10} />
               AI-generated
             </span>
@@ -134,13 +134,13 @@ export default function IcebreakerDisplay({
       <div className="flex justify-between items-center mt-4">
         <button
           onClick={prevQuestion}
-          className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+          className="text-sm text-[#8B6F5C] hover:text-[#6B5344] font-medium"
         >
           Previous
         </button>
         <button
           onClick={nextQuestion}
-          className="flex items-center gap-1 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+          className="flex items-center gap-1 bg-[#8B6F5C] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#6B5344] transition-colors"
         >
           <RefreshCw size={14} />
           Next Question
@@ -181,9 +181,9 @@ export function IcebreakerInline({ meetupId, className = '' }) {
   if (loading || !icebreaker) return null;
 
   return (
-    <div className={`flex items-start gap-2 p-3 bg-purple-50 rounded-lg ${className}`}>
-      <MessageCircle size={16} className="text-purple-600 mt-0.5 flex-shrink-0" />
-      <p className="text-sm text-purple-900">{icebreaker.question}</p>
+    <div className={`flex items-start gap-2 p-3 bg-[#FDF8F3] rounded-lg ${className}`}>
+      <MessageCircle size={16} className="text-[#8B6F5C] mt-0.5 flex-shrink-0" />
+      <p className="text-sm text-[#5C4033]">{icebreaker.question}</p>
     </div>
   );
 }
@@ -223,7 +223,7 @@ export function IcebreakerList({ meetupId, className = '' }) {
   return (
     <div className={`space-y-2 ${className}`}>
       <h4 className="font-medium text-gray-900 flex items-center gap-2">
-        <MessageCircle size={16} className="text-purple-600" />
+        <MessageCircle size={16} className="text-[#8B6F5C]" />
         Icebreaker Questions
       </h4>
       <ul className="space-y-2">

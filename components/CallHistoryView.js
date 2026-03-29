@@ -197,7 +197,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
   const getCallTypeColor = (callType) => {
     switch (callType) {
       case '1on1': return 'bg-amber-100 text-amber-700';
-      case 'meetup': return 'bg-purple-100 text-purple-700';
+      case 'meetup': return 'bg-[#F5EDE4] text-[#6B5344]';
       case 'group': return 'bg-emerald-100 text-emerald-700';
       default: return 'bg-gray-100 text-gray-700';
     }
@@ -220,7 +220,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#8B6F5C] mx-auto mb-4"></div>
           <p className="text-gray-600">Loading call history...</p>
         </div>
       </div>
@@ -251,7 +251,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
         {/* Recap Card */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           {/* Header */}
-          <div className="bg-gradient-to-r from-purple-600 to-pink-500 p-6 text-white">
+          <div className="bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] p-6 text-white">
             <h2 className="text-2xl font-bold mb-2">Call Recap</h2>
             <p className="opacity-90">{formatDate(selectedRecap.started_at)}</p>
           </div>
@@ -263,11 +263,11 @@ export default function CallHistoryView({ currentUser, supabase }) {
               <p className="text-sm text-gray-500">Duration</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">{selectedRecap.participant_count || 0}</p>
+              <p className="text-2xl font-bold text-[#8B6F5C]">{selectedRecap.participant_count || 0}</p>
               <p className="text-sm text-gray-500">Participants</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-purple-600">{transcript.length}</p>
+              <p className="text-2xl font-bold text-[#8B6F5C]">{transcript.length}</p>
               <p className="text-sm text-gray-500">Transcript Lines</p>
             </div>
           </div>
@@ -277,7 +277,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
             {/* Participants */}
             <div>
               <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-                <Users className="w-5 h-5 mr-2 text-purple-500" />
+                <Users className="w-5 h-5 mr-2 text-[#8B6F5C]" />
                 Participants
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -288,8 +288,8 @@ export default function CallHistoryView({ currentUser, supabase }) {
                       key={id}
                       className="flex items-center bg-gray-100 rounded-full px-3 py-1"
                     >
-                      <div className="w-6 h-6 rounded-full bg-purple-200 flex items-center justify-center mr-2">
-                        <span className="text-xs font-medium text-purple-700">
+                      <div className="w-6 h-6 rounded-full bg-[#EDE6DF] flex items-center justify-center mr-2">
+                        <span className="text-xs font-medium text-[#6B5344]">
                           {(profile?.name || 'U')[0].toUpperCase()}
                         </span>
                       </div>
@@ -310,7 +310,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                   <Sparkles className="w-5 h-5 mr-2 text-yellow-500" />
                   AI Summary
                 </h3>
-                <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-100">
+                <div className="bg-gradient-to-r from-[#FDF8F3] to-[#F5EDE4] rounded-lg p-4 border border-[#F5EDE4]">
                   <p className="text-gray-700 whitespace-pre-wrap">{selectedRecap.ai_summary}</p>
                 </div>
               </div>
@@ -327,7 +327,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                   {transcript.map((entry, index) => (
                     <div key={index} className="flex">
                       <div className="flex-shrink-0 w-24">
-                        <span className="text-sm font-medium text-purple-600">
+                        <span className="text-sm font-medium text-[#8B6F5C]">
                           {entry.speakerName || 'Unknown'}:
                         </span>
                       </div>
@@ -378,12 +378,12 @@ export default function CallHistoryView({ currentUser, supabase }) {
             {(connectionRecs.length > 0 || loadingRecs) && (
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-                  <UserPlus className="w-5 h-5 mr-2 text-purple-500" />
+                  <UserPlus className="w-5 h-5 mr-2 text-[#8B6F5C]" />
                   People to Connect
                 </h3>
                 {loadingRecs ? (
                   <div className="flex items-center justify-center py-4">
-                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-purple-500"></div>
+                    <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-[#8B6F5C]"></div>
                     <span className="ml-2 text-gray-500">Loading suggestions...</span>
                   </div>
                 ) : (
@@ -399,8 +399,8 @@ export default function CallHistoryView({ currentUser, supabase }) {
                                 className="w-10 h-10 rounded-full object-cover"
                               />
                             ) : (
-                              <div className="w-10 h-10 rounded-full bg-purple-200 flex items-center justify-center">
-                                <span className="text-purple-700 font-medium">
+                              <div className="w-10 h-10 rounded-full bg-[#EDE6DF] flex items-center justify-center">
+                                <span className="text-[#6B5344] font-medium">
                                   {(rec.recommended_user?.name || 'U')[0].toUpperCase()}
                                 </span>
                               </div>
@@ -423,7 +423,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                           </span>
                         </div>
                         <p className="text-sm text-gray-600 mt-2">
-                          <span className="text-purple-600">Why connect:</span> {rec.reason}
+                          <span className="text-[#8B6F5C]">Why connect:</span> {rec.reason}
                         </p>
                         {rec.shared_topics?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
@@ -443,7 +443,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                             <>
                               <button
                                 onClick={() => handleConnectFromRec(rec)}
-                                className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
+                                className="bg-[#8B6F5C] hover:bg-[#6B5344] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition"
                               >
                                 Connect
                               </button>
@@ -482,7 +482,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-3">
                             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                              isFormNew ? 'bg-gradient-to-br from-purple-400 to-pink-400' : 'bg-blue-200'
+                              isFormNew ? 'bg-gradient-to-br from-[#8B6F5C] to-[#A89080]' : 'bg-blue-200'
                             }`}>
                               <span className="text-white text-lg">{isFormNew ? '+' : '👥'}</span>
                             </div>
@@ -507,7 +507,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                           </span>
                         </div>
                         {isFormNew && rec.suggested_topic && (
-                          <span className="inline-block bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full mb-2">
+                          <span className="inline-block bg-[#F5EDE4] text-[#6B5344] text-xs px-2 py-1 rounded-full mb-2">
                             {rec.suggested_topic}
                           </span>
                         )}
@@ -517,7 +517,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                           </p>
                         )}
                         <p className="text-sm text-gray-600">
-                          <span className="text-purple-600">Why:</span> {rec.reason}
+                          <span className="text-[#8B6F5C]">Why:</span> {rec.reason}
                         </p>
                         <div className="flex gap-2 mt-3">
                           {rec.status === 'acted' ? (
@@ -530,7 +530,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
                                 onClick={() => isFormNew ? handleCreateGroup(rec) : handleJoinGroup(rec)}
                                 className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
                                   isFormNew
-                                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'
+                                    ? 'bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] hover:from-[#5C4033] hover:to-[#6B5344] text-white'
                                     : 'bg-blue-600 hover:bg-blue-700 text-white'
                                 }`}
                               >
@@ -570,7 +570,7 @@ export default function CallHistoryView({ currentUser, supabase }) {
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-          <Phone className="w-7 h-7 mr-3 text-purple-500" />
+          <Phone className="w-7 h-7 mr-3 text-[#8B6F5C]" />
           Call History
         </h1>
         <p className="text-gray-600 mt-1">View recaps from your past video calls</p>

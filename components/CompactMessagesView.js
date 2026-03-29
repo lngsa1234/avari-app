@@ -214,7 +214,7 @@ export default function CompactMessagesView({ currentUser, onBack }) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="w-8 h-8 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <div className="w-8 h-8 border-4 border-[#8B6F5C] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading...</p>
         </div>
       </div>
@@ -224,7 +224,7 @@ export default function CompactMessagesView({ currentUser, onBack }) {
   return (
     <div className="flex flex-col h-screen bg-white">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 shadow-lg">
+      <div className="bg-gradient-to-r from-[#6B5344] to-[#8B6F5C] text-white p-4 shadow-lg">
         <div className="flex items-center">
           <button onClick={goBack} className="mr-3">
             <ArrowLeft className="w-6 h-6" />
@@ -253,8 +253,8 @@ export default function CompactMessagesView({ currentUser, onBack }) {
                 className="w-full p-4 border-b border-gray-100 active:bg-gray-50 text-left"
               >
                 <div className="flex items-start">
-                  <div className="bg-purple-100 rounded-full p-2 mr-3">
-                    <User className="w-6 h-6 text-purple-600" />
+                  <div className="bg-[#F5EDE4] rounded-full p-2 mr-3">
+                    <User className="w-6 h-6 text-[#8B6F5C]" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
@@ -275,7 +275,7 @@ export default function CompactMessagesView({ currentUser, onBack }) {
                     )}
                   </div>
                   {conv.unreadCount > 0 && (
-                    <div className="bg-purple-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center ml-2">
+                    <div className="bg-[#8B6F5C] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center ml-2">
                       {conv.unreadCount}
                     </div>
                   )}
@@ -297,12 +297,12 @@ export default function CompactMessagesView({ currentUser, onBack }) {
                   <div
                     className={`max-w-[75%] px-4 py-2 rounded-2xl ${
                       isOwn
-                        ? 'bg-purple-600 text-white rounded-br-none'
+                        ? 'bg-[#8B6F5C] text-white rounded-br-none'
                         : 'bg-white text-gray-900 rounded-bl-none shadow'
                     }`}
                   >
                     <p className="text-sm break-words">{message.content}</p>
-                    <p className={`text-xs mt-1 ${isOwn ? 'text-purple-200' : 'text-gray-500'}`}>
+                    <p className={`text-xs mt-1 ${isOwn ? 'text-[#EDE6DF]' : 'text-gray-500'}`}>
                       {formatTime(message.created_at)}
                     </p>
                   </div>
@@ -319,12 +319,12 @@ export default function CompactMessagesView({ currentUser, onBack }) {
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 placeholder="Type a message..."
-                className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:border-purple-500"
+                className="flex-1 px-4 py-3 border border-gray-300 rounded-full focus:outline-none focus:border-[#8B6F5C]"
               />
               <button
                 type="submit"
                 disabled={!newMessage.trim()}
-                className="bg-purple-600 text-white p-3 rounded-full disabled:bg-gray-300"
+                className="bg-[#8B6F5C] text-white p-3 rounded-full disabled:bg-gray-300"
               >
                 <Send className="w-5 h-5" />
               </button>
