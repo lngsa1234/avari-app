@@ -168,6 +168,10 @@ function MainApp({ currentUser, onSignOut }) {
         connectionName: data.scheduleConnectionName || null
       })
     }
+    // Refresh home page coffee chats & meetups when navigating back to home
+    if (view === 'home' && hasLoadedRef.current) {
+      refreshHomeCoffeeChatsRef.current?.()
+    }
     // Lazy-load connections data on first navigate to a view that needs it
     const viewsNeedingConnections = ['meetups', 'connectionGroups', 'discover', 'coffeeChats', 'scheduleMeetup', 'people', 'allPeople', 'profile']
     if (viewsNeedingConnections.includes(view) && !hasLoadedConnectionsRef.current) {
@@ -200,6 +204,7 @@ function MainApp({ currentUser, onSignOut }) {
   const hasLoadedRef = useRef(false)
   const hasLoadedConnectionsRef = useRef(false) // lazy-load connections data on first navigate
   const lazyLoadConnectionsRef = useRef(null) // set after functions are defined
+  const refreshHomeCoffeeChatsRef = useRef(null) // lightweight refresh when returning to home
 
   // DEBUGGING: Detect mount/unmount cycles
   useEffect(() => {
@@ -1688,6 +1693,57 @@ function MainApp({ currentUser, onSignOut }) {
     loadMyInterests()
     loadMeetupPeople()
     loadPotentialConnections()
+  }
+
+  // Lightweight refresh: re-fetch coffee chats + meetups when returning to home
+  refreshHomeCoffeeChatsRef.current = async () => {
+    try {
+      const now = new Date()
+      const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - 1)
+      const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
+
+      const [chatsRes, meetupsRes] = await Promise.all([
+        supabase
+          .from('coffee_chats')
+          .select('*')
+          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
+          .in('status', ['pending', 'accepted', 'scheduled']),
+        supabase
+          .from('meetups')
+          .select('*')
+          .gte('date', cutoff)
+          .order('date', { ascending: true })
+      ])
+
+      if (chatsRes.data) {
+        const chats = chatsRes.data
+        const otherIds = [...new Set(chats.map(c => c.requester_id === currentUser.id ? c.recipient_id : c.requester_id))]
+        let profileMap = {}
+        if (otherIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, name, career, city, state, profile_picture')
+            .in('id', otherIds)
+          if (profiles) profiles.forEach(p => { profileMap[p.id] = p })
+        }
+        const upcoming = chats.filter(chat => {
+          if (!chat.scheduled_time) return true
+          return new Date(chat.scheduled_time) > gracePeriod
+        }).map(chat => {
+          const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
+          return { ...chat, _otherPerson: profileMap[otherId] || null }
+        })
+        setUpcomingCoffeeChats(upcoming)
+      }
+
+      if (meetupsRes.data) {
+        setMeetups(meetupsRes.data)
+      }
+    } catch (err) {
+      console.error('Error refreshing home coffee chats:', err)
+    }
   }
 
   const updateAttendedCount = useCallback(async () => {
@@ -4332,7 +4388,7 @@ function MainApp({ currentUser, onSignOut }) {
           <div className="max-w-4xl mx-auto px-2 md:px-6">
             <div className="flex items-center gap-1 py-1.5">
               <button
-                onClick={() => setCurrentView('home')}
+                onClick={() => handleNavigate('home')}
                 className={`flex-1 md:flex-none flex items-center justify-center gap-[5px] md:gap-[7px] px-3 md:px-4 py-3 text-xs md:text-sm font-medium whitespace-nowrap rounded-full transition-all duration-[250ms] min-h-[44px] ${
                   currentView === 'home'
                     ? 'bg-[#5E4530] text-[#FAF5EF]'

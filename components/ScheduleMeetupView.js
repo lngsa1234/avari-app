@@ -1004,7 +1004,7 @@ export default function ScheduleMeetupView({
                   const eventId = createdEvent.id;
                   setCreatedEvent(null);
                   if (isCoffee) {
-                    onNavigate?.(previousView || 'meetups');
+                    onNavigate?.('meetups');
                   } else {
                     onNavigate?.('eventDetail', { meetupId: eventId });
                   }
