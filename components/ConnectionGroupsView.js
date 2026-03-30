@@ -23,6 +23,7 @@ import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
 import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
 import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
   const [isMobile, setIsMobile] = useState(() => {
@@ -978,9 +979,39 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   if (loading && !hasRenderedOnce.current) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner}></div>
-        <p style={styles.loadingText}>Loading your circles...</p>
+      <div style={{ padding: isMobile ? '16px' : '24px' }}>
+        {/* Skeleton: connections row */}
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ width: '160px', height: '20px', borderRadius: '6px', background: '#EDE6DF', marginBottom: '16px', animation: 'pulse 1.5s infinite' }} />
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#EDE6DF', animation: 'pulse 1.5s infinite' }} />
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: '#EDE6DF', animation: 'pulse 1.5s infinite', animationDelay: '0.15s' }} />
+          </div>
+        </div>
+        {/* Skeleton: circle card */}
+        <div style={{ width: '180px', height: '20px', borderRadius: '6px', background: '#EDE6DF', marginBottom: '12px', animation: 'pulse 1.5s infinite' }} />
+        <div style={{ background: 'rgba(255,255,255,0.5)', borderRadius: '16px', padding: '16px', border: '1px solid rgba(139,111,92,0.08)', display: 'flex', gap: '14px', alignItems: 'center', animation: 'pulse 1.5s infinite', animationDelay: '0.1s' }}>
+          <div style={{ width: '80px', height: '80px', borderRadius: '12px', background: '#EDE6DF', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ width: '70%', height: '16px', borderRadius: '6px', background: '#EDE6DF', marginBottom: '8px' }} />
+            <div style={{ width: '50%', height: '12px', borderRadius: '4px', background: '#F5EDE4' }} />
+          </div>
+        </div>
+        {/* Skeleton: recommend cards */}
+        <div style={{ width: '200px', height: '20px', borderRadius: '6px', background: '#EDE6DF', margin: '24px 0 12px', animation: 'pulse 1.5s infinite' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
+          {[0, 1].map(i => (
+            <div key={i} style={{ background: 'rgba(255,255,255,0.5)', borderRadius: '16px', padding: '16px', border: '1px solid rgba(139,111,92,0.08)', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.15}s` }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#EDE6DF' }} />
+                <div>
+                  <div style={{ width: '100px', height: '14px', borderRadius: '4px', background: '#EDE6DF', marginBottom: '6px' }} />
+                  <div style={{ width: '70px', height: '10px', borderRadius: '4px', background: '#F5EDE4' }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
         <style>{keyframeStyles}</style>
       </div>
     );

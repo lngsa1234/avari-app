@@ -840,18 +840,39 @@ export default function NetworkDiscoverView({
 
   if (loading && connectionGroups.length === 0) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            border: `4px solid ${colors.primary}`,
-            borderTopColor: 'transparent',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 16px'
-          }} />
-          <p style={{ color: colors.textLight }}>Loading network...</p>
+      <div style={{ padding: isMobile ? '16px' : '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <div style={{ width: '220px', height: '24px', borderRadius: '8px', background: '#EDE6DF', marginBottom: '6px', animation: 'pulse 1.5s infinite' }} />
+            <div style={{ width: '280px', height: '12px', borderRadius: '6px', background: '#F5EDE4', animation: 'pulse 1.5s infinite', animationDelay: '0.1s' }} />
+          </div>
+          <div style={{ width: '110px', height: '40px', borderRadius: '12px', background: '#EDE6DF', animation: 'pulse 1.5s infinite' }} />
+        </div>
+        {/* Trending requests skeleton */}
+        <div style={{ width: '180px', height: '20px', borderRadius: '6px', background: '#EDE6DF', marginBottom: '12px', animation: 'pulse 1.5s infinite' }} />
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            padding: '14px 16px', marginBottom: '6px', borderRadius: '12px',
+            background: 'rgba(255,255,255,0.5)', border: '1px solid rgba(139,111,92,0.06)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.12}s`,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#EDE6DF' }} />
+              <div style={{ width: `${140 + i * 20}px`, height: '14px', borderRadius: '6px', background: '#EDE6DF' }} />
+            </div>
+            <div style={{ width: '70px', height: '32px', borderRadius: '8px', background: '#EDE6DF' }} />
+          </div>
+        ))}
+        {/* Circles skeleton */}
+        <div style={{ width: '160px', height: '20px', borderRadius: '6px', background: '#EDE6DF', margin: '24px 0 12px', animation: 'pulse 1.5s infinite' }} />
+        <div style={{ background: 'rgba(255,255,255,0.5)', borderRadius: '16px', padding: '16px', border: '1px solid rgba(139,111,92,0.08)', display: 'flex', gap: '14px', animation: 'pulse 1.5s infinite', animationDelay: '0.15s' }}>
+          <div style={{ width: '120px', height: '120px', borderRadius: '12px', background: '#EDE6DF', flexShrink: 0 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ width: '70%', height: '16px', borderRadius: '6px', background: '#EDE6DF', marginBottom: '8px' }} />
+            <div style={{ width: '90%', height: '12px', borderRadius: '4px', background: '#F5EDE4', marginBottom: '6px' }} />
+            <div style={{ width: '60%', height: '12px', borderRadius: '4px', background: '#F5EDE4' }} />
+          </div>
         </div>
       </div>
     );

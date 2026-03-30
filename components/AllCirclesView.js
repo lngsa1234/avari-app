@@ -7,6 +7,7 @@ import {
   Search, Users, ChevronLeft, ChevronRight, X, Check, Clock, Heart,
 } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 
 const colors = {
   mocha: tokens.tagText,
@@ -32,8 +33,6 @@ const COVER_ICONS = ['🚀', '🤖', '🛠️', '💰', '🎨', '🌱', '🌸', 
 const AVATAR_COLORS = ['#7A5C44', '#4A7A5C', '#6A5A8A', '#A06030', '#7A5A8A', '#6B4F3A', '#C4A882'];
 
 export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
-  const [circles, setCircles] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -46,18 +45,17 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  useEffect(() => { loadCircles(); }, []);
-
-  const loadCircles = async () => {
-    setLoading(true);
-    try {
-      const { data: groupsData, error } = await supabase
+  const { data: circles = [], isLoading: loading, mutate: refreshCircles } = useSupabaseQuery(
+    currentUser ? 'all-circles' : null,
+    async (sb) => {
+      try {
+      const { data: groupsData, error } = await sb
         .from('connection_groups')
         .select('id, name, description, creator_id, is_active, vibe_category, cadence, meeting_day, max_members, created_at, image_url')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (error || !groupsData?.length) { setCircles([]); setLoading(false); return; }
+      if (error || !groupsData?.length) return [];
 
       const groupIds = groupsData.map(g => g.id);
       const [membersRes, creatorsRes] = await Promise.all([
@@ -97,10 +95,11 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
           freq: group.cadence || 'Flexible',
         };
       });
-      setCircles(enriched);
-    } catch (e) { console.error('Error loading circles:', e); setCircles([]); }
-    setLoading(false);
-  };
+      return enriched;
+    } catch (e) { console.error('Error loading circles:', e); return []; }
+  });
+
+  const loadCircles = async () => { await refreshCircles(); };
 
   const mapVibeToCategory = (vibe) => {
     const map = { advice: 'Career', peers: 'Wellness', grow: 'Business' };

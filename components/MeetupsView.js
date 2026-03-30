@@ -976,9 +976,32 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
   if (loading) {
     return (
-      <div style={styles.loadingContainer}>
-        <div style={styles.loadingSpinner}></div>
-        <p style={styles.loadingText}>Loading your meetups...</p>
+      <div style={{ padding: isMobile ? '16px' : '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <div>
+            <div style={{ width: '200px', height: '28px', borderRadius: '8px', background: '#EDE6DF', marginBottom: '8px', animation: 'pulse 1.5s infinite' }} />
+            <div style={{ width: '260px', height: '14px', borderRadius: '6px', background: '#F5EDE4', animation: 'pulse 1.5s infinite', animationDelay: '0.1s' }} />
+          </div>
+          <div style={{ width: '180px', height: '44px', borderRadius: '12px', background: '#EDE6DF', animation: 'pulse 1.5s infinite' }} />
+        </div>
+        <div style={{ display: 'flex', gap: '4px', marginBottom: '16px' }}>
+          <div style={{ width: '90px', height: '44px', borderRadius: '10px', background: '#D4C4B0', animation: 'pulse 1.5s infinite' }} />
+          <div style={{ width: '60px', height: '44px', borderRadius: '10px', background: '#EDE6DF', animation: 'pulse 1.5s infinite', animationDelay: '0.1s' }} />
+        </div>
+        {[0, 1, 2].map(i => (
+          <div key={i} style={{
+            display: 'flex', gap: '14px', alignItems: 'center',
+            padding: '16px', marginBottom: '8px', borderRadius: '14px',
+            background: 'rgba(255,255,255,0.4)', border: '1px solid rgba(139,111,92,0.06)',
+            animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.15}s`,
+          }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EDE6DF', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ width: '65%', height: '14px', borderRadius: '6px', background: '#EDE6DF', marginBottom: '6px' }} />
+              <div style={{ width: '45%', height: '10px', borderRadius: '4px', background: '#F5EDE4' }} />
+            </div>
+          </div>
+        ))}
         <style>{keyframeStyles}</style>
       </div>
     );
