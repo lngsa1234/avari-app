@@ -27,8 +27,10 @@ export function useSupabaseQuery(key, queryFn, opts = {}) {
     () => queryFn(supabase),
     {
       revalidateOnFocus: false,
-      revalidateOnReconnect: true,
-      dedupingInterval: 30000,
+      revalidateOnReconnect: false,
+      revalidateIfStale: false,
+      dedupingInterval: 60000,
+      keepPreviousData: true,
       errorRetryCount: 2,
       ...opts,
     }

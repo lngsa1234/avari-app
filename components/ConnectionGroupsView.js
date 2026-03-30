@@ -1024,7 +1024,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 key={user.id}
                 style={{
                   ...styles.slideCard,
-                  animationDelay: `${index * 0.1}s`
                 }}
                 className="circles-slide-card"
                 onClick={() => setSelectedUser(user)}
@@ -1131,7 +1130,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         overflow: 'hidden', display: 'flex', alignItems: 'stretch',
                         cursor: 'pointer',
                         transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                        animationDelay: `${index * 0.12}s`,
                       }}
                       onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(61,46,34,0.15)'; }}
                       onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 24px rgba(61,46,34,0.11)'; }}
@@ -2300,9 +2298,7 @@ const styles = {
     backgroundColor: 'transparent',
     borderRadius: '16px',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    animation: 'fadeInUp 0.5s ease-out forwards',
-    opacity: 0,
+    transition: 'background-color 0.2s ease',
     flexShrink: 0,
   },
   slideAvatarContainer: {
