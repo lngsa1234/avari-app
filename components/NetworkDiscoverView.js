@@ -2,9 +2,10 @@
 // Network discovery page with Vibe Bar, Recommended Section, and Dynamic Results Feed
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { parseLocalDate, isEventPast, formatEventTime, formatEventDate } from '../lib/dateUtils';
 import { requestToJoinGroup } from '@/lib/connectionRecommendationHelpers';
+import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 import {
   Search,
   Calendar,
@@ -173,12 +174,6 @@ export default function NetworkDiscoverView({
   toast,
 }) {
   const [selectedVibe, setSelectedVibe] = useState('peers');
-  const [connectionGroups, setConnectionGroups] = useState([]);
-  const [meetupRequests, setMeetupRequests] = useState([]);
-  const [peerSuggestions, setPeerSuggestions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const hasLoadedRef = useRef(false);
-  const [socialProofStats, setSocialProofStats] = useState({ activeThisWeek: 0, meetupsThisWeek: 0 });
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestTopic, setRequestTopic] = useState('');
   const [requestDescription, setRequestDescription] = useState('');
@@ -186,16 +181,188 @@ export default function NetworkDiscoverView({
   const [showAllRequests, setShowAllRequests] = useState(false);
   const [deletingRequestId, setDeletingRequestId] = useState(null);
   const [sentRequests, setSentRequests] = useState(new Set()); // Track sent connection requests
-  const [userRsvps, setUserRsvps] = useState(new Set()); // Track user's RSVPs
   const [rsvpLoading, setRsvpLoading] = useState({});
   const [circleJoinState, setCircleJoinState] = useState({}); // { [circleId]: 'idle' | 'loading' | 'joined' | 'requested' }
-  const [meetupSignups, setMeetupSignups] = useState({});
   const [searchText, setSearchText] = useState('');
   const [selectedChips, setSelectedChips] = useState([]);
   const [searchFocused, setSearchFocused] = useState(false);
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
   const [placeholderVisible, setPlaceholderVisible] = useState(true);
   const [expandedCircleId, setExpandedCircleId] = useState(null);
+
+  // --- SWR data-loading queries (all grouped before useMemo hooks) ---
+
+  const { data: connectionGroups = [], isLoading: isLoadingGroups } = useSupabaseQuery(
+    'discover-connection-groups',
+    async (sb) => {
+      const { data: groups, error } = await sb
+        .from('connection_groups')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      if (error || !groups || groups.length === 0) return [];
+
+      const groupIds = groups.map(g => g.id);
+      const { data: allMembers, error: membersError } = await sb
+        .from('connection_group_members')
+        .select('id, group_id, user_id, status')
+        .in('group_id', groupIds)
+        .eq('status', 'accepted');
+
+      const memberUserIds = [...new Set((allMembers || []).map(m => m.user_id))];
+      let profileMap = {};
+
+      if (memberUserIds.length > 0) {
+        const { data: profiles } = await sb
+          .from('profiles')
+          .select('id, name, career, profile_picture')
+          .in('id', memberUserIds);
+
+        profileMap = (profiles || []).reduce((acc, p) => {
+          acc[p.id] = p;
+          return acc;
+        }, {});
+      }
+
+      return groups.map(g => ({
+        ...g,
+        members: (allMembers || [])
+          .filter(m => m.group_id === g.id)
+          .map(m => ({
+            ...m,
+            user: profileMap[m.user_id] || null
+          }))
+      }));
+    }
+  );
+
+  const { data: meetupRequests = [], isLoading: isLoadingRequests } = useSupabaseQuery(
+    'discover-meetup-requests',
+    async (sb) => {
+      const { data, error } = await sb
+        .from('meetup_requests')
+        .select('*')
+        .eq('status', 'open')
+        .order('supporter_count', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error || !data || data.length === 0) return [];
+
+      const userIds = [...new Set(data.map(r => r.user_id))];
+      const { data: profiles } = await sb
+        .from('profiles')
+        .select('id, name')
+        .in('id', userIds);
+
+      const profileMap = (profiles || []).reduce((acc, p) => {
+        acc[p.id] = p;
+        return acc;
+      }, {});
+
+      const requestIds = data.map(r => r.id);
+      const { data: allSupporters } = await sb
+        .from('meetup_request_supporters')
+        .select('request_id, user_id')
+        .in('request_id', requestIds);
+
+      const supporterUserIds = [...new Set((allSupporters || []).map(s => s.user_id))];
+      let supporterProfileMap = {};
+      if (supporterUserIds.length > 0) {
+        const { data: supporterProfiles } = await sb
+          .from('profiles')
+          .select('id, name, profile_picture')
+          .in('id', supporterUserIds);
+        supporterProfileMap = (supporterProfiles || []).reduce((acc, p) => { acc[p.id] = p; return acc; }, {});
+      }
+
+      const supportersByRequest = {};
+      (allSupporters || []).forEach(s => {
+        if (!supportersByRequest[s.request_id]) supportersByRequest[s.request_id] = [];
+        supportersByRequest[s.request_id].push({ ...s, profile: supporterProfileMap[s.user_id] || null });
+      });
+
+      return data.map(r => ({
+        ...r,
+        user: profileMap[r.user_id] || null,
+        supporters: supportersByRequest[r.id] || [],
+      }));
+    }
+  );
+
+  const { data: socialProofStats = { activeThisWeek: 0, meetupsThisWeek: 0 } } = useSupabaseQuery(
+    'discover-social-proof',
+    async (sb) => {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+      const { count: activeCount } = await sb
+        .from('meetup_signups')
+        .select('user_id', { count: 'exact', head: true })
+        .gte('created_at', oneWeekAgo.toISOString());
+
+      const { count: meetupCount } = await sb
+        .from('meetups')
+        .select('id', { count: 'exact', head: true })
+        .gte('date', oneWeekAgo.toISOString().split('T')[0]);
+
+      return {
+        activeThisWeek: activeCount || 0,
+        meetupsThisWeek: meetupCount || 0,
+      };
+    }
+  );
+
+  const { data: userRsvps = new Set(), isLoading: isLoadingRsvps } = useSupabaseQuery(
+    currentUser?.id ? `discover-user-rsvps-${currentUser.id}` : null,
+    async (sb) => {
+      const { data, error } = await sb
+        .from('meetup_signups')
+        .select('meetup_id')
+        .eq('user_id', currentUser.id);
+
+      if (!error && data) {
+        return new Set(data.map(r => r.meetup_id));
+      }
+      return new Set();
+    }
+  );
+
+  const { data: meetupSignups = {}, isLoading: isLoadingSignups } = useSupabaseQuery(
+    'discover-meetup-signups',
+    async (sb) => {
+      const { data: signupsData, error: signupsError } = await sb
+        .from('meetup_signups')
+        .select('*');
+
+      if (signupsError || !signupsData || signupsData.length === 0) return {};
+
+      const userIds = [...new Set(signupsData.map(s => s.user_id))];
+      const { data: profilesData } = await sb
+        .from('profiles')
+        .select('id, name, profile_picture')
+        .in('id', userIds);
+
+      const profilesMap = {};
+      if (profilesData) {
+        profilesData.forEach(p => { profilesMap[p.id] = p; });
+      }
+
+      const byMeetup = {};
+      signupsData.forEach(s => {
+        if (!byMeetup[s.meetup_id]) byMeetup[s.meetup_id] = [];
+        byMeetup[s.meetup_id].push({
+          ...s,
+          profile: profilesMap[s.user_id] || null,
+        });
+      });
+      return byMeetup;
+    }
+  );
+
+  // Derive loading from SWR flags
+  const loading = isLoadingGroups || isLoadingRequests;
 
   const { width: windowWidth } = useWindowSize();
   const isMobile = windowWidth < 480;
@@ -255,79 +422,6 @@ export default function NetworkDiscoverView({
 
   const hasInput = searchText.length > 0 || selectedChips.length > 0;
 
-  useEffect(() => {
-    if (hasLoadedRef.current) return;
-    hasLoadedRef.current = true;
-    loadData();
-  }, [selectedVibe]);
-
-  // Load user's RSVPs on mount
-  useEffect(() => {
-    loadUserRsvps();
-  }, [currentUser.id]);
-
-  const loadMeetupSignups = async () => {
-    const t0 = Date.now();
-    try {
-      const { data: signupsData, error: signupsError } = await supabase
-        .from('meetup_signups')
-        .select('*');
-
-      if (signupsError || !signupsData || signupsData.length === 0) return;
-
-      const userIds = [...new Set(signupsData.map(s => s.user_id))];
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, name, profile_picture')
-        .in('id', userIds);
-
-      const profilesMap = {};
-      if (profilesData) {
-        profilesData.forEach(p => { profilesMap[p.id] = p; });
-      }
-
-      console.log('🔍 Signups count:', signupsData.length);
-      console.log('🔍 User IDs:', userIds);
-      console.log('🔍 Profiles loaded:', profilesData);
-      console.log('🔍 Profiles map:', profilesMap);
-
-      const byMeetup = {};
-      signupsData.forEach(s => {
-        if (!byMeetup[s.meetup_id]) byMeetup[s.meetup_id] = [];
-        byMeetup[s.meetup_id].push({
-          ...s,
-          profile: profilesMap[s.user_id] || null,
-        });
-      });
-      console.log('🔍 Final meetupSignups:', byMeetup);
-      setMeetupSignups(byMeetup);
-      console.log(`⏱️ Discover: loadMeetupSignups in ${Date.now() - t0}ms`);
-    } catch (err) {
-      console.error('Error loading meetup signups:', err);
-    }
-  };
-
-  useEffect(() => {
-    loadMeetupSignups();
-  }, [supabase]);
-
-  const loadUserRsvps = async () => {
-    const t0 = Date.now();
-    try {
-      const { data, error } = await supabase
-        .from('meetup_signups')
-        .select('meetup_id')
-        .eq('user_id', currentUser.id);
-
-      if (!error && data) {
-        setUserRsvps(new Set(data.map(r => r.meetup_id)));
-      }
-      console.log(`⏱️ Discover: loadUserRsvps in ${Date.now() - t0}ms`);
-    } catch (err) {
-      console.error('Error loading user RSVPs:', err);
-    }
-  };
-
   const handleRsvp = async (meetupId) => {
     if (!meetupId || rsvpLoading[meetupId]) return;
 
@@ -344,12 +438,6 @@ export default function NetworkDiscoverView({
           .eq('user_id', currentUser.id);
 
         if (error) throw error;
-
-        setUserRsvps(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(meetupId);
-          return newSet;
-        });
       } else {
         // Add RSVP (defaults to video; user can change from EventDetailView for hybrid events)
         const { error } = await supabase
@@ -361,12 +449,11 @@ export default function NetworkDiscoverView({
           });
 
         if (error) throw error;
-
-        setUserRsvps(prev => new Set([...prev, meetupId]));
       }
 
       // Reload data to update attendee counts
-      await loadMeetupSignups();
+      invalidateQuery('discover-meetup-signups');
+      invalidateQuery(`discover-user-rsvps-${currentUser.id}`);
     } catch (err) {
       console.error('Error handling RSVP:', err);
       toast?.error('Failed to update RSVP. Please try again.');
@@ -375,268 +462,6 @@ export default function NetworkDiscoverView({
     }
   };
 
-  const loadData = async () => {
-    const t0 = Date.now();
-    setLoading(true);
-    try {
-      await Promise.all([
-        loadConnectionGroups().then(() => console.log(`⏱️ Discover: loadConnectionGroups in ${Date.now() - t0}ms`)),
-        loadMeetupRequests().then(() => console.log(`⏱️ Discover: loadMeetupRequests in ${Date.now() - t0}ms`)),
-        loadSocialProofStats().then(() => console.log(`⏱️ Discover: loadSocialProofStats in ${Date.now() - t0}ms`))
-      ]);
-    } catch (error) {
-      console.error('Error loading network data:', error);
-    }
-    console.log(`⏱️ Discover page data loaded in ${Date.now() - t0}ms`);
-    setLoading(false);
-  };
-
-  const loadConnectionGroups = async () => {
-    try {
-      const { data: groups, error } = await supabase
-        .from('connection_groups')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(30);
-
-      console.log('[Circles] Fetched groups:', groups?.length, 'error:', error);
-
-      if (error) {
-        console.error('Error fetching connection groups:', error);
-        setConnectionGroups([]);
-        return;
-      }
-
-      if (!groups || groups.length === 0) {
-        console.log('[Circles] No active groups found');
-        setConnectionGroups([]);
-        return;
-      }
-
-      const groupIds = groups.map(g => g.id);
-      const { data: allMembers, error: membersError } = await supabase
-        .from('connection_group_members')
-        .select('id, group_id, user_id, status')
-        .in('group_id', groupIds)
-        .eq('status', 'accepted');
-
-      console.log('[Circles] Members fetched:', allMembers?.length, 'error:', membersError);
-      if (membersError) {
-        console.error('Error fetching group members:', membersError);
-      }
-
-      const memberUserIds = [...new Set((allMembers || []).map(m => m.user_id))];
-      let profileMap = {};
-
-      if (memberUserIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name, career, profile_picture')
-          .in('id', memberUserIds);
-
-        profileMap = (profiles || []).reduce((acc, p) => {
-          acc[p.id] = p;
-          return acc;
-        }, {});
-      }
-
-      let enrichedGroups = groups.map(g => ({
-        ...g,
-        members: (allMembers || [])
-          .filter(m => m.group_id === g.id)
-          .map(m => ({
-            ...m,
-            user: profileMap[m.user_id] || null
-          }))
-      }));
-
-      console.log('[Circles] Setting state:', enrichedGroups.length);
-      setConnectionGroups(enrichedGroups);
-    } catch (error) {
-      console.error('Error loading connection groups:', error);
-      setConnectionGroups([]);
-    }
-  };
-
-  const loadMeetupRequests = async () => {
-    try {
-      // Fetch all open requests — sort by votes, then recency for new ones
-      const { data, error } = await supabase
-        .from('meetup_requests')
-        .select('*')
-        .eq('status', 'open')
-        .order('supporter_count', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching meetup requests:', error);
-        setMeetupRequests([]);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const userIds = [...new Set(data.map(r => r.user_id))];
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, name')
-          .in('id', userIds);
-
-        const profileMap = (profiles || []).reduce((acc, p) => {
-          acc[p.id] = p;
-          return acc;
-        }, {});
-
-        const requestIds = data.map(r => r.id);
-        const { data: allSupporters } = await supabase
-          .from('meetup_request_supporters')
-          .select('request_id, user_id')
-          .in('request_id', requestIds);
-
-        // Fetch supporter profiles for avatars
-        const supporterUserIds = [...new Set((allSupporters || []).map(s => s.user_id))];
-        let supporterProfileMap = {};
-        if (supporterUserIds.length > 0) {
-          const { data: supporterProfiles } = await supabase
-            .from('profiles')
-            .select('id, name, profile_picture')
-            .in('id', supporterUserIds);
-          supporterProfileMap = (supporterProfiles || []).reduce((acc, p) => { acc[p.id] = p; return acc; }, {});
-        }
-
-        // Group supporters by request
-        const supportersByRequest = {};
-        (allSupporters || []).forEach(s => {
-          if (!supportersByRequest[s.request_id]) supportersByRequest[s.request_id] = [];
-          supportersByRequest[s.request_id].push({ ...s, profile: supporterProfileMap[s.user_id] || null });
-        });
-
-        let requests = data.map(r => ({
-          ...r,
-          user: profileMap[r.user_id] || null,
-          supporters: supportersByRequest[r.id] || [],
-        }));
-
-        setMeetupRequests(requests);
-      } else {
-        setMeetupRequests([]);
-      }
-    } catch (error) {
-      console.error('Error loading meetup requests:', error);
-      setMeetupRequests([]);
-    }
-  };
-
-  const loadPeerSuggestions = async () => {
-    try {
-      // Parallel: fetch profiles, mutual matches, and my interests at the same time
-      const [profilesResult, mutualResult, interestsResult] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, name, career, city, state, hook, industry, career_stage, profile_picture, open_to_coffee_chat')
-          .neq('id', currentUser.id)
-          .not('name', 'is', null)
-          .limit(50),
-        supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
-        supabase
-          .from('user_interests')
-          .select('interested_in_user_id')
-          .eq('user_id', currentUser.id)
-      ]);
-
-      const { data, error } = profilesResult;
-      if (error) {
-        console.error('Error fetching peer suggestions:', error);
-        setPeerSuggestions([]);
-        return;
-      }
-
-      // Filter out connected users (from connections prop + mutual matches)
-      const connectedIds = new Set(connections.map(c => c.connected_user_id || c.id));
-      const myMatchIds = new Set((mutualResult.data || []).map(m => m.matched_user_id));
-      const myInterestIds = new Set((interestsResult.data || []).map(i => i.interested_in_user_id));
-
-      // Exclude connections, mutual matches, and already-requested users
-      const suggestions = (data || []).filter(u =>
-        !connectedIds.has(u.id) && !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
-      );
-      const suggestionIds = suggestions.map(s => s.id);
-
-      // Get mutual circles
-      let userCircleCount = {};
-      if (suggestionIds.length > 0) {
-        const { data: myCircles } = await supabase
-          .from('connection_group_members')
-          .select('group_id')
-          .eq('user_id', currentUser.id)
-          .eq('status', 'accepted');
-        const myCircleIds = (myCircles || []).map(c => c.group_id);
-
-        if (myCircleIds.length > 0) {
-          const { data: sharedMembers } = await supabase
-            .from('connection_group_members')
-            .select('user_id, group_id')
-            .in('group_id', myCircleIds)
-            .in('user_id', suggestionIds)
-            .eq('status', 'accepted');
-
-          (sharedMembers || []).forEach(m => {
-            if (!userCircleCount[m.user_id]) userCircleCount[m.user_id] = new Set();
-            userCircleCount[m.user_id].add(m.group_id);
-          });
-        }
-      }
-
-      // Get mutual connections - use user_interests to find shared connections
-      // instead of calling get_mutual_matches RPC per user in a loop
-      let userMutualConnections = {};
-      if (suggestionIds.length > 0 && myMatchIds.size > 0) {
-        const myMatchArray = [...myMatchIds];
-        // Find which of my matches have mutual interest with each suggestion
-        const { data: theirInterests } = await supabase
-          .from('user_interests')
-          .select('user_id, interested_in_user_id')
-          .in('user_id', suggestionIds)
-          .in('interested_in_user_id', myMatchArray);
-        const { data: interestedInThem } = await supabase
-          .from('user_interests')
-          .select('user_id, interested_in_user_id')
-          .in('interested_in_user_id', suggestionIds)
-          .in('user_id', myMatchArray);
-
-        // Build bidirectional interest map for suggestions
-        const interestPairs = new Map(); // personId -> Set of myMatch ids they're mutual with
-        (theirInterests || []).forEach(i => {
-          const key = `${i.user_id}-${i.interested_in_user_id}`;
-          if (!interestPairs.has(key)) interestPairs.set(key, { from: i.user_id, to: i.interested_in_user_id });
-        });
-        (interestedInThem || []).forEach(i => {
-          const reverseKey = `${i.interested_in_user_id}-${i.user_id}`;
-          if (interestPairs.has(reverseKey)) {
-            // Mutual match found between suggestion and one of my matches
-            const personId = i.interested_in_user_id;
-            userMutualConnections[personId] = (userMutualConnections[personId] || 0) + 1;
-          }
-        });
-      }
-
-      const enriched = suggestions.map(person => ({
-        ...person,
-        mutualCircles: userCircleCount[person.id] ? userCircleCount[person.id].size : 0,
-        mutualConnections: userMutualConnections[person.id] || 0,
-      })).sort((a, b) => {
-        // Priority: mutual connections > open to coffee chat > others
-        const scoreA = (a.mutualConnections * 4) + (a.mutualCircles * 2) + (a.open_to_coffee_chat ? 1 : 0);
-        const scoreB = (b.mutualConnections * 4) + (b.mutualCircles * 2) + (b.open_to_coffee_chat ? 1 : 0);
-        return scoreB - scoreA;
-      }).slice(0, 20);
-
-      setPeerSuggestions(enriched);
-    } catch (error) {
-      console.error('Error loading peer suggestions:', error);
-      setPeerSuggestions([]);
-    }
-  };
 
   const handleConnect = async (personId) => {
     if (!currentUser?.id || sentRequests.has(personId)) return;
@@ -664,30 +489,6 @@ export default function NetworkDiscoverView({
     }
   };
 
-  const loadSocialProofStats = async () => {
-    try {
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-      const { count: activeCount } = await supabase
-        .from('meetup_signups')
-        .select('user_id', { count: 'exact', head: true })
-        .gte('created_at', oneWeekAgo.toISOString());
-
-      const { count: meetupCount } = await supabase
-        .from('meetups')
-        .select('id', { count: 'exact', head: true })
-        .gte('date', oneWeekAgo.toISOString().split('T')[0]);
-
-      setSocialProofStats({
-        activeThisWeek: activeCount || 0,
-        meetupsThisWeek: meetupCount || 0
-      });
-    } catch (error) {
-      console.error('Error loading social proof stats:', error);
-    }
-  };
-
   const handleSupportRequest = async (requestId) => {
     try {
       const { error } = await supabase
@@ -702,7 +503,7 @@ export default function NetworkDiscoverView({
       }
 
       await supabase.rpc('increment_request_supporters', { request_id: requestId });
-      await loadMeetupRequests();
+      invalidateQuery('discover-meetup-requests');
     } catch (error) {
       console.error('Error supporting request:', error);
     }
@@ -713,7 +514,7 @@ export default function NetworkDiscoverView({
       await supabase.from('meetup_request_supporters').delete().eq('request_id', requestId);
       await supabase.from('meetup_requests').delete().eq('id', requestId);
       setDeletingRequestId(null);
-      await loadMeetupRequests();
+      invalidateQuery('discover-meetup-requests');
     } catch (error) {
       console.error('Error deleting request:', error);
     }
@@ -754,7 +555,7 @@ export default function NetworkDiscoverView({
       setRequestDescription('');
       setRequestVibe('grow');
 
-      await loadMeetupRequests();
+      invalidateQuery('discover-meetup-requests');
       toast?.success('Request submitted! Others can now support your idea.');
     } catch (error) {
       console.error('Error submitting request:', error);
@@ -1765,6 +1566,7 @@ export default function NetworkDiscoverView({
                                   const result = await requestToJoinGroup(supabase, circle.id, currentUser.id);
                                   if (result.success) {
                                     setCircleJoinState(prev => ({ ...prev, [circle.id]: 'requested' }));
+                                    invalidateQuery('discover-connection-groups');
                                     toast?.success('Request sent!');
                                   } else {
                                     const errMsg = typeof result.error === 'string' ? result.error : result.error?.message || String(result.error || '');

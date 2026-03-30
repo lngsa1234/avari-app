@@ -9,8 +9,6 @@ import {
   checkGroupEligibility,
   getEligibleConnections,
   createConnectionGroup,
-  getMyConnectionGroups,
-  getPendingGroupInvites,
   acceptGroupInvite,
   declineGroupInvite,
   createConnectionGroupRoom,
@@ -19,11 +17,11 @@ import {
   getGroupMessages,
   deleteGroupMessage
 } from '@/lib/connectionGroupHelpers';
-import { isUserActive, countActiveUsers } from '@/lib/activityHelpers';
+import { isUserActive } from '@/lib/activityHelpers';
 import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
 import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
-import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
+import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
 export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
   const [isMobile, setIsMobile] = useState(() => {
@@ -37,17 +35,12 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const [connectionGroups, setConnectionGroups] = useState([]);
   const [showChatModal, setShowChatModal] = useState(false);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupMessages, setGroupMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
-  const [groupInvites, setGroupInvites] = useState([]);
-  const [pendingJoinRequests, setPendingJoinRequests] = useState([]);
-  const [sentCircleInvites, setSentCircleInvites] = useState([]);
   const [eligibleConnections, setEligibleConnections] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showAllCircles, setShowAllCircles] = useState(false);
   const [createSuccess, setCreateSuccess] = useState(null);
@@ -55,59 +48,427 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const [groupDescription, setGroupDescription] = useState('');
   const [selectedConnections, setSelectedConnections] = useState([]);
 
-  // Use connections from props, add online status
-  const [connections, setConnections] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
 
   // Connect with People
-  const [peerSuggestions, setPeerSuggestions] = useState([]);
   const [sentRequests, setSentRequests] = useState(new Set());
-  const [sentRequestProfiles, setSentRequestProfiles] = useState([]);
 
-  // Unread DM counts per sender
-  const [unreadCounts, setUnreadCounts] = useState({});
-  // Recent chats
-  const [recentChats, setRecentChats] = useState([]);
+  // --- SWR: Main circles page data ---
+  const circlesCacheKey = currentUser ? `circles-page-${currentUser.id}` : null;
+  const { data: circlesData, isLoading: loading, mutate: refreshCircles } = useSupabaseQuery(
+    circlesCacheKey,
+    async (sb) => {
+      const t0 = Date.now();
 
-  // Load connections directly from DB (single source of truth)
-  const loadConnectionsDirect = async (sharedMatches) => {
-    const t0 = Date.now();
-    try {
-      const matches = sharedMatches || [];
-      if (matches.length === 0) return;
+      const [rpcResult, mutualResult, pendingReqsResult] = await Promise.all([
+        sb.rpc('get_circles_page_data', { p_user_id: currentUser.id }),
+        sb.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
+        sb.from('connection_group_members')
+          .select('id, group_id, status, invited_at, connection_groups(id, name)')
+          .eq('user_id', currentUser.id)
+          .eq('status', 'pending'),
+      ]);
 
-      const matchedUserIds = matches.map(m => m.matched_user_id);
-      const { data: profiles, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, name, career, city, state, profile_picture, last_active')
-        .in('id', matchedUserIds);
-      if (profileError || !profiles) return;
+      const sharedMatches = mutualResult.data || [];
 
-      const connectionsWithStatus = profiles.map(user => ({
-        id: user.id,
-        userId: user.id,
-        name: user.name || 'Unknown',
-        avatar: user.profile_picture,
-        career: user.career || '',
-        city: user.city,
-        state: user.state,
-        last_active: user.last_active,
-        status: isUserActive(user.last_active, 10) ? 'online' : 'away',
+      if (rpcResult.error) {
+        console.error('Circles RPC error:', rpcResult.error);
+        return { connectionGroups: [], groupInvites: [], pendingJoinRequests: [], unreadCounts: {}, connections: [], sharedMatches: [] };
+      }
+
+      const d = rpcResult.data;
+
+      // Process connection groups from RPC data
+      const groups = d.groups || [];
+      const members = d.members || [];
+      const creators = d.creators || [];
+      const latestMessages = d.latest_messages || [];
+      const upcomingMeetups = d.upcoming_meetups || [];
+      const pastMeetups = d.past_meetups || [];
+
+      const creatorMap = {};
+      creators.forEach(c => { creatorMap[c.id] = c; });
+
+      const membersByGroup = {};
+      members.forEach(m => {
+        if (!membersByGroup[m.group_id]) membersByGroup[m.group_id] = [];
+        membersByGroup[m.group_id].push({
+          id: m.id, status: m.status, user_id: m.user_id, group_id: m.group_id,
+          user: { id: m.user_id, name: m.name, career: m.career, last_active: m.last_active, profile_picture: m.profile_picture }
+        });
+      });
+
+      const latestMessageByGroup = {};
+      latestMessages.forEach(msg => {
+        latestMessageByGroup[msg.group_id] = {
+          ...msg,
+          sender: { id: msg.user_id, name: msg.sender_name }
+        };
+      });
+
+      const nextMeetupByCircle = {};
+      upcomingMeetups.forEach(meetup => {
+        const existing = nextMeetupByCircle[meetup.circle_id];
+        if (!existing) {
+          nextMeetupByCircle[meetup.circle_id] = meetup;
+        } else {
+          const existingDate = new Date(existing.date).getTime();
+          const thisDate = new Date(meetup.date).getTime();
+          const daysDiff = Math.abs(thisDate - existingDate) / (24 * 60 * 60 * 1000);
+          if (daysDiff <= 3 && new Date(meetup.updated_at) > new Date(existing.updated_at)) {
+            nextMeetupByCircle[meetup.circle_id] = meetup;
+          }
+        }
+      });
+
+      const pastMeetupCountByCircle = {};
+      const lastTopicByCircle = {};
+      pastMeetups.forEach(meetup => {
+        pastMeetupCountByCircle[meetup.circle_id] = (pastMeetupCountByCircle[meetup.circle_id] || 0) + 1;
+        if (!lastTopicByCircle[meetup.circle_id] && meetup.topic) {
+          lastTopicByCircle[meetup.circle_id] = meetup.topic;
+        }
+      });
+
+      // Fetch latest recap for each circle
+      const groupIds = groups.map(g => g.id);
+      const channelNames = groupIds.map(id => `connection-group-${id}`);
+      const latestRecapByCircle = {};
+      if (channelNames.length > 0) {
+        const { data: recaps } = await sb
+          .from('call_recaps')
+          .select('id, channel_name, created_at, ai_summary')
+          .in('channel_name', channelNames)
+          .order('created_at', { ascending: false });
+        (recaps || []).forEach(r => {
+          const circleId = r.channel_name.replace('connection-group-', '');
+          if (!latestRecapByCircle[circleId]) {
+            latestRecapByCircle[circleId] = r;
+          }
+        });
+      }
+
+      for (const group of groups) {
+        group.creator = creatorMap[group.creator_id] || null;
+        group.members = membersByGroup[group.id] || [];
+        group.lastMessage = latestMessageByGroup[group.id] || null;
+        group.nextMeetup = nextMeetupByCircle[group.id] || null;
+        group.pastSessionCount = pastMeetupCountByCircle[group.id] || 0;
+        group.lastTopic = lastTopicByCircle[group.id] || null;
+        group.lastRecap = latestRecapByCircle[group.id] || null;
+      }
+      groups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      // Process invitations from RPC data
+      const invitations = d.invitations || [];
+      const groupInvites = invitations.map(inv => ({
+        id: inv.id,
+        group_id: inv.group_id,
+        user_id: inv.user_id,
+        status: inv.status,
+        invited_at: inv.invited_at,
+        group: {
+          id: inv.group_id,
+          name: inv.group_name,
+          creator_id: inv.group_creator_id,
+          created_at: inv.group_created_at,
+          is_active: inv.group_is_active,
+          creator: { id: inv.group_creator_id, name: inv.creator_name }
+        }
       }));
-      console.log(`⏱️ Circles: loadConnectionsDirect in ${Date.now() - t0}ms`);
-      setConnections(connectionsWithStatus);
-    } catch (err) {
-      console.error('Error loading connections directly:', err);
+
+      // Pending join requests
+      const pendingReqs = pendingReqsResult.data;
+      const pendingJoinRequests = (pendingReqs || []).map(r => ({
+        id: r.id,
+        group_id: r.group_id,
+        invited_at: r.invited_at,
+        groupName: r.connection_groups?.name || 'Unknown circle',
+      }));
+
+      // Process unread counts from RPC data
+      const unreadData = d.unread_counts || [];
+      const counts = {};
+      unreadData.forEach(u => { counts[u.sender_id] = u.count; });
+
+      // Process connections from shared matches
+      let connectionsResult = [];
+      if (sharedMatches.length > 0) {
+        const matchedUserIds = sharedMatches.map(m => m.matched_user_id);
+        const { data: profiles } = await sb
+          .from('profiles')
+          .select('id, name, career, city, state, profile_picture, last_active')
+          .in('id', matchedUserIds);
+
+        if (profiles) {
+          connectionsResult = profiles.map(user => ({
+            id: user.id,
+            userId: user.id,
+            name: user.name || 'Unknown',
+            avatar: user.profile_picture,
+            career: user.career || '',
+            city: user.city,
+            state: user.state,
+            last_active: user.last_active,
+            status: isUserActive(user.last_active, 10) ? 'online' : 'away',
+          }));
+        }
+      }
+
+      console.log(`⏱️ Circles page data fetched in ${Date.now() - t0}ms`);
+      return { connectionGroups: groups, groupInvites, pendingJoinRequests, unreadCounts: counts, connections: connectionsResult, sharedMatches };
     }
-  };
+  );
 
-  const hasLoadedRef = useRef(false);
+  // Destructure SWR result
+  const {
+    connectionGroups = [],
+    groupInvites = [],
+    pendingJoinRequests = [],
+    unreadCounts: swrUnreadCounts = {},
+    connections = [],
+    sharedMatches = [],
+  } = circlesData || {};
+
+  // Local unread counts that can be updated in real-time without full refetch
+  const [localUnreadCounts, setLocalUnreadCounts] = useState({});
+  const unreadCounts = { ...swrUnreadCounts, ...localUnreadCounts };
+
+  // --- SWR: Peer suggestions (deferred) ---
+  const { data: peerSuggestions = [] } = useSupabaseQuery(
+    circlesData && currentUser ? `circles-peers-${currentUser.id}` : null,
+    async (sb) => {
+      const t0 = Date.now();
+      const [profilesResult, interestsResult, incomingInterestsResult] = await Promise.all([
+        sb
+          .from('profiles')
+          .select('id, name, career, city, state, hook, industry, career_stage, interests, profile_picture, open_to_coffee_chat, last_active')
+          .neq('id', currentUser.id)
+          .not('name', 'is', null)
+          .limit(50),
+        sb
+          .from('user_interests')
+          .select('interested_in_user_id')
+          .eq('user_id', currentUser.id),
+        sb
+          .from('user_interests')
+          .select('user_id')
+          .eq('interested_in_user_id', currentUser.id),
+      ]);
+
+      if (profilesResult.error) return [];
+
+      const myMatchIds = new Set((sharedMatches || []).map(m => m.matched_user_id));
+      const myInterestIds = new Set((interestsResult.data || []).map(i => i.interested_in_user_id));
+      const interestedInMeIds = new Set((incomingInterestsResult.data || []).map(i => i.user_id));
+
+      const suggestions = (profilesResult.data || []).filter(u =>
+        !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
+      );
+
+      suggestions.sort((a, b) => {
+        const scoreA = (interestedInMeIds.has(a.id) ? 4 : 0) + (a.open_to_coffee_chat ? 2 : 0);
+        const scoreB = (interestedInMeIds.has(b.id) ? 4 : 0) + (b.open_to_coffee_chat ? 2 : 0);
+        return scoreB - scoreA;
+      });
+
+      const finalSuggestions = suggestions.slice(0, 20);
+      const finalIds = finalSuggestions.map(s => s.id);
+
+      if (finalIds.length === 0) return [];
+
+      const [myCirclesResult, suggestedInterestsResult] = await Promise.all([
+        sb
+          .from('connection_group_members')
+          .select('group_id')
+          .eq('user_id', currentUser.id)
+          .eq('status', 'accepted'),
+        sb
+          .from('user_interests')
+          .select('user_id, interested_in_user_id')
+          .in('user_id', finalIds)
+          .in('interested_in_user_id', Array.from(myMatchIds)),
+      ]);
+
+      const userMutualConnections = {};
+      const suggestedInterests = suggestedInterestsResult.data || [];
+      const interestsByUser = {};
+      suggestedInterests.forEach(i => {
+        if (!interestsByUser[i.user_id]) interestsByUser[i.user_id] = new Set();
+        interestsByUser[i.user_id].add(i.interested_in_user_id);
+      });
+      finalIds.forEach(id => {
+        userMutualConnections[id] = interestsByUser[id] ? interestsByUser[id].size : 0;
+      });
+
+      let userCircleCount = {};
+      const myCircleIds = (myCirclesResult.data || []).map(c => c.group_id);
+      if (myCircleIds.length > 0) {
+        const { data: sharedMembers } = await sb
+          .from('connection_group_members')
+          .select('user_id, group_id')
+          .in('group_id', myCircleIds)
+          .in('user_id', finalIds)
+          .eq('status', 'accepted');
+
+        (sharedMembers || []).forEach(m => {
+          if (!userCircleCount[m.user_id]) userCircleCount[m.user_id] = new Set();
+          userCircleCount[m.user_id].add(m.group_id);
+        });
+      }
+
+      const enriched = finalSuggestions.map(person => ({
+        ...person,
+        mutualCircles: userCircleCount[person.id] ? userCircleCount[person.id].size : 0,
+        mutualConnections: userMutualConnections[person.id] || 0,
+      }));
+
+      console.log(`⏱️ Circles: loadPeerSuggestions in ${Date.now() - t0}ms`);
+      return enriched;
+    }
+  );
+
+  // --- SWR: Sent requests (deferred) ---
+  const { data: sentRequestProfiles = [] } = useSupabaseQuery(
+    circlesData && currentUser ? `circles-sent-requests-${currentUser.id}` : null,
+    async (sb) => {
+      const t0 = Date.now();
+      const { data: interestsData, error: interestsError } = await sb
+        .from('user_interests')
+        .select('interested_in_user_id, created_at')
+        .eq('user_id', currentUser.id);
+
+      if (interestsError) return [];
+
+      const mutualIds = new Set((sharedMatches || []).map(m => m.matched_user_id));
+
+      const pendingInterests = (interestsData || []).filter(i =>
+        !mutualIds.has(i.interested_in_user_id)
+      );
+
+      if (pendingInterests.length === 0) return [];
+
+      const pendingIds = pendingInterests.map(i => i.interested_in_user_id);
+      const createdAtMap = {};
+      pendingInterests.forEach(i => { createdAtMap[i.interested_in_user_id] = i.created_at; });
+
+      const { data: profiles, error: profilesError } = await sb
+        .from('profiles')
+        .select('id, name, career, city, state, profile_picture')
+        .in('id', pendingIds);
+
+      if (profilesError) return [];
+
+      const enriched = (profiles || []).map(p => ({
+        ...p,
+        requested_at: createdAtMap[p.id],
+      }));
+
+      enriched.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at));
+
+      console.log(`⏱️ Circles: loadSentRequests in ${Date.now() - t0}ms`);
+      return enriched;
+    }
+  );
+
+  // --- SWR: Recent chats (deferred) ---
+  const { data: recentChats = [] } = useSupabaseQuery(
+    circlesData && currentUser ? `circles-recent-chats-${currentUser.id}` : null,
+    async (sb) => {
+      const [{ data: sent }, { data: received }] = await Promise.all([
+        sb
+          .from('messages')
+          .select('id, content, created_at, sender_id, receiver_id, read')
+          .eq('sender_id', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        sb
+          .from('messages')
+          .select('id, content, created_at, sender_id, receiver_id, read')
+          .eq('receiver_id', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+      ]);
+
+      const allMessages = [...(sent || []), ...(received || [])];
+      const latestByUser = {};
+      allMessages.forEach(msg => {
+        const partnerId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
+        if (!latestByUser[partnerId] || new Date(msg.created_at) > new Date(latestByUser[partnerId].created_at)) {
+          latestByUser[partnerId] = { ...msg, partnerId };
+        }
+      });
+
+      const chats = Object.values(latestByUser)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, 5);
+
+      if (chats.length === 0) return [];
+
+      const partnerIds = chats.map(c => c.partnerId);
+      const { data: profiles } = await sb
+        .from('profiles')
+        .select('id, name, profile_picture, career')
+        .in('id', partnerIds);
+
+      const profileMap = {};
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+
+      return chats.map(c => ({
+        ...c,
+        partner: profileMap[c.partnerId] || { id: c.partnerId, name: 'Unknown' },
+        isFromMe: c.sender_id === currentUser.id,
+        unread: !c.read && c.receiver_id === currentUser.id,
+      }));
+    }
+  );
+
+  // --- SWR: Sent circle invites (deferred) ---
+  const { data: sentCircleInvites = [] } = useSupabaseQuery(
+    circlesData && currentUser ? `circles-sent-invites-${currentUser.id}` : null,
+    async (sb) => {
+      const { data: myCircles } = await sb
+        .from('connection_groups')
+        .select('id, name')
+        .eq('creator_id', currentUser.id);
+
+      if (!myCircles || myCircles.length === 0) return [];
+
+      const circleIds = myCircles.map(c => c.id);
+      const circleNameMap = {};
+      myCircles.forEach(c => { circleNameMap[c.id] = c.name; });
+
+      const { data: pendingMembers } = await sb
+        .from('connection_group_members')
+        .select('id, user_id, group_id, invited_at')
+        .eq('status', 'invited')
+        .in('group_id', circleIds);
+
+      if (!pendingMembers || pendingMembers.length === 0) return [];
+
+      const userIds = [...new Set(pendingMembers.map(m => m.user_id))];
+      const { data: profiles } = await sb
+        .from('profiles')
+        .select('id, name, career, profile_picture')
+        .in('id', userIds);
+
+      const profileMap = {};
+      (profiles || []).forEach(p => { profileMap[p.id] = p; });
+
+      return pendingMembers.map(m => ({
+        id: m.id,
+        user: profileMap[m.user_id] || { id: m.user_id, name: 'Unknown' },
+        circleName: circleNameMap[m.group_id],
+        groupId: m.group_id,
+        invited_at: m.invited_at,
+      })).filter(i => i.user.name !== 'Unknown');
+    }
+  );
+
   const hasRenderedOnce = useRef(false);
-  useEffect(() => {
-    if (hasLoadedRef.current) return;
-    hasLoadedRef.current = true;
-    loadData();
 
+  // Realtime subscriptions
+  useEffect(() => {
     const invitesChannel = supabase
       .channel('connection-group-invites')
       .on(
@@ -119,8 +480,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           filter: `user_id=eq.${currentUser.id}`
         },
         () => {
-          loadGroupInvites();
-          loadConnectionGroups();
+          refreshCircles();
         }
       )
       .subscribe();
@@ -137,7 +497,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         },
         (payload) => {
           const senderId = payload.new.sender_id;
-          setUnreadCounts(prev => ({
+          setLocalUnreadCounts(prev => ({
             ...prev,
             [senderId]: (prev[senderId] || 0) + 1
           }));
@@ -152,7 +512,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
           filter: `receiver_id=eq.${currentUser.id}`
         },
         () => {
-          loadUnreadCounts();
+          invalidateQuery(`circles-page-${currentUser.id}`);
+          invalidateQuery(`circles-recent-chats-${currentUser.id}`);
         }
       )
       .subscribe();
@@ -187,420 +548,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     };
   }, [selectedGroup]);
 
-  const loadUnreadCounts = async () => {
-    const t0 = Date.now();
-    try {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('sender_id')
-        .eq('receiver_id', currentUser.id)
-        .eq('read', false);
-
-      if (error) return;
-
-      const counts = {};
-      (data || []).forEach(msg => {
-        counts[msg.sender_id] = (counts[msg.sender_id] || 0) + 1;
-      });
-      console.log(`⏱️ Circles: loadUnreadCounts in ${Date.now() - t0}ms`);
-      setUnreadCounts(counts);
-    } catch (err) {
-      // silently fail
-    }
-  };
-
-  const loadRecentChats = async () => {
-    console.log('⏱️ Circles: loadRecentChats starting, userId:', currentUser?.id);
-    try {
-      // Get latest message per conversation (sent or received) — parallel
-      const [{ data: sent }, { data: received }] = await Promise.all([
-        supabase
-          .from('messages')
-          .select('id, content, created_at, sender_id, receiver_id, read')
-          .eq('sender_id', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(20),
-        supabase
-          .from('messages')
-          .select('id, content, created_at, sender_id, receiver_id, read')
-          .eq('receiver_id', currentUser.id)
-          .order('created_at', { ascending: false })
-          .limit(20),
-      ]);
-
-      // Deduplicate by conversation partner, keep latest
-      const allMessages = [...(sent || []), ...(received || [])];
-      const latestByUser = {};
-      allMessages.forEach(msg => {
-        const partnerId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
-        if (!latestByUser[partnerId] || new Date(msg.created_at) > new Date(latestByUser[partnerId].created_at)) {
-          latestByUser[partnerId] = { ...msg, partnerId };
-        }
-      });
-
-      const chats = Object.values(latestByUser)
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, 5);
-
-      if (chats.length === 0) { setRecentChats([]); return; }
-
-      // Fetch profiles for chat partners
-      const partnerIds = chats.map(c => c.partnerId);
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name, profile_picture, career')
-        .in('id', partnerIds);
-
-      const profileMap = {};
-      (profiles || []).forEach(p => { profileMap[p.id] = p; });
-
-      const result = chats.map(c => ({
-        ...c,
-        partner: profileMap[c.partnerId] || { id: c.partnerId, name: 'Unknown' },
-        isFromMe: c.sender_id === currentUser.id,
-        unread: !c.read && c.receiver_id === currentUser.id,
-      }));
-      console.log('⏱️ Circles: loadRecentChats result:', result.length, 'chats');
-      setRecentChats(result);
-    } catch (err) {
-      console.error('Error loading recent chats:', err);
-    }
-  };
-
-  const loadData = async () => {
-    const t0 = Date.now();
-    setLoading(true);
-
-    // Load all initial data in parallel: RPC + mutual matches + pending join requests
-    const [rpcResult, mutualResult, pendingReqsResult] = await Promise.all([
-      supabase.rpc('get_circles_page_data', { p_user_id: currentUser.id }),
-      supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
-      supabase.from('connection_group_members')
-        .select('id, group_id, status, invited_at, connection_groups(id, name)')
-        .eq('user_id', currentUser.id)
-        .eq('status', 'pending'),
-    ]);
-
-    const sharedMatches = mutualResult.data || [];
-
-    if (rpcResult.error) {
-      console.error('Circles RPC error:', rpcResult.error);
-      setLoading(false);
-      return;
-    }
-
-    const d = rpcResult.data;
-
-    // Process connection groups from RPC data
-    const groups = d.groups || [];
-    const members = d.members || [];
-    const creators = d.creators || [];
-    const latestMessages = d.latest_messages || [];
-    const upcomingMeetups = d.upcoming_meetups || [];
-    const pastMeetups = d.past_meetups || [];
-
-    const creatorMap = {};
-    creators.forEach(c => { creatorMap[c.id] = c; });
-
-    const membersByGroup = {};
-    members.forEach(m => {
-      if (!membersByGroup[m.group_id]) membersByGroup[m.group_id] = [];
-      membersByGroup[m.group_id].push({
-        id: m.id, status: m.status, user_id: m.user_id, group_id: m.group_id,
-        user: { id: m.user_id, name: m.name, career: m.career, last_active: m.last_active, profile_picture: m.profile_picture }
-      });
-    });
-
-    const latestMessageByGroup = {};
-    latestMessages.forEach(msg => {
-      latestMessageByGroup[msg.group_id] = {
-        ...msg,
-        sender: { id: msg.user_id, name: msg.sender_name }
-      };
-    });
-
-    const nextMeetupByCircle = {};
-    upcomingMeetups.forEach(meetup => {
-      const existing = nextMeetupByCircle[meetup.circle_id];
-      if (!existing) {
-        nextMeetupByCircle[meetup.circle_id] = meetup;
-      } else {
-        const existingDate = new Date(existing.date).getTime();
-        const thisDate = new Date(meetup.date).getTime();
-        const daysDiff = Math.abs(thisDate - existingDate) / (24 * 60 * 60 * 1000);
-        if (daysDiff <= 3 && new Date(meetup.updated_at) > new Date(existing.updated_at)) {
-          nextMeetupByCircle[meetup.circle_id] = meetup;
-        }
-      }
-    });
-
-    const pastMeetupCountByCircle = {};
-    const lastTopicByCircle = {};
-    pastMeetups.forEach(meetup => {
-      pastMeetupCountByCircle[meetup.circle_id] = (pastMeetupCountByCircle[meetup.circle_id] || 0) + 1;
-      if (!lastTopicByCircle[meetup.circle_id] && meetup.topic) {
-        lastTopicByCircle[meetup.circle_id] = meetup.topic;
-      }
-    });
-
-    // Fetch latest recap for each circle
-    const groupIds = groups.map(g => g.id);
-    const channelNames = groupIds.map(id => `connection-group-${id}`);
-    const latestRecapByCircle = {};
-    if (channelNames.length > 0) {
-      const { data: recaps } = await supabase
-        .from('call_recaps')
-        .select('id, channel_name, created_at, ai_summary')
-        .in('channel_name', channelNames)
-        .order('created_at', { ascending: false });
-      (recaps || []).forEach(r => {
-        const circleId = r.channel_name.replace('connection-group-', '');
-        if (!latestRecapByCircle[circleId]) {
-          latestRecapByCircle[circleId] = r;
-        }
-      });
-    }
-
-    for (const group of groups) {
-      group.creator = creatorMap[group.creator_id] || null;
-      group.members = membersByGroup[group.id] || [];
-      group.lastMessage = latestMessageByGroup[group.id] || null;
-      group.nextMeetup = nextMeetupByCircle[group.id] || null;
-      group.pastSessionCount = pastMeetupCountByCircle[group.id] || 0;
-      group.lastTopic = lastTopicByCircle[group.id] || null;
-      group.lastRecap = latestRecapByCircle[group.id] || null;
-    }
-    groups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    setConnectionGroups(groups);
-
-    // Process invitations from RPC data
-    const invitations = d.invitations || [];
-    setGroupInvites(invitations.map(inv => ({
-      id: inv.id,
-      group_id: inv.group_id,
-      user_id: inv.user_id,
-      status: inv.status,
-      invited_at: inv.invited_at,
-      group: {
-        id: inv.group_id,
-        name: inv.group_name,
-        creator_id: inv.group_creator_id,
-        created_at: inv.group_created_at,
-        is_active: inv.group_is_active,
-        creator: { id: inv.group_creator_id, name: inv.creator_name }
-      }
-    })));
-
-    // Pending join requests (loaded in parallel with RPC above)
-    const pendingReqs = pendingReqsResult.data;
-    setPendingJoinRequests((pendingReqs || []).map(r => ({
-      id: r.id,
-      group_id: r.group_id,
-      invited_at: r.invited_at,
-      groupName: r.connection_groups?.name || 'Unknown circle',
-    })));
-
-    // Process unread counts from RPC data
-    const unreadData = d.unread_counts || [];
-    const counts = {};
-    unreadData.forEach(u => { counts[u.sender_id] = u.count; });
-    setUnreadCounts(counts);
-
-    // Process connections from shared matches
-    if (sharedMatches.length > 0) {
-      const matchedUserIds = sharedMatches.map(m => m.matched_user_id);
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name, career, city, state, profile_picture, last_active')
-        .in('id', matchedUserIds);
-
-      if (profiles) {
-        setConnections(profiles.map(user => ({
-          id: user.id,
-          userId: user.id,
-          name: user.name || 'Unknown',
-          avatar: user.profile_picture,
-          career: user.career || '',
-          city: user.city,
-          state: user.state,
-          last_active: user.last_active,
-          status: isUserActive(user.last_active, 10) ? 'online' : 'away',
-        })));
-      }
-    }
-
-    console.log(`⏱️ Circles page rendered in ${Date.now() - t0}ms`);
-    setLoading(false);
-
-    // Deferred — peer suggestions and sent requests load in background
-    loadPeerSuggestions(sharedMatches);
-    loadSentRequests(sharedMatches);
-    loadRecentChats();
-    loadSentCircleInvites();
-  };
-
-  const loadPeerSuggestions = async (sharedMatches) => {
-    const t0 = Date.now();
-    try {
-      const [profilesResult, interestsResult, incomingInterestsResult] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, name, career, city, state, hook, industry, career_stage, interests, profile_picture, open_to_coffee_chat, last_active')
-          .neq('id', currentUser.id)
-          .not('name', 'is', null)
-          .limit(50),
-        supabase
-          .from('user_interests')
-          .select('interested_in_user_id')
-          .eq('user_id', currentUser.id),
-        supabase
-          .from('user_interests')
-          .select('user_id')
-          .eq('interested_in_user_id', currentUser.id),
-      ]);
-
-      if (profilesResult.error) {
-        setPeerSuggestions([]);
-        return;
-      }
-
-      const myMatchIds = new Set((sharedMatches || []).map(m => m.matched_user_id));
-      const myInterestIds = new Set((interestsResult.data || []).map(i => i.interested_in_user_id));
-      const interestedInMeIds = new Set((incomingInterestsResult.data || []).map(i => i.user_id));
-
-      const suggestions = (profilesResult.data || []).filter(u =>
-        !myMatchIds.has(u.id) && !myInterestIds.has(u.id)
-      );
-
-      // Prioritize: interested in me > open to coffee chat > others
-      suggestions.sort((a, b) => {
-        const scoreA = (interestedInMeIds.has(a.id) ? 4 : 0) + (a.open_to_coffee_chat ? 2 : 0);
-        const scoreB = (interestedInMeIds.has(b.id) ? 4 : 0) + (b.open_to_coffee_chat ? 2 : 0);
-        return scoreB - scoreA;
-      });
-
-      const finalSuggestions = suggestions.slice(0, 20);
-      const finalIds = finalSuggestions.map(s => s.id);
-
-      if (finalIds.length === 0) {
-        setPeerSuggestions([]);
-        return;
-      }
-
-      // Fetch shared circles and mutual connections with simple queries (no extra RPCs)
-      const [myCirclesResult, suggestedInterestsResult] = await Promise.all([
-        supabase
-          .from('connection_group_members')
-          .select('group_id')
-          .eq('user_id', currentUser.id)
-          .eq('status', 'accepted'),
-        // Count mutual connections: find interests involving both the suggestion and my matches
-        supabase
-          .from('user_interests')
-          .select('user_id, interested_in_user_id')
-          .in('user_id', finalIds)
-          .in('interested_in_user_id', Array.from(myMatchIds)),
-      ]);
-
-      // Build mutual connections: a suggested person has a mutual connection if
-      // they expressed interest in one of my matches AND that match expressed interest back
-      const userMutualConnections = {};
-      // For simplicity, count how many of my connections each suggestion is connected to
-      // by checking bidirectional interests
-      const suggestedInterests = suggestedInterestsResult.data || [];
-      const interestsByUser = {};
-      suggestedInterests.forEach(i => {
-        if (!interestsByUser[i.user_id]) interestsByUser[i.user_id] = new Set();
-        interestsByUser[i.user_id].add(i.interested_in_user_id);
-      });
-      finalIds.forEach(id => {
-        userMutualConnections[id] = interestsByUser[id] ? interestsByUser[id].size : 0;
-      });
-
-      // Build shared circles map
-      let userCircleCount = {};
-      const myCircleIds = (myCirclesResult.data || []).map(c => c.group_id);
-      if (myCircleIds.length > 0) {
-        const { data: sharedMembers } = await supabase
-          .from('connection_group_members')
-          .select('user_id, group_id')
-          .in('group_id', myCircleIds)
-          .in('user_id', finalIds)
-          .eq('status', 'accepted');
-
-        (sharedMembers || []).forEach(m => {
-          if (!userCircleCount[m.user_id]) userCircleCount[m.user_id] = new Set();
-          userCircleCount[m.user_id].add(m.group_id);
-        });
-      }
-
-      const enriched = finalSuggestions.map(person => ({
-        ...person,
-        mutualCircles: userCircleCount[person.id] ? userCircleCount[person.id].size : 0,
-        mutualConnections: userMutualConnections[person.id] || 0,
-      }));
-
-      console.log(`⏱️ Circles: loadPeerSuggestions in ${Date.now() - t0}ms`);
-      setPeerSuggestions(enriched);
-    } catch (error) {
-      console.error('Error loading peer suggestions:', error);
-      setPeerSuggestions([]);
-    }
-  };
-
-  const loadSentRequests = async (sharedMatches) => {
-    const t0 = Date.now();
-    try {
-      const { data: interestsData, error: interestsError } = await supabase
-        .from('user_interests')
-        .select('interested_in_user_id, created_at')
-        .eq('user_id', currentUser.id);
-
-      if (interestsError) {
-        setSentRequestProfiles([]);
-        return;
-      }
-
-      const mutualIds = new Set((sharedMatches || []).map(m => m.matched_user_id));
-
-      // Pending = I sent interest but they haven't matched back
-      const pendingInterests = (interestsData || []).filter(i =>
-        !mutualIds.has(i.interested_in_user_id)
-      );
-
-      if (pendingInterests.length === 0) {
-        setSentRequestProfiles([]);
-        return;
-      }
-
-      const pendingIds = pendingInterests.map(i => i.interested_in_user_id);
-      const createdAtMap = {};
-      pendingInterests.forEach(i => { createdAtMap[i.interested_in_user_id] = i.created_at; });
-
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, name, career, city, state, profile_picture')
-        .in('id', pendingIds);
-
-      if (profilesError) {
-        setSentRequestProfiles([]);
-        return;
-      }
-
-      const enriched = (profiles || []).map(p => ({
-        ...p,
-        requested_at: createdAtMap[p.id],
-      }));
-
-      // Sort by most recent first
-      enriched.sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at));
-
-      console.log(`⏱️ Circles: loadSentRequests in ${Date.now() - t0}ms`);
-      setSentRequestProfiles(enriched);
-    } catch (error) {
-      console.error('Error loading sent requests:', error);
-      setSentRequestProfiles([]);
-    }
+  // Helper to invalidate all circles-related caches
+  const invalidateAllCirclesData = () => {
+    invalidateQuery(`circles-page-${currentUser.id}`);
+    invalidateQuery(`circles-peers-${currentUser.id}`);
+    invalidateQuery(`circles-sent-requests-${currentUser.id}`);
+    invalidateQuery(`circles-recent-chats-${currentUser.id}`);
+    invalidateQuery(`circles-sent-invites-${currentUser.id}`);
   };
 
   const handleConnect = async (personId) => {
@@ -620,36 +574,12 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         .rpc('check_mutual_interest', { user_a: currentUser.id, user_b: personId });
 
       if (isMutual) {
-        // Mutual match: add to connections and remove from suggestions
-        const person = peerSuggestions.find(p => p.id === personId);
-        if (person) {
-          setConnections(prev => [...prev, {
-            id: person.id,
-            userId: person.id,
-            name: person.name,
-            avatar: person.profile_picture,
-            career: person.career || '',
-            city: person.city,
-            state: person.state,
-            status: 'away',
-          }]);
-          setPeerSuggestions(prev => prev.filter(p => p.id !== personId));
-        }
-      } else {
-        // Add to pending requests list
-        const person = peerSuggestions.find(p => p.id === personId);
-        if (person) {
-          setSentRequestProfiles(prev => [{
-            id: person.id,
-            name: person.name,
-            career: person.career,
-            city: person.city,
-            state: person.state,
-            profile_picture: person.profile_picture,
-            requested_at: new Date().toISOString(),
-          }, ...prev]);
-        }
+        // Mutual match: refresh connections and suggestions
+        invalidateQuery(`circles-page-${currentUser.id}`);
+        invalidateQuery(`circles-peers-${currentUser.id}`);
       }
+      // Always refresh sent requests
+      invalidateQuery(`circles-sent-requests-${currentUser.id}`);
     } catch (error) {
       console.error('Error sending connection request:', error);
       setSentRequests(prev => {
@@ -668,13 +598,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         .eq('user_id', currentUser.id)
         .eq('interested_in_user_id', personId);
       if (error) throw error;
-      setSentRequestProfiles(prev => prev.filter(p => p.id !== personId));
-      // Also remove from sentRequests set so the "Connect" button reappears in suggestions
+      // Remove from sentRequests set so the "Connect" button reappears in suggestions
       setSentRequests(prev => {
         const next = new Set(prev);
         next.delete(personId);
         return next;
       });
+      invalidateQuery(`circles-sent-requests-${currentUser.id}`);
+      invalidateQuery(`circles-peers-${currentUser.id}`);
     } catch (error) {
       console.error('Error withdrawing request:', error);
     }
@@ -694,50 +625,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     return `${diffDays}d ago`;
   };
 
-  const loadSentCircleInvites = async () => {
-    try {
-      // Get circles I created
-      const { data: myCircles } = await supabase
-        .from('connection_groups')
-        .select('id, name')
-        .eq('creator_id', currentUser.id);
-
-      if (!myCircles || myCircles.length === 0) { setSentCircleInvites([]); return; }
-
-      const circleIds = myCircles.map(c => c.id);
-      const circleNameMap = {};
-      myCircles.forEach(c => { circleNameMap[c.id] = c.name; });
-
-      // Get pending invited members
-      const { data: pendingMembers } = await supabase
-        .from('connection_group_members')
-        .select('id, user_id, group_id, invited_at')
-        .eq('status', 'invited')
-        .in('group_id', circleIds);
-
-      if (!pendingMembers || pendingMembers.length === 0) { setSentCircleInvites([]); return; }
-
-      const userIds = [...new Set(pendingMembers.map(m => m.user_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name, career, profile_picture')
-        .in('id', userIds);
-
-      const profileMap = {};
-      (profiles || []).forEach(p => { profileMap[p.id] = p; });
-
-      setSentCircleInvites(pendingMembers.map(m => ({
-        id: m.id,
-        user: profileMap[m.user_id] || { id: m.user_id, name: 'Unknown' },
-        circleName: circleNameMap[m.group_id],
-        groupId: m.group_id,
-        invited_at: m.invited_at,
-      })).filter(i => i.user.name !== 'Unknown'));
-    } catch (err) {
-      console.error('Error loading sent circle invites:', err);
-    }
-  };
-
   const handleWithdrawCircleInvite = async (membershipId) => {
     try {
       const { error } = await supabase
@@ -745,31 +632,9 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         .delete()
         .eq('id', membershipId);
       if (error) throw error;
-      setSentCircleInvites(prev => prev.filter(i => i.id !== membershipId));
+      invalidateQuery(`circles-sent-invites-${currentUser.id}`);
     } catch (err) {
       console.error('Error withdrawing circle invite:', err);
-    }
-  };
-
-  const loadConnectionGroups = async () => {
-    const t0 = Date.now();
-    try {
-      const groups = await getMyConnectionGroups(currentUser.id);
-      console.log(`⏱️ Circles: loadConnectionGroups in ${Date.now() - t0}ms`);
-      setConnectionGroups(groups);
-    } catch (error) {
-      console.error('Error loading groups:', error);
-    }
-  };
-
-  const loadGroupInvites = async () => {
-    const t0 = Date.now();
-    try {
-      const invites = await getPendingGroupInvites(currentUser.id);
-      console.log(`⏱️ Circles: loadGroupInvites in ${Date.now() - t0}ms`);
-      setGroupInvites(invites);
-    } catch (error) {
-      console.error('Error loading invites:', error);
     }
   };
 
@@ -833,7 +698,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       setGroupDescription('');
       setSelectedConnections([]);
       setCreateSuccess({ name: createdName, inviteCount });
-      await loadConnectionGroups();
+      invalidateQuery(`circles-page-${currentUser.id}`);
+      invalidateQuery(`circles-sent-invites-${currentUser.id}`);
     } catch (error) {
       alert('Error creating circle: ' + error.message);
     }
@@ -843,7 +709,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     try {
       await acceptGroupInvite(membershipId);
       alert(`You joined "${groupName}"!`);
-      await Promise.all([loadConnectionGroups(), loadGroupInvites()]);
+      invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
       alert('Error accepting invite: ' + error.message);
     }
@@ -854,7 +720,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
     try {
       await declineGroupInvite(membershipId);
-      await loadGroupInvites();
+      invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
       alert('Error declining invite: ' + error.message);
     }
@@ -890,7 +756,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
     try {
       await deleteConnectionGroup(groupId);
-      await loadConnectionGroups();
+      invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
       alert('Error deleting group: ' + error.message);
     }
@@ -977,7 +843,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     });
   }, [connectionGroups]);
 
-  if (loading && !hasRenderedOnce.current) {
+  if (loading && !circlesData && !hasRenderedOnce.current) {
     return (
       <div style={{ padding: isMobile ? '16px' : '24px' }}>
         {/* Skeleton: connections row */}
@@ -1099,7 +965,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 <button
                   onClick={async () => {
                     const { error } = await supabase.from('connection_group_members').delete().eq('id', req.id);
-                    if (!error) setPendingJoinRequests(prev => prev.filter(r => r.id !== req.id));
+                    if (!error) invalidateQuery(`circles-page-${currentUser.id}`);
                   }}
                   style={{
                     fontSize: '12px', fontWeight: '500', color: '#A08070',

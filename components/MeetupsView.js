@@ -8,6 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus, ChevronLeft, FileText, Check, Circle } from 'lucide-react';
 import { parseLocalDate, isEventPast, formatEventTime, eventDateTimeToUTC } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
+import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
 const formatDate = (isoStr) => {
   try {
@@ -18,14 +19,7 @@ const formatDate = (isoStr) => {
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null, pastOnly = false }) {
   const [activeView, setActiveView] = useState(pastOnly ? 'past' : (initialView || 'upcoming'));
   const [activeFilter, setActiveFilter] = useState('all');
-  const [coffeeChats, setCoffeeChats] = useState([]);
-  const [groupEvents, setGroupEvents] = useState([]);
   const [pastMeetups, setPastMeetups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [pendingRequests, setPendingRequests] = useState({
-    coffeeChats: 0,
-    circleInvites: 0
-  });
   const [actionMenuOpen, setActionMenuOpen] = useState(null);
   const [activeCardId, setActiveCardId] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -99,37 +93,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     setExpandedSummaries(prev => ({ ...prev, [itemId]: !prev[itemId] }));
   };
 
-  const hasLoadedRef = React.useRef(false);
-  useEffect(() => {
-    if (hasLoadedRef.current) return;
-    hasLoadedRef.current = true;
-    loadData();
-  }, [currentUser.id]);
+  // --- SWR-cached data fetching ---
 
-  const loadData = async () => {
-    const t0 = Date.now();
-    setLoading(true);
-    const promises = [
-      loadCoffeeChats(),
-      loadGroupEvents(),
-      loadPendingRequests(),
-    ];
-    if (initialView === 'past' || pastOnly) {
-      promises.push(loadPastMeetups());
-    }
-    await Promise.all(promises);
-    console.log(`⏱️ Meetups page data loaded in ${Date.now() - t0}ms`);
-    setLoading(false);
-    if (initialView !== 'past' && !pastOnly) {
-      loadPastMeetups();
-    }
-  };
-
-  const loadCoffeeChats = useCallback(async () => {
-    const t0 = Date.now();
-    try {
-      // Load all coffee chats for the user
-      const { data, error } = await supabase
+  const { data: coffeeChats = [], isLoading: coffeeLoading, mutate: refreshCoffeeChats } = useSupabaseQuery(
+    currentUser ? `meetups-coffee-${currentUser.id}` : null,
+    async (sb) => {
+      const t0 = Date.now();
+      const { data, error } = await sb
         .from('coffee_chats')
         .select('*')
         .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
@@ -138,32 +108,25 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
       if (error) {
         console.error('Coffee chats query error:', error.message);
-        setCoffeeChats([]);
-        return;
+        return [];
       }
 
-      // Filter to only upcoming chats (client-side filter)
-      // Show all chats scheduled from today onwards
       const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
       const upcomingChats = (data || []).filter(chat => {
-        // Exclude completed, declined, cancelled
         if (chat.status === 'completed' || chat.status === 'declined' || chat.status === 'cancelled') return false;
-        if (!chat.scheduled_time) return true; // No time = pending, show it
+        if (!chat.scheduled_time) return true;
         const chatTime = new Date(chat.scheduled_time);
-        // Coffee chats last ~30 min, add 30 min grace
         return chatTime.getTime() + 60 * 60 * 1000 > now.getTime();
       });
 
-      // Get profile info for the other person in each chat
       const otherUserIds = upcomingChats.map(chat =>
         chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
       );
 
       let profiles = [];
       if (otherUserIds.length > 0) {
-        const { data: profileData } = await supabase
+        const { data: profileData } = await sb
           .from('profiles')
           .select('id, name, career, profile_picture')
           .in('id', otherUserIds);
@@ -175,7 +138,6 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const chatsWithProfiles = upcomingChats.map(chat => {
         const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id;
         const profile = profileMap.get(otherId);
-        // Extract date and time from scheduled_time timestamp
         const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : null;
         const isPending = chat.status === 'pending';
         const isInviteReceived = isPending && chat.recipient_id === currentUser.id;
@@ -193,25 +155,22 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           isPending,
           isInviteReceived,
           isInviteSent,
-          scheduled_date: chat.scheduled_time // Keep for sorting
+          scheduled_date: chat.scheduled_time
         };
       });
 
       console.log(`⏱️ Meetups: loadCoffeeChats in ${Date.now() - t0}ms`);
-      setCoffeeChats(chatsWithProfiles);
-    } catch (err) {
-      console.error('Error loading coffee chats:', err);
-      setCoffeeChats([]);
+      return chatsWithProfiles;
     }
-  }, [currentUser.id, supabase]);
+  );
 
-  const loadGroupEvents = useCallback(async () => {
-    const t0 = Date.now();
-    try {
+  const { data: groupEvents = [], isLoading: eventsLoading, mutate: refreshGroupEvents } = useSupabaseQuery(
+    currentUser ? `meetups-group-${currentUser.id}` : null,
+    async (sb) => {
+      const t0 = Date.now();
       const signedUpMeetupIds = userSignups || [];
 
-      // Build meetups query with memberships in parallel
-      const { data: membershipData } = await supabase
+      const { data: membershipData } = await sb
         .from('connection_group_members')
         .select('group_id')
         .eq('user_id', currentUser.id)
@@ -227,7 +186,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         orConditions.push(`circle_id.in.(${userCircleIds.join(',')})`);
       }
 
-      const { data: signedUpMeetups, error } = await supabase
+      const { data: signedUpMeetups, error } = await sb
         .from('meetups')
         .select('*, connection_groups(id, name)')
         .or(orConditions.join(','))
@@ -235,20 +194,16 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
       if (error) {
         console.error('Error fetching signed up meetups:', error);
-        setGroupEvents([]);
-        return;
+        return [];
       }
 
-      // Filter to upcoming ones
       const now = new Date();
       const upcomingFiltered = (signedUpMeetups || []).filter(meetup => {
         if (meetup.status === 'completed' || meetup.status === 'cancelled') return false;
         if (!meetup.date) return false;
-        // Use timezone-aware check with generous grace period (4 hours = 240 min)
         return !isEventPast(meetup.date, meetup.time, meetup.timezone, parseInt(meetup.duration || '60'), 240);
       });
 
-      // Fire circle counts + attendee signups in parallel
       const upcomingMeetupIds = upcomingFiltered.map(m => m.id);
       const hostIds = [...new Set(upcomingFiltered.map(m => m.created_by).filter(Boolean))];
       const circleIdsInResults = [...new Set((signedUpMeetups || []).filter(m => m.circle_id).map(m => m.circle_id))];
@@ -257,11 +212,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const parallelKeys = [];
 
       if (circleIdsInResults.length > 0) {
-        parallelQueries.push(supabase.from('meetups').select('id, circle_id, date').in('circle_id', circleIdsInResults).order('date', { ascending: true }));
+        parallelQueries.push(sb.from('meetups').select('id, circle_id, date').in('circle_id', circleIdsInResults).order('date', { ascending: true }));
         parallelKeys.push('circleMeetups');
       }
       if (upcomingMeetupIds.length > 0) {
-        parallelQueries.push(supabase.from('meetup_signups').select('meetup_id, user_id').in('meetup_id', upcomingMeetupIds));
+        parallelQueries.push(sb.from('meetup_signups').select('meetup_id, user_id').in('meetup_id', upcomingMeetupIds));
         parallelKeys.push('signups');
       }
 
@@ -283,7 +238,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         const attendeeUserIds = signupData.map(s => s.user_id);
         const allUserIds = [...new Set([...attendeeUserIds, ...hostIds])];
         if (allUserIds.length > 0) {
-          const { data: profileData } = await supabase
+          const { data: profileData } = await sb
             .from('profiles')
             .select('id, name, profile_picture, career')
             .in('id', allUserIds);
@@ -304,13 +259,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         const circleName = meetup.connection_groups?.name;
         const signupProfiles = attendeesByMeetup[meetup.id] || [];
         const hostProfile = hostProfileMap[meetup.created_by];
-        // Always include host in attendee list if not already there
         const hostAlreadyIncluded = signupProfiles.some(p => p.id === meetup.created_by);
         const attendeeProfiles = (hostProfile && !hostAlreadyIncluded)
           ? [hostProfile, ...signupProfiles]
           : signupProfiles;
 
-        // Calculate session number for circle meetups
         let sessionNumber = null;
         if (isCircleMeetup && circleMeetupCounts[meetup.circle_id]) {
           const meetupIds = circleMeetupCounts[meetup.circle_id];
@@ -342,12 +295,40 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       });
 
       console.log(`⏱️ Meetups: loadGroupEvents in ${Date.now() - t0}ms`);
-      setGroupEvents(upcomingEvents);
-    } catch (err) {
-      console.error('Error loading group events:', err);
-      setGroupEvents([]);
+      return upcomingEvents;
     }
-  }, [userSignups, supabase]);
+  );
+
+  const { data: pendingRequests = { coffeeChats: 0, circleInvites: 0 } } = useSupabaseQuery(
+    currentUser ? `meetups-pending-${currentUser.id}` : null,
+    async (sb) => {
+      const t0 = Date.now();
+      const [coffeeResult, circleResult] = await Promise.all([
+        sb.from('coffee_chats').select('id', { count: 'exact', head: true }).eq('recipient_id', currentUser.id).eq('status', 'pending'),
+        sb.from('connection_group_members').select('id', { count: 'exact', head: true }).eq('user_id', currentUser.id).eq('status', 'invited'),
+      ]);
+      console.log(`⏱️ Meetups: loadPendingRequests in ${Date.now() - t0}ms`);
+      return {
+        coffeeChats: coffeeResult.error ? 0 : (coffeeResult.count || 0),
+        circleInvites: circleResult.error ? 0 : (circleResult.count || 0),
+      };
+    }
+  );
+
+  const loading = coffeeLoading || eventsLoading;
+
+  // Lazy-load past meetups on mount or tab switch
+  const hasLoadedPastRef = React.useRef(false);
+  useEffect(() => {
+    if (hasLoadedPastRef.current) return;
+    hasLoadedPastRef.current = true;
+    if (initialView === 'past' || pastOnly) {
+      loadPastMeetups();
+    } else {
+      // Load past meetups in background after initial render
+      loadPastMeetups();
+    }
+  }, [currentUser.id]);
 
   const loadPastMeetups = useCallback(async () => {
     const t0 = Date.now();
@@ -686,34 +667,6 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     }
   };
 
-  const loadPendingRequests = useCallback(async () => {
-    const t0 = Date.now();
-    try {
-      // Count pending coffee chat requests (where user is recipient)
-      const { count: pendingCoffee, error: coffeeError } = await supabase
-        .from('coffee_chats')
-        .select('id', { count: 'exact', head: true })
-        .eq('recipient_id', currentUser.id)
-        .eq('status', 'pending');
-
-      // Count pending circle invites
-      const { count: pendingCircles, error: circleError } = await supabase
-        .from('connection_group_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', currentUser.id)
-        .eq('status', 'invited');
-
-      setPendingRequests({
-        coffeeChats: coffeeError ? 0 : (pendingCoffee || 0),
-        circleInvites: circleError ? 0 : (pendingCircles || 0)
-      });
-    } catch (err) {
-      // Silently handle errors
-      setPendingRequests({ coffeeChats: 0, circleInvites: 0 });
-    } finally {
-      console.log(`⏱️ Meetups: loadPendingRequests in ${Date.now() - t0}ms`);
-    }
-  }, [currentUser.id, supabase]);
 
   const formatDateLocal = (dateStr, timeStr, timezone) => {
     if (!dateStr) return 'TBD';
@@ -803,9 +756,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', chat.id);
 
       if (!error) {
-        setCoffeeChats(prev => prev.map(c =>
-          c.id === chat.id ? { ...c, status: 'accepted', isPending: false, isInviteReceived: false, isInviteSent: false } : c
-        ));
+        invalidateQuery(`meetups-coffee-${currentUser.id}`);
+        invalidateQuery(`meetups-pending-${currentUser.id}`);
       }
     } catch (err) {
       console.error('Error accepting chat:', err);
@@ -820,7 +772,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', chat.id);
 
       if (!error) {
-        setCoffeeChats(prev => prev.filter(c => c.id !== chat.id));
+        invalidateQuery(`meetups-coffee-${currentUser.id}`);
+        invalidateQuery(`meetups-pending-${currentUser.id}`);
       }
     } catch (err) {
       console.error('Error declining chat:', err);
@@ -834,9 +787,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .insert({ meetup_id: meetup.id, user_id: currentUser.id });
 
       if (!error) {
-        setGroupEvents(prev => prev.map(e =>
-          e.id === meetup.id ? { ...e, status: 'going' } : e
-        ));
+        invalidateQuery(`meetups-group-${currentUser.id}`);
       }
     } catch (err) {
       console.error('Error RSVPing to meetup:', err);
@@ -896,21 +847,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .select();
 
       if (!error) {
-        setGroupEvents(prev => prev.map(e =>
-          e.id === editingMeetup.id ? {
-            ...e,
-            topic: editingMeetup.topic,
-            title: editingMeetup.topic || e.title,
-            originalDate: editingMeetup.date,
-            rawDate: parseLocalDate(editingMeetup.date),
-            date: formatDateLocal(editingMeetup.date, editingMeetup.time, editingMeetup.timezone),
-            rawTime: editingMeetup.time,
-            time: formatEventTime(editingMeetup.date, editingMeetup.time, editingMeetup.timezone),
-            location: editingMeetup.meeting_format === 'virtual' ? 'Virtual' : editingMeetup.location,
-            meeting_format: editingMeetup.meeting_format,
-            image_url: imageUrl,
-          } : e
-        ));
+        invalidateQuery(`meetups-group-${currentUser.id}`);
         setShowEditModal(false);
         setEditingMeetup(null);
       }
@@ -929,7 +866,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', meetupId);
 
       if (!error) {
-        setGroupEvents(prev => prev.filter(e => e.id !== meetupId));
+        invalidateQuery(`meetups-group-${currentUser.id}`);
         setShowDeleteConfirm(false);
         setDeletingMeetupId(null);
       }
@@ -946,7 +883,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', chatId);
 
       if (!error) {
-        setCoffeeChats(prev => prev.filter(c => c.id !== chatId));
+        invalidateQuery(`meetups-coffee-${currentUser.id}`);
+        invalidateQuery(`meetups-pending-${currentUser.id}`);
         setShowCancelChatConfirm(false);
         setCancellingChatId(null);
       }
