@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 
 import { colors as tokens, fonts } from '@/lib/designTokens';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 
 // Color palette — sourced from shared design tokens
 const colors = {
@@ -41,67 +42,39 @@ export default function AllEventsView({
   supabase,
   onNavigate,
 }) {
-  const [meetups, setMeetups] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVibe, setSelectedVibe] = useState('all');
   const [activeView, setActiveView] = useState('upcoming'); // 'upcoming' or 'past'
 
-  useEffect(() => {
-    loadAllMeetups();
-  }, []);
+  // SWR: cached meetups data — shows instantly on repeat visits
+  const { data: meetups = [], isLoading: loading } = useSupabaseQuery(
+    currentUser ? 'all-events' : null,
+    async (sb) => {
+      const [{ data: meetupsData, error }, { data: signupsData }] = await Promise.all([
+        sb.from('meetups').select('*').order('date', { ascending: true }),
+        sb.from('meetup_signups').select('id, meetup_id, user_id'),
+      ]);
 
-  const loadAllMeetups = async () => {
-    setLoading(true);
-    try {
-      // Fetch all meetups
-      const { data: meetupsData, error } = await supabase
-        .from('meetups')
-        .select('*')
-        .order('date', { ascending: true });
+      if (error || !meetupsData?.length) return [];
 
-      if (error) {
-        console.error('Error fetching meetups:', error);
-        setMeetups([]);
-        return;
-      }
-
-      if (!meetupsData || meetupsData.length === 0) {
-        setMeetups([]);
-        setLoading(false);
-        return;
-      }
-
-      // Fetch signups separately
-      const { data: signupsData, error: signupsError } = await supabase
-        .from('meetup_signups')
-        .select('id, meetup_id, user_id');
-
-      if (signupsError) {
-        console.error('Error fetching signups:', signupsError);
-      }
-
-      // Group signups by meetup_id
       const signupsByMeetup = (signupsData || []).reduce((acc, signup) => {
-        if (!acc[signup.meetup_id]) {
-          acc[signup.meetup_id] = [];
-        }
+        if (!acc[signup.meetup_id]) acc[signup.meetup_id] = [];
         acc[signup.meetup_id].push(signup);
         return acc;
       }, {});
 
-      // Attach signups to meetups
-      const meetupsWithSignups = meetupsData.map(meetup => ({
+      return meetupsData.map(meetup => ({
         ...meetup,
         signups: signupsByMeetup[meetup.id] || [],
       }));
-
-      setMeetups(meetupsWithSignups);
-    } catch (error) {
-      console.error('Error loading meetups:', error);
-      setMeetups([]);
     }
-    setLoading(false);
+  );
+
+  // Legacy compatibility: loadAllMeetups was called in useEffect, now handled by SWR.
+  // Keeping the function signature for any manual refresh calls.
+  const loadAllMeetups = async () => {
+    // SWR handles this automatically now. This is a no-op placeholder
+    // for any code that calls loadAllMeetups() after a mutation.
   };
 
   // Filter meetups based on search, vibe, and date

@@ -17,6 +17,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 
 const colors = {
   mocha: tokens.tagText,
@@ -57,8 +58,6 @@ export default function AllPeopleView({
   onNavigate,
   previousView,
 }) {
-  const [people, setPeople] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInterest, setSelectedInterest] = useState('All');
   const [sortBy, setSortBy] = useState('default');
@@ -75,12 +74,17 @@ export default function AllPeopleView({
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  useEffect(() => { loadPeople(); }, []);
+  // SWR: people data cached across navigation
+  const { data: people = [], isLoading: loading, mutate: refreshPeople } = useSupabaseQuery(
+    currentUser ? `all-people-${currentUser.id}` : null,
+    async (sb) => { return loadPeopleData(sb); }
+  );
 
-  const loadPeople = async () => {
-    setLoading(true);
+  const loadPeople = async () => { await refreshPeople(); };
+
+  async function loadPeopleData(sb) {
     try {
-      const { data: profilesData, error } = await supabase
+      const { data: profilesData, error } = await sb
         .from('profiles')
         .select('*')
         .neq('id', currentUser.id)
@@ -88,9 +92,7 @@ export default function AllPeopleView({
         .order('created_at', { ascending: false });
 
       if (error || !profilesData?.length) {
-        setPeople([]);
-        setLoading(false);
-        return;
+        return [];
       }
 
       // Fetch mutual matches, circle data, interests in parallel
@@ -197,12 +199,11 @@ export default function AllPeopleView({
         hasPendingRequest: !myConnectionIds.has(person.id) && myInterestIds.has(person.id),
       }));
 
-      setPeople(enriched);
+      return enriched;
     } catch (error) {
       console.error('Error loading people:', error);
-      setPeople([]);
+      return [];
     }
-    setLoading(false);
   };
 
   const filteredPeople = useMemo(() => {

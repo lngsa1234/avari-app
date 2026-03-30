@@ -805,18 +805,9 @@ function MainApp({ currentUser, onSignOut }) {
     loadPendingRecaps()
   }, []) // Empty array - run once on mount
 
-  // Reload meetups when navigating BACK to home view (not on initial mount)
+  // Re-fetch on navigation removed: SWR handles stale-while-revalidate
+  // Data shows instantly from cache when returning to home/discover
   const previousViewRef = useRef(currentView)
-  useEffect(() => {
-    const prevView = previousViewRef.current
-    previousViewRef.current = currentView
-    // Reload when returning to home or discover from a different view
-    // so updated meetup images/data are reflected immediately
-    if ((currentView === 'home' || currentView === 'discover') && prevView !== currentView && hasLoadedRef.current) {
-      loadHomePageData()
-      if (currentView === 'home') loadCoffeeChatRequests()
-    }
-  }, [currentView])
 
   // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
   // Re-enable after adding useCallback to all functions

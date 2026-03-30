@@ -211,20 +211,21 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const loadRecentChats = async () => {
     console.log('⏱️ Circles: loadRecentChats starting, userId:', currentUser?.id);
     try {
-      // Get latest message per conversation (sent or received)
-      const { data: sent } = await supabase
-        .from('messages')
-        .select('id, content, created_at, sender_id, receiver_id, read')
-        .eq('sender_id', currentUser.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      const { data: received } = await supabase
-        .from('messages')
-        .select('id, content, created_at, sender_id, receiver_id, read')
-        .eq('receiver_id', currentUser.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      // Get latest message per conversation (sent or received) — parallel
+      const [{ data: sent }, { data: received }] = await Promise.all([
+        supabase
+          .from('messages')
+          .select('id, content, created_at, sender_id, receiver_id, read')
+          .eq('sender_id', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+        supabase
+          .from('messages')
+          .select('id, content, created_at, sender_id, receiver_id, read')
+          .eq('receiver_id', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(20),
+      ]);
 
       // Deduplicate by conversation partner, keep latest
       const allMessages = [...(sent || []), ...(received || [])];
