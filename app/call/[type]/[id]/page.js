@@ -411,14 +411,21 @@ export default function UnifiedCallPage() {
   // Get current user with profile
   useEffect(() => {
     async function fetchUserWithProfile() {
-      const { data: authData } = await supabase.auth.getUser();
+      console.log('[UnifiedCall] Fetching user with profile...');
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      console.log('[UnifiedCall] Auth result:', { user: authData?.user?.id, error: authError?.message });
       if (authData?.user) {
         // Fetch profile to get display name
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('name, profile_picture')
           .eq('id', authData.user.id)
           .single();
+
+        if (profileError) {
+          console.error('[UnifiedCall] Profile fetch error:', profileError.message);
+        }
+        console.log('[UnifiedCall] Profile loaded:', profile?.name);
 
         // Merge profile data with user object
         setUser({
@@ -426,7 +433,9 @@ export default function UnifiedCallPage() {
           name: profile?.name || authData.user.email?.split('@')[0],
           profile_picture: profile?.profile_picture
         });
+        console.log('[UnifiedCall] User set, config:', config?.provider);
       } else {
+        console.warn('[UnifiedCall] No auth user, redirecting to /');
         router.push('/');
       }
     }
@@ -482,6 +491,7 @@ export default function UnifiedCallPage() {
 
   // Initialize call when user is ready
   useEffect(() => {
+    console.log('[UnifiedCall] Init check — user:', !!user, 'config:', !!config, 'hasInit:', hasInitialized.current, 'isIniting:', isInitializing.current);
     if (user && config && !hasInitialized.current && !isInitializing.current) {
       initializeCall();
     }
