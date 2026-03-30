@@ -1802,13 +1802,13 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }
 
-  // Safety check - if currentUser is not loaded yet, show loading
+  // Safety check - if currentUser is not loaded yet, show skeleton
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-rose-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your profile...</p>
+      <div style={{ minHeight: '100vh', backgroundColor: '#FDF8F3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: '48px', height: '48px', border: '3px solid rgba(139, 111, 92, 0.15)', borderTopColor: '#8B6F5C', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: '#A89080', fontSize: '14px', fontFamily: fonts.sans }}>Loading...</p>
         </div>
       </div>
     )
@@ -3069,9 +3069,22 @@ function MainApp({ currentUser, onSignOut }) {
               </div>
 
               {loadingMeetups ? (
-                <div style={{ padding: '32px', textAlign: 'center' }}>
-                  <div style={{ width: '32px', height: '32px', border: '3px solid rgba(139, 111, 92, 0.2)', borderTopColor: '#7A5C42', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }}></div>
-                  <p style={{ color: '#9C8068', fontSize: '14px' }}>Loading events...</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px 0' }}>
+                  {[0, 1].map(i => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: '14px',
+                      padding: isMobile ? '12px 14px' : '16px 20px',
+                      borderRadius: '14px',
+                      background: 'rgba(255,255,255,0.4)',
+                      border: '1px solid rgba(139,111,92,0.06)',
+                    }}>
+                      <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#EDE6DF', flexShrink: 0, animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.2}s` }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ width: '60%', height: '14px', borderRadius: '6px', background: '#EDE6DF', marginBottom: '6px', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.2}s` }} />
+                        <div style={{ width: '40%', height: '10px', borderRadius: '4px', background: '#F5EDE4', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.2 + 0.1}s` }} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : upcomingMeetups.length === 0 ? (
                 <div style={{ padding: '32px', textAlign: 'center' }}>
