@@ -60,6 +60,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     async (sb) => {
       const t0 = Date.now();
 
+      // Round 1: Fire all independent queries in parallel
       const [rpcResult, mutualResult, pendingReqsResult] = await Promise.all([
         sb.rpc('get_circles_page_data', { p_user_id: currentUser.id }),
         sb.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
@@ -77,8 +78,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       }
 
       const d = rpcResult.data;
-
-      // Process connection groups from RPC data
       const groups = d.groups || [];
       const members = d.members || [];
       const creators = d.creators || [];
@@ -86,6 +85,37 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       const upcomingMeetups = d.upcoming_meetups || [];
       const pastMeetups = d.past_meetups || [];
 
+      // Round 2: Queries that depend on Round 1 — in parallel
+      const groupIds = groups.map(g => g.id);
+      const channelNames = groupIds.map(id => `connection-group-${id}`);
+      const matchedUserIds = sharedMatches.map(m => m.matched_user_id);
+
+      const round2Promises = [];
+      const round2Keys = [];
+
+      if (channelNames.length > 0) {
+        round2Promises.push(
+          sb.from('call_recaps')
+            .select('id, channel_name, created_at, ai_summary')
+            .in('channel_name', channelNames)
+            .order('created_at', { ascending: false })
+        );
+        round2Keys.push('recaps');
+      }
+      if (matchedUserIds.length > 0) {
+        round2Promises.push(
+          sb.from('profiles')
+            .select('id, name, career, city, state, profile_picture, last_active')
+            .in('id', matchedUserIds)
+        );
+        round2Keys.push('profiles');
+      }
+
+      const round2Results = round2Promises.length > 0 ? await Promise.all(round2Promises) : [];
+      const round2Map = {};
+      round2Keys.forEach((key, i) => { round2Map[key] = round2Results[i]?.data || []; });
+
+      // Process data
       const creatorMap = {};
       creators.forEach(c => { creatorMap[c.id] = c; });
 
@@ -130,23 +160,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         }
       });
 
-      // Fetch latest recap for each circle
-      const groupIds = groups.map(g => g.id);
-      const channelNames = groupIds.map(id => `connection-group-${id}`);
       const latestRecapByCircle = {};
-      if (channelNames.length > 0) {
-        const { data: recaps } = await sb
-          .from('call_recaps')
-          .select('id, channel_name, created_at, ai_summary')
-          .in('channel_name', channelNames)
-          .order('created_at', { ascending: false });
-        (recaps || []).forEach(r => {
-          const circleId = r.channel_name.replace('connection-group-', '');
-          if (!latestRecapByCircle[circleId]) {
-            latestRecapByCircle[circleId] = r;
-          }
-        });
-      }
+      (round2Map.recaps || []).forEach(r => {
+        const circleId = r.channel_name.replace('connection-group-', '');
+        if (!latestRecapByCircle[circleId]) {
+          latestRecapByCircle[circleId] = r;
+        }
+      });
 
       for (const group of groups) {
         group.creator = creatorMap[group.creator_id] || null;
@@ -193,26 +213,19 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
       // Process connections from shared matches
       let connectionsResult = [];
-      if (sharedMatches.length > 0) {
-        const matchedUserIds = sharedMatches.map(m => m.matched_user_id);
-        const { data: profiles } = await sb
-          .from('profiles')
-          .select('id, name, career, city, state, profile_picture, last_active')
-          .in('id', matchedUserIds);
-
-        if (profiles) {
-          connectionsResult = profiles.map(user => ({
-            id: user.id,
-            userId: user.id,
-            name: user.name || 'Unknown',
-            avatar: user.profile_picture,
-            career: user.career || '',
-            city: user.city,
-            state: user.state,
-            last_active: user.last_active,
-            status: isUserActive(user.last_active, 10) ? 'online' : 'away',
-          }));
-        }
+      const connectionProfiles = round2Map.profiles || [];
+      if (connectionProfiles.length > 0) {
+        connectionsResult = connectionProfiles.map(user => ({
+          id: user.id,
+          userId: user.id,
+          name: user.name || 'Unknown',
+          avatar: user.profile_picture,
+          career: user.career || '',
+          city: user.city,
+          state: user.state,
+          last_active: user.last_active,
+          status: isUserActive(user.last_active, 10) ? 'online' : 'away',
+        }));
       }
 
       console.log(`⏱️ Circles page data fetched in ${Date.now() - t0}ms`);
