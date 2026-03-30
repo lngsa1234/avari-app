@@ -396,6 +396,20 @@ function MainApp({ currentUser, onSignOut }) {
             deferredKeys.push('signups')
           }
 
+          // Recommendations — run in parallel with other secondary data, not after
+          deferredPromises.push(
+            supabase.from('event_recommendations').select('*').eq('user_id', currentUser.id).in('status', ['pending', 'viewed']).order('match_score', { ascending: false }).limit(4)
+          )
+          deferredKeys.push('eventRecs')
+          deferredPromises.push(
+            supabase.from('circle_match_scores').select('*, circle:connection_groups(id, name, is_active, connection_group_members(count))').eq('user_id', currentUser.id).order('match_score', { ascending: false }).limit(4)
+          )
+          deferredKeys.push('circleRecs')
+          deferredPromises.push(
+            supabase.from('connection_recommendations').select('*').eq('user_id', currentUser.id).neq('status', 'dismissed').order('match_score', { ascending: false }).limit(6)
+          )
+          deferredKeys.push('peopleRecs')
+
           const deferredResults = deferredPromises.length > 0 ? await Promise.all(deferredPromises) : []
           const dMap = {}
           deferredKeys.forEach((key, i) => { dMap[key] = deferredResults[i]?.data || [] })
@@ -422,17 +436,27 @@ function MainApp({ currentUser, onSignOut }) {
             setConnectionRequests([])
           }
 
-          // Process circle join requests
+          // Batch-fetch all profiles needed for join requests + signups in ONE query
           const pendingMembers = dMap.pendingMembers || []
-          if (pendingMembers.length > 0) {
-            const pendingUserIds = [...new Set(pendingMembers.map(m => m.user_id))]
-            const { data: pendingProfiles } = await supabase
+          const signupsData = dMap.signups || []
+          const allProfileIds = new Set()
+          if (pendingMembers.length > 0) pendingMembers.forEach(m => allProfileIds.add(m.user_id))
+          if (signupsData.length > 0) signupsData.forEach(s => allProfileIds.add(s.user_id))
+
+          let batchedProfileMap = {}
+          if (allProfileIds.size > 0) {
+            const { data: batchProfiles } = await supabase
               .from('profiles')
               .select('id, name, career, city, state, profile_picture')
-              .in('id', pendingUserIds)
+              .in('id', [...allProfileIds])
+            ;(batchProfiles || []).forEach(p => { batchedProfileMap[p.id] = p })
+          }
 
-            const pendingProfileMap = {}
-            ;(pendingProfiles || []).forEach(p => { pendingProfileMap[p.id] = p })
+          // Process circle join requests
+          if (pendingMembers.length > 0) {
+            const pendingUserIds = [...new Set(pendingMembers.map(m => m.user_id))]
+
+            const pendingProfileMap = batchedProfileMap
 
             const joinRequests = pendingMembers.map(m => ({
               id: m.id,
@@ -470,52 +494,23 @@ function MainApp({ currentUser, onSignOut }) {
             setCircleInvitations([])
           }
 
-          // Process signups
-          const signupsData = dMap.signups || []
+          // Process signups (profiles already batched above)
           if (signupsData.length > 0) {
-            const signupUserIds = [...new Set(signupsData.map(s => s.user_id))]
-            const { data: signupProfiles } = await supabase
-              .from('profiles')
-              .select('id, name, career, city, state, profile_picture')
-              .in('id', signupUserIds)
-
-            const profilesMap = {}
-            ;(signupProfiles || []).forEach(p => { profilesMap[p.id] = p })
-
             const signupsByMeetup = {}
             signupsData.forEach(signup => {
               if (!signupsByMeetup[signup.meetup_id]) signupsByMeetup[signup.meetup_id] = []
-              signupsByMeetup[signup.meetup_id].push({ ...signup, profiles: profilesMap[signup.user_id] || null })
+              signupsByMeetup[signup.meetup_id].push({ ...signup, profiles: batchedProfileMap[signup.user_id] || null })
             })
             setSignups(signupsByMeetup)
           } else {
             setSignups({})
           }
 
-          // === Load home page recommendation sections ===
+          // === Process home page recommendation sections (data already fetched in parallel above) ===
           try {
-            const [eventRes, circleRes, peopleRes] = await Promise.allSettled([
-              supabase
-                .from('event_recommendations')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .in('status', ['pending', 'viewed'])
-                .order('match_score', { ascending: false })
-                .limit(4),
-              supabase
-                .from('circle_match_scores')
-                .select('*, circle:connection_groups(id, name, is_active, connection_group_members(count))')
-                .eq('user_id', currentUser.id)
-                .order('match_score', { ascending: false })
-                .limit(4),
-              supabase
-                .from('connection_recommendations')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .neq('status', 'dismissed')
-                .order('match_score', { ascending: false })
-                .limit(6),
-            ])
+            const eventRes = { status: 'fulfilled', value: { data: dMap.eventRecs || [], error: null } }
+            const circleRes = { status: 'fulfilled', value: { data: dMap.circleRecs || [], error: null } }
+            const peopleRes = { status: 'fulfilled', value: { data: dMap.peopleRecs || [], error: null } }
 
             // Process event recs
             let eventRecs = []
