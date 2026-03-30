@@ -19,7 +19,7 @@ const formatDate = (isoStr) => {
 export default function MeetupsView({ currentUser, supabase, connections = [], meetups = [], userSignups = [], onNavigate, initialView = null, pastOnly = false }) {
   const [activeView, setActiveView] = useState(pastOnly ? 'past' : (initialView || 'upcoming'));
   const [activeFilter, setActiveFilter] = useState('all');
-  const [pastMeetups, setPastMeetups] = useState([]);
+  // pastMeetups is now managed by SWR (see useSupabaseQuery below)
   const [actionMenuOpen, setActionMenuOpen] = useState(null);
   const [activeCardId, setActiveCardId] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -94,8 +94,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
   };
 
   // --- SWR-cached data fetching ---
+  const EMPTY = useMemo(() => [], []);
 
-  const { data: coffeeChats = [], isLoading: coffeeLoading, mutate: refreshCoffeeChats } = useSupabaseQuery(
+  const { data: coffeeChats = EMPTY, isLoading: coffeeLoading, mutate: refreshCoffeeChats } = useSupabaseQuery(
     currentUser ? `meetups-coffee-${currentUser.id}` : null,
     async (sb) => {
       const t0 = Date.now();
@@ -164,7 +165,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
     }
   );
 
-  const { data: groupEvents = [], isLoading: eventsLoading, mutate: refreshGroupEvents } = useSupabaseQuery(
+  const { data: groupEvents = EMPTY, isLoading: eventsLoading, mutate: refreshGroupEvents } = useSupabaseQuery(
     currentUser ? `meetups-group-${currentUser.id}` : null,
     async (sb) => {
       const t0 = Date.now();
@@ -317,20 +318,9 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
   const loading = coffeeLoading || eventsLoading;
 
-  // Lazy-load past meetups on mount or tab switch
-  const hasLoadedPastRef = React.useRef(false);
-  useEffect(() => {
-    if (hasLoadedPastRef.current) return;
-    hasLoadedPastRef.current = true;
-    if (initialView === 'past' || pastOnly) {
-      loadPastMeetups();
-    } else {
-      // Load past meetups in background after initial render
-      loadPastMeetups();
-    }
-  }, [currentUser.id]);
-
-  const loadPastMeetups = useCallback(async () => {
+  const { data: pastMeetups = EMPTY } = useSupabaseQuery(
+    currentUser ? `meetups-past-${currentUser.id}` : null,
+    async (sb) => {
     const t0 = Date.now();
     try {
       const now = new Date();
@@ -649,14 +639,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       // Sort by date descending
       allPastMeetups.sort((a, b) => b.rawDate - a.rawDate);
 
-      setPastMeetups(allPastMeetups);
+      console.log(`⏱️ Meetups: loadPastMeetups in ${Date.now() - t0}ms`);
+      return allPastMeetups;
     } catch (err) {
       console.error('Error loading past meetups:', err);
-      setPastMeetups([]);
-    } finally {
-      console.log(`⏱️ Meetups: loadPastMeetups in ${Date.now() - t0}ms`);
+      return [];
     }
-  }, [currentUser.id, supabase]);
+  });
 
   // View recap for a past meetup
   const handleViewRecap = (item) => {

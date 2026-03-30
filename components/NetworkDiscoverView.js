@@ -191,8 +191,13 @@ export default function NetworkDiscoverView({
   const [expandedCircleId, setExpandedCircleId] = useState(null);
 
   // --- SWR data-loading queries (all grouped before useMemo hooks) ---
+  // Stable defaults to prevent useMemo thrashing on re-renders
+  const EMPTY_ARRAY = useMemo(() => [], []);
+  const EMPTY_OBJECT = useMemo(() => ({}), []);
+  const EMPTY_SET = useMemo(() => new Set(), []);
+  const EMPTY_STATS = useMemo(() => ({ activeThisWeek: 0, meetupsThisWeek: 0 }), []);
 
-  const { data: connectionGroups = [], isLoading: isLoadingGroups } = useSupabaseQuery(
+  const { data: connectionGroups = EMPTY_ARRAY, isLoading: isLoadingGroups } = useSupabaseQuery(
     'discover-connection-groups',
     async (sb) => {
       const { data: groups, error } = await sb
@@ -238,7 +243,7 @@ export default function NetworkDiscoverView({
     }
   );
 
-  const { data: meetupRequests = [], isLoading: isLoadingRequests } = useSupabaseQuery(
+  const { data: meetupRequests = EMPTY_ARRAY, isLoading: isLoadingRequests } = useSupabaseQuery(
     'discover-meetup-requests',
     async (sb) => {
       const { data, error } = await sb
@@ -291,7 +296,7 @@ export default function NetworkDiscoverView({
     }
   );
 
-  const { data: socialProofStats = { activeThisWeek: 0, meetupsThisWeek: 0 } } = useSupabaseQuery(
+  const { data: socialProofStats = EMPTY_STATS } = useSupabaseQuery(
     'discover-social-proof',
     async (sb) => {
       const oneWeekAgo = new Date();
@@ -314,7 +319,7 @@ export default function NetworkDiscoverView({
     }
   );
 
-  const { data: userRsvps = new Set(), isLoading: isLoadingRsvps } = useSupabaseQuery(
+  const { data: userRsvps = EMPTY_SET, isLoading: isLoadingRsvps } = useSupabaseQuery(
     currentUser?.id ? `discover-user-rsvps-${currentUser.id}` : null,
     async (sb) => {
       const { data, error } = await sb
@@ -329,7 +334,7 @@ export default function NetworkDiscoverView({
     }
   );
 
-  const { data: meetupSignups = {}, isLoading: isLoadingSignups } = useSupabaseQuery(
+  const { data: meetupSignups = EMPTY_OBJECT, isLoading: isLoadingSignups } = useSupabaseQuery(
     'discover-meetup-signups',
     async (sb) => {
       const { data: signupsData, error: signupsError } = await sb
