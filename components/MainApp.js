@@ -38,6 +38,7 @@ import useMeetups from '@/hooks/useMeetups'
 import useCoffeeChats from '@/hooks/useCoffeeChats'
 import useConnections from '@/hooks/useConnections'
 import useJourney from '@/hooks/useJourney'
+import usePrefetchPages from '@/hooks/usePrefetchPages'
 import HomeView from './HomeView'
 
 // Helper functions used by AdminDashboard and meetup modals (still inline in MainApp)
@@ -157,6 +158,9 @@ function MainApp({ currentUser, onSignOut }) {
     userSignups: homeData.userSignups,
     toast,
   })
+
+  // Prefetch Discover, Coffee, Circles data while user is on Home
+  usePrefetchPages(currentUser, supabase)
 
   // Destructure from hooks
   const {

@@ -47,3 +47,17 @@ export function useSupabaseQuery(key, queryFn, opts = {}) {
  *   invalidateQuery('home-meetups')
  */
 export { mutate as invalidateQuery } from 'swr'
+
+/**
+ * Prefetch a query into SWR cache.
+ * Call this to warm the cache before the user navigates to a page.
+ *
+ * Usage:
+ *   import { prefetchQuery } from '@/hooks/useSupabaseQuery'
+ *   prefetchQuery('discover-circles', async (sb) => { ... })
+ */
+import { mutate } from 'swr'
+export function prefetchQuery(key, queryFn) {
+  // Only prefetch if not already cached
+  mutate(key, () => queryFn(supabase), { revalidate: false })
+}
