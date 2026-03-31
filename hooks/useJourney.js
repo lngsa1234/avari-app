@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
 import { parseLocalDate } from '@/lib/dateUtils'
+import { supabase } from '@/lib/supabase'
 
 /**
  * useJourney — tracks user progress: pending recaps, attended count
  * groupsCount and coffeeChatsCount are owned by useHomeData (set via RPC)
  */
-export default function useJourney(currentUser, supabase) {
+export default function useJourney(currentUser) {
   const [pendingRecaps, setPendingRecaps] = useState([])
 
   const loadPendingRecaps = useCallback(async () => {

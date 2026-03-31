@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createAgoraRoom, hasAgoraRoom } from '@/lib/agoraHelpers'
+import { supabase } from '@/lib/supabase'
 
 // Helper function to format date from ISO to friendly display
 const formatDate = (dateStr) => {
@@ -31,7 +32,7 @@ const formatDate = (dateStr) => {
  * useMeetups — meetup CRUD, signups, RSVP, video call join
  * Does NOT own meetups/userSignups/signups state — calls refresh callbacks from useHomeData
  */
-export default function useMeetups(currentUser, supabase, { refreshMeetups, refreshUserSignups, refreshSignups, meetups, userSignups, toast } = {}) {
+export default function useMeetups(currentUser, { refreshMeetups, refreshUserSignups, refreshSignups, meetups, userSignups, toast } = {}) {
   // Modal state
   const [newMeetup, setNewMeetup] = useState({ date: '', time: '', location: '', topic: '', duration: '60', participantLimit: '100', description: '' })
   const [selectedDate, setSelectedDate] = useState(null)

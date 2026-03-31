@@ -142,15 +142,15 @@ function MainApp({ currentUser, onSignOut }) {
   })
 
   // === HOOKS ===
-  const homeData = useHomeData(currentUser, supabase)
-  const journey = useJourney(currentUser, supabase)
-  const connectionsHook = useConnections(currentUser, supabase, {
+  const homeData = useHomeData(currentUser)
+  const journey = useJourney(currentUser)
+  const connectionsHook = useConnections(currentUser, {
     refreshConnectionRequests: homeData.loadConnectionRequests, toast
   })
-  const coffeeChats = useCoffeeChats(currentUser, supabase, {
+  const coffeeChats = useCoffeeChats(currentUser, {
     refreshCoffeeChats: homeData.refreshCoffeeChats
   })
-  const meetupsHook = useMeetups(currentUser, supabase, {
+  const meetupsHook = useMeetups(currentUser, {
     refreshMeetups: homeData.refreshMeetups,
     refreshUserSignups: homeData.refreshUserSignups,
     refreshSignups: homeData.refreshSignups,

@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
 
 /**
  * useConnections — connections, interests, discovery, meetup people, potential connections
  */
-export default function useConnections(currentUser, supabase, { refreshConnectionRequests, toast } = {}) {
+export default function useConnections(currentUser, { refreshConnectionRequests, toast } = {}) {
   const [connections, setConnections] = useState([])
   const [myInterests, setMyInterests] = useState([])
   const [meetupPeople, setMeetupPeople] = useState({})

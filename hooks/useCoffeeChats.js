@@ -1,12 +1,13 @@
 import { useState, useCallback } from 'react'
 import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/coffeeChatHelpers'
 import { apiFetch } from '@/lib/apiFetch'
+import { supabase } from '@/lib/supabase'
 
 /**
  * useCoffeeChats — coffee chat requests, accept/decline handlers
  * upcomingCoffeeChats state is owned by useHomeData
  */
-export default function useCoffeeChats(currentUser, supabase, { refreshCoffeeChats } = {}) {
+export default function useCoffeeChats(currentUser, { refreshCoffeeChats } = {}) {
   const [coffeeChatRequests, setCoffeeChatRequests] = useState([])
 
   const loadCoffeeChatRequests = useCallback(async () => {

@@ -2,8 +2,9 @@
 
 import { useState, useCallback } from 'react'
 import { parseLocalDate } from '@/lib/dateUtils'
+import { supabase } from '@/lib/supabase'
 
-export default function useHomeData(currentUser, supabase) {
+export default function useHomeData(currentUser) {
   // State variables
   const [meetups, setMeetups] = useState([])
   const [loadingMeetups, setLoadingMeetups] = useState(true)
