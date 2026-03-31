@@ -5,6 +5,7 @@ import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users
 import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 import { apiFetch } from '@/lib/apiFetch';
 import { colors as tokens, fonts } from '@/lib/designTokens';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 
 const COLORS = {
   bg: tokens.bgAlt,
@@ -86,111 +87,97 @@ function timeAgo(dateStr) {
 }
 
 export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard, refreshKey }) {
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isConnected, setIsConnected] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [mutualCircles, setMutualCircles] = useState([]);
-  const [connectionCount, setConnectionCount] = useState(0);
-  const [meetupCount, setMeetupCount] = useState(0);
   const [loaded, setLoaded] = useState(false);
-  const [hasIncomingRequest, setHasIncomingRequest] = useState(false);
-  const [hasSentRequest, setHasSentRequest] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [showReport, setShowReport] = useState(false);
-  const [activities, setActivities] = useState([]);
   const [reportReason, setReportReason] = useState(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const isOwnProfile = userId === currentUser.id;
 
-  useEffect(() => {
-    if (userId) loadProfile();
-  }, [userId, refreshKey]);
-
-  const loadProfile = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
+  // SWR: profile data cached across navigation
+  const { data: profileData, isLoading: loading, mutate: refreshProfile } = useSupabaseQuery(
+    userId ? `user-profile-${userId}-${currentUser.id}` : null,
+    async (sb) => {
+      const { data, error } = await sb
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
       if (error) throw error;
-      setProfile(data);
 
-      const { data: matches } = await supabase
+      const { data: matches } = await sb
         .rpc('get_mutual_matches', { for_user_id: currentUser.id });
       const matchedIds = (matches || []).map(m => m.matched_user_id);
       const connected = matchedIds.includes(userId);
-      setIsConnected(connected);
 
-      // Check if this person has sent us a pending connection request, or if we sent one
+      let hasIncoming = false;
+      let hasSent = false;
       if (!connected && userId !== currentUser.id) {
         const [{ data: incomingInterest }, { data: outgoingInterest }] = await Promise.all([
-          supabase
+          sb
             .from('user_interests')
             .select('id')
             .eq('user_id', userId)
             .eq('interested_in_user_id', currentUser.id)
             .limit(1),
-          supabase
+          sb
             .from('user_interests')
             .select('id')
             .eq('user_id', currentUser.id)
             .eq('interested_in_user_id', userId)
             .limit(1),
         ]);
-        setHasIncomingRequest((incomingInterest || []).length > 0);
-        setHasSentRequest((outgoingInterest || []).length > 0);
+        hasIncoming = (incomingInterest || []).length > 0;
+        hasSent = (outgoingInterest || []).length > 0;
       }
 
+      let connCount = 0;
       if (userId === currentUser.id) {
-        setConnectionCount((matches || []).length);
+        connCount = (matches || []).length;
       } else {
-        const { data: theirMatches } = await supabase
+        const { data: theirMatches } = await sb
           .rpc('get_mutual_matches', { for_user_id: userId });
-        setConnectionCount((theirMatches || []).length);
+        connCount = (theirMatches || []).length;
       }
 
-      const { data: myCircles } = await supabase
+      const { data: myCircles } = await sb
         .from('connection_group_members')
         .select('group_id')
         .eq('user_id', currentUser.id)
         .eq('status', 'accepted');
 
-      const { data: theirCircles } = await supabase
+      const { data: theirCircles } = await sb
         .from('connection_group_members')
         .select('group_id')
         .eq('user_id', userId)
         .eq('status', 'accepted');
 
+      let sharedCircles = [];
       if (myCircles && theirCircles) {
         const myGroupIds = new Set(myCircles.map(c => c.group_id));
         const sharedIds = theirCircles.filter(c => myGroupIds.has(c.group_id)).map(c => c.group_id);
 
         if (sharedIds.length > 0) {
-          const { data: circles } = await supabase
+          const { data: circles } = await sb
             .from('connection_groups')
             .select('id, name, connection_group_members(count)')
             .in('id', sharedIds);
-          setMutualCircles(circles || []);
+          sharedCircles = circles || [];
         }
       }
 
-      // Count meetups attended (from call_recaps participant_ids)
-      const { count: recapCount } = await supabase
+      const { count: recapCount } = await sb
         .from('call_recaps')
         .select('id', { count: 'exact', head: true })
         .contains('participant_ids', [userId]);
-      setMeetupCount(recapCount || 0);
 
-      // Fetch recent activity
-      const { data: feedData, error: feedError } = await supabase
+      const { data: feedData, error: feedError } = await sb
         .from('feed_events')
         .select('id, event_type, target_id, metadata, created_at')
         .eq('actor_id', userId)
@@ -198,24 +185,41 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         .limit(8);
       if (feedError) console.error('Feed events error:', feedError);
 
-      // Resolve target user names for activities
       const targetIds = [...new Set((feedData || []).filter(e => e.target_id).map(e => e.target_id))];
       let targetNames = {};
       if (targetIds.length > 0) {
-        const { data: targets } = await supabase
+        const { data: targets } = await sb
           .from('profiles')
           .select('id, name')
           .in('id', targetIds);
         (targets || []).forEach(t => { targetNames[t.id] = t.name; });
       }
-      setActivities((feedData || []).map(e => ({ ...e, _targetName: targetNames[e.target_id] || null })));
-    } catch (err) {
-      console.error('Error loading user profile:', err);
-    } finally {
-      setLoading(false);
-      setTimeout(() => setLoaded(true), 50);
+
+      return {
+        profile: data,
+        isConnected: connected,
+        hasIncomingRequest: hasIncoming,
+        hasSentRequest: hasSent,
+        connectionCount: connCount,
+        mutualCircles: sharedCircles,
+        meetupCount: recapCount || 0,
+        activities: (feedData || []).map(e => ({ ...e, _targetName: targetNames[e.target_id] || null })),
+      };
     }
-  };
+  );
+
+  const profile = profileData?.profile || null;
+  const isConnected = profileData?.isConnected || false;
+  const hasIncomingRequest = profileData?.hasIncomingRequest || false;
+  const hasSentRequest = profileData?.hasSentRequest || false;
+  const connectionCount = profileData?.connectionCount || 0;
+  const mutualCircles = profileData?.mutualCircles || [];
+  const meetupCount = profileData?.meetupCount || 0;
+  const activities = profileData?.activities || [];
+
+  useEffect(() => {
+    if (!loading && profile) setTimeout(() => setLoaded(true), 50);
+  }, [loading, profile]);
 
   const handleRemoveConnection = async () => {
     setRemoving(true);
@@ -225,8 +229,8 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       if (error) throw error;
 
-      setIsConnected(false);
       setShowConfirm(false);
+      refreshProfile();
       onConnectionRemoved?.(userId);
       onNavigate?.(previousView || 'connectionGroups');
     } catch (err) {
@@ -249,8 +253,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       if (error && error.code !== '23505') throw error;
 
-      setIsConnected(true);
-      setHasIncomingRequest(false);
+      refreshProfile();
     } catch (err) {
       console.error('Error accepting connection:', err);
       alert('Failed to accept connection. Please try again.');
@@ -271,21 +274,14 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       if (error) {
         if (error.code === '23505') {
-          setHasSentRequest(true);
+          refreshProfile();
         } else {
           throw error;
         }
         return;
       }
 
-      // Check if it's now a mutual match
-      const { data: isMutual } = await supabase
-        .rpc('check_mutual_interest', { user_a: currentUser.id, user_b: userId });
-      if (isMutual) {
-        setIsConnected(true);
-      } else {
-        setHasSentRequest(true);
-      }
+      refreshProfile();
     } catch (err) {
       console.error('Error sending connection request:', err);
       alert('Failed to send connection request. Please try again.');
@@ -305,7 +301,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       if (error && error.code !== '23505') throw error;
 
-      setHasIncomingRequest(false);
+      refreshProfile();
     } catch (err) {
       console.error('Error ignoring connection:', err);
     }
@@ -320,12 +316,51 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
     transition: `all 0.45s ease ${delay}s`,
   });
 
-  if (loading) {
+  if (loading && !profileData) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', fontFamily: FONT }}>
+      <div style={{ fontFamily: FONT, maxWidth: '880px', margin: '0 auto' }}>
         <style>{keyframeStyles}</style>
-        <div style={{ width: 32, height: 32, border: `3px solid ${COLORS.brown100}`, borderTopColor: COLORS.accent, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <p style={{ marginTop: 12, color: COLORS.brown400, fontSize: 14 }}>Loading profile...</p>
+        {/* Nav skeleton */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 0' }}>
+          <div style={{ width: 20, height: 20, borderRadius: 4, background: '#EDE6DF', animation: 'pulse 1.5s infinite' }} />
+          <div style={{ width: 60, height: 18, borderRadius: 6, background: '#EDE6DF', animation: 'pulse 1.5s infinite' }} />
+          <div style={{ width: 50, height: 16, borderRadius: 4, background: '#EDE6DF', animation: 'pulse 1.5s infinite' }} />
+        </div>
+        {/* Avatar + name */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, paddingTop: 8, marginBottom: 20 }}>
+          <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#EDE6DF', flexShrink: 0, animation: 'pulse 1.5s infinite' }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ width: '60%', height: 20, borderRadius: 6, background: '#EDE6DF', marginBottom: 8, animation: 'pulse 1.5s infinite' }} />
+            <div style={{ width: '45%', height: 14, borderRadius: 4, background: '#F5EDE4', marginBottom: 6, animation: 'pulse 1.5s infinite', animationDelay: '0.1s' }} />
+            <div style={{ width: '35%', height: 12, borderRadius: 4, background: '#F5EDE4', animation: 'pulse 1.5s infinite', animationDelay: '0.2s' }} />
+          </div>
+        </div>
+        {/* Stats row */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+          {[0, 1, 2].map(i => (
+            <div key={i} style={{ flex: 1, background: 'rgba(255,255,255,0.5)', borderRadius: 12, padding: 14, border: '1px solid rgba(139,111,92,0.08)', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.1}s` }}>
+              <div style={{ width: '40%', height: 20, borderRadius: 4, background: '#EDE6DF', marginBottom: 6, margin: '0 auto' }} />
+              <div style={{ width: '60%', height: 10, borderRadius: 4, background: '#F5EDE4', margin: '0 auto' }} />
+            </div>
+          ))}
+        </div>
+        {/* Bio skeleton */}
+        <div style={{ background: 'rgba(255,255,255,0.5)', borderRadius: 16, padding: 16, border: '1px solid rgba(139,111,92,0.08)', marginBottom: 16, animation: 'pulse 1.5s infinite', animationDelay: '0.15s' }}>
+          <div style={{ width: '90%', height: 12, borderRadius: 4, background: '#EDE6DF', marginBottom: 8 }} />
+          <div style={{ width: '75%', height: 12, borderRadius: 4, background: '#F5EDE4', marginBottom: 8 }} />
+          <div style={{ width: '60%', height: 12, borderRadius: 4, background: '#F5EDE4' }} />
+        </div>
+        {/* Activity skeleton */}
+        <div style={{ width: 140, height: 18, borderRadius: 6, background: '#EDE6DF', marginBottom: 12, animation: 'pulse 1.5s infinite' }} />
+        {[0, 1].map(i => (
+          <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12, animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.15}s` }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#EDE6DF', flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ width: '70%', height: 12, borderRadius: 4, background: '#EDE6DF', marginBottom: 4 }} />
+              <div style={{ width: '40%', height: 10, borderRadius: 4, background: '#F5EDE4' }} />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -563,7 +598,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             <div
               onClick={async () => {
                 const newVal = !profile.open_to_hosting;
-                setProfile(prev => ({ ...prev, open_to_hosting: newVal }));
+                refreshProfile(prev => prev ? { ...prev, profile: { ...prev.profile, open_to_hosting: newVal } } : prev, { revalidate: false });
                 await supabase.from('profiles').update({ open_to_hosting: newVal }).eq('id', currentUser.id);
               }}
               style={{
@@ -603,7 +638,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             <div
               onClick={async () => {
                 const newVal = !profile.open_to_coffee_chat;
-                setProfile(prev => ({ ...prev, open_to_coffee_chat: newVal }));
+                refreshProfile(prev => prev ? { ...prev, profile: { ...prev.profile, open_to_coffee_chat: newVal } } : prev, { revalidate: false });
                 await supabase.from('profiles').update({ open_to_coffee_chat: newVal }).eq('id', currentUser.id);
               }}
               style={{
@@ -661,7 +696,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                         const currentDays = profile.coffee_chat_slots?.days || [];
                         const newDays = selected ? currentDays.filter(d => d !== day) : [...currentDays, day];
                         const newSlots = { ...profile.coffee_chat_slots, days: newDays };
-                        setProfile(prev => ({ ...prev, coffee_chat_slots: newSlots }));
+                        refreshProfile(prev => prev ? { ...prev, profile: { ...prev.profile, coffee_chat_slots: newSlots } } : prev, { revalidate: false });
                         await supabase.from('profiles').update({ coffee_chat_slots: newSlots }).eq('id', currentUser.id);
                       }}
                       style={{
@@ -688,7 +723,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                         const currentTimes = profile.coffee_chat_slots?.times || [];
                         const newTimes = selected ? currentTimes.filter(t => t !== time) : [...currentTimes, time];
                         const newSlots = { ...profile.coffee_chat_slots, times: newTimes };
-                        setProfile(prev => ({ ...prev, coffee_chat_slots: newSlots }));
+                        refreshProfile(prev => prev ? { ...prev, profile: { ...prev.profile, coffee_chat_slots: newSlots } } : prev, { revalidate: false });
                         await supabase.from('profiles').update({ coffee_chat_slots: newSlots }).eq('id', currentUser.id);
                       }}
                       style={{
