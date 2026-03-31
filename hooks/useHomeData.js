@@ -76,8 +76,103 @@ export default function useHomeData(currentUser) {
   const [circleInvitations, setCircleInvitations] = useState([])
   const [homeEventRecs, setHomeEventRecs] = useState([])
   const [homeCircleRecs, setHomeCircleRecs] = useState([])
-  const [homePeopleRecs, setHomePeopleRecs] = useState([])
-  const [homeRecsLoaded, setHomeRecsLoaded] = useState(false)
+
+  // === PEOPLE RECS: separate SWR query for caching across navigations ===
+  const { data: homePeopleRecs = [], mutate: mutatePeopleRecs } = useSupabaseQuery(
+    currentUser?.id ? `home-people-recs-${currentUser.id}` : null,
+    async (sb) => {
+      const { data: mutualMatchesData } = await sb.rpc('get_mutual_matches', { for_user_id: currentUser.id })
+      const mutualConnectedIds = new Set((mutualMatchesData || []).map(m => m.matched_user_id))
+
+      // Try AI recommendations first
+      const { data: peopleData } = await sb
+        .from('connection_recommendations')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .neq('status', 'dismissed')
+        .order('match_score', { ascending: false })
+        .limit(6)
+
+      let recs = []
+      if (peopleData?.length > 0) {
+        const seen = new Set()
+        const deduped = peopleData.filter(r => {
+          if (mutualConnectedIds.has(r.recommended_user_id)) return false
+          if (seen.has(r.recommended_user_id)) return false
+          seen.add(r.recommended_user_id)
+          return true
+        }).slice(0, 3)
+        if (deduped.length > 0) {
+          const profileIds = deduped.map(r => r.recommended_user_id)
+          const { data: recProfiles } = await sb
+            .from('profiles')
+            .select('id, name, career, profile_picture')
+            .in('id', profileIds)
+          const recProfileMap = {}
+          ;(recProfiles || []).forEach(p => { recProfileMap[p.id] = p })
+          recs = deduped.map(r => {
+            const reasons = []
+            if (r.reason) reasons.push({ reason: r.reason })
+            if (r.shared_topics?.length > 0) {
+              r.shared_topics.forEach(t => reasons.push({ reason: t }))
+            }
+            return { ...r, match_reasons: reasons, profile: recProfileMap[r.recommended_user_id] || null }
+          }).filter(r => r.profile)
+        }
+      }
+
+      // Fallback: recently active community members
+      if (recs.length === 0) {
+        const activeCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+        const { data: communityProfiles } = await sb
+          .from('profiles')
+          .select('id, name, career, profile_picture, last_active, industry, hook, city, state')
+          .neq('id', currentUser.id)
+          .not('name', 'is', null)
+          .not('last_active', 'is', null)
+          .gte('last_active', activeCutoff)
+          .order('last_active', { ascending: false })
+          .limit(6)
+        if (communityProfiles?.length > 0) {
+          const myCareer = (currentUser.career || '').toLowerCase()
+          const myIndustry = (currentUser.industry || '').toLowerCase()
+          const myCity = (currentUser.city || '').toLowerCase()
+          const careerKeywords = myCareer.split(/[\s,\/]+/).filter(w => w.length > 2)
+          recs = communityProfiles
+            .filter(p => !mutualConnectedIds.has(p.id))
+            .map(p => {
+              const reasons = []
+              let score = 0
+              const theirCareer = (p.career || '').toLowerCase()
+              if (careerKeywords.some(kw => theirCareer.includes(kw))) {
+                reasons.push({ reason: 'Similar role' })
+                score += 2
+              }
+              if (p.industry) {
+                if (myIndustry && p.industry.toLowerCase().includes(myIndustry)) {
+                  reasons.push({ reason: `Same industry: ${p.industry}` })
+                  score += 2
+                } else {
+                  reasons.push({ reason: p.industry })
+                }
+              }
+              if (p.city && myCity && p.city.toLowerCase() === myCity) {
+                reasons.push({ reason: `Same city: ${p.city}` })
+                score += 1
+              }
+              return { id: p.id, recommended_user_id: p.id, match_score: score, match_reasons: reasons, profile: p }
+            })
+            .filter(r => r.match_reasons.length > 0)
+            .sort((a, b) => b.match_score - a.match_score)
+            .slice(0, 3)
+        }
+      }
+
+      return recs
+    }
+  )
+
+  const homeRecsLoaded = homePeopleRecs !== undefined
 
   // Track whether secondary data has been loaded for this primary fetch
   const secondaryLoadedForRef = useRef(null)
@@ -167,7 +262,7 @@ export default function useHomeData(currentUser) {
             deferredKeys.push('signups')
           }
 
-          // Recommendations — run in parallel with other secondary data, not after
+          // Recommendations + mutual matches — run in parallel with other secondary data
           deferredPromises.push(
             supabase.from('event_recommendations').select('*').eq('user_id', currentUser.id).in('status', ['pending', 'viewed']).order('match_score', { ascending: false }).limit(4)
           )
@@ -176,10 +271,7 @@ export default function useHomeData(currentUser) {
             supabase.from('circle_match_scores').select('*, circle:connection_groups(id, name, is_active, connection_group_members(count))').eq('user_id', currentUser.id).order('match_score', { ascending: false }).limit(4)
           )
           deferredKeys.push('circleRecs')
-          deferredPromises.push(
-            supabase.from('connection_recommendations').select('*').eq('user_id', currentUser.id).neq('status', 'dismissed').order('match_score', { ascending: false }).limit(6)
-          )
-          deferredKeys.push('peopleRecs')
+          // People recs now handled by separate SWR query (home-people-recs)
 
           const deferredResults = deferredPromises.length > 0 ? await Promise.all(deferredPromises) : []
           const dMap = {}
@@ -281,8 +373,6 @@ export default function useHomeData(currentUser) {
           try {
             const eventRes = { status: 'fulfilled', value: { data: dMap.eventRecs || [], error: null } }
             const circleRes = { status: 'fulfilled', value: { data: dMap.circleRecs || [], error: null } }
-            const peopleRes = { status: 'fulfilled', value: { data: dMap.peopleRecs || [], error: null } }
-
             // Process event recs
             let eventRecs = []
             const eventData = eventRes.status === 'fulfilled' && !eventRes.value.error ? eventRes.value.data : []
@@ -323,17 +413,11 @@ export default function useHomeData(currentUser) {
             // Circle fallback: active circles user hasn't joined
             if (circleRecs.length === 0) {
               try {
-                const { data: myMemberships } = await supabase
-                  .from('connection_group_members')
-                  .select('group_id')
-                  .eq('user_id', currentUser.id)
+                const [{ data: myMemberships }, { data: activeCircles }] = await Promise.all([
+                  supabase.from('connection_group_members').select('group_id').eq('user_id', currentUser.id),
+                  supabase.from('connection_groups').select('id, name, is_active, connection_group_members(count)').eq('is_active', true).order('created_at', { ascending: false }).limit(6),
+                ])
                 const myGroupIds = new Set((myMemberships || []).map(m => m.group_id))
-                const { data: activeCircles } = await supabase
-                  .from('connection_groups')
-                  .select('id, name, is_active, connection_group_members(count)')
-                  .eq('is_active', true)
-                  .order('created_at', { ascending: false })
-                  .limit(6)
                 if (activeCircles?.length > 0) {
                   circleRecs = activeCircles
                     .filter(c => !myGroupIds.has(c.id))
@@ -369,167 +453,10 @@ export default function useHomeData(currentUser) {
               } catch (e) { console.error('[HomeRecs] Circle enrich:', e) }
             }
 
-            // Process people recs
-            let peopleRecs = []
-            // Get mutual connections once — shared by AI recs and fallback
-            const { data: mutualMatchesForRecs } = await supabase
-              .rpc('get_mutual_matches', { for_user_id: currentUser.id })
-            const mutualConnectedIds = new Set((mutualMatchesForRecs || []).map(m => m.matched_user_id))
-
-            const peopleData = peopleRes.status === 'fulfilled' && !peopleRes.value.error ? peopleRes.value.data : []
-            if (peopleData.length > 0) {
-              const connectedIds = mutualConnectedIds
-              const seen = new Set()
-              const deduped = peopleData.filter(r => {
-                if (connectedIds.has(r.recommended_user_id)) return false
-                if (seen.has(r.recommended_user_id)) return false
-                seen.add(r.recommended_user_id)
-                return true
-              }).slice(0, 3)
-              if (deduped.length > 0) {
-                const profileIds = deduped.map(r => r.recommended_user_id)
-                const { data: recProfiles } = await supabase
-                  .from('profiles')
-                  .select('id, name, career, profile_picture')
-                  .in('id', profileIds)
-                const recProfileMap = {}
-                ;(recProfiles || []).forEach(p => { recProfileMap[p.id] = p })
-                peopleRecs = deduped.map(r => {
-                  // Build match_reasons from DB fields
-                  const reasons = []
-                  if (r.reason) reasons.push({ reason: r.reason })
-                  if (r.shared_topics?.length > 0) {
-                    r.shared_topics.forEach(t => reasons.push({ reason: t }))
-                  }
-                  return { ...r, match_reasons: reasons, profile: recProfileMap[r.recommended_user_id] || null }
-                }).filter(r => r.profile)
-              }
-            }
-            // People fallback: recently active community members (active in last 30 days)
-            if (peopleRecs.length === 0) {
-              try {
-                const activeCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-                const { data: communityProfiles } = await supabase
-                  .from('profiles')
-                  .select('id, name, career, profile_picture, last_active')
-                  .neq('id', currentUser.id)
-                  .not('name', 'is', null)
-                  .not('last_active', 'is', null)
-                  .gte('last_active', activeCutoff)
-                  .order('last_active', { ascending: false })
-                  .limit(6)
-                if (communityProfiles?.length > 0) {
-                  // Fetch industry/hook for tags
-                  const fallbackIds = communityProfiles.filter(p => !mutualConnectedIds.has(p.id)).map(p => p.id)
-                  let extraFields = {}
-                  if (fallbackIds.length > 0) {
-                    const { data: extraProfiles } = await supabase
-                      .from('profiles')
-                      .select('id, industry, hook, city, state')
-                      .in('id', fallbackIds)
-                    ;(extraProfiles || []).forEach(p => { extraFields[p.id] = p })
-                  }
-                  // Detect career/role similarity
-                  const myCareer = (currentUser.career || '').toLowerCase()
-                  const myIndustry = (currentUser.industry || '').toLowerCase()
-                  const careerKeywords = myCareer.split(/[\s,\/]+/).filter(w => w.length > 2)
-                  peopleRecs = communityProfiles
-                    .filter(p => !mutualConnectedIds.has(p.id))
-                    .map(p => {
-                      const extra = extraFields[p.id] || {}
-                      const reasons = []
-                      let score = 0
-
-                      // Career similarity
-                      const theirCareer = (p.career || '').toLowerCase()
-                      const hasSimilarRole = careerKeywords.some(kw => theirCareer.includes(kw))
-                      if (hasSimilarRole) {
-                        reasons.push({ reason: 'Similar role' })
-                        score += 2
-                      }
-
-                      // Industry match
-                      if (extra.industry) {
-                        if (myIndustry && extra.industry.toLowerCase().includes(myIndustry)) {
-                          reasons.push({ reason: `Same industry: ${extra.industry}` })
-                          score += 2
-                        } else {
-                          reasons.push({ reason: extra.industry })
-                        }
-                      }
-
-                      // Only show location if it matches current user's location or there are other reasons
-                      const myCity = (currentUser.city || '').toLowerCase()
-                      if (extra.city && myCity && extra.city.toLowerCase() === myCity) {
-                        reasons.push({ reason: `Same city: ${extra.city}` })
-                        score += 1
-                      }
-
-                      return { id: p.id, recommended_user_id: p.id, match_score: score, match_reasons: reasons, profile: p }
-                    })
-                    .filter(r => r.match_reasons.length > 0)
-                    .sort((a, b) => b.match_score - a.match_score)
-                    .slice(0, 3)
-                }
-              } catch (e) { console.error('[HomeRecs] People fallback:', e) }
-            }
-
-            // Final activity filter: exclude anyone inactive for 30+ days
-            if (peopleRecs.length > 0) {
-              const activityCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-              const profileIds = peopleRecs.map(r => r.profile?.id || r.recommended_user_id).filter(Boolean)
-              const { data: activityCheck } = await supabase
-                .from('profiles')
-                .select('id, last_active')
-                .in('id', profileIds)
-              const activeIds = new Set(
-                (activityCheck || [])
-                  .filter(p => p.last_active && p.last_active >= activityCutoff)
-                  .map(p => p.id)
-              )
-              peopleRecs = peopleRecs.filter(r => activeIds.has(r.profile?.id || r.recommended_user_id))
-            }
-
-            // Compute shared meetup counts for people recs
-            if (peopleRecs.length > 0) {
-              try {
-                // Get all meetups Admin signed up for
-                const { data: mySignups } = await supabase
-                  .from('meetup_signups')
-                  .select('meetup_id')
-                  .eq('user_id', currentUser.id)
-                const myMeetupIds = (mySignups || []).map(s => s.meetup_id)
-
-                if (myMeetupIds.length > 0) {
-                  const recUserIds = peopleRecs.map(r => r.recommended_user_id)
-                  // Get signups for recommended users in the same meetups
-                  const { data: theirSignups } = await supabase
-                    .from('meetup_signups')
-                    .select('user_id, meetup_id')
-                    .in('meetup_id', myMeetupIds)
-                    .in('user_id', recUserIds)
-
-                  // Count shared meetups per user
-                  const sharedCounts = {}
-                  ;(theirSignups || []).forEach(s => {
-                    sharedCounts[s.user_id] = (sharedCounts[s.user_id] || 0) + 1
-                  })
-
-                  peopleRecs = peopleRecs.map(r => ({
-                    ...r,
-                    sharedMeetups: sharedCounts[r.recommended_user_id] || 0,
-                  }))
-                }
-              } catch (e) { console.error('[HomeRecs] Shared meetups:', e) }
-            }
-
             setHomeEventRecs(eventRecs)
             setHomeCircleRecs(circleRecs)
-            setHomePeopleRecs(peopleRecs)
-            setHomeRecsLoaded(true)
           } catch (e) {
             console.error('[HomeRecs] Error:', e)
-            setHomeRecsLoaded(true)
           }
 
         } catch (err) {
