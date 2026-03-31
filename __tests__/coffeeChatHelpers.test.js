@@ -11,6 +11,9 @@ import {
   declineCoffeeChat,
   cancelCoffeeChat,
   completeCoffeeChat,
+  getMyCoffeeChats,
+  getPendingRequests,
+  getSentRequests,
 } from '@/lib/coffeeChatHelpers'
 
 // Build a chainable mock Supabase client
@@ -185,5 +188,212 @@ describe('completeCoffeeChat', () => {
     const updateCall = supabase._chain.update.mock.calls[0][0]
     const parsedDate = new Date(updateCall.completed_at)
     expect(parsedDate.getTime()).not.toBeNaN()
+  })
+})
+
+// Build a more flexible mock for query functions (getMyCoffeeChats, getPendingRequests, getSentRequests)
+function createQueryMockSupabase({ user = { id: 'user-123' }, tables = {} } = {}) {
+  function makeChain(resolvedValue) {
+    const chain = {}
+    const methods = ['select', 'eq', 'or', 'in', 'order', 'contains', 'limit', 'insert', 'update']
+    methods.forEach(m => {
+      chain[m] = jest.fn().mockReturnValue(chain)
+    })
+    chain.single = jest.fn().mockResolvedValue(resolvedValue)
+    // Make chain thenable so await works on the chain itself
+    chain.then = (resolve) => resolve(resolvedValue)
+    return chain
+  }
+
+  const sb = {
+    auth: {
+      getUser: jest.fn().mockResolvedValue({ data: { user } }),
+    },
+    from: jest.fn((table) => {
+      const result = tables[table] || { data: [], error: null }
+      return makeChain(result)
+    }),
+  }
+  return sb
+}
+
+describe('getMyCoffeeChats', () => {
+  test('returns empty array when no chats exist', async () => {
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: [], error: null },
+      },
+    })
+    const result = await getMyCoffeeChats(supabase)
+    expect(result).toEqual([])
+  })
+
+  test('throws when user is not authenticated', async () => {
+    const supabase = createQueryMockSupabase({ user: null })
+    await expect(getMyCoffeeChats(supabase)).rejects.toThrow('Not authenticated')
+  })
+
+  test('attaches requester and recipient profiles to chats', async () => {
+    const chats = [
+      { id: 'chat-1', requester_id: 'user-123', recipient_id: 'user-456' },
+    ]
+    const profiles = [
+      { id: 'user-123', name: 'Alice' },
+      { id: 'user-456', name: 'Bob' },
+    ]
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: chats, error: null },
+        profiles: { data: profiles, error: null },
+      },
+    })
+    const result = await getMyCoffeeChats(supabase)
+    expect(result).toHaveLength(1)
+    expect(result[0].requester.name).toBe('Alice')
+    expect(result[0].recipient.name).toBe('Bob')
+  })
+
+  test('handles null profiles gracefully', async () => {
+    const chats = [
+      { id: 'chat-1', requester_id: 'user-123', recipient_id: 'user-999' },
+    ]
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: chats, error: null },
+        profiles: { data: [], error: null },
+      },
+    })
+    const result = await getMyCoffeeChats(supabase)
+    expect(result).toHaveLength(1)
+    expect(result[0].requester).toBeNull()
+    expect(result[0].recipient).toBeNull()
+  })
+
+  test('throws on database error', async () => {
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: null, error: { message: 'DB error' } },
+      },
+    })
+    await expect(getMyCoffeeChats(supabase)).rejects.toBeTruthy()
+  })
+})
+
+describe('getPendingRequests', () => {
+  test('returns empty array when no pending requests', async () => {
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: [], error: null },
+      },
+    })
+    const result = await getPendingRequests(supabase)
+    expect(result).toEqual([])
+  })
+
+  test('throws when user is not authenticated', async () => {
+    const supabase = createQueryMockSupabase({ user: null })
+    await expect(getPendingRequests(supabase)).rejects.toThrow('Not authenticated')
+  })
+
+  test('returns pending requests with requester profiles', async () => {
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    const requests = [
+      { id: 'req-1', requester_id: 'user-456', recipient_id: 'user-123', scheduled_time: futureDate },
+    ]
+    const profiles = [
+      { id: 'user-456', name: 'Bob' },
+    ]
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: requests, error: null },
+        profiles: { data: profiles, error: null },
+      },
+    })
+    const result = await getPendingRequests(supabase)
+    expect(result).toHaveLength(1)
+    expect(result[0].requester.name).toBe('Bob')
+  })
+
+  test('throws on database error', async () => {
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: null, error: { message: 'DB error' } },
+      },
+    })
+    await expect(getPendingRequests(supabase)).rejects.toBeTruthy()
+  })
+})
+
+describe('getSentRequests', () => {
+  test('returns empty array when no sent requests', async () => {
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: [], error: null },
+      },
+    })
+    const result = await getSentRequests(supabase)
+    expect(result).toEqual([])
+  })
+
+  test('throws when user is not authenticated', async () => {
+    const supabase = createQueryMockSupabase({ user: null })
+    await expect(getSentRequests(supabase)).rejects.toThrow('Not authenticated')
+  })
+
+  test('returns sent requests with recipient profiles', async () => {
+    const requests = [
+      { id: 'req-1', requester_id: 'user-123', recipient_id: 'user-789' },
+    ]
+    const profiles = [
+      { id: 'user-789', name: 'Carol' },
+    ]
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: requests, error: null },
+        profiles: { data: profiles, error: null },
+      },
+    })
+    const result = await getSentRequests(supabase)
+    expect(result).toHaveLength(1)
+    expect(result[0].recipient.name).toBe('Carol')
+  })
+
+  test('throws on database error', async () => {
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: null, error: { message: 'DB error' } },
+      },
+    })
+    await expect(getSentRequests(supabase)).rejects.toBeTruthy()
+  })
+})
+
+describe('error paths', () => {
+  test('acceptCoffeeChat throws on database error', async () => {
+    const supabase = createMockSupabase({
+      queryResult: { error: { message: 'DB error' }, data: null },
+    })
+    await expect(acceptCoffeeChat(supabase, 'chat-1')).rejects.toBeTruthy()
+  })
+
+  test('declineCoffeeChat throws on database error', async () => {
+    const supabase = createMockSupabase({
+      queryResult: { error: { message: 'DB error' }, data: null },
+    })
+    await expect(declineCoffeeChat(supabase, 'chat-1')).rejects.toBeTruthy()
+  })
+
+  test('cancelCoffeeChat throws on database error', async () => {
+    const supabase = createMockSupabase({
+      queryResult: { error: { message: 'DB error' }, data: null },
+    })
+    await expect(cancelCoffeeChat(supabase, 'chat-1')).rejects.toBeTruthy()
+  })
+
+  test('completeCoffeeChat throws on database error', async () => {
+    const supabase = createMockSupabase({
+      queryResult: { error: { message: 'DB error' }, data: null },
+    })
+    await expect(completeCoffeeChat(supabase, 'chat-1')).rejects.toBeTruthy()
   })
 })

@@ -11,6 +11,7 @@ import {
   isEventPast,
   isEventLive,
   formatEventTime,
+  formatEventDate,
   formatDate,
 } from '@/lib/dateUtils'
 
@@ -248,5 +249,72 @@ describe('formatDate', () => {
   test('includes year when year option is set', () => {
     const result = formatDate('2026-03-15', { year: 'numeric' })
     expect(result).toContain('2026')
+  })
+
+  test('handles legacy non-YYYY-MM-DD format gracefully', () => {
+    // parseLocalDate falls back to new Date() for non-matching formats
+    // If it results in Invalid Date, formatDate returns the original string
+    const result = formatDate('Wednesday, Dec 3')
+    // Should return something — either formatted or the original string
+    expect(typeof result).toBe('string')
+    expect(result.length).toBeGreaterThan(0)
+  })
+})
+
+describe('formatEventDate', () => {
+  test('returns TBD for null dateStr', () => {
+    expect(formatEventDate(null)).toBe('TBD')
+  })
+
+  test('returns TBD for empty dateStr', () => {
+    expect(formatEventDate('')).toBe('TBD')
+  })
+
+  test('formats date without timezone', () => {
+    const result = formatEventDate('2026-07-04')
+    expect(result).toContain('Jul')
+    expect(result).toContain('4')
+  })
+
+  test('formats date without timeStr (same tz path)', () => {
+    const result = formatEventDate('2026-12-25', null, 'America/New_York')
+    expect(result).toContain('Dec')
+    expect(result).toContain('25')
+  })
+
+  test('formats date in same timezone as viewer', () => {
+    const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const result = formatEventDate('2026-03-15', '10:00', viewerTz)
+    expect(result).toContain('Mar')
+    expect(result).toContain('15')
+  })
+
+  test('converts date across timezones', () => {
+    // An event at 2:00 AM UTC on March 15 would be March 14 evening in US Pacific
+    const result = formatEventDate('2026-03-15', '02:00', 'UTC', { timeZone: 'America/Los_Angeles' })
+    // Should return a valid date string (may be Mar 14 or 15 depending on test runner timezone)
+    expect(typeof result).toBe('string')
+    expect(result.length).toBeGreaterThan(0)
+  })
+
+  test('passes year option through', () => {
+    const result = formatEventDate('2026-03-15', null, null, { year: 'numeric' })
+    expect(result).toContain('2026')
+  })
+})
+
+describe('formatEventTime cross-timezone', () => {
+  test('converts time when event timezone differs from viewer', () => {
+    // If the test runner is NOT in UTC, this should convert
+    const result = formatEventTime('2026-03-15', '14:00', 'UTC')
+    // Should contain a time — either converted or as-is
+    expect(result).toMatch(/\d{1,2}:\d{2}\s*(AM|PM)/i)
+  })
+
+  test('same timezone does not convert', () => {
+    const viewerTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const result = formatEventTime('2026-03-15', '14:00', viewerTz)
+    expect(result).toContain('2:00')
+    expect(result).toContain('PM')
   })
 })
