@@ -1,19 +1,76 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { parseLocalDate } from '@/lib/dateUtils'
 import { supabase } from '@/lib/supabase'
+import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery'
+
+/**
+ * Fetch and process primary home page data via RPC.
+ * Pure function — no React state, just returns processed data.
+ */
+async function fetchPrimaryHomeData(sb, userId) {
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - 1)
+  const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
+
+  const { data: homeData, error } = await sb
+    .rpc('get_home_page_data', { p_user_id: userId, p_cutoff_date: cutoff })
+
+  if (error) throw error
+
+  const now = new Date()
+  const chats = homeData.coffee_chats || []
+  const coffeeProfiles = homeData.coffee_profiles || []
+
+  // Process coffee chats with profiles
+  let upcomingCoffeeChats = []
+  if (coffeeProfiles.length > 0) {
+    const profileMap = {}
+    coffeeProfiles.forEach(p => { profileMap[p.id] = p })
+    const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
+    upcomingCoffeeChats = chats.filter(chat => {
+      if (!chat.scheduled_time) return true
+      return new Date(chat.scheduled_time) > gracePeriod
+    }).map(chat => {
+      const otherId = chat.requester_id === userId ? chat.recipient_id : chat.requester_id
+      return { ...chat, _otherPerson: profileMap[otherId] || null }
+    })
+  }
+
+  return {
+    meetups: homeData.meetups || [],
+    userSignups: homeData.user_signups || [],
+    upcomingCoffeeChats,
+    unreadMessageCount: homeData.unread_count || 0,
+    groupsCount: homeData.groups_count || 0,
+    coffeeChatsCount: homeData.coffee_completed_count || 0,
+    // Raw data needed by secondary fetch
+    _incomingInterests: homeData.incoming_interests || [],
+    _attendedSignups: homeData.attended_signups || [],
+    _createdCircles: homeData.created_circles || [],
+    _circleInvitations: homeData.circle_invitations || [],
+    _memberCircleIds: homeData.member_circle_ids || [],
+  }
+}
 
 export default function useHomeData(currentUser) {
-  // State variables
-  const [meetups, setMeetups] = useState([])
-  const [loadingMeetups, setLoadingMeetups] = useState(true)
+  // === PRIMARY DATA: SWR-cached RPC call ===
+  const { data: primary, isLoading: loadingMeetups, mutate: mutatePrimary } = useSupabaseQuery(
+    currentUser?.id ? `home-primary-${currentUser.id}` : null,
+    (sb) => fetchPrimaryHomeData(sb, currentUser.id),
+  )
+
+  // Destructure primary data with safe defaults
+  const meetups = primary?.meetups || []
+  const userSignups = primary?.userSignups || []
+  const upcomingCoffeeChats = primary?.upcomingCoffeeChats || []
+  const unreadMessageCount = primary?.unreadMessageCount || 0
+  const groupsCount = primary?.groupsCount || 0
+  const coffeeChatsCount = primary?.coffeeChatsCount || 0
+
+  // === SECONDARY DATA: deferred, non-blocking (still useState for now) ===
   const [signups, setSignups] = useState({})
-  const [userSignups, setUserSignups] = useState([])
-  const [upcomingCoffeeChats, setUpcomingCoffeeChats] = useState([])
-  const [groupsCount, setGroupsCount] = useState(0)
-  const [coffeeChatsCount, setCoffeeChatsCount] = useState(0)
-  const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [connectionRequests, setConnectionRequests] = useState([])
   const [circleJoinRequests, setCircleJoinRequests] = useState([])
   const [circleInvitations, setCircleInvitations] = useState([])
@@ -22,96 +79,62 @@ export default function useHomeData(currentUser) {
   const [homePeopleRecs, setHomePeopleRecs] = useState([])
   const [homeRecsLoaded, setHomeRecsLoaded] = useState(false)
 
+  // Track whether secondary data has been loaded for this primary fetch
+  const secondaryLoadedForRef = useRef(null)
+
+  // Load secondary data when primary data arrives
+  useEffect(() => {
+    if (!primary || !currentUser?.id) return
+    // Only load secondary once per primary data version
+    const key = JSON.stringify([primary.meetups?.length, primary._incomingInterests?.length])
+    if (secondaryLoadedForRef.current === key) return
+    secondaryLoadedForRef.current = key
+
+    loadSecondaryData(primary)
+  }, [primary, currentUser?.id])
+
+  // Update attended count side effect (from old loadHomePageData)
+  useEffect(() => {
+    if (!primary?._attendedSignups || !currentUser?.id) return
+    const now = new Date()
+    const attendedCount = primary._attendedSignups.filter(signup => {
+      try {
+        if (!signup.date) return false
+        const meetupDate = parseLocalDate(signup.date)
+        if (isNaN(meetupDate.getTime())) return false
+        const meetupTime = signup.time || '00:00'
+        const [hours, minutes] = meetupTime.split(':').map(Number)
+        meetupDate.setHours(hours, minutes, 0, 0)
+        return meetupDate < now
+      } catch { return false }
+    }).length
+    if (attendedCount !== currentUser.meetups_attended) {
+      supabase.from('profiles').update({ meetups_attended: attendedCount }).eq('id', currentUser.id)
+    }
+  }, [primary?._attendedSignups, currentUser?.id])
+
+  // Wrapper for backward compatibility — triggers SWR revalidation
   const loadHomePageData = useCallback(async () => {
-    const t0 = Date.now()
+    mutatePrimary()
+  }, [mutatePrimary])
+
+  // === DEFERRED: Load secondary data in background ===
+  const loadSecondaryData = useCallback(async (primaryData) => {
     try {
-      setLoadingMeetups(true)
+      const incomingInterests = primaryData._incomingInterests || []
+      const createdCircles = primaryData._createdCircles || []
+      const circleInvitationsData = primaryData._circleInvitations || []
+      const meetupsData = primaryData.meetups || []
+      const userSignupsData = primaryData.userSignups || []
 
-      const cutoffDate = new Date()
-      cutoffDate.setDate(cutoffDate.getDate() - 1)
-      const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
+      const requestUserIds = incomingInterests.map(i => i.user_id)
 
-      // === SINGLE RPC: Get all home page data in one database round-trip ===
-      const { data: homeData, error: rpcError } = await supabase
-        .rpc('get_home_page_data', { p_user_id: currentUser.id, p_cutoff_date: cutoff })
+      const createdCircleIds = createdCircles.map(c => c.id)
+      const circleNameMap = {}
+      createdCircles.forEach(c => { circleNameMap[c.id] = c.name })
 
-      if (rpcError) {
-        console.error('RPC error:', rpcError)
-        throw rpcError
-      }
-
-      const now = new Date()
-
-      // Extract data from RPC result
-      const memberCircleIds = homeData.member_circle_ids || []
-      const userSignupsData = homeData.user_signups || []
-      const chats = homeData.coffee_chats || []
-      const incomingInterests = homeData.incoming_interests || []
-      const attendedSignups = homeData.attended_signups || []
-      const createdCircles = homeData.created_circles || []
-      const circleInvitationsData = homeData.circle_invitations || []
-
-      // Set simple state immediately
-      setUserSignups(userSignupsData)
-      setUnreadMessageCount(homeData.unread_count || 0)
-      setGroupsCount(homeData.groups_count || 0)
-      setCoffeeChatsCount(homeData.coffee_completed_count || 0)
-
-      // Process attended count
-      const attendedCount = attendedSignups.filter(signup => {
-        try {
-          if (!signup.date) return false
-          const meetupDate = parseLocalDate(signup.date)
-          if (isNaN(meetupDate.getTime())) return false
-          const meetupTime = signup.time || '00:00'
-          const [hours, minutes] = meetupTime.split(':').map(Number)
-          meetupDate.setHours(hours, minutes, 0, 0)
-          return meetupDate < now
-        } catch { return false }
-      }).length
-      if (attendedCount !== currentUser.meetups_attended) {
-        supabase.from('profiles').update({ meetups_attended: attendedCount }).eq('id', currentUser.id)
-        currentUser.meetups_attended = attendedCount
-      }
-
-      console.log(`⏱️ RPC done in ${Date.now() - t0}ms`)
-
-      // Meetups and coffee profiles are now included in the RPC
-      const meetupsData = homeData.meetups || []
-      setMeetups(meetupsData)
-
-      const coffeeProfiles = homeData.coffee_profiles || []
-      if (coffeeProfiles.length > 0) {
-        const profileMap = {}
-        coffeeProfiles.forEach(p => { profileMap[p.id] = p })
-        const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
-        const upcoming = chats.filter(chat => {
-          if (!chat.scheduled_time) return true
-          return new Date(chat.scheduled_time) > gracePeriod
-        }).map(chat => {
-          const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
-          return { ...chat, _otherPerson: profileMap[otherId] || null }
-        })
-        setUpcomingCoffeeChats(upcoming)
-      } else {
-        setUpcomingCoffeeChats([])
-      }
-
-      // Mark page as ready — show the home page now
-      console.log(`⏱️ Home page rendered in ${Date.now() - t0}ms`)
-      setLoadingMeetups(false)
-
-      // === DEFERRED: Load secondary data in background (signups, requests, invitations) ===
-      const loadSecondaryData = async () => {
-        try {
-          const requestUserIds = incomingInterests.map(i => i.user_id)
-
-          const createdCircleIds = createdCircles.map(c => c.id)
-          const circleNameMap = {}
-          createdCircles.forEach(c => { circleNameMap[c.id] = c.name })
-
-          const invitations = circleInvitationsData
-          const creatorIds = [...new Set(invitations.map(inv => inv.creator_id).filter(Boolean))]
+      const invitations = circleInvitationsData
+      const creatorIds = [...new Set(invitations.map(inv => inv.creator_id).filter(Boolean))]
 
           // Fire all secondary queries in parallel
           const deferredPromises = []
@@ -509,83 +532,16 @@ export default function useHomeData(currentUser) {
             setHomeRecsLoaded(true)
           }
 
-          console.log(`⏱️ Secondary data loaded in ${Date.now() - t0}ms`)
         } catch (err) {
           console.error('Error loading secondary data:', err)
         }
-      }
-      // Fire and forget — don't block the page
-      loadSecondaryData()
+  }, [currentUser?.id])
 
-    } catch (err) {
-      console.error('Error loading home page data:', err)
-      setLoadingMeetups(false)
-    }
-  }, [supabase, currentUser.id])
-
+  // Refresh functions — trigger SWR revalidation of the primary RPC
   const loadMeetupsFromDatabase = useCallback(async () => {
-    try {
-      setLoadingMeetups(true)
-
-      // Only fetch meetups from yesterday onwards (grace period for recently ended ones)
-      const cutoffDate = new Date()
-      cutoffDate.setDate(cutoffDate.getDate() - 1)
-      const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
-
-      // Get circles where user is a member
-      const { data: memberCircles, error: circleError } = await supabase
-        .from('connection_group_members')
-        .select('group_id')
-        .eq('user_id', currentUser.id)
-        .eq('status', 'accepted')
-
-      const memberCircleIds = (memberCircles || []).map(m => m.group_id)
-
-      // Load public meetups AND circle meetups from user's circles (upcoming only)
-      let data, error
-
-      if (memberCircleIds.length > 0) {
-        // Get public meetups OR meetups from user's circles
-        const result = await supabase
-          .from('meetups')
-          .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
-          .or(`circle_id.is.null,circle_id.in.(${memberCircleIds.join(',')})`)
-          .gte('date', cutoff)
-          .not('status', 'eq', 'cancelled')
-          .order('date', { ascending: true })
-          .order('time', { ascending: true })
-
-        data = result.data
-        error = result.error
-      } else {
-        // No circle memberships, just get public meetups
-        const result = await supabase
-          .from('meetups')
-          .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture)')
-          .is('circle_id', null)
-          .gte('date', cutoff)
-          .not('status', 'eq', 'cancelled')
-          .order('date', { ascending: true })
-          .order('time', { ascending: true })
-
-        data = result.data
-        error = result.error
-      }
-
-      if (error) {
-        console.error('Error loading meetups:', error)
-        return []
-      } else {
-        setMeetups(data || [])
-        return data || []
-      }
-    } catch (err) {
-      console.error('Error:', err)
-      return []
-    } finally {
-      setLoadingMeetups(false)
-    }
-  }, [supabase, currentUser.id])
+    mutatePrimary()
+    return meetups
+  }, [mutatePrimary, meetups])
 
   const loadSignupsForMeetups = useCallback(async (meetupIds) => {
     try {
@@ -644,21 +600,9 @@ export default function useHomeData(currentUser) {
   }, [supabase])
 
   const loadUserSignups = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('meetup_signups')
-        .select('meetup_id')
-        .eq('user_id', currentUser.id)
-
-      if (error) {
-        console.error('Error loading user signups:', error)
-      } else {
-        setUserSignups((data || []).map(s => s.meetup_id))
-      }
-    } catch (err) {
-      console.error('Error:', err)
-    }
-  }, [currentUser.id, supabase])
+    // User signups now come from the primary SWR cache — trigger revalidation
+    mutatePrimary()
+  }, [mutatePrimary])
 
   // Load incoming connection requests (people interested in me, but not mutual yet)
   const loadConnectionRequests = useCallback(async () => {
@@ -795,73 +739,15 @@ export default function useHomeData(currentUser) {
     }
   }, [supabase, currentUser.id])
 
+  // Unread count comes from primary SWR cache — trigger revalidation
   const loadUnreadMessageCount = useCallback(async () => {
-    try {
-      const { count, error } = await supabase
-        .from('messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('receiver_id', currentUser.id)
-        .eq('read', false)
+    mutatePrimary()
+  }, [mutatePrimary])
 
-      if (error) throw error
-      setUnreadMessageCount(count || 0)
-    } catch (error) {
-      console.error('Error loading unread message count:', error)
-      setUnreadMessageCount(0)
-    }
-  }, [currentUser.id, supabase])
-
-  // Lightweight refresh: re-fetch coffee chats + meetups when returning to home
+  // Lightweight refresh — SWR revalidation replaces manual re-fetch
   const refreshCoffeeChats = useCallback(async () => {
-    try {
-      const now = new Date()
-      const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
-      const cutoffDate = new Date()
-      cutoffDate.setDate(cutoffDate.getDate() - 1)
-      const cutoff = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}`
-
-      const [chatsRes, meetupsRes] = await Promise.all([
-        supabase
-          .from('coffee_chats')
-          .select('*')
-          .or(`requester_id.eq.${currentUser.id},recipient_id.eq.${currentUser.id}`)
-          .in('status', ['pending', 'accepted', 'scheduled']),
-        supabase
-          .from('meetups')
-          .select('*')
-          .gte('date', cutoff)
-          .not('status', 'eq', 'cancelled')
-          .order('date', { ascending: true })
-      ])
-
-      if (chatsRes.data) {
-        const chats = chatsRes.data
-        const otherIds = [...new Set(chats.map(c => c.requester_id === currentUser.id ? c.recipient_id : c.requester_id))]
-        let profileMap = {}
-        if (otherIds.length > 0) {
-          const { data: profiles } = await supabase
-            .from('profiles')
-            .select('id, name, career, city, state, profile_picture')
-            .in('id', otherIds)
-          if (profiles) profiles.forEach(p => { profileMap[p.id] = p })
-        }
-        const upcoming = chats.filter(chat => {
-          if (!chat.scheduled_time) return true
-          return new Date(chat.scheduled_time) > gracePeriod
-        }).map(chat => {
-          const otherId = chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
-          return { ...chat, _otherPerson: profileMap[otherId] || null }
-        })
-        setUpcomingCoffeeChats(upcoming)
-      }
-
-      if (meetupsRes.data) {
-        setMeetups(meetupsRes.data)
-      }
-    } catch (err) {
-      console.error('Error refreshing home coffee chats:', err)
-    }
-  }, [supabase, currentUser.id])
+    mutatePrimary()
+  }, [mutatePrimary])
 
   return {
     // State
@@ -881,9 +767,8 @@ export default function useHomeData(currentUser) {
     homePeopleRecs,
     homeRecsLoaded,
 
-    // State setters (needed by MainApp)
-    setMeetups,
-    setUpcomingCoffeeChats,
+    // Revalidate primary data (replaces manual setters)
+    mutatePrimary,
 
     // Functions
     loadHomePageData,
