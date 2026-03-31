@@ -195,7 +195,7 @@ export default function AIInsightsPage() {
         <div className="text-center">
           <p className="text-[#8C7B6B]">Unable to load insights</p>
           <button
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/home')}
             className="mt-4 px-4 py-2 bg-[#8B6F5C] text-white rounded-lg"
           >
             Go Home
@@ -210,7 +210,7 @@ export default function AIInsightsPage() {
       <div className="max-w-3xl mx-auto px-4 py-6">
         {/* Back Button */}
         <button
-          onClick={() => router.push('/')}
+          onClick={() => router.push('/home')}
           className="flex items-center gap-2 text-[#8C7B6B] hover:text-[#5C4033] mb-6 transition-colors"
         >
           <ChevronLeft className="w-5 h-5" />

@@ -436,7 +436,7 @@ export default function UnifiedCallPage() {
         console.log('[UnifiedCall] User set, config:', config?.provider);
       } else {
         console.warn('[UnifiedCall] No auth user, redirecting to /');
-        router.push('/');
+        router.push('/home');
       }
     }
     fetchUserWithProfile();
@@ -446,7 +446,7 @@ export default function UnifiedCallPage() {
   useEffect(() => {
     if (!isValidCallType(callType)) {
       console.error('Invalid call type:', callType);
-      router.push('/');
+      router.push('/home');
     }
   }, [callType, router]);
 
@@ -2330,7 +2330,7 @@ export default function UnifiedCallPage() {
   const handleRecapClose = () => {
     // Navigate directly without setting showRecap to false
     // This prevents the video call UI from briefly showing during navigation
-    router.push('/');
+    router.push('/home');
   };
 
   const handleConnectFromRecap = async (userId) => {
@@ -2447,7 +2447,7 @@ export default function UnifiedCallPage() {
           currentUserId={user?.id}
           onClose={handleRecapClose}
           onConnect={handleConnectFromRecap}
-          onScheduleFollowUp={() => router.push('/')}
+          onScheduleFollowUp={() => router.push('/home')}
           circleId={callType === 'circle' ? relatedData?.id : null}
           onShareToCircle={callType === 'circle' ? handleShareToCircle : null}
           onSendToParticipant={handleSendToParticipant}
@@ -2468,7 +2468,7 @@ export default function UnifiedCallPage() {
         <div className="text-white text-center">
           <p className="text-xl mb-4">Invalid call type</p>
           <button
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/home')}
             className="bg-amber-700 hover:bg-amber-800 px-6 py-3 rounded-lg"
           >
             Go Home

@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import CoffeeChatRecapView from '@/components/CoffeeChatRecapView';
+import { createOnNavigate } from '@/lib/navigationAdapter';
 
 export default function RecapDetailPage() {
   const params = useParams();
   const router = useRouter();
   const recapId = params.id;
+  const handleNavigate = createOnNavigate(router);
 
   const [isMobile, setIsMobile] = useState(false);
 
@@ -17,14 +19,6 @@ export default function RecapDetailPage() {
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
-
-  const handleNavigate = (view, data) => {
-    if (view === 'home' || view === 'meetups') {
-      router.push('/');
-    } else if (view === 'userProfile' && data?.userId) {
-      // Stay on current page — standalone recap doesn't have in-app navigation
-    }
-  };
 
   return (
     <div style={{
