@@ -20,7 +20,7 @@ export default function DiscoverPage() {
     refreshConnectionRequests: homeData.loadConnectionRequests, toast
   })
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   return (
     <NetworkDiscoverView

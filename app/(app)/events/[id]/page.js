@@ -12,7 +12,7 @@ export default function EventDetailPage() {
   const router = useRouter()
   const handleNavigate = createOnNavigate(router)
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   return (
     <CoffeeChatDetailView

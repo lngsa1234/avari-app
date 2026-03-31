@@ -22,7 +22,7 @@ export default function SchedulePage() {
   const connectionId = searchParams.get('connectionId') || null
   const connectionName = searchParams.get('connectionName') || null
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   return (
     <ScheduleMeetupView

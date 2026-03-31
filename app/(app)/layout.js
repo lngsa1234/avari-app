@@ -78,25 +78,23 @@ export default function AuthenticatedLayout({ children }) {
     }
   }, [profile?.id])
 
-  // Loading state
-  if (status === 'initializing' || status === 'loading_profile') {
-    if (user) {
-      return (
-        <div className="flex items-center justify-center min-h-screen" style={{ backgroundColor: '#FDF8F3' }}>
+  // Not authenticated — render nothing while redirect fires
+  if (status === 'signed_out') {
+    return null
+  }
+
+  // Still loading auth — show the shell with a placeholder so there's no flash
+  if (status === 'initializing' || status === 'loading_profile' || !profile) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#FDF8F3' }}>
+        <div className="flex items-center justify-center" style={{ minHeight: '60vh' }}>
           <div className="text-center">
             <div style={{ width: '48px', height: '48px', border: '3px solid rgba(139, 111, 92, 0.15)', borderTopColor: '#8B6F5C', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
             <p style={{ color: '#A89080', fontSize: '14px', fontFamily: fonts.sans }}>Loading...</p>
           </div>
         </div>
-      )
-    }
-    // No user yet during initialization — wait (will redirect when status becomes signed_out)
-    return null
-  }
-
-  // Not authenticated
-  if (status === 'signed_out' || !profile) {
-    return null // useEffect above handles redirect
+      </div>
+    )
   }
 
   // Onboarding check

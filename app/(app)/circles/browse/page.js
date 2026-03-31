@@ -11,7 +11,7 @@ export default function BrowseCirclesPage() {
   const router = useRouter()
   const handleNavigate = createOnNavigate(router)
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   return (
     <AllCirclesView

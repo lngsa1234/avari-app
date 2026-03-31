@@ -139,7 +139,7 @@ export default function HomePage() {
     }
   }, [homeSearchQuery, upcomingMeetups, connections, meetups])
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   return (
     <>

@@ -14,7 +14,7 @@ export default function CirclesPage() {
 
   const connectionsHook = useConnections(currentUser, {})
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   return (
     <ConnectionGroupsView

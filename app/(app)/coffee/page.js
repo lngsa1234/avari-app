@@ -21,7 +21,7 @@ export default function CoffeePage() {
   const homeData = useHomeData(currentUser)
   const connectionsHook = useConnections(currentUser, {})
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   // Call history sub-view
   if (view === 'history') {

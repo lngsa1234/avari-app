@@ -15,7 +15,7 @@ export default function MessagesPage() {
   const chatId = searchParams.get('id') || null
   const chatType = searchParams.get('type') || 'user'
 
-  if (!currentUser) return null
+  if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
   return (
     <MessagesPageView
