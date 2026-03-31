@@ -1,29 +1,15 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Create Supabase client inside functions to ensure env vars are available
-function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    throw new Error('Missing Supabase configuration');
-  }
-
-  return createClient(url, key);
-}
+import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * POST /api/feedback - Submit user feedback
  */
 export async function POST(request) {
   try {
-    const { userId, category, subject, message, pageContext, rating } = await request.json();
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
 
-    // Validate required fields
-    if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
-    }
+    const { category, subject, message, pageContext, rating } = await request.json();
     if (!category || !['bug', 'feature', 'improvement', 'other', 'report'].includes(category)) {
       return NextResponse.json({ error: 'Valid category is required' }, { status: 400 });
     }
@@ -34,13 +20,13 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Message must be 10-5000 characters' }, { status: 400 });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = createAdminClient();
 
     // Insert feedback
     const { data, error } = await supabase
       .from('user_feedback')
       .insert({
-        user_id: userId,
+        user_id: user.id,
         category,
         subject,
         message,
@@ -74,15 +60,17 @@ export async function POST(request) {
  */
 export async function GET(request) {
   try {
+    const { user: authUser, response } = await authenticateRequest(request);
+    if (!authUser) return response;
+
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
     const isAdmin = searchParams.get('isAdmin') === 'true';
     const status = searchParams.get('status');
     const category = searchParams.get('category');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
-    const supabase = getSupabaseClient();
+    const supabase = createAdminClient();
 
     let query = supabase
       .from('user_feedback')
@@ -91,8 +79,8 @@ export async function GET(request) {
       .range(offset, offset + limit - 1);
 
     // Filter by user if not admin
-    if (!isAdmin && userId) {
-      query = query.eq('user_id', userId);
+    if (!isAdmin) {
+      query = query.eq('user_id', authUser.id);
     }
 
     // Optional filters
@@ -148,6 +136,9 @@ export async function GET(request) {
  */
 export async function PATCH(request) {
   try {
+    const { user: authUser, response } = await authenticateRequest(request);
+    if (!authUser) return response;
+
     const { feedbackId, status, adminNotes, reviewedBy } = await request.json();
 
     if (!feedbackId) {
@@ -169,7 +160,7 @@ export async function PATCH(request) {
       updateData.reviewed_at = new Date().toISOString();
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('user_feedback')

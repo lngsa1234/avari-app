@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * Generate AI-powered connection and group recommendations
@@ -16,6 +16,9 @@ import { createClient } from '@supabase/supabase-js';
  */
 export async function POST(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const {
       callRecapId,
       meetupId,
@@ -55,20 +58,7 @@ export async function POST(request) {
     );
 
     // Save recommendations to database
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('[Recommendations] Missing Supabase configuration');
-      return NextResponse.json({
-        success: false,
-        error: 'Database not configured',
-        connectionCount: connectionRecs.length,
-        groupCount: groupRecs.length
-      });
-    }
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createAdminClient();
 
     // Save connection recommendations
     if (connectionRecs.length > 0) {

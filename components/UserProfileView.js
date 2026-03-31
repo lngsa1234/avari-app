@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock, Activity } from 'lucide-react';
 import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
+import { apiFetch } from '@/lib/apiFetch';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 
 const COLORS = {
@@ -1109,7 +1110,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                     onClick={async () => {
                       setReportSubmitting(true);
                       try {
-                        await fetch('/api/feedback', {
+                        await apiFetch('/api/feedback', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({

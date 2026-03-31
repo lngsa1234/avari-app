@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { MessageCircle, RefreshCw, Sparkles } from 'lucide-react';
+import { apiFetch } from '@/lib/apiFetch';
 
 /**
  * IcebreakerDisplay Component
@@ -30,7 +31,7 @@ export default function IcebreakerDisplay({
     setLoading(true);
     try {
       // First try to get cached icebreakers
-      const getResponse = await fetch(`/api/agent/icebreakers?meetupId=${meetupId}`);
+      const getResponse = await apiFetch(`/api/agent/icebreakers?meetupId=${meetupId}`);
       const getData = await getResponse.json();
 
       if (getData.found && getData.icebreakers) {
@@ -41,7 +42,7 @@ export default function IcebreakerDisplay({
       }
 
       // Generate new icebreakers
-      const postResponse = await fetch('/api/agent/icebreakers', {
+      const postResponse = await apiFetch('/api/agent/icebreakers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -163,7 +164,7 @@ export function IcebreakerInline({ meetupId, className = '' }) {
 
   async function loadIcebreaker() {
     try {
-      const response = await fetch(`/api/agent/icebreakers?meetupId=${meetupId}`);
+      const response = await apiFetch(`/api/agent/icebreakers?meetupId=${meetupId}`);
       const data = await response.json();
 
       if (data.found && data.icebreakers?.length > 0) {
@@ -201,7 +202,7 @@ export function IcebreakerList({ meetupId, className = '' }) {
 
   async function loadIcebreakers() {
     try {
-      const response = await fetch(`/api/agent/icebreakers?meetupId=${meetupId}`);
+      const response = await apiFetch(`/api/agent/icebreakers?meetupId=${meetupId}`);
       const data = await response.json();
 
       if (data.found && data.icebreakers) {

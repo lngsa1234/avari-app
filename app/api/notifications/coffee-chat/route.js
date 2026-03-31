@@ -1,17 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { sendCoffeeChatEmail } from '@/lib/emailHelpers';
-
-function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    throw new Error('Missing Supabase configuration');
-  }
-
-  return createClient(url, key);
-}
+import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * POST /api/notifications/coffee-chat
@@ -21,13 +10,16 @@ function getSupabaseClient() {
  */
 export async function POST(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const { notificationType, chatId } = await request.json();
 
     if (!notificationType || !chatId) {
       return NextResponse.json({ success: true, skipped: 'missing params' });
     }
 
-    const supabase = getSupabaseClient();
+    const supabase = createAdminClient();
 
     // Fetch coffee chat with both profiles
     const { data: chat, error: chatError } = await supabase

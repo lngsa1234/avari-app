@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Users, Sparkles, X, ChevronRight, RefreshCw } from 'lucide-react';
+import { apiFetch } from '@/lib/apiFetch';
 
 /**
  * CircleRecommendations Component
@@ -69,7 +70,7 @@ export default function CircleRecommendations({
       if (!user) return;
 
       // Trigger new matching
-      await fetch('/api/agent/circle-match', {
+      await apiFetch('/api/agent/circle-match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id })

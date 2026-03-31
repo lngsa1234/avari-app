@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { logAgentExecution, callAI, parseJSONFromAI, calculateInterestOverlap } from '@/lib/agentHelpers';
 import { parseLocalDate } from '@/lib/dateUtils';
+import { authenticateRequest, verifyCronAuth, cronUnauthorized, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * Generate event recommendations for a user
@@ -11,22 +11,19 @@ import { parseLocalDate } from '@/lib/dateUtils';
  */
 export async function POST(request) {
   try {
-    const { userId, batch } = await request.json();
+    const body = await request.json();
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
-
-    if (batch) {
+    if (body.batch) {
+      if (!verifyCronAuth(request)) return cronUnauthorized();
+      const supabase = createAdminClient();
       return await generateBatchEventRecs(supabase);
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
 
-    return await generateUserEventRecs(supabase, userId);
+    const supabase = createAdminClient();
+    return await generateUserEventRecs(supabase, user.id);
   } catch (error) {
     console.error('[EventRecs] Error:', error);
     return NextResponse.json({ error: 'Failed to generate recommendations' }, { status: 500 });

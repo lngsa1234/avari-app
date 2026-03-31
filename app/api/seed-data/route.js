@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
 const ADMIN_EMAIL = 'lngsa.wang@gmail.com';
-
-function getSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Missing Supabase configuration');
-  return createClient(url, key);
-}
 
 const CIRCLES = [
   {
@@ -180,9 +173,18 @@ const TRENDING_REQUESTS = [
  * POST /api/seed-data - Create sample circles and trending requests
  * Looks up the Admin user (lngsa.wang@gmail.com) and uses them as creator/host
  */
-export async function POST() {
+export async function POST(request) {
   try {
-    const supabase = getSupabaseClient();
+    // Require authentication — only admin can seed data
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
+    // Verify the authenticated user is the admin
+    if (user.email !== ADMIN_EMAIL) {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 });
+    }
+
+    const supabase = createAdminClient();
 
     // Look up Admin user by email
     const { data: adminUser, error: userError } = await supabase

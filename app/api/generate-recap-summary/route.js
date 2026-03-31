@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { authenticateRequest } from '@/lib/apiAuth';
 
 /**
  * Generate AI summary for call recap
@@ -17,6 +18,9 @@ import { NextResponse } from 'next/server';
  */
 export async function POST(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const { transcript, messages, participants, duration, meetingTitle, meetingType, existingCircles } = await request.json();
 
     // Check if we have content to summarize

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   ChevronLeft,
   Calendar,
@@ -371,7 +372,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
             .from('connection_groups')
             .select('id, name')
             .eq('is_active', true);
-          const response = await fetch('/api/generate-recap-summary', {
+          const response = await apiFetch('/api/generate-recap-summary', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -388,7 +389,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
             const summaryData = await response.json();
             const aiSummaryJson = JSON.stringify(summaryData);
             // Save via server-side API to bypass RLS
-            const saveResponse = await fetch('/api/save-recap-summary', {
+            const saveResponse = await apiFetch('/api/save-recap-summary', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ recapId: data.id, aiSummary: aiSummaryJson })

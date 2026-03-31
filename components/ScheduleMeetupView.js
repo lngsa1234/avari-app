@@ -8,6 +8,7 @@ import { ChevronLeft, Calendar, Clock, Users, User, MessageCircle, MapPin, Repea
 import { reconcileCircleMeetups } from '@/lib/circleMeetupHelpers';
 import { toLocalDateString } from '@/lib/dateUtils';
 import { useAuth } from './AuthProvider';
+import { apiFetch } from '@/lib/apiFetch';
 import { formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 
@@ -439,7 +440,7 @@ export default function ScheduleMeetupView({
       if (signupError) console.error('Auto-RSVP failed:', signupError);
 
       // Generate initial discussion topics based on host profile (non-blocking)
-      fetch('/api/agent/discussion-topics', {
+      apiFetch('/api/agent/discussion-topics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

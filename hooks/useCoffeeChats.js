@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { getPendingRequests, acceptCoffeeChat, declineCoffeeChat } from '@/lib/coffeeChatHelpers'
+import { apiFetch } from '@/lib/apiFetch'
 
 /**
  * useCoffeeChats — coffee chat requests, accept/decline handlers
@@ -19,7 +20,7 @@ export default function useCoffeeChats(currentUser, supabase, { refreshCoffeeCha
   }, [supabase])
 
   const notifyEmail = (type, chatId) => {
-    fetch('/api/notifications/coffee-chat', {
+    apiFetch('/api/notifications/coffee-chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notificationType: type, chatId }),

@@ -1,12 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-function getSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error('Missing Supabase config');
-  return createClient(url, key);
-}
+import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * Save AI-generated recap summary to call_recaps.
@@ -17,13 +10,16 @@ function getSupabase() {
  */
 export async function POST(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const { recapId, aiSummary } = await request.json();
 
     if (!recapId || !aiSummary) {
       return NextResponse.json({ error: 'Missing recapId or aiSummary' }, { status: 400 });
     }
 
-    const supabase = getSupabase();
+    const supabase = createAdminClient();
     const { error } = await supabase
       .from('call_recaps')
       .update({ ai_summary: aiSummary })

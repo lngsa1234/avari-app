@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   getRecommendationsForCall,
   updateConnectionRecommendationStatus,
@@ -193,7 +194,7 @@ export default function CallRecap({
 
     setGeneratingSummary(true);
     try {
-      const response = await fetch('/api/generate-recap-summary', {
+      const response = await apiFetch('/api/generate-recap-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { logAgentExecution, callAI, parseJSONFromAI, calculateInterestOverlap } from '@/lib/agentHelpers';
+import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * Match user to circles
@@ -10,16 +10,11 @@ import { logAgentExecution, callAI, parseJSONFromAI, calculateInterestOverlap } 
  */
 export async function POST(request) {
   try {
-    const { userId } = await request.json();
+    const { user: authUser, response } = await authenticateRequest(request);
+    if (!authUser) return response;
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const userId = authUser.id;
+    const supabase = createAdminClient();
 
     // Fetch user profile and all active circles
     const [userResult, circlesResult, existingMemberships] = await Promise.all([
@@ -112,17 +107,10 @@ export async function POST(request) {
  */
 export async function GET(request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const { user: authUser, response } = await authenticateRequest(request);
+    if (!authUser) return response;
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('circle_match_scores')
@@ -130,7 +118,7 @@ export async function GET(request) {
         *,
         circle:connection_groups(id, name, is_active, connection_group_members(count))
       `)
-      .eq('user_id', userId)
+      .eq('user_id', authUser.id)
       .order('match_score', { ascending: false })
       .limit(10);
 

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { parseLocalDate } from '@/lib/dateUtils';
+import { apiFetch } from '@/lib/apiFetch';
 import {
   Calendar,
   MapPin,
@@ -134,7 +135,7 @@ export default function EventRecommendations({
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      await fetch('/api/agent/event-recommendations', {
+      await apiFetch('/api/agent/event-recommendations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user.id })

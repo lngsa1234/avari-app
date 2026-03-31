@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { logAgentExecution, canSendNudge } from '@/lib/agentHelpers';
+import { authenticateRequest, verifyCronAuth, cronUnauthorized, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * Generate nudges for a user (or batch for cron)
@@ -10,22 +10,21 @@ import { logAgentExecution, canSendNudge } from '@/lib/agentHelpers';
  */
 export async function POST(request) {
   try {
-    const { userId, batch } = await request.json();
+    const body = await request.json();
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
-
-    if (batch) {
+    // Batch mode: requires cron auth
+    if (body.batch) {
+      if (!verifyCronAuth(request)) return cronUnauthorized();
+      const supabase = createAdminClient();
       return await generateBatchNudges(supabase);
     }
 
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    // User mode: requires user auth
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
 
-    return await generateUserNudges(supabase, userId);
+    const supabase = createAdminClient();
+    return await generateUserNudges(supabase, user.id);
   } catch (error) {
     console.error('[Nudges] Error:', error);
     return NextResponse.json({ error: 'Failed to generate nudges' }, { status: 500 });
@@ -39,23 +38,15 @@ export async function POST(request) {
  */
 export async function GET(request) {
   try {
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
 
-    // Get user from auth header or query
-    const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
-      return NextResponse.json({ error: 'userId is required' }, { status: 400 });
-    }
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('user_nudges')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', user.id)
       .in('status', ['pending', 'delivered'])
       .order('created_at', { ascending: false })
       .limit(5);
@@ -80,6 +71,9 @@ export async function GET(request) {
  */
 export async function PATCH(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const { nudgeId, status } = await request.json();
 
     if (!nudgeId || !status) {
@@ -91,10 +85,7 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const supabase = createAdminClient();
 
     const updateData = { status };
     if (status === 'delivered') {

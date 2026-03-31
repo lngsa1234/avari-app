@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { logAgentExecution, callAI, parseJSONFromAI } from '@/lib/agentHelpers';
+import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * Generate icebreakers for a meetup
@@ -10,16 +10,16 @@ import { logAgentExecution, callAI, parseJSONFromAI } from '@/lib/agentHelpers';
  */
 export async function POST(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const { meetupId, callType, title, description, attendees } = await request.json();
 
     if (!meetupId) {
       return NextResponse.json({ error: 'meetupId is required' }, { status: 400 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const supabase = createAdminClient();
 
     // Check cache first (only for meetups — coffee/circle IDs aren't in this table)
     if (callType === 'meetup' || !callType) {
@@ -87,6 +87,9 @@ export async function POST(request) {
  */
 export async function GET(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const { searchParams } = new URL(request.url);
     const meetupId = searchParams.get('meetupId');
 
@@ -94,10 +97,7 @@ export async function GET(request) {
       return NextResponse.json({ error: 'meetupId is required' }, { status: 400 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('meetup_icebreakers')

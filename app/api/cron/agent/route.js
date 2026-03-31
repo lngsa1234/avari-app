@@ -31,26 +31,32 @@ export async function GET(request) {
       errors: []
     };
 
+    // Internal headers for server-to-server auth
+    const internalHeaders = {
+      'Content-Type': 'application/json',
+      'X-Cron-Secret': cronSecret || '',
+    };
+
     // Run batch jobs in parallel
     const [nudgeResult, eventRecResult, topicsResult] = await Promise.allSettled([
       // Batch nudges
       fetch(`${baseUrl}/api/agent/nudges`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: internalHeaders,
         body: JSON.stringify({ batch: true })
       }).then(r => r.json()),
 
       // Batch event recommendations
       fetch(`${baseUrl}/api/agent/event-recommendations`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: internalHeaders,
         body: JSON.stringify({ batch: true })
       }).then(r => r.json()),
 
       // Batch discussion topics for meetups within 24h
       fetch(`${baseUrl}/api/agent/discussion-topics`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: internalHeaders,
         body: JSON.stringify({ batch: true })
       }).then(r => r.json())
     ]);

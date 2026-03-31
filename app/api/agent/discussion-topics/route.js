@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import { logAgentExecution, callAI, parseJSONFromAI } from '@/lib/agentHelpers';
+import { authenticateRequest, verifyCronAuth, cronUnauthorized, createAdminClient } from '@/lib/apiAuth';
 
 /**
  * Generate suggested discussion topics for a meetup based on attendee profiles.
@@ -15,8 +15,12 @@ export async function POST(request) {
     const body = await request.json();
 
     if (body.batch) {
+      if (!verifyCronAuth(request)) return cronUnauthorized();
       return handleBatch();
     }
+
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
 
     return handleSingle(body);
   } catch (error) {
@@ -30,10 +34,7 @@ export async function POST(request) {
  * cached topics yet, and generate topics for each (max 20 per run).
  */
 async function handleBatch() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+  const supabase = createAdminClient();
 
   const now = new Date();
   const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -107,10 +108,7 @@ async function handleSingle({ meetupId, title, description, attendees }) {
     return NextResponse.json({ error: 'meetupId is required' }, { status: 400 });
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
+  const supabase = createAdminClient();
 
   // Check cache first
   const { data: cached } = await supabase
@@ -140,6 +138,9 @@ async function handleSingle({ meetupId, title, description, attendees }) {
  */
 export async function GET(request) {
   try {
+    const { user, response } = await authenticateRequest(request);
+    if (!user) return response;
+
     const { searchParams } = new URL(request.url);
     const meetupId = searchParams.get('meetupId');
 
@@ -147,10 +148,7 @@ export async function GET(request) {
       return NextResponse.json({ error: 'meetupId is required' }, { status: 400 });
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    );
+    const supabase = createAdminClient();
 
     const { data } = await supabase
       .from('meetup_icebreakers')
