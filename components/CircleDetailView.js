@@ -494,7 +494,19 @@ export default function CircleDetailView({
           status: 'pending',
         });
 
-      if (error) throw error;
+      if (error) {
+        // 409 = row already exists (previous invite/decline) — update it to pending
+        if (error.code === '23505' || error.status === 409) {
+          const { error: updateErr } = await supabase
+            .from('connection_group_members')
+            .update({ status: 'pending', responded_at: null, invited_at: new Date().toISOString() })
+            .eq('group_id', circleId)
+            .eq('user_id', currentUser.id);
+          if (updateErr) throw updateErr;
+        } else {
+          throw error;
+        }
+      }
 
       setShowJoinConfirm(false);
       setJoinSuccess(true);
