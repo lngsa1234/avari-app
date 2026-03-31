@@ -44,3 +44,27 @@ After ConnectionGroupsView and MeetupsView are split, the pattern will be well-e
 12 components already migrated (ff7bb03, d247d99).
 
 **Depends on:** Token migration during top-2 component splits.
+
+---
+
+## Build invite/share link system
+**Priority:** P1 | **Added:** 2026-03-31 | **Source:** /plan-ceo-review (launch readiness)
+
+Each user gets a personalized invite link ("Join [Name]'s circle on CircleW") that converts better than the generic landing page. Needs: unique link generation, referral tracking (who invited whom), landing page variant that shows inviter's name/photo, and auto-connect inviter+invitee on signup.
+
+Community products grow through word of mouth. This is the primary growth lever post-launch.
+
+**Effort:** S with CC (~1-2 hours)
+**Depends on:** Launch + first user feedback.
+
+---
+
+## Auto-match coffee chats for new users
+**Priority:** P1 | **Added:** 2026-03-31 | **Source:** /plan-ceo-review (launch readiness)
+
+Within 24h of signup, automatically match new users with a compatible existing member for a coffee chat. Uses existing AI matching (`/api/generate-connection-recommendations`) + existing coffee chat scheduling flow. Needs: scheduling logic (find mutual availability from `coffee_chat_slots`), notification to both parties, edge case handling when no compatible match exists (fallback to admin-matched).
+
+Solves the "signed up, never came back" retention problem. Key post-launch lever once there are 10+ users to match from.
+
+**Effort:** M with CC (~3-4 hours)
+**Depends on:** Launch + minimum ~10 active users.
