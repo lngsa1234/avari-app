@@ -116,7 +116,9 @@ export default function CircleDetailView({
   // Determine user's relationship to circle
   const membership = members.find(m => m.user_id === currentUser?.id);
   const isMember = membership?.status === 'accepted';
-  const isPending = membership?.status === 'invited';
+  const isPending = membership?.status === 'invited' || membership?.status === 'pending';
+  const isInvited = membership?.status === 'invited';
+  const isRequested = membership?.status === 'pending';
   const isHost = circle?.creator_id === currentUser?.id;
   const memberCount = members.filter(m => m.status === 'accepted').length;
   const maxMembers = circle?.max_members || 10;
@@ -483,13 +485,13 @@ export default function CircleDetailView({
         return;
       }
 
-      // Add as invited (pending approval)
+      // Add as pending (waiting for admin approval)
       const { error } = await supabase
         .from('connection_group_members')
         .insert({
           group_id: circleId,
           user_id: currentUser.id,
-          status: 'invited',
+          status: 'pending',
         });
 
       if (error) throw error;
@@ -1097,7 +1099,75 @@ export default function CircleDetailView({
             )}
           </div>
 
-          {/* Pending Invites */}
+          {/* Join Requests (user-initiated, host needs to approve) */}
+          {isHost && members.filter(m => m.status === 'pending').length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', fontFamily: fonts.sans }}>
+                Join Requests
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {members.filter(m => m.status === 'pending').map(member => (
+                  <div
+                    key={member.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '10px',
+                      backgroundColor: `${colors.primary}08`,
+                      border: `1px solid ${colors.border}`,
+                    }}
+                  >
+                    <div style={{ ...styles.memberAvatar, width: '32px', height: '32px' }}>
+                      {member.profile?.profile_picture ? (
+                        <img src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
+                      ) : (
+                        <span style={{ ...styles.avatarText, fontSize: '12px' }}>{member.profile?.name?.charAt(0) || '?'}</span>
+                      )}
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: '500', color: colors.text, flex: 1 }}>
+                      {member.profile?.name || 'Unknown'}
+                    </span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await supabase.from('connection_group_members')
+                              .update({ status: 'declined', responded_at: new Date().toISOString() })
+                              .eq('id', member.id)
+                            await loadCircleDetails()
+                          } catch (err) { console.error('Error declining request:', err) }
+                        }}
+                        style={{
+                          fontSize: '11px', fontWeight: '600', color: colors.textLight,
+                          background: 'none', border: `1px solid ${colors.border}`, borderRadius: '100px',
+                          padding: '4px 12px', cursor: 'pointer', fontFamily: fonts.sans,
+                        }}
+                      >Decline</button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await supabase.from('connection_group_members')
+                              .update({ status: 'accepted', responded_at: new Date().toISOString() })
+                              .eq('id', member.id)
+                            await loadCircleDetails()
+                          } catch (err) { console.error('Error accepting request:', err) }
+                        }}
+                        style={{
+                          fontSize: '11px', fontWeight: '600', color: '#F5EDE9',
+                          background: 'rgba(103, 77, 59, 0.9)', border: 'none', borderRadius: '100px',
+                          padding: '4px 12px', cursor: 'pointer', fontFamily: fonts.sans,
+                        }}
+                      >Accept</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Pending Invites (admin-initiated) */}
           {members.filter(m => m.status === 'invited').length > 0 && (
             <div style={{ marginTop: '16px' }}>
               <h4 style={{ fontSize: '13px', fontWeight: '600', color: colors.textMuted, marginBottom: '8px', fontFamily: fonts.sans }}>
@@ -1268,12 +1338,12 @@ export default function CircleDetailView({
           </div>
         )}
 
-        {/* Status Banner for Pending */}
-        {isPending && (
+        {/* Status Banner for Invitation (admin invited user) */}
+        {isInvited && (
           <div style={styles.pendingBanner}>
-            <span style={styles.pendingIcon}>⏳</span>
+            <span style={styles.pendingIcon}>✉️</span>
             <div style={{ flex: 1 }}>
-              <span style={styles.pendingTitle}>Invitation Pending</span>
+              <span style={styles.pendingTitle}>You're Invited</span>
               <span style={styles.pendingText}>{host?.name || 'Host'} invited you to this circle</span>
             </div>
             <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
@@ -1340,6 +1410,51 @@ export default function CircleDetailView({
                 }}
               >
                 Accept
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Status Banner for Join Request (user requested to join) */}
+        {isRequested && (
+          <div style={styles.pendingBanner}>
+            <span style={styles.pendingIcon}>⏳</span>
+            <div style={{ flex: 1 }}>
+              <span style={styles.pendingTitle}>Request Pending</span>
+              <span style={styles.pendingText}>Waiting for {host?.name || 'the host'} to approve your request</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
+              <button
+                onClick={async () => {
+                  try {
+                    setActionLoading(true)
+                    const { error } = await supabase
+                      .from('connection_group_members')
+                      .delete()
+                      .eq('id', membership.id)
+                      .eq('user_id', currentUser.id)
+                    if (error) throw error
+                    await loadCircleDetails()
+                  } catch (err) {
+                    console.error('Error canceling join request:', err)
+                  } finally {
+                    setActionLoading(false)
+                  }
+                }}
+                disabled={actionLoading}
+                style={{
+                  padding: '6px 16px',
+                  background: 'transparent',
+                  border: '1px solid rgba(184, 160, 137, 0.4)',
+                  borderRadius: '16px',
+                  color: '#6B5647',
+                  fontFamily: fonts.serif,
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel Request
               </button>
             </div>
           </div>

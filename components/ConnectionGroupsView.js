@@ -453,8 +453,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
       const { data: pendingMembers } = await sb
         .from('connection_group_members')
-        .select('id, user_id, group_id, invited_at')
-        .eq('status', 'invited')
+        .select('id, user_id, group_id, status, invited_at')
+        .in('status', ['invited', 'pending'])
         .in('group_id', circleIds);
 
       if (!pendingMembers || pendingMembers.length === 0) return [];
