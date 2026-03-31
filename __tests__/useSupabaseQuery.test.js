@@ -34,8 +34,10 @@ describe('useSupabaseQuery', () => {
       expect.any(Function),
       expect.objectContaining({
         revalidateOnFocus: false,
-        revalidateOnReconnect: true,
-        dedupingInterval: 30000,
+        revalidateOnReconnect: false,
+        revalidateIfStale: false,
+        dedupingInterval: 60000,
+        keepPreviousData: true,
         errorRetryCount: 2,
       })
     )
@@ -73,8 +75,10 @@ describe('useSupabaseQuery', () => {
       'key',
       expect.any(Function),
       expect.objectContaining({
-        dedupingInterval: 5000,
-        revalidateOnFocus: true,
+        dedupingInterval: 5000,        // overridden from 60000
+        revalidateOnFocus: true,       // overridden from false
+        revalidateOnReconnect: false,  // default preserved
+        keepPreviousData: true,        // default preserved
       })
     )
   })
