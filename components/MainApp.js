@@ -373,8 +373,51 @@ function MainApp({ currentUser, onSignOut }) {
   // Data shows instantly from cache when returning to home/discover
   const previousViewRef = useRef(currentView)
 
-  // SUBSCRIPTIONS TEMPORARILY DISABLED TO FIX INFINITE RELOAD
-  // Re-enable after adding useCallback to all functions
+  // Realtime subscriptions — functions are now stable (useCallback in hooks)
+  useEffect(() => {
+    if (!currentUser?.id) return
+
+    const meetupsChannel = supabase
+      .channel('meetups_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'meetups' },
+        () => { homeData.loadMeetupsFromDatabase() }
+      )
+      .subscribe()
+
+    const signupsChannel = supabase
+      .channel('signups_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'meetup_signups' },
+        () => { homeData.loadSignupsForMeetups(homeData.meetups) }
+      )
+      .subscribe()
+
+    const interestsChannel = supabase
+      .channel('interests_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'user_interests',
+          filter: `interested_in_user_id=eq.${currentUser.id}` },
+        () => { homeData.loadConnectionRequests() }
+      )
+      .subscribe()
+
+    const messagesChannel = supabase
+      .channel('messages_changes')
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages',
+          filter: `receiver_id=eq.${currentUser.id}` },
+        () => { homeData.loadUnreadMessageCount() }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(meetupsChannel)
+      supabase.removeChannel(signupsChannel)
+      supabase.removeChannel(interestsChannel)
+      supabase.removeChannel(messagesChannel)
+    }
+  }, [currentUser?.id])
 
   // Safety check - if currentUser is not loaded yet, show skeleton
   if (!currentUser) {
