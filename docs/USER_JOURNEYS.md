@@ -1,6 +1,6 @@
 # CircleW User Journeys & Navigation Map
 
-**Last updated:** 2026-03-31
+**Last updated:** 2026-04-01
 **Purpose:** Document all user workflows, navigation paths, state transitions, and failure points for E2E testing.
 
 ---
@@ -11,7 +11,8 @@
 - View components use `onNavigate(viewName, data)` callback
 - `lib/navigationAdapter.js` translates view names to URLs via `createOnNavigate(router)`
 - MainApp.js (legacy) uses `handleNavigate` which sets `currentView` state + syncs `selectedCircleId`, `selectedUserId`, etc.
-- App Router pages hardcode `previousView` values (context is lost vs MainApp which tracked it dynamically)
+- **Dynamic `from=` param**: `createOnNavigate` appends `from={currentPath}` to URLs for back navigation. `getPreviousView` reads this param to determine the back destination. For dynamic routes (e.g. `/people/{id}`), returns `_path:/people/{id}` which `createOnNavigate` handles as a direct `router.push()`.
+- **Skip list**: Main tabs and list pages (`home`, `discover`, `meetups`, `connectionGroups`, `allPeople`, `allEvents`) don't get `from=` appended, so their back buttons use the fallback default.
 - **Fallback:** unmapped view names navigate to `/${viewName}` (404)
 
 ### State Synchronized with Navigation (MainApp.js)
@@ -65,40 +66,41 @@ When `handleNavigate(view, data)` is called, these are set atomically:
 
 ## Navigation Issues
 
-| ID | Severity | Description | File | Impact |
-|----|----------|-------------|------|--------|
-| NAV-001 | **High** | `pastMeetings` not in ROUTES, navigates to 404 | `lib/navigationAdapter.js` | User clicks "View past" on coffee page, gets 404 |
-| NAV-002 | **Medium** | Event detail `previousView` hardcoded to "coffee" | `events/[id]/page.js:24` | Back button always goes to /coffee, even when coming from Home or Discover |
-| NAV-003 | **Medium** | User profile `previousView` hardcoded to "discover" | `people/[id]/page.js` | Back button goes to /discover even when coming from Circles or Home |
-| NAV-004 | **Medium** | Circle detail `previousView` hardcoded to "circles" | `circles/[id]/page.js` | Back from circle always goes to /circles, not the actual referring page |
-| NAV-005 | **Medium** | All hardcoded `previousView` values break after page refresh | All pages with hardcoded previousView | User refreshes → back button goes to hardcoded default, not actual history |
-| NAV-006 | **Low** | Proposals page missing `onNavigate` handler | `proposals/page.js` | Navigation out of proposals may not work |
-| NAV-007 | **Low** | Admin sub-pages missing `onNavigate` handler | `admin/feedback/page.js`, `admin/analytics/page.js` | Can't navigate from admin sub-pages |
-| NAV-008 | **Low** | Discover page uses direct `router.push` for host meetup | `discover/page.js:38` | Inconsistent pattern, works but harder to maintain |
-| NAV-009 | **Low** | `schedule/page.js` hardcodes `previousView="home"` | `schedule/page.js` | Back from schedule always goes home, even when opened from circle detail or profile |
-| NAV-010 | **Low** | `messages/page.js` hardcodes `previousView="home"` | `messages/page.js` | Back from messages always goes home, even when opened from user profile or circle |
+| ID | Severity | Status | Description | File | Impact |
+|----|----------|--------|-------------|------|--------|
+| NAV-001 | **High** | Open | `pastMeetings` not in ROUTES, navigates to 404 | `lib/navigationAdapter.js` | User clicks "View past" on coffee page, gets 404 |
+| NAV-002 | **Medium** | **Fixed** | Event detail `previousView` now uses `from=` param | `events/[id]/page.js` | Back button goes to actual referring page via `from=` param |
+| NAV-003 | **Medium** | **Fixed** | User profile `previousView` now uses `from=` param | `people/[id]/page.js` | Back button goes to actual referring page; dynamic routes use `_path:` prefix |
+| NAV-004 | **Medium** | **Partial** | Circle detail `previousView` hardcoded to "circles" | `circles/[id]/page.js` | Still hardcoded; needs `from=` param support |
+| NAV-005 | **Medium** | **Fixed** | `from=` param persists in URL across page refreshes | `lib/navigationAdapter.js` | Back button survives page refresh for pages with `from=` param |
+| NAV-006 | **Low** | Open | Proposals page missing `onNavigate` handler | `proposals/page.js` | Navigation out of proposals may not work |
+| NAV-007 | **Low** | Open | Admin sub-pages missing `onNavigate` handler | `admin/feedback/page.js`, `admin/analytics/page.js` | Can't navigate from admin sub-pages |
+| NAV-008 | **Low** | Open | Discover page uses direct `router.push` for host meetup | `discover/page.js:38` | Inconsistent pattern, works but harder to maintain |
+| NAV-009 | **Low** | **Partial** | `schedule/page.js` uses `from=` for some flows | `schedule/page.js` | Back works when navigated with `from=`, falls back to home otherwise |
+| NAV-010 | **Low** | **Fixed** | `messages/page.js` uses `from=` param for back | `messages/page.js` | Back goes to actual referring page (profile, circle, etc.) |
+| NAV-011 | **Low** | **Fixed** | `/circles/browse` highlighted Circles tab when accessed from Discover | `AppNavBar.js` | Nav bar now correctly doesn't highlight Circles for browse page |
+| NAV-012 | **Low** | **Fixed** | `/circles/browse` back always went to Home | `AllCirclesView.js` | Now uses `previousView` from `from=` param, defaults to Discover |
 
 ---
 
 ## Back Navigation Analysis
 
 ### Where Previous View Context Is Lost
-In MainApp.js, `previousView` is tracked dynamically (set to the current view before transitioning). In App Router pages, `previousView` is **hardcoded per page**, so the actual referring page is lost.
+Most pages now use `from=` URL param for dynamic back navigation. Some still use hardcoded fallbacks.
 
-| Page | Hardcoded previousView | Breaks When Coming From |
-|------|----------------------|------------------------|
-| `/circles/{id}` | "circles" | Home (circle card), Discover (circle card), Profile (shared circles) |
-| `/people/{userId}` | "discover" | Home (People to Meet), Circles (connections), Search results |
-| `/events/{id}` | "coffee" | Home (meetup card), Discover (event card), Circle detail (session) |
-| `/profile` | "home" | Any page (avatar click in nav bar) |
-| `/schedule` | "home" | Circle detail (schedule meetup), Profile (schedule coffee), Circles (schedule coffee) |
-| `/messages` | "home" | User profile (message button), Circle detail (chat button), Circles (message button) |
+| Page | Back Navigation | Status |
+|------|----------------|--------|
+| `/circles/{id}` | Hardcoded "circles" | **Needs fix** — should use `from=` param |
+| `/people/{userId}` | `from=` param, falls back to "allPeople" | **Fixed** |
+| `/events/{id}` | `from=` param + `?category=` for coffee chats | **Fixed** |
+| `/profile` | Hardcoded "home" | Acceptable (profile is always accessible from nav) |
+| `/schedule` | `from=` param, falls back to "home" | **Partial** |
+| `/messages` | `from=` param, falls back to "home" | **Fixed** |
+| `/circles/browse` | `from=` param, falls back to "discover" | **Fixed** |
 
-### Flows That Reset to Home
-- Profile back button → always /home
-- Messages back button → always /home
-- Schedule back button → always /home
-- Any page refresh → previousView resets to hardcoded default
+### Flows That Still Reset to Home
+- Profile back button → always /home (acceptable, accessed from nav bar)
+- Schedule back button → /home when no `from=` param
 
 ### Refresh Causing Broken Return Path
 All `previousView` values are hardcoded props, not persisted in URL or sessionStorage. A page refresh loses the actual navigation history. Browser back button works (browser history is real), but in-app back button uses the hardcoded value.
@@ -121,11 +123,11 @@ All `previousView` values are hardcoded props, not persisted in URL or sessionSt
 ### Stale Selected Entity State
 In MainApp.js, `selectedCircleId`, `selectedUserId`, `selectedMeetupId` persist in state even after navigating away. If the user navigates back via browser back button, the old entity is still selected. In App Router, this isn't an issue (entity ID comes from URL params).
 
-### Impossible Return Journeys
-- Home → Circle card → Circle detail → Schedule meetup → Back → goes to /home (not circle detail)
-- People → Person profile → Message → Back → goes to /home (not profile)
-- Circle detail → Member profile → Schedule coffee → Back → goes to /home (not profile)
-- Any page → Avatar → Profile → Back → goes to /home (not the actual previous page)
+### Impossible Return Journeys (remaining)
+- Home → Circle card → Circle detail → Schedule meetup → Back → goes to /home (not circle detail) — **NAV-004 still open**
+- ~~People → Person profile → Message → Back → goes to /home (not profile)~~ **Fixed** — now uses `from=` param
+- ~~Circle detail → Member profile → Schedule coffee → Back → goes to /home (not profile)~~ **Partial** — profile back works, schedule back still goes home
+- Any page → Avatar → Profile → Back → goes to /home (acceptable, nav-level action)
 
 ### Where Browser History Should Exist But Does Not
 All navigation uses `router.push()` so browser history IS created. The issue is only with in-app back buttons using hardcoded `previousView` values that don't match browser history.
@@ -245,7 +247,7 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 4. People to Meet → "Say hi" → sends connection request (inline, no navigation)
 5. Circle to Join section → card click → `/circles/{circleId}`
 6. Circle to Join → "Join" → sends join request (inline)
-7. Live Feed → "Connect" → sends connection request
+7. Live Feed → "Connect" → navigates to profile (shows "Request Sent" if already requested)
 8. Live Feed → "Join" → `/circles/{circleId}`
 9. Live Feed → "RSVP" → `/events/{meetupId}`
 10. Requests section → Accept/Decline (inline, no navigation)
@@ -533,13 +535,13 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 2. My Circles tab → circle card click → `/circles/{circleId}`
 3. Open Circles tab → circle card click → `/circles/{circleId}`
 4. "Create a Circle" → `/circles/new`
-5. Back button → `/home` (hardcoded in component)
+5. Back button → uses `from=` param, defaults to `/discover`
 
 **Failure points:**
-- No previousView passed from page
+- None significant
 
 **Back navigation risks:**
-- Back always goes to /home regardless of origin
+- ~~Back always goes to /home regardless of origin~~ **Fixed** — uses `from=` param
 
 **Data dependencies:** `connection_groups`, `connection_group_members`
 
@@ -581,7 +583,7 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 3. Coffee chat: pick connection → pick time → confirm
 4. Circle meetup: pick circle → pick time → confirm
 5. Community event: fill details → confirm
-6. After scheduling → navigates to `/coffee`
+6. After scheduling → navigates to `/events/{id}?category=coffee` (detail page)
 
 **Failure points:**
 - Pre-selected connection/circle from URL params may not match available options
@@ -615,14 +617,12 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 2. "View Recap" → `/recaps/{recapId}`
 
 **Failure points:**
-- `events/[id]/page.js` passes both `coffeeChatId={id}` and `meetupId={id}` — component uses whichever matches
+- ~~`events/[id]/page.js` queries wrong table for coffee chats~~ **Fixed** — passes `?category=coffee` in URL, falls back to checking `coffee_chats` table if `meetups` query returns empty
 - RSVP/cancel may fail silently
 
 **Back navigation risks:**
-- `previousView` hardcoded to "coffee" [NAV-002]
-- Coming from Home (meetup card) → back goes to /coffee (should go to /home)
-- Coming from Discover → back goes to /coffee (should go to /discover)
-- Coming from Circle detail (past session) → back goes to /coffee (should go to circle)
+- ~~`previousView` hardcoded to "coffee" [NAV-002]~~ **Fixed** — uses `from=` param
+- Back now returns to actual referring page (Home, Discover, Circle, etc.)
 
 **Data dependencies:** `meetups` or `coffee_chats`, `meetup_signups`, `call_recaps`, `profiles`
 
@@ -741,6 +741,7 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 | Accept/decline connection | `circles-page-{userId}`, `home-primary-{userId}` |
 | Join circle | `circles-page-{userId}` |
 | Leave circle | `circles-page-{userId}` |
+| Schedule coffee chat | `home-primary-{userId}`, `meetups-coffee-{userId}` |
 | Schedule meetup | `home-primary-{userId}` |
 | RSVP to event | `home-primary-{userId}` |
 | Toggle coffee availability | `user-profile-{userId}-{currentUserId}` |
@@ -762,14 +763,8 @@ All modals use local component state. None have URLs. Browser back does NOT clos
 
 ## Suggested Improvements for URL Structure
 
-### Dynamic previousView via searchParams
-Instead of hardcoding `previousView`, pass it via URL:
-```
-/circles/abc123?from=home
-/people/xyz789?from=circles
-/events/evt456?from=discover
-```
-The page reads `searchParams.get('from')` and uses it for the back button. Falls back to a sensible default if missing.
+### Dynamic previousView via searchParams — ✅ IMPLEMENTED
+`createOnNavigate` now appends `from={currentPath}` to URLs. `getPreviousView` reads this param. For dynamic routes, returns `_path:{path}` which is handled as a direct `router.push()`. List pages and main tabs skip `from=` to avoid ping-pong navigation.
 
 ### Missing Routes to Add
 - `pastMeetings` → `/coffee?view=past`
