@@ -1,17 +1,18 @@
 'use client'
 
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
-import { createOnNavigate } from '@/lib/navigationAdapter'
+import { createOnNavigate, getPreviousView } from '@/lib/navigationAdapter'
 import useConnections from '@/hooks/useConnections'
 import ScheduleMeetupView from '@/components/ScheduleMeetupView'
 
 export default function SchedulePage() {
   const { profile: currentUser } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
-  const handleNavigate = createOnNavigate(router)
+  const handleNavigate = createOnNavigate(router, pathname)
 
   const connectionsHook = useConnections(currentUser, {})
 
@@ -30,7 +31,7 @@ export default function SchedulePage() {
       supabase={supabase}
       connections={connectionsHook.connections}
       onNavigate={handleNavigate}
-      previousView="home"
+      previousView={getPreviousView(searchParams, 'home')}
       initialType={initialType}
       scheduleContext={{
         type: initialType,

@@ -4,7 +4,7 @@
  * @jest-environment node
  */
 
-const { ROUTES, createOnNavigate } = require('@/lib/navigationAdapter')
+const { ROUTES, createOnNavigate, getPreviousView } = require('@/lib/navigationAdapter')
 
 describe('ROUTES', () => {
   test('main tabs resolve to correct paths', () => {
@@ -64,6 +64,10 @@ describe('ROUTES', () => {
     expect(ROUTES.coffeeChats()).toBe('/schedule?type=coffee')
   })
 
+  test('pastMeetings maps to coffee past view', () => {
+    expect(ROUTES.pastMeetings()).toBe('/coffee?view=past')
+  })
+
   test('profile and history', () => {
     expect(ROUTES.profile()).toBe('/profile')
     expect(ROUTES.callHistory()).toBe('/coffee?view=history')
@@ -81,10 +85,10 @@ describe('ROUTES', () => {
 describe('createOnNavigate', () => {
   test('calls router.push with resolved URL', () => {
     const mockRouter = { push: jest.fn() }
-    const onNavigate = createOnNavigate(mockRouter)
+    const onNavigate = createOnNavigate(mockRouter, '/home')
 
     onNavigate('circleDetail', { circleId: 'abc' })
-    expect(mockRouter.push).toHaveBeenCalledWith('/circles/abc')
+    expect(mockRouter.push).toHaveBeenCalledWith('/circles/abc?from=%2Fhome')
   })
 
   test('falls back to /viewName for unknown views', () => {
@@ -93,5 +97,62 @@ describe('createOnNavigate', () => {
 
     onNavigate('unknownView')
     expect(mockRouter.push).toHaveBeenCalledWith('/unknownView')
+  })
+
+  test('skips from param for main tab navigations', () => {
+    const mockRouter = { push: jest.fn() }
+    const onNavigate = createOnNavigate(mockRouter, '/circles/abc')
+
+    onNavigate('home')
+    expect(mockRouter.push).toHaveBeenCalledWith('/home')
+
+    onNavigate('discover')
+    expect(mockRouter.push).toHaveBeenCalledWith('/discover')
+  })
+
+  test('appends from param with & when URL has existing query params', () => {
+    const mockRouter = { push: jest.fn() }
+    const onNavigate = createOnNavigate(mockRouter, '/circles')
+
+    onNavigate('messages', { chatId: 'c1', chatType: 'user' })
+    expect(mockRouter.push).toHaveBeenCalledWith('/messages?id=c1&type=user&from=%2Fcircles')
+  })
+
+  test('works without currentPath', () => {
+    const mockRouter = { push: jest.fn() }
+    const onNavigate = createOnNavigate(mockRouter)
+
+    onNavigate('profile')
+    expect(mockRouter.push).toHaveBeenCalledWith('/profile')
+  })
+})
+
+describe('getPreviousView', () => {
+  const mockSearchParams = (from) => ({
+    get: (key) => key === 'from' ? from : null,
+  })
+
+  test('returns view name for known paths', () => {
+    expect(getPreviousView(mockSearchParams('/home'))).toBe('home')
+    expect(getPreviousView(mockSearchParams('/discover'))).toBe('discover')
+    expect(getPreviousView(mockSearchParams('/coffee'))).toBe('meetups')
+    expect(getPreviousView(mockSearchParams('/circles'))).toBe('connectionGroups')
+    expect(getPreviousView(mockSearchParams('/people'))).toBe('allPeople')
+    expect(getPreviousView(mockSearchParams('/profile'))).toBe('profile')
+  })
+
+  test('handles dynamic routes', () => {
+    expect(getPreviousView(mockSearchParams('/circles/abc-123'))).toBe('circleDetail')
+    expect(getPreviousView(mockSearchParams('/people/user-456'))).toBe('userProfile')
+    expect(getPreviousView(mockSearchParams('/events/evt-789'))).toBe('eventDetail')
+  })
+
+  test('returns fallback when from is missing', () => {
+    expect(getPreviousView(mockSearchParams(null), 'home')).toBe('home')
+    expect(getPreviousView(null, 'discover')).toBe('discover')
+  })
+
+  test('returns fallback for unknown paths', () => {
+    expect(getPreviousView(mockSearchParams('/unknown'), 'home')).toBe('home')
   })
 })

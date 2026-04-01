@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import AppNavBar from '@/components/AppNavBar'
@@ -24,8 +24,9 @@ import { createOnNavigate } from '@/lib/navigationAdapter'
 export default function AuthenticatedLayout({ children }) {
   const { user, profile, status, refreshProfile } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const toast = useToast()
-  const onNavigate = createOnNavigate(router)
+  const onNavigate = createOnNavigate(router, pathname)
 
   // Redirect to landing if not authenticated
   useEffect(() => {

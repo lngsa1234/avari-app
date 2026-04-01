@@ -1,6 +1,6 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, usePathname } from 'next/navigation'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
@@ -14,7 +14,8 @@ export default function CoffeePage() {
   const { profile: currentUser } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const handleNavigate = createOnNavigate(router)
+  const pathname = usePathname()
+  const handleNavigate = createOnNavigate(router, pathname)
 
   const view = searchParams.get('view') // 'past', 'history', or null
 

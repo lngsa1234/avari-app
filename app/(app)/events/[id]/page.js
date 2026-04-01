@@ -1,16 +1,18 @@
 'use client'
 
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
-import { createOnNavigate } from '@/lib/navigationAdapter'
+import { createOnNavigate, getPreviousView } from '@/lib/navigationAdapter'
 import CoffeeChatDetailView from '@/components/CoffeeChatDetailView'
 
 export default function EventDetailPage() {
   const { id } = useParams()
   const { profile: currentUser } = useAuth()
   const router = useRouter()
-  const handleNavigate = createOnNavigate(router)
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const handleNavigate = createOnNavigate(router, pathname)
 
   if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
@@ -21,7 +23,7 @@ export default function EventDetailPage() {
       onNavigate={handleNavigate}
       coffeeChatId={id}
       meetupId={id}
-      previousView="coffee"
+      previousView={getPreviousView(searchParams, 'meetups')}
     />
   )
 }

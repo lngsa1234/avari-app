@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { createOnNavigate } from '@/lib/navigationAdapter'
@@ -18,8 +18,9 @@ import LiveFeed from '@/components/LiveFeed'
 export default function HomePage() {
   const { profile: currentUser } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const toast = useToast()
-  const handleNavigate = createOnNavigate(router)
+  const handleNavigate = createOnNavigate(router, pathname)
   const hasLoadedRef = useRef(false)
 
   // Search state (lives here since search bar is in nav, results in HomeView)

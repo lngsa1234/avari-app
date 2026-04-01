@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { createOnNavigate } from '@/lib/navigationAdapter'
@@ -12,8 +12,9 @@ import NetworkDiscoverView from '@/components/NetworkDiscoverView'
 export default function DiscoverPage() {
   const { profile: currentUser } = useAuth()
   const router = useRouter()
+  const pathname = usePathname()
   const toast = useToast()
-  const handleNavigate = createOnNavigate(router)
+  const handleNavigate = createOnNavigate(router, pathname)
 
   const homeData = useHomeData(currentUser)
   const connectionsHook = useConnections(currentUser, {
@@ -35,6 +36,7 @@ export default function DiscoverPage() {
         params.set('type', 'community')
         if (requestData?.topic) params.set('topic', requestData.topic)
         if (requestData?.description) params.set('description', requestData.description)
+        params.set('from', pathname)
         router.push(`/schedule?${params}`)
       }}
     />
