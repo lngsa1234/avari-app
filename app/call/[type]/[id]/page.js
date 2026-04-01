@@ -2651,7 +2651,8 @@ export default function UnifiedCallPage() {
       )}
 
       {/* Video Area */}
-      <div className={`flex-1 p-2 sm:p-3 relative transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`} style={{ minHeight: 0 }}>
+      <div className={`flex-1 p-2 sm:p-3 relative transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''} flex justify-center`} style={{ minHeight: 0 }}>
+      <div className="w-full h-full" style={{ maxWidth: '1200px' }}>
         {gridView ? (
           <VideoGrid
             localVideoRef={localVideoRef}
@@ -2704,6 +2705,7 @@ export default function UnifiedCallPage() {
           interimText={interimText}
           speakerName={user?.name || 'You'}
         />
+      </div>
       </div>
 
       {/* Controls */}

@@ -91,26 +91,10 @@ const MoreIcon = () => (
   </svg>
 );
 
-const TopicsIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
-);
-
 const BlurIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="3" />
     <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-  </svg>
-);
-
-const LanguageIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="2" y1="12" x2="22" y2="12" />
-    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
   </svg>
 );
 
@@ -252,11 +236,6 @@ const MenuItem = ({ icon, label, onClick, active, danger, rightLabel }) => {
   );
 };
 
-/* ─── Divider ─── */
-const Divider = () => (
-  <div className="w-px h-7 bg-stone-600/50 mx-1 flex-shrink-0" />
-);
-
 /* ─── Device Selector Dropdown ─── */
 const DeviceSelector = ({ devices, selectedDevice, onChange, disabled, type }) => {
   const [open, setOpen] = useState(false);
@@ -314,7 +293,7 @@ const DeviceSelector = ({ devices, selectedDevice, onChange, disabled, type }) =
   );
 };
 
-/* ─── Main Control Bar ─── */
+/* ─── Main Control Bar (Zoom-style 3-zone layout) ─── */
 export default function ControlBar({
   // State
   isMuted,
@@ -383,9 +362,6 @@ export default function ControlBar({
     });
   }
 
-
-  // Background blur is shown as a direct button next to video, not in More menu
-
   return (
     <div className="flex flex-col items-center gap-2 py-3 px-4 relative z-50" style={{ background: 'rgba(30, 20, 16, 0.6)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
       {/* Status indicators row */}
@@ -433,99 +409,95 @@ export default function ControlBar({
         )}
       </div>
 
-      {/* Control bar */}
-      <div className="flex items-center gap-1 sm:gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 sm:p-2 shadow-2xl border border-stone-700/30 max-w-full flex-wrap justify-center">
-        {/* Primary: Audio with device selector */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <ControlBtn
-            icon={isAudioDeviceSwitching ? <span className="animate-spin">⏳</span> : <MicIcon muted={isMuted} />}
-            active={!isMuted}
-            onClick={onToggleMute}
-            disabled={isAudioDeviceSwitching}
-            tooltip={isMuted ? 'Unmute (M)' : 'Mute (M)'}
-          />
-          <DeviceSelector
-            devices={audioDevices}
-            selectedDevice={selectedAudioDevice}
-            onChange={onAudioDeviceChange}
-            disabled={isAudioDeviceSwitching}
-            type="audio"
-          />
-        </div>
-
-        {/* Primary: Video with device selector */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <ControlBtn
-            icon={isVideoDeviceSwitching ? <span className="animate-spin">⏳</span> : <CameraIcon off={isVideoOff} />}
-            active={!isVideoOff}
-            onClick={onToggleVideo}
-            disabled={isVideoDeviceSwitching}
-            tooltip={isVideoOff ? 'Turn on camera (V)' : 'Turn off camera (V)'}
-          />
-          <DeviceSelector
-            devices={videoDevices}
-            selectedDevice={selectedVideoDevice}
-            onChange={onVideoDeviceChange}
-            disabled={isVideoDeviceSwitching}
-            type="video"
-          />
-        </div>
-
-        {/* Background blur */}
-        {isBlurSupported && (
-          <ControlBtn
-            icon={isBlurLoading ? <span className="animate-spin">⏳</span> : <BlurIcon />}
-            active={isBlurEnabled}
-            onClick={onToggleBlur}
-            disabled={isBlurLoading || isVideoOff}
-            tooltip={isVideoOff ? 'Turn on camera first' : isBlurEnabled ? 'Disable background blur' : 'Enable background blur'}
-          />
-        )}
-
-        <Divider />
-
-        {/* Secondary: Collaboration */}
-        {features.screenShare && (
-          <ControlBtn
-            icon={<ScreenShareIcon active={isScreenSharing} />}
-            active={isScreenSharing}
-            onClick={onToggleScreenShare}
-            disabled={!isScreenShareSupported || isOtherSharing}
-            tooltip={
-              !isScreenShareSupported ? 'Screen sharing is not supported on this device'
-              : isScreenSharing ? 'Stop sharing'
-              : isOtherSharing ? `${screenSharerName || 'Someone'} is sharing`
-              : 'Share screen'
-            }
-          />
-        )}
-
-        {features.chat && (
-          <ControlBtn
-            icon={<ChatIcon />}
-            active={showChat}
-            onClick={onToggleChat}
-            badge={!showChat ? messagesCount : undefined}
-            tooltip="Chat (C)"
-          />
-        )}
-
-        {features.participants && (
-          <span className="hidden sm:inline-flex">
+      {/* Control bar — 3-zone Zoom-style layout */}
+      <div className="w-full max-w-4xl flex items-center justify-between gap-2">
+        {/* LEFT zone: Audio + Video + Blur */}
+        <div className="flex items-center gap-1 sm:gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 sm:p-2 shadow-2xl border border-stone-700/30">
+          <div className="flex items-center gap-0.5 flex-shrink-0">
             <ControlBtn
-              icon={<PeopleIcon />}
-              active={showParticipants}
-              onClick={onToggleParticipants}
-              label={participantCount > 0 ? String(participantCount) : undefined}
-              tooltip="Participants (P)"
+              icon={isAudioDeviceSwitching ? <span className="animate-spin">⏳</span> : <MicIcon muted={isMuted} />}
+              active={!isMuted}
+              onClick={onToggleMute}
+              disabled={isAudioDeviceSwitching}
+              tooltip={isMuted ? 'Unmute (M)' : 'Mute (M)'}
             />
-          </span>
-        )}
+            <DeviceSelector
+              devices={audioDevices}
+              selectedDevice={selectedAudioDevice}
+              onChange={onAudioDeviceChange}
+              disabled={isAudioDeviceSwitching}
+              type="audio"
+            />
+          </div>
 
-        {/* More menu */}
-        {moreMenuItems.length > 0 && (
-          <>
-            <Divider />
+          <div className="flex items-center gap-0.5 flex-shrink-0">
+            <ControlBtn
+              icon={isVideoDeviceSwitching ? <span className="animate-spin">⏳</span> : <CameraIcon off={isVideoOff} />}
+              active={!isVideoOff}
+              onClick={onToggleVideo}
+              disabled={isVideoDeviceSwitching}
+              tooltip={isVideoOff ? 'Turn on camera (V)' : 'Turn off camera (V)'}
+            />
+            <DeviceSelector
+              devices={videoDevices}
+              selectedDevice={selectedVideoDevice}
+              onChange={onVideoDeviceChange}
+              disabled={isVideoDeviceSwitching}
+              type="video"
+            />
+          </div>
+
+          {isBlurSupported && (
+            <ControlBtn
+              icon={isBlurLoading ? <span className="animate-spin">⏳</span> : <BlurIcon />}
+              active={isBlurEnabled}
+              onClick={onToggleBlur}
+              disabled={isBlurLoading || isVideoOff}
+              tooltip={isVideoOff ? 'Turn on camera first' : isBlurEnabled ? 'Disable background blur' : 'Enable background blur'}
+            />
+          )}
+        </div>
+
+        {/* CENTER zone: Screen Share + Chat + Participants + More */}
+        <div className="flex items-center gap-1 sm:gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 sm:p-2 shadow-2xl border border-stone-700/30">
+          {features.screenShare && (
+            <ControlBtn
+              icon={<ScreenShareIcon active={isScreenSharing} />}
+              active={isScreenSharing}
+              onClick={onToggleScreenShare}
+              disabled={!isScreenShareSupported || isOtherSharing}
+              tooltip={
+                !isScreenShareSupported ? 'Screen sharing is not supported on this device'
+                : isScreenSharing ? 'Stop sharing'
+                : isOtherSharing ? `${screenSharerName || 'Someone'} is sharing`
+                : 'Share screen'
+              }
+            />
+          )}
+
+          {features.chat && (
+            <ControlBtn
+              icon={<ChatIcon />}
+              active={showChat}
+              onClick={onToggleChat}
+              badge={!showChat ? messagesCount : undefined}
+              tooltip="Chat (C)"
+            />
+          )}
+
+          {features.participants && (
+            <span className="hidden sm:inline-flex">
+              <ControlBtn
+                icon={<PeopleIcon />}
+                active={showParticipants}
+                onClick={onToggleParticipants}
+                label={participantCount > 0 ? String(participantCount) : undefined}
+                tooltip="Participants (P)"
+              />
+            </span>
+          )}
+
+          {moreMenuItems.length > 0 && (
             <div ref={moreRef} className="relative flex-shrink-0">
               <ControlBtn
                 icon={<MoreIcon />}
@@ -540,13 +512,11 @@ export default function ControlBar({
                 />
               )}
             </div>
-          </>
-        )}
+          )}
+        </div>
 
-        <Divider />
-
-        {/* Leave — label hidden on mobile to save space */}
-        <span className="flex-shrink-0">
+        {/* RIGHT zone: Leave */}
+        <div className="flex items-center bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 sm:p-2 shadow-2xl border border-stone-700/30">
           <span className="hidden sm:contents">
             <ControlBtn
               icon={<LeaveIcon />}
@@ -564,7 +534,7 @@ export default function ControlBar({
               tooltip="Leave call (L)"
             />
           </span>
-        </span>
+        </div>
       </div>
     </div>
   );
