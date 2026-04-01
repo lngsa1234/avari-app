@@ -264,12 +264,13 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
     if (meetupId) loadEventDetails();
   }, [meetupId]);
 
-  async function loadEventDetails() {
+  async function loadEventDetails(categoryOverride) {
     try {
       setLoading(true);
+      const category = categoryOverride || meetupCategory;
 
       // 1:1 coffee chat — load from coffee_chats table
-      if (meetupCategory === 'coffee') {
+      if (category === 'coffee') {
         const { data: chatData, error: chatError } = await sb
           .from('coffee_chats')
           .select('*')
@@ -330,6 +331,18 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
         .select('*, connection_groups(id, name), host:profiles!created_by(id, name, profile_picture, career)')
         .eq('id', meetupId)
         .single();
+
+      // If not found in meetups, try coffee_chats (fallback for missing category param)
+      if (meetupError && meetupError.code === 'PGRST116') {
+        const { data: fallbackChat } = await sb
+          .from('coffee_chats')
+          .select('id')
+          .eq('id', meetupId)
+          .maybeSingle();
+        if (fallbackChat) {
+          return loadEventDetails('coffee');
+        }
+      }
 
       if (meetupError) throw meetupError;
 

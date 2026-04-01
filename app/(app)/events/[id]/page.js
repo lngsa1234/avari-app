@@ -16,6 +16,8 @@ export default function EventDetailPage() {
 
   if (!currentUser) return <div style={{ minHeight: "50vh" }} />
 
+  const category = searchParams.get('category')
+
   return (
     <CoffeeChatDetailView
       currentUser={currentUser}
@@ -23,6 +25,7 @@ export default function EventDetailPage() {
       onNavigate={handleNavigate}
       coffeeChatId={id}
       meetupId={id}
+      meetupCategory={category || undefined}
       previousView={getPreviousView(searchParams, 'meetups')}
     />
   )
