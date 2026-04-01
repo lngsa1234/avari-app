@@ -418,7 +418,7 @@ export default function UnifiedCallPage() {
         // Fetch profile to get display name
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('name, profile_picture')
+          .select('name, profile_picture, role')
           .eq('id', authData.user.id)
           .single();
 
@@ -431,7 +431,8 @@ export default function UnifiedCallPage() {
         setUser({
           ...authData.user,
           name: profile?.name || authData.user.email?.split('@')[0],
-          profile_picture: profile?.profile_picture
+          profile_picture: profile?.profile_picture,
+          role: profile?.role,
         });
         console.log('[UnifiedCall] User set, config:', config?.provider);
       } else {
@@ -441,6 +442,14 @@ export default function UnifiedCallPage() {
     }
     fetchUserWithProfile();
   }, [router]);
+
+  // Load eruda debug console for admin users (mobile debugging)
+  useEffect(() => {
+    if (user?.role !== 'admin') return;
+    import('eruda').then(({ default: eruda }) => {
+      if (!eruda._isInit) eruda.init();
+    });
+  }, [user?.role]);
 
   // Validate call type
   useEffect(() => {
@@ -994,6 +1003,14 @@ export default function UnifiedCallPage() {
       if (joinedUserId === user?.id) return;
       remotePeerId = joinedUserId;
       remotePeerIdRef.current = joinedUserId;
+
+      // Clear disconnected state — peer is back
+      setRemoteParticipants(prev => prev.map(p => ({
+        ...p,
+        isDisconnected: false,
+        _lastUpdate: Date.now(),
+      })));
+
       const polite = amIPolite(remotePeerId);
       console.log('[WebRTC] Peer joined, I am', polite ? 'polite' : 'impolite');
       if (!polite) {
@@ -1583,7 +1600,10 @@ export default function UnifiedCallPage() {
     // Don't re-offer if connection is already established
     if (pc.connectionState === 'connected' || pc.connectionState === 'connecting') return;
     try {
-      const offer = await pc.createOffer();
+      // Use ICE restart if connection previously failed or disconnected
+      const needsRestart = pc.connectionState === 'failed' || pc.connectionState === 'disconnected';
+      const offer = await pc.createOffer({ iceRestart: needsRestart });
+      if (needsRestart) console.log('[WebRTC] ICE restart offer created');
       await pc.setLocalDescription(offer);
       signalingSocketRef.current?.emit('offer', {
         offer: pc.localDescription,

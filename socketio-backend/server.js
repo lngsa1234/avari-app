@@ -58,6 +58,9 @@ const socketToUser = new Map(); // socketId -> userId
 // Match metadata
 const matchMetadata = new Map(); // matchId -> { createdAt, lastActivity }
 
+// Pending disconnect timers — gives Socket.IO time to reconnect before firing user-left
+const disconnectTimers = new Map(); // userId -> { timer, matchId, socketId }
+
 // Deepgram transcription connections
 const deepgramConnections = new Map(); // socketId -> WebSocket instance
 
@@ -185,6 +188,14 @@ io.on('connection', (socket) => {
           message: 'Missing userId or matchId' 
         });
         return;
+      }
+
+      // Cancel any pending disconnect timer for this user (reconnect scenario)
+      const pending = disconnectTimers.get(userId);
+      if (pending) {
+        clearTimeout(pending.timer);
+        disconnectTimers.delete(userId);
+        console.log(`[Avari] Cancelled pending disconnect for ${userId} (reconnected)`);
       }
 
       // Store user info on socket
@@ -510,32 +521,51 @@ io.on('connection', (socket) => {
       }
 
       if (socket.userId) {
-        // Remove from user maps
-        userSockets.delete(socket.userId);
+        // Remove from socket-level maps immediately
         socketToUser.delete(socket.id);
 
-        // Remove from match
-        if (socket.matchId) {
-          const match = matches.get(socket.matchId);
-          if (match) {
-            match.delete(socket);
+        // Intentional disconnects (client-initiated) fire user-left immediately.
+        // Transport drops get a grace period so Socket.IO can reconnect without
+        // triggering a false user-left on the other participant.
+        const isTransportDrop = reason === 'transport close' || reason === 'transport error' || reason === 'ping timeout';
+        const GRACE_MS = 8000; // 8 seconds for Socket.IO to reconnect
 
-            // Notify other participants
-            socket.to(socket.matchId).emit('user-left', {
-              userId: socket.userId
-            });
+        const doCleanup = () => {
+          disconnectTimers.delete(socket.userId);
 
-            socket.to(socket.matchId).emit('call-ended', {
-              from: socket.userId
-            });
+          // Only clean up if this socket is still the active one for the user
+          // (a reconnect would have replaced it in the register handler)
+          if (userSockets.get(socket.userId) === socket) {
+            userSockets.delete(socket.userId);
+          }
 
-            // Clean up empty matches
-            if (match.size === 0) {
-              matches.delete(socket.matchId);
-              matchMetadata.delete(socket.matchId);
-              console.log(`[Avari] Cleaned up empty match: ${socket.matchId}`);
+          // Remove from match
+          if (socket.matchId) {
+            const match = matches.get(socket.matchId);
+            if (match) {
+              match.delete(socket);
+
+              // Notify other participants via the room (not the disconnected socket)
+              io.to(socket.matchId).emit('user-left', {
+                userId: socket.userId
+              });
+
+              // Clean up empty matches
+              if (match.size === 0) {
+                matches.delete(socket.matchId);
+                matchMetadata.delete(socket.matchId);
+                console.log(`[Avari] Cleaned up empty match: ${socket.matchId}`);
+              }
             }
           }
+        };
+
+        if (isTransportDrop) {
+          console.log(`[Avari] Transport drop for ${socket.userId}, waiting ${GRACE_MS}ms for reconnect`);
+          const timer = setTimeout(doCleanup, GRACE_MS);
+          disconnectTimers.set(socket.userId, { timer, matchId: socket.matchId, socketId: socket.id });
+        } else {
+          doCleanup();
         }
       }
 
