@@ -1600,10 +1600,10 @@ export default function UnifiedCallPage() {
     // Don't re-offer if connection is already established
     if (pc.connectionState === 'connected' || pc.connectionState === 'connecting') return;
     try {
-      // Use ICE restart if connection previously failed or disconnected
-      const needsRestart = pc.connectionState === 'failed' || pc.connectionState === 'disconnected';
-      const offer = await pc.createOffer({ iceRestart: needsRestart });
-      if (needsRestart) console.log('[WebRTC] ICE restart offer created');
+      // Always use iceRestart on re-offers to preserve m-line order and refresh candidates
+      const isReoffer = pc.remoteDescription !== null;
+      const offer = await pc.createOffer({ iceRestart: isReoffer });
+      if (isReoffer) console.log('[WebRTC] Re-offer with ICE restart');
       await pc.setLocalDescription(offer);
       signalingSocketRef.current?.emit('offer', {
         offer: pc.localDescription,
