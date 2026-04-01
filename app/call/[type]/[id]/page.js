@@ -806,7 +806,7 @@ export default function UnifiedCallPage() {
       localVideoRef.current.srcObject = stream;
     }
 
-    // Setup peer connection with STUN + TURN servers
+    // ICE server configuration
     const iceServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
@@ -823,115 +823,127 @@ export default function UnifiedCallPage() {
       );
       console.log('[WebRTC] TURN servers configured');
     }
-    const pc = new RTCPeerConnection({ iceServers });
-    peerConnectionRef.current = pc;
 
-    stream.getTracks().forEach(track => {
-      const sender = pc.addTrack(track, stream);
-      if (track.kind === 'video') {
-        track.contentHint = 'motion';
-        const params = sender.getParameters();
-        if (!params.encodings || params.encodings.length === 0) {
-          params.encodings = [{}];
+    // Create (or recreate) a peer connection with all event handlers wired up
+    const createPeerConnection = () => {
+      // Clean up old connection if any
+      if (peerConnectionRef.current) {
+        if (qualityMonitorRef.current) {
+          clearInterval(qualityMonitorRef.current);
+          qualityMonitorRef.current = null;
         }
-        params.encodings[0].maxBitrate = 1_500_000;
-        params.encodings[0].maxFramerate = 24;
-        // Let browser reduce resolution (not framerate) when bandwidth is low
-        params.degradationPreference = 'maintain-framerate';
-        sender.setParameters(params).catch(e => console.warn('[WebRTC] Could not set video params:', e.message));
+        try { peerConnectionRef.current.close(); } catch (e) { /* ignore */ }
       }
-    });
+      iceCandidateQueueRef.current = [];
 
-    // Collect remote tracks — ontrack fires once per track (audio + video)
-    const remoteTracks = { video: null, audio: null };
-    pc.ontrack = (event) => {
-      console.log('[WebRTC] ontrack fired, track kind:', event.track.kind, 'readyState:', event.track.readyState, 'enabled:', event.track.enabled);
-      // Always create dedicated MediaStream per track for clean attachment
-      if (event.track.kind === 'video') {
-        remoteTracks.video = new MediaStream([event.track]);
-      } else if (event.track.kind === 'audio') {
-        remoteTracks.audio = new MediaStream([event.track]);
-      }
-      // Derive the partner's real user ID from relatedData (coffee chat has requester_id/recipient_id)
-      const rd = relatedDataRef.current || relatedData;
-      const partnerId = rd && user?.id
-        ? (rd.requester_id === user.id ? rd.recipient_id : rd.requester_id) || 'remote'
-        : 'remote';
-      setRemoteParticipants([{
-        id: partnerId,
-        name: rd?.partner_name || 'Partner',
-        videoTrack: remoteTracks.video,
-        audioTrack: remoteTracks.audio,
-        hasVideo: !!remoteTracks.video,
-        hasAudio: !!remoteTracks.audio,
-        _lastUpdate: Date.now(),
-      }]);
-    };
+      const newPc = new RTCPeerConnection({ iceServers });
+      peerConnectionRef.current = newPc;
 
-    pc.onconnectionstatechange = () => {
-      console.log('[WebRTC] Connection state:', pc.connectionState);
-      if (pc.connectionState === 'disconnected') {
-        // 'disconnected' is transient on mobile networks — wait before showing UI
-        if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
-        disconnectGraceRef.current = setTimeout(() => {
-          // Still disconnected after grace period? Show it
-          if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
-            setRemoteParticipants(prev => prev.map(p => ({
-              ...p,
-              isDisconnected: true,
-              _lastUpdate: Date.now(),
-            })));
+      // Add local tracks
+      stream.getTracks().forEach(track => {
+        const sender = newPc.addTrack(track, stream);
+        if (track.kind === 'video') {
+          track.contentHint = 'motion';
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) {
+            params.encodings = [{}];
           }
-        }, 5000);
-      } else if (pc.connectionState === 'failed') {
-        // 'failed' is terminal — mark disconnected immediately
-        if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
-        setRemoteParticipants(prev => prev.map(p => ({
-          ...p,
-          isDisconnected: true,
-          _lastUpdate: Date.now(),
-        })));
-      } else if (pc.connectionState === 'connected') {
-        // Recovered — clear any pending grace timer and restore UI
-        if (disconnectGraceRef.current) {
-          clearTimeout(disconnectGraceRef.current);
-          disconnectGraceRef.current = null;
+          params.encodings[0].maxBitrate = 1_500_000;
+          params.encodings[0].maxFramerate = 24;
+          params.degradationPreference = 'maintain-framerate';
+          sender.setParameters(params).catch(e => console.warn('[WebRTC] Could not set video params:', e.message));
         }
-        setRemoteParticipants(prev => prev.map(p => ({
-          ...p,
-          isDisconnected: false,
+      });
+
+      // Collect remote tracks — ontrack fires once per track (audio + video)
+      const remoteTracks = { video: null, audio: null };
+      newPc.ontrack = (event) => {
+        console.log('[WebRTC] ontrack fired, track kind:', event.track.kind, 'readyState:', event.track.readyState, 'enabled:', event.track.enabled);
+        if (event.track.kind === 'video') {
+          remoteTracks.video = new MediaStream([event.track]);
+        } else if (event.track.kind === 'audio') {
+          remoteTracks.audio = new MediaStream([event.track]);
+        }
+        const rd = relatedDataRef.current || relatedData;
+        const partnerId = rd && user?.id
+          ? (rd.requester_id === user.id ? rd.recipient_id : rd.requester_id) || 'remote'
+          : 'remote';
+        setRemoteParticipants([{
+          id: partnerId,
+          name: rd?.partner_name || 'Partner',
+          videoTrack: remoteTracks.video,
+          audioTrack: remoteTracks.audio,
+          hasVideo: !!remoteTracks.video,
+          hasAudio: !!remoteTracks.audio,
           _lastUpdate: Date.now(),
-        })));
-        // Log connection type (relay vs direct) and start quality monitor
-        pc.getStats().then(stats => {
-          stats.forEach(report => {
-            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-              const localId = report.localCandidateId;
-              const remoteId = report.remoteCandidateId;
-              stats.forEach(s => {
-                if (s.id === localId) console.log('[WebRTC] Local candidate:', s.candidateType, s.protocol, s.address);
-                if (s.id === remoteId) console.log('[WebRTC] Remote candidate:', s.candidateType, s.protocol, s.address);
-              });
-              console.log('[WebRTC] Round-trip time:', report.currentRoundTripTime, 's');
+        }]);
+      };
+
+      newPc.onconnectionstatechange = () => {
+        console.log('[WebRTC] Connection state:', newPc.connectionState);
+        if (newPc.connectionState === 'disconnected') {
+          if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
+          disconnectGraceRef.current = setTimeout(() => {
+            if (newPc.connectionState === 'disconnected' || newPc.connectionState === 'failed') {
+              setRemoteParticipants(prev => prev.map(p => ({
+                ...p,
+                isDisconnected: true,
+                _lastUpdate: Date.now(),
+              })));
             }
+          }, 5000);
+        } else if (newPc.connectionState === 'failed') {
+          if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
+          setRemoteParticipants(prev => prev.map(p => ({
+            ...p,
+            isDisconnected: true,
+            _lastUpdate: Date.now(),
+          })));
+        } else if (newPc.connectionState === 'connected') {
+          if (disconnectGraceRef.current) {
+            clearTimeout(disconnectGraceRef.current);
+            disconnectGraceRef.current = null;
+          }
+          setRemoteParticipants(prev => prev.map(p => ({
+            ...p,
+            isDisconnected: false,
+            _lastUpdate: Date.now(),
+          })));
+          newPc.getStats().then(stats => {
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                const localId = report.localCandidateId;
+                const remoteId = report.remoteCandidateId;
+                stats.forEach(s => {
+                  if (s.id === localId) console.log('[WebRTC] Local candidate:', s.candidateType, s.protocol, s.address);
+                  if (s.id === remoteId) console.log('[WebRTC] Remote candidate:', s.candidateType, s.protocol, s.address);
+                });
+                console.log('[WebRTC] Round-trip time:', report.currentRoundTripTime, 's');
+              }
+            });
           });
-        });
-        startQualityMonitor(pc);
-      }
+          startQualityMonitor(newPc);
+        }
+      };
+
+      newPc.oniceconnectionstatechange = () => {
+        console.log('[WebRTC] ICE state:', newPc.iceConnectionState);
+      };
+
+      newPc.onicecandidate = (event) => {
+        if (event.candidate && signalingSocketRef.current?.connected) {
+          signalingSocketRef.current.emit('ice-candidate', {
+            candidate: event.candidate,
+            to: remotePeerIdRef.current,
+          });
+        }
+      };
+
+      console.log('[WebRTC] Peer connection created');
+      return newPc;
     };
 
-    pc.oniceconnectionstatechange = () => {
-      console.log('[WebRTC] ICE state:', pc.iceConnectionState);
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate && signalingSocketRef.current?.connected) {
-        signalingSocketRef.current.emit('ice-candidate', {
-          candidate: event.candidate,
-          to: remotePeerIdRef.current,
-        });
-      }
-    };
+    let pc = createPeerConnection();
 
     // Setup Socket.IO signaling — reliable delivery via Render server
     const serverUrl = process.env.NEXT_PUBLIC_SIGNALING_SERVER_URL || 'http://localhost:3001';
@@ -965,20 +977,27 @@ export default function UnifiedCallPage() {
     });
 
     // Receive signaling messages from remote peer
+    // Always use peerConnectionRef.current so handlers see the latest PC after recreation
     socket.on('offer', ({ offer, from }) => {
       console.log('[WebRTC] Received offer from:', from);
       remotePeerId = from;
       remotePeerIdRef.current = from;
-      handleWebRTCSignal({ type: 'offer', offer }, pc, amIPolite(from));
+      // If polite peer receives offer on a dead connection, recreate first
+      const currentPc = peerConnectionRef.current;
+      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed') {
+        console.log('[WebRTC] Polite peer recreating connection for new offer');
+        pc = createPeerConnection();
+      }
+      handleWebRTCSignal({ type: 'offer', offer }, peerConnectionRef.current, amIPolite(from));
     });
 
     socket.on('answer', ({ answer, from }) => {
       console.log('[WebRTC] Received answer from:', from);
-      handleWebRTCSignal({ type: 'answer', answer }, pc, amIPolite(from));
+      handleWebRTCSignal({ type: 'answer', answer }, peerConnectionRef.current, amIPolite(from));
     });
 
     socket.on('ice-candidate', ({ candidate, from }) => {
-      handleWebRTCSignal({ type: 'ice-candidate', candidate }, pc, false);
+      handleWebRTCSignal({ type: 'ice-candidate', candidate }, peerConnectionRef.current, false);
     });
 
     // Room events — peer join/leave
@@ -991,7 +1010,7 @@ export default function UnifiedCallPage() {
         const polite = amIPolite(remotePeerId);
         console.log('[WebRTC] Peer already present, I am', polite ? 'polite' : 'impolite');
         if (!polite) {
-          createWebRTCOffer(pc);
+          createWebRTCOffer(peerConnectionRef.current);
         }
         // Polite peer waits for offer — no fallback timer needed with reliable signaling
       } else {
@@ -1011,18 +1030,17 @@ export default function UnifiedCallPage() {
         _lastUpdate: Date.now(),
       })));
 
+      // If old connection is dead, create a fresh one
+      const currentPc = peerConnectionRef.current;
+      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed') {
+        console.log('[WebRTC] Old connection dead, creating fresh peer connection');
+        pc = createPeerConnection();
+      }
+
       const polite = amIPolite(remotePeerId);
       console.log('[WebRTC] Peer joined, I am', polite ? 'polite' : 'impolite');
       if (!polite) {
-        if (pc.signalingState === 'have-local-offer') {
-          pc.setLocalDescription({ type: 'rollback' }).then(() => {
-            createWebRTCOffer(pc);
-          }).catch(() => {
-            createWebRTCOffer(pc);
-          });
-        } else {
-          createWebRTCOffer(pc);
-        }
+        createWebRTCOffer(peerConnectionRef.current);
       }
       // Polite peer waits for offer from the impolite peer
     });
