@@ -90,7 +90,7 @@ export default function UnifiedCallPage() {
   // Transcription state
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcript, setTranscript] = useState([]);
-  const [transcriptionLanguage, setTranscriptionLanguage] = useState('en-US');
+  const [transcriptionLanguage, setTranscriptionLanguage] = useState('zh-CN');
   const [pendingLanguageRestart, setPendingLanguageRestart] = useState(false);
 
   // Discussion topics state
