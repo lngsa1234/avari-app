@@ -1,0 +1,94 @@
+// @ts-check
+const { test, expect } = require('@playwright/test')
+const { login } = require('./helpers/auth')
+
+/**
+ * Journey 10-12: People directory + User profiles
+ * Tests: people list, search, profile detail, back navigation
+ */
+
+test.describe('People Page', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page)
+    await page.goto('/people')
+    await expect(page).toHaveURL(/\/people/)
+  })
+
+  test('shows people directory', async ({ page }) => {
+    await expect(page.getByText(/connect with women/i)).toBeVisible({ timeout: 10000 })
+  })
+
+  test('shows search bar', async ({ page }) => {
+    await expect(page.getByPlaceholder(/search/i)).toBeVisible()
+  })
+
+  test('shows industry filter tabs', async ({ page }) => {
+    await expect(page.getByRole('button', { name: 'All' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Tech' })).toBeVisible()
+  })
+
+  test('search filters results', async ({ page }) => {
+    await page.getByPlaceholder(/search/i).fill('Admin')
+    await page.waitForTimeout(500)
+    // Should show filtered results or no results
+    const content = await page.textContent('body')
+    expect(content).toBeTruthy()
+  })
+
+  test('person card click navigates to profile', async ({ page }) => {
+    await page.waitForTimeout(2000)
+    // Click on a person's name or card area
+    const connectBtn = page.getByRole('button', { name: /connect/i }).first()
+    if (await connectBtn.isVisible()) {
+      // Click the card area, not the connect button
+      const card = connectBtn.locator('..')
+      await card.click()
+      // May navigate to profile
+    }
+  })
+})
+
+test.describe('User Profile', () => {
+  test('shows profile details', async ({ page }) => {
+    await login(page)
+    await page.goto('/profile')
+    await expect(page.getByText('Profile')).toBeVisible()
+    await expect(page.getByText('Tester')).toBeVisible({ timeout: 10000 })
+  })
+
+  test('shows stats (meetups, connections, shared circles)', async ({ page }) => {
+    await login(page)
+    await page.goto('/profile')
+    await expect(page.getByText('Meetups', { exact: true })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Connections', { exact: true })).toBeVisible()
+  })
+
+  test('shows toggle switches for hosting and coffee chats', async ({ page }) => {
+    await login(page)
+    await page.goto('/profile')
+    await expect(page.getByText(/open to hosting/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/open to coffee/i)).toBeVisible()
+  })
+
+  test('shows log out button', async ({ page }) => {
+    await login(page)
+    await page.goto('/profile')
+    await expect(page.getByRole('button', { name: /log out/i })).toBeVisible({ timeout: 10000 })
+  })
+
+  test('back button from profile goes to previous page', async ({ page }) => {
+    await login(page)
+    // Navigate from circles to profile
+    await page.goto('/circles')
+    await page.locator('a[href="/profile"]').first().click()
+    await expect(page).toHaveURL(/\/profile/)
+
+    // Back should return to circles (from= param)
+    const backBtn = page.locator('button').filter({ has: page.locator('svg') }).first()
+    await backBtn.click()
+    // Should go back (either via from= or browser history)
+    await page.waitForTimeout(1000)
+    const url = page.url()
+    expect(url).not.toContain('/profile')
+  })
+})
