@@ -272,7 +272,7 @@ export default function ScheduleMeetupView({
   const scheduleCoffeeChat = async () => {
     const dateTime = new Date(`${scheduledDate}T${scheduledTime}`);
 
-    const { error } = await supabase
+    const { data: chatData, error } = await supabase
       .from('coffee_chats')
       .insert({
         requester_id: currentUser.id,
@@ -282,14 +282,20 @@ export default function ScheduleMeetupView({
         notes: notes || null,
         status: 'pending',
         duration,
-      });
+      })
+      .select('id')
+      .single();
 
     if (error) throw error;
+
+    // Invalidate SWR caches so coffee page and home page show the new chat
+    const { invalidateQuery } = await import('@/hooks/useSupabaseQuery');
+    invalidateQuery(`meetups-coffee-${currentUser.id}`);
 
     const eventDate = new Date(scheduledDate + 'T00:00:00');
     const formattedTime = scheduledTime.includes(':') ? scheduledTime : `${scheduledTime}:00`;
     setCreatedEvent({
-      id: null,
+      id: chatData?.id || null,
       title: `Coffee Chat with ${selectedConnection.name}`,
       date: eventDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
       time: new Date(`2000-01-01T${formattedTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
@@ -1004,11 +1010,7 @@ export default function ScheduleMeetupView({
                   const isCoffee = createdEvent.isCoffeeChat;
                   const eventId = createdEvent.id;
                   setCreatedEvent(null);
-                  if (isCoffee) {
-                    onNavigate?.('meetups');
-                  } else {
-                    onNavigate?.('eventDetail', { meetupId: eventId });
-                  }
+                  onNavigate?.('eventDetail', { meetupId: eventId, meetupCategory: isCoffee ? 'coffee' : undefined });
                 }}
                 style={{
                   flex: 1, padding: '12px',
