@@ -409,10 +409,49 @@ export default function ControlBar({
         )}
       </div>
 
-      {/* Control bar — 3-zone Zoom-style layout */}
-      <div className="w-full max-w-4xl flex items-center justify-between gap-2">
+      {/* Control bar — single row on mobile, 3-zone Zoom layout on desktop */}
+
+      {/* Mobile: single centered pill */}
+      <div className="flex sm:hidden items-center gap-1 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 shadow-2xl border border-stone-700/30 max-w-full overflow-x-auto">
+        <ControlBtn
+          icon={isAudioDeviceSwitching ? <span className="animate-spin">⏳</span> : <MicIcon muted={isMuted} />}
+          active={!isMuted}
+          onClick={onToggleMute}
+          disabled={isAudioDeviceSwitching}
+        />
+        <ControlBtn
+          icon={isVideoDeviceSwitching ? <span className="animate-spin">⏳</span> : <CameraIcon off={isVideoOff} />}
+          active={!isVideoOff}
+          onClick={onToggleVideo}
+          disabled={isVideoDeviceSwitching}
+        />
+        {features.screenShare && (
+          <ControlBtn
+            icon={<ScreenShareIcon active={isScreenSharing} />}
+            active={isScreenSharing}
+            onClick={onToggleScreenShare}
+            disabled={!isScreenShareSupported || isOtherSharing}
+          />
+        )}
+        {features.chat && (
+          <ControlBtn
+            icon={<ChatIcon />}
+            active={showChat}
+            onClick={onToggleChat}
+            badge={!showChat ? messagesCount : undefined}
+          />
+        )}
+        <ControlBtn
+          icon={<LeaveIcon />}
+          danger
+          onClick={onLeave}
+        />
+      </div>
+
+      {/* Desktop: 3-zone Zoom-style layout — full width, controls at edges */}
+      <div className="hidden sm:flex w-full items-center justify-between gap-2">
         {/* LEFT zone: Audio + Video + Blur */}
-        <div className="flex items-center gap-1 sm:gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 sm:p-2 shadow-2xl border border-stone-700/30">
+        <div className="flex items-center gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
           <div className="flex items-center gap-0.5 flex-shrink-0">
             <ControlBtn
               icon={isAudioDeviceSwitching ? <span className="animate-spin">⏳</span> : <MicIcon muted={isMuted} />}
@@ -459,7 +498,7 @@ export default function ControlBar({
         </div>
 
         {/* CENTER zone: Screen Share + Chat + Participants + More */}
-        <div className="flex items-center gap-1 sm:gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 sm:p-2 shadow-2xl border border-stone-700/30">
+        <div className="flex items-center gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
           {features.screenShare && (
             <ControlBtn
               icon={<ScreenShareIcon active={isScreenSharing} />}
@@ -486,15 +525,13 @@ export default function ControlBar({
           )}
 
           {features.participants && (
-            <span className="hidden sm:inline-flex">
-              <ControlBtn
-                icon={<PeopleIcon />}
-                active={showParticipants}
-                onClick={onToggleParticipants}
-                label={participantCount > 0 ? String(participantCount) : undefined}
-                tooltip="Participants (P)"
-              />
-            </span>
+            <ControlBtn
+              icon={<PeopleIcon />}
+              active={showParticipants}
+              onClick={onToggleParticipants}
+              label={participantCount > 0 ? String(participantCount) : undefined}
+              tooltip="Participants (P)"
+            />
           )}
 
           {moreMenuItems.length > 0 && (
@@ -516,24 +553,14 @@ export default function ControlBar({
         </div>
 
         {/* RIGHT zone: Leave */}
-        <div className="flex items-center bg-stone-800/80 backdrop-blur-xl rounded-2xl p-1.5 sm:p-2 shadow-2xl border border-stone-700/30">
-          <span className="hidden sm:contents">
-            <ControlBtn
-              icon={<LeaveIcon />}
-              label="Leave"
-              danger
-              onClick={onLeave}
-              tooltip="Leave call (L)"
-            />
-          </span>
-          <span className="sm:hidden">
-            <ControlBtn
-              icon={<LeaveIcon />}
-              danger
-              onClick={onLeave}
-              tooltip="Leave call (L)"
-            />
-          </span>
+        <div className="flex items-center bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
+          <ControlBtn
+            icon={<LeaveIcon />}
+            label="Leave"
+            danger
+            onClick={onLeave}
+            tooltip="Leave call (L)"
+          />
         </div>
       </div>
     </div>
