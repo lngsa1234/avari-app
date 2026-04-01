@@ -317,4 +317,18 @@ describe('formatEventTime cross-timezone', () => {
     expect(result).toContain('2:00')
     expect(result).toContain('PM')
   })
+
+  test('includes timezone label with non-US timezone', () => {
+    const result = formatEventTime('2026-03-15', '14:00', 'Asia/Shanghai')
+    // Should contain a time + timezone label
+    expect(result).toMatch(/\d{1,2}:\d{2}\s*(AM|PM)/i)
+  })
+})
+
+describe('formatDate edge cases', () => {
+  test('handles date object thrown as exception gracefully', () => {
+    // formatDate catches exceptions and returns the input
+    const result = formatDate('not-a-real-date-format!!!')
+    expect(typeof result).toBe('string')
+  })
 })

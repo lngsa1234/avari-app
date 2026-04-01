@@ -4,7 +4,7 @@
  * @jest-environment node
  */
 
-const { ROUTES, createOnNavigate, getPreviousView } = require('@/lib/navigationAdapter')
+const { ROUTES, createOnNavigate, getPreviousView, resolveRoute } = require('@/lib/navigationAdapter')
 
 describe('ROUTES', () => {
   test('main tabs resolve to correct paths', () => {
@@ -154,5 +154,16 @@ describe('getPreviousView', () => {
 
   test('returns fallback for unknown paths', () => {
     expect(getPreviousView(mockSearchParams('/unknown'), 'home')).toBe('home')
+  })
+})
+
+describe('resolveRoute', () => {
+  test('resolves known routes', () => {
+    expect(resolveRoute('home')).toBe('/home')
+    expect(resolveRoute('circleDetail', { circleId: 'abc' })).toBe('/circles/abc')
+  })
+
+  test('falls back to /viewName for unknown views', () => {
+    expect(resolveRoute('unknownView')).toBe('/unknownView')
   })
 })

@@ -15,7 +15,7 @@ jest.mock('@/lib/supabase', () => ({
   supabase: { from: jest.fn() },
 }))
 
-const { useSupabaseQuery, invalidateQuery } = require('@/hooks/useSupabaseQuery')
+const { useSupabaseQuery, invalidateQuery, prefetchQuery } = require('@/hooks/useSupabaseQuery')
 const { supabase } = require('@/lib/supabase')
 
 describe('useSupabaseQuery', () => {
@@ -86,5 +86,21 @@ describe('useSupabaseQuery', () => {
   test('invalidateQuery re-exports SWR mutate', () => {
     const { mutate } = require('swr')
     expect(invalidateQuery).toBe(mutate)
+  })
+})
+
+describe('prefetchQuery', () => {
+  test('calls SWR mutate with key, fetcher, and revalidate: false', () => {
+    const { mutate } = require('swr')
+    mutate.mockClear()
+
+    const queryFn = jest.fn().mockResolvedValue([{ id: 1 }])
+    prefetchQuery('prefetch-key', queryFn)
+
+    expect(mutate).toHaveBeenCalledWith(
+      'prefetch-key',
+      expect.any(Function),
+      { revalidate: false }
+    )
   })
 })

@@ -131,6 +131,11 @@ describe('updateLastActive', () => {
     mockUpdate.mockReturnValueOnce({ eq: jest.fn().mockResolvedValue({ error: { message: 'fail' } }) })
     await expect(updateLastActive('user-123')).resolves.not.toThrow()
   })
+
+  test('does not throw on supabase exception', async () => {
+    mockUpdate.mockReturnValueOnce({ eq: jest.fn().mockRejectedValue(new Error('Network error')) })
+    await expect(updateLastActive('user-123')).resolves.not.toThrow()
+  })
 })
 
 describe('updateLastActiveThrottled', () => {

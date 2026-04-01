@@ -82,6 +82,48 @@ describe('authenticateRequest', () => {
     expect(result.user).toBeNull()
     expect(result.response.status).toBe(401)
   })
+
+  test('extracts token from auth-token cookie (JSON array format)', async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-cookie', email: 'cookie@test.com' } },
+      error: null,
+    })
+
+    const cookies = new Map([['sb-auth-token', { value: '["token-from-cookie"]' }]])
+    const request = mockRequest({ cookies })
+    const result = await authenticateRequest(request)
+
+    expect(result.user).toEqual({ id: 'user-cookie', email: 'cookie@test.com' })
+    expect(mockGetUser).toHaveBeenCalledWith('token-from-cookie')
+  })
+
+  test('extracts token from auth-token cookie (plain string JSON)', async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-str', email: 'str@test.com' } },
+      error: null,
+    })
+
+    const cookies = new Map([['sb-auth-token', { value: '"plain-token"' }]])
+    const request = mockRequest({ cookies })
+    const result = await authenticateRequest(request)
+
+    expect(result.user).toEqual({ id: 'user-str', email: 'str@test.com' })
+    expect(mockGetUser).toHaveBeenCalledWith('plain-token')
+  })
+
+  test('extracts token from auth-token cookie (unparseable, raw value)', async () => {
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-raw', email: 'raw@test.com' } },
+      error: null,
+    })
+
+    const cookies = new Map([['sb-auth-token', { value: 'raw-token-value' }]])
+    const request = mockRequest({ cookies })
+    const result = await authenticateRequest(request)
+
+    expect(result.user).toEqual({ id: 'user-raw', email: 'raw@test.com' })
+    expect(mockGetUser).toHaveBeenCalledWith('raw-token-value')
+  })
 })
 
 describe('verifyCronAuth', () => {

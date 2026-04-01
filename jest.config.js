@@ -15,6 +15,13 @@ const customJestConfig = {
     '<rootDir>/node_modules/',
     '<rootDir>/__tests__/helpers/',
   ],
+  collectCoverageFrom: [
+    'lib/**/*.{js,jsx}',
+    'hooks/**/*.{js,jsx}',
+    'components/**/*.{js,jsx}',
+    '!**/node_modules/**',
+    '!**/.next/**',
+  ],
 }
 
 module.exports = createJestConfig(customJestConfig)

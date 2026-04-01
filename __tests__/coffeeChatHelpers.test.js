@@ -253,6 +253,22 @@ describe('getMyCoffeeChats', () => {
     expect(result[0].recipient.name).toBe('Bob')
   })
 
+  test('handles profile fetch error gracefully (returns null profiles)', async () => {
+    const chats = [
+      { id: 'chat-1', requester_id: 'user-123', recipient_id: 'user-456' },
+    ]
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: chats, error: null },
+        profiles: { data: null, error: { message: 'fetch error' } },
+      },
+    })
+    const result = await getMyCoffeeChats(supabase)
+    expect(result).toHaveLength(1)
+    expect(result[0].requester).toBeNull()
+    expect(result[0].recipient).toBeNull()
+  })
+
   test('handles null profiles gracefully', async () => {
     const chats = [
       { id: 'chat-1', requester_id: 'user-123', recipient_id: 'user-999' },
@@ -293,6 +309,43 @@ describe('getPendingRequests', () => {
   test('throws when user is not authenticated', async () => {
     const supabase = createQueryMockSupabase({ user: null })
     await expect(getPendingRequests(supabase)).rejects.toThrow('Not authenticated')
+  })
+
+  test('auto-declines stale requests and returns only active ones', async () => {
+    const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+    const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    const requests = [
+      { id: 'stale-1', requester_id: 'user-old', recipient_id: 'user-123', scheduled_time: staleDate },
+      { id: 'active-1', requester_id: 'user-456', recipient_id: 'user-123', scheduled_time: futureDate },
+    ]
+    const profiles = [
+      { id: 'user-456', name: 'Bob' },
+    ]
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: requests, error: null },
+        profiles: { data: profiles, error: null },
+      },
+    })
+    const result = await getPendingRequests(supabase)
+    // Only the active request should be returned
+    expect(result).toHaveLength(1)
+    expect(result[0].requester.name).toBe('Bob')
+  })
+
+  test('returns empty when all requests are stale', async () => {
+    const staleDate = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
+    const requests = [
+      { id: 'stale-1', requester_id: 'user-old', recipient_id: 'user-123', scheduled_time: staleDate },
+    ]
+    const supabase = createQueryMockSupabase({
+      tables: {
+        coffee_chats: { data: requests, error: null },
+        profiles: { data: [], error: null },
+      },
+    })
+    const result = await getPendingRequests(supabase)
+    expect(result).toEqual([])
   })
 
   test('returns pending requests with requester profiles', async () => {
