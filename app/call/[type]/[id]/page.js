@@ -2369,9 +2369,13 @@ export default function UnifiedCallPage() {
 
       // Generate AI summary and save via server API (bypasses RLS)
       try {
+        const { data: { session } } = await supabase.auth.getSession();
         const response = await fetch('/api/generate-recap-summary', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+          },
           body: JSON.stringify({
             transcript: combinedTranscript,
             messages: currentMessages,
@@ -2393,7 +2397,10 @@ export default function UnifiedCallPage() {
             const aiSummaryJson = JSON.stringify(summaryData);
             fetch('/api/save-recap-summary', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}),
+              },
               body: JSON.stringify({ recapId, aiSummary: aiSummaryJson })
             }).then(() => console.log('[UnifiedCall] AI recap saved to database'))
               .catch(err => console.error('[UnifiedCall] Failed to save AI recap:', err));
