@@ -1034,15 +1034,14 @@ export default function UnifiedCallPage() {
         _lastUpdate: Date.now(),
       })));
 
-      // If old connection is dead or dying, create a fresh one
-      const currentPc = peerConnectionRef.current;
-      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed' || currentPc.connectionState === 'disconnected') {
-        console.log('[WebRTC] Old connection dead, creating fresh peer connection');
-        pc = createPeerConnection();
-      }
+      // Always create a fresh peer connection when a peer joins.
+      // The peer may have refreshed their page (destroying their old PC),
+      // even though our local PC still shows 'connected' briefly.
+      console.log('[WebRTC] Peer joined, creating fresh peer connection');
+      pc = createPeerConnection();
 
       const polite = amIPolite(remotePeerId);
-      console.log('[WebRTC] Peer joined, I am', polite ? 'polite' : 'impolite');
+      console.log('[WebRTC] I am', polite ? 'polite' : 'impolite');
       if (!polite) {
         createWebRTCOffer(peerConnectionRef.current);
       }
