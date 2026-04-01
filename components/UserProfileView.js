@@ -92,6 +92,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [loaded, setLoaded] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [localSentRequest, setLocalSentRequest] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reportReason, setReportReason] = useState(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
@@ -211,7 +212,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const profile = profileData?.profile || null;
   const isConnected = profileData?.isConnected || false;
   const hasIncomingRequest = profileData?.hasIncomingRequest || false;
-  const hasSentRequest = profileData?.hasSentRequest || false;
+  const hasSentRequest = localSentRequest || profileData?.hasSentRequest || false;
   const connectionCount = profileData?.connectionCount || 0;
   const mutualCircles = profileData?.mutualCircles || [];
   const meetupCount = profileData?.meetupCount || 0;
@@ -274,6 +275,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       if (error) {
         if (error.code === '23505') {
+          setLocalSentRequest(true);
           refreshProfile();
         } else {
           throw error;
@@ -281,6 +283,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
         return;
       }
 
+      setLocalSentRequest(true);
       refreshProfile();
     } catch (err) {
       console.error('Error sending connection request:', err);
