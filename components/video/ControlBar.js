@@ -448,9 +448,9 @@ export default function ControlBar({
         />
       </div>
 
-      {/* Desktop: 3-zone Zoom-style layout — full width, controls at edges */}
-      <div className="hidden sm:flex w-full items-center justify-between gap-2">
-        {/* LEFT zone: Audio + Video + Blur */}
+      {/* Desktop: 3-zone Zoom-style layout — left/right at edges, center truly centered */}
+      <div className="hidden sm:flex w-full items-center relative">
+        {/* LEFT zone: Audio + Video + Blur — pinned to left */}
         <div className="flex items-center gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
           <div className="flex items-center gap-0.5 flex-shrink-0">
             <ControlBtn
@@ -497,8 +497,8 @@ export default function ControlBar({
           )}
         </div>
 
-        {/* CENTER zone: Screen Share + Chat + Participants + More */}
-        <div className="flex items-center gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
+        {/* CENTER zone: Screen Share + Chat + Participants + More — true center */}
+        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
           {features.screenShare && (
             <ControlBtn
               icon={<ScreenShareIcon active={isScreenSharing} />}
@@ -552,8 +552,8 @@ export default function ControlBar({
           )}
         </div>
 
-        {/* RIGHT zone: Leave */}
-        <div className="flex items-center bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
+        {/* RIGHT zone: Leave — pinned to right */}
+        <div className="ml-auto flex items-center bg-stone-800/80 backdrop-blur-xl rounded-2xl p-2 shadow-2xl border border-stone-700/30">
           <ControlBtn
             icon={<LeaveIcon />}
             label="Leave"
