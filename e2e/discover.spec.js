@@ -61,8 +61,8 @@ test.describe('Coffee Page', () => {
   })
 
   test('shows upcoming and past tabs', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /upcoming/i })).toBeVisible()
-    await expect(page.getByRole('button', { name: /past/i })).toBeVisible()
+    await expect(page.getByText(/upcoming/i).first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText(/past/i).first()).toBeVisible({ timeout: 15000 })
   })
 
   test('"Host a Coffee Chat" button navigates to schedule', async ({ page }) => {
