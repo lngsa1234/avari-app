@@ -767,8 +767,12 @@ export default function UnifiedCallPage() {
       callStartTimeRef.current = startTime;
 
       // Write join signal for live call detection
+      // Strip call-type prefix from roomId for UUID columns (e.g. coffee-{uuid} → {uuid})
+      const signalRoomId = roomId?.includes('-') && roomId.split('-').length > 5
+        ? roomId.replace(/^[a-z]+-/, '')
+        : roomId;
       supabase.from('video_signals').insert({
-        room_id: roomId,
+        room_id: signalRoomId,
         channel_name: roomId,
         sender_id: user?.id,
         type: 'join',
@@ -2169,8 +2173,11 @@ export default function UnifiedCallPage() {
     setIsLeaving(true);
 
     // Write leave signal for live call detection
+    const leaveRoomId = roomId?.includes('-') && roomId.split('-').length > 5
+      ? roomId.replace(/^[a-z]+-/, '')
+      : roomId;
     supabase.from('video_signals').insert({
-      room_id: roomId,
+      room_id: leaveRoomId,
       channel_name: roomId,
       sender_id: user?.id,
       type: 'leave',

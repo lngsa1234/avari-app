@@ -38,11 +38,12 @@ export function useCallRoom(callType, roomId) {
 
       switch (callType) {
         case 'coffee': {
-          // 1:1 Coffee Chat - query coffee_chats directly (no video_rooms table needed)
+          // 1:1 Coffee Chat - extract UUID from channel name (coffee-{uuid})
+          const chatId = roomId?.startsWith('coffee-') ? roomId.replace('coffee-', '') : roomId;
           const { data: chatData, error: chatError } = await supabase
             .from('coffee_chats')
             .select('id, requester_id, recipient_id, status, scheduled_time, topic, notes, room_url')
-            .eq('id', roomId)
+            .eq('id', chatId)
             .single();
 
           if (chatError && chatError.code !== 'PGRST116') throw chatError;
