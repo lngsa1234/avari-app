@@ -1913,6 +1913,22 @@ export default function UnifiedCallPage() {
             }
             agoraScreenClientRef.current = null;
           }
+        } else if (config.provider === 'webrtc') {
+          // Restore camera track on the video sender
+          if (screenTrackRef.current) {
+            screenTrackRef.current.stop();
+            screenTrackRef.current = null;
+          }
+          const pc = peerConnectionRef.current;
+          if (pc && localVideoTrack instanceof MediaStream) {
+            const cameraTrack = localVideoTrack.getVideoTracks()[0];
+            if (cameraTrack) {
+              const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+              if (videoSender) {
+                await videoSender.replaceTrack(cameraTrack);
+              }
+            }
+          }
         }
         setIsScreenSharing(false);
         setLocalScreenTrack(null);
@@ -1978,8 +1994,16 @@ export default function UnifiedCallPage() {
           await screenClient.publish([screenTrack]);
 
           console.log('[Agora] Screen share published via dual-client, UID:', screenUid);
-        } else {
-          // WebRTC - store the screen stream directly
+        } else if (config.provider === 'webrtc') {
+          // WebRTC — replace the video sender's track with the screen track
+          const pc = peerConnectionRef.current;
+          if (pc) {
+            const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+            if (videoSender) {
+              await videoSender.replaceTrack(screenVideoTrack);
+            }
+          }
+          screenTrackRef.current = screenVideoTrack;
           setLocalScreenTrack(screenStream);
         }
 
@@ -2007,6 +2031,19 @@ export default function UnifiedCallPage() {
               screenTrackRef.current.stop();
             } catch (e) { /* already ended */ }
             screenTrackRef.current = null;
+          } else if (config.provider === 'webrtc') {
+            // Restore camera track
+            screenTrackRef.current = null;
+            const pc = peerConnectionRef.current;
+            if (pc && localVideoTrack instanceof MediaStream) {
+              const cameraTrack = localVideoTrack.getVideoTracks()[0];
+              if (cameraTrack) {
+                const videoSender = pc.getSenders().find(s => s.track?.kind === 'video');
+                if (videoSender) {
+                  try { await videoSender.replaceTrack(cameraTrack); } catch (e) { /* ignore */ }
+                }
+              }
+            }
           }
           setIsScreenSharing(false);
           setLocalScreenTrack(null);
@@ -2533,9 +2570,12 @@ export default function UnifiedCallPage() {
   const getSubtitle = () => {
     if (callType === 'coffee') {
       if (!isJoined) return 'Connecting...';
+      const partnerName = relatedData?.partner_name || 'Partner';
+      const hasRemote = remoteParticipants.length > 0;
       const partnerDisconnected = remoteParticipants.some(p => p.isDisconnected);
-      if (partnerDisconnected) return `${relatedData?.partner_name || 'Partner'} left the call`;
-      return `Connected with ${relatedData?.partner_name || 'Partner'}`;
+      if (partnerDisconnected) return `${partnerName} disconnected`;
+      if (!hasRemote) return `Waiting for ${partnerName} to join...`;
+      return `Connected with ${partnerName}`;
     } else if (callType === 'meetup' && relatedData) {
       return `${relatedData.date} at ${relatedData.time}`;
     } else if (callType === 'circle' && relatedData) {
