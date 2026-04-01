@@ -912,8 +912,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         }}>Your deep and meaningful connections</p>
       </div>
 
-      {/* Combined Pending Items (invitations + join requests) */}
-      {(groupInvites.length > 0 || pendingJoinRequests.length > 0) && (
+      {/* Incoming circle invitations */}
+      {groupInvites.length > 0 && (
         <div style={{
           background: 'white', borderRadius: '16px', border: '1px solid #E8DDD6',
           overflow: 'hidden', maxWidth: '800px', margin: '0 auto', marginBottom: isMobile ? '16px' : '20px',
@@ -929,14 +929,13 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             <span style={{
               fontSize: '11px', fontWeight: '600', background: '#F5E6D3', color: '#D4864A',
               borderRadius: '100px', padding: '2px 8px', fontFamily: fonts.sans,
-            }}>{groupInvites.length + pendingJoinRequests.length}</span>
+            }}>{groupInvites.length}</span>
           </div>
 
-          {/* Invitations */}
           {groupInvites.map((invite, i) => (
             <div key={`inv-${invite.id}`} style={{
               display: 'flex', alignItems: 'center', padding: '10px 16px', gap: '12px',
-              borderBottom: (i < groupInvites.length - 1 || pendingJoinRequests.length > 0) ? '1px solid #F0E8E0' : 'none',
+              borderBottom: i < groupInvites.length - 1 ? '1px solid #F0E8E0' : 'none',
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: fonts.sans }}>
@@ -957,39 +956,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               >Join</button>
             </div>
           ))}
-
-          {/* Join requests */}
-          {pendingJoinRequests.map((req, i) => {
-            const daysAgo = req.invited_at ? Math.floor((Date.now() - new Date(req.invited_at)) / (1000 * 60 * 60 * 24)) : null;
-            const timeLabel = daysAgo === null ? '' : daysAgo === 0 ? 'Today' : daysAgo === 1 ? '1d ago' : `${daysAgo}d ago`;
-            return (
-              <div key={`req-${req.id}`} style={{
-                display: 'flex', alignItems: 'center', padding: '10px 16px', gap: '12px',
-                borderBottom: i < pendingJoinRequests.length - 1 ? '1px solid #F0E8E0' : 'none',
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '14px', fontWeight: '500', color: '#2C1810', fontFamily: fonts.sans }}>
-                    {req.groupName}
-                  </div>
-                  <div style={{ fontSize: '12px', color: '#A08070', fontFamily: fonts.sans, marginTop: '1px' }}>
-                    Request pending{timeLabel ? ` · ${timeLabel}` : ''}
-                  </div>
-                </div>
-                <button
-                  onClick={async () => {
-                    const { error } = await supabase.from('connection_group_members').delete().eq('id', req.id);
-                    if (!error) invalidateQuery(`circles-page-${currentUser.id}`);
-                  }}
-                  style={{
-                    fontSize: '12px', fontWeight: '500', color: '#A08070',
-                    background: 'none', border: '1px solid #E8DDD6', borderRadius: '100px',
-                    padding: '7px 16px', cursor: 'pointer', fontFamily: fonts.sans,
-                    minHeight: '36px',
-                  }}
-                >Withdraw</button>
-              </div>
-            );
-          })}
         </div>
       )}
 
@@ -1613,11 +1579,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         )}
 
         {/* Sent Requests */}
-        {(sentRequestProfiles.length > 0 || sentCircleInvites.length > 0) && (
+        {(sentRequestProfiles.length > 0 || sentCircleInvites.length > 0 || pendingJoinRequests.length > 0) && (
           <section style={{ ...styles.section, marginBottom: '0' }} className="circles-card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
               <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>Sent Requests</h2>
-              <span style={{ fontSize: '11px', color: '#FFF8F0', backgroundColor: '#8B6F5C', borderRadius: '10px', padding: '2px 8px', fontWeight: '600' }}>{sentRequestProfiles.length + sentCircleInvites.length}</span>
+              <span style={{ fontSize: '11px', color: '#FFF8F0', backgroundColor: '#8B6F5C', borderRadius: '10px', padding: '2px 8px', fontWeight: '600' }}>{sentRequestProfiles.length + sentCircleInvites.length + pendingJoinRequests.length}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {sentRequestProfiles.map((person) => (
@@ -1642,6 +1608,24 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                     <div style={{ fontSize: '12px', color: '#8B7355' }}>Invited to <span style={{ fontWeight: '600' }}>{invite.circleName}</span> · {invite.invited_at ? formatTimeAgo(invite.invited_at) : 'pending'}</div>
                   </div>
                   <button onClick={() => handleWithdrawCircleInvite(invite.id)} style={{ padding: '7px 14px', fontSize: '12px', fontWeight: '600', color: '#8B6F5C', backgroundColor: 'transparent', border: '1.5px solid rgba(139, 111, 92, 0.3)', borderRadius: '100px', cursor: 'pointer', flexShrink: 0, minHeight: '36px' }}>Withdraw</button>
+                </div>
+              ))}
+              {pendingJoinRequests.map((req) => (
+                <div key={`join-${req.id}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', backgroundColor: 'rgba(139, 111, 92, 0.06)', borderRadius: '12px', border: '1px solid rgba(139, 111, 92, 0.1)' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0 }}>
+                    <Users size={18} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.groupName}</div>
+                    <div style={{ fontSize: '12px', color: '#8B7355' }}>Join request pending{req.invited_at ? ` · ${formatTimeAgo(req.invited_at)}` : ''}</div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const { error } = await supabase.from('connection_group_members').delete().eq('id', req.id);
+                      if (!error) invalidateQuery(`circles-page-${currentUser.id}`);
+                    }}
+                    style={{ padding: '7px 14px', fontSize: '12px', fontWeight: '600', color: '#8B6F5C', backgroundColor: 'transparent', border: '1.5px solid rgba(139, 111, 92, 0.3)', borderRadius: '100px', cursor: 'pointer', flexShrink: 0, minHeight: '36px' }}
+                  >Withdraw</button>
                 </div>
               ))}
             </div>

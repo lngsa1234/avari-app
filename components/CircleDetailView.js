@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, Users, Calendar, Clock, MapPin, MessageCircle, Video, Settings, LogOut, X, Edit3, Trash2, Check, UserPlus, Plus, FileText, Camera } from 'lucide-react';
 import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
+import { invalidateQuery } from '@/hooks/useSupabaseQuery';
 import {
   getOrCreateCircleMeetups,
   getUserRSVPStatus,
@@ -486,6 +487,13 @@ export default function CircleDetailView({
       }
 
       // Add as pending (waiting for admin approval)
+      // Delete any old row first (previous invite/decline) to avoid 409 conflict
+      await supabase
+        .from('connection_group_members')
+        .delete()
+        .eq('group_id', circleId)
+        .eq('user_id', currentUser.id);
+
       const { error } = await supabase
         .from('connection_group_members')
         .insert({
@@ -494,23 +502,12 @@ export default function CircleDetailView({
           status: 'pending',
         });
 
-      if (error) {
-        // 409 = row already exists (previous invite/decline) — update it to pending
-        if (error.code === '23505' || error.status === 409) {
-          const { error: updateErr } = await supabase
-            .from('connection_group_members')
-            .update({ status: 'pending', responded_at: null, invited_at: new Date().toISOString() })
-            .eq('group_id', circleId)
-            .eq('user_id', currentUser.id);
-          if (updateErr) throw updateErr;
-        } else {
-          throw error;
-        }
-      }
+      if (error) throw error;
 
       setShowJoinConfirm(false);
       setJoinSuccess(true);
       await loadCircleDetails();
+      invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
       console.error('Error requesting to join:', error);
       setShowJoinConfirm(false);
@@ -535,6 +532,7 @@ export default function CircleDetailView({
       if (count === 0) throw new Error('Could not remove membership. Please try again.');
 
       setShowLeaveConfirm(false);
+      invalidateQuery(`circles-page-${currentUser.id}`);
       alert('You have left the circle.');
       onNavigate?.(previousView || 'allCircles');
     } catch (error) {
