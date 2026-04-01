@@ -198,6 +198,17 @@ io.on('connection', (socket) => {
         console.log(`[Avari] Cancelled pending disconnect for ${userId} (reconnected)`);
       }
 
+      // Remove any old socket for the same user from the match (page refresh scenario)
+      const oldSocket = userSockets.get(userId);
+      if (oldSocket && oldSocket !== socket && oldSocket.matchId) {
+        const oldMatch = matches.get(oldSocket.matchId);
+        if (oldMatch) {
+          oldMatch.delete(oldSocket);
+          console.log(`[Avari] Removed stale socket for ${userId} from match ${oldSocket.matchId}`);
+        }
+        socketToUser.delete(oldSocket.id);
+      }
+
       // Store user info on socket
       socket.userId = userId;
       socket.matchId = matchId;
@@ -219,9 +230,9 @@ io.on('connection', (socket) => {
 
       // Check if match is full (2 people max for 1:1 calls)
       if (match.size >= 2 && !match.has(socket)) {
-        socket.emit('error', { 
-          type: 'match_full', 
-          message: 'This match already has 2 participants' 
+        socket.emit('error', {
+          type: 'match_full',
+          message: 'This match already has 2 participants'
         });
         return;
       }

@@ -980,6 +980,20 @@ export default function UnifiedCallPage() {
       socket.emit('register', { userId: user?.id, matchId: roomId });
     });
 
+    // Handle server errors (e.g. match_full when old socket lingers)
+    socket.on('error', ({ type, message }) => {
+      console.warn('[WebRTC] Server error:', type, message);
+      if (type === 'match_full') {
+        // Old socket still in match — retry after it gets cleaned up
+        console.log('[WebRTC] Match full, retrying registration in 3s...');
+        setTimeout(() => {
+          if (socket.connected) {
+            socket.emit('register', { userId: user?.id, matchId: roomId });
+          }
+        }, 3000);
+      }
+    });
+
     // Receive signaling messages from remote peer
     // Always use peerConnectionRef.current so handlers see the latest PC after recreation
     socket.on('offer', ({ offer, from }) => {
