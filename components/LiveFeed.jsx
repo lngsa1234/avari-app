@@ -244,9 +244,10 @@ function DualAvatars({ actor, target, isLive, isMobile }) {
   )
 }
 
-function FeedItem({ event, onCta, isMobile, currentUserId }) {
+function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new Set() }) {
   const config = EVENT_CONFIG[event.event_type]
   if (!config) return null
+  const alreadyRequested = sentRequestIds.has(event.actor_id)
 
   const hasDualAvatar = event.target && (event.event_type === 'coffee_live' || event.event_type === 'coffee_scheduled' || event.event_type === 'connection')
   const headline = config.getHeadline(event)
@@ -287,29 +288,36 @@ function FeedItem({ event, onCta, isMobile, currentUserId }) {
     // No badge needed — all coffee chats are private by nature
     actionPart = null
   } else if (config.cta && event.actor_id !== currentUserId) {
-    const isOutline = config.ctaStyle === 'outline'
+    const showRequested = alreadyRequested && (config.cta === 'Connect' || config.cta === 'Say hi')
+    const ctaText = showRequested ? 'Request Sent' : config.cta
+    const isOutline = config.ctaStyle === 'outline' || showRequested
     actionPart = (
       <button
-        onClick={(e) => { e.stopPropagation(); onCta?.(event) }}
+        onClick={(e) => { e.stopPropagation(); if (!showRequested) onCta?.(event) }}
+        disabled={showRequested}
         style={{
           padding: isMobile ? '7px 14px' : '8px 18px', borderRadius: 22,
-          fontSize: isMobile ? '12px' : '13px', fontWeight: 600, cursor: 'pointer',
+          fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
+          cursor: showRequested ? 'default' : 'pointer',
           fontFamily: fonts.sans, whiteSpace: 'nowrap', letterSpacing: '0.15px',
           transition: 'all 0.15s ease',
+          opacity: showRequested ? 0.7 : 1,
           border: isOutline ? '1px solid #C4A882' : 'none',
           background: isOutline ? 'transparent' : '#5C4033',
           color: isOutline ? '#5C4033' : '#FAF5EF',
         }}
         onMouseEnter={e => {
+          if (showRequested) return
           if (isOutline) { e.currentTarget.style.background = '#F0E8DF' }
           else { e.currentTarget.style.background = '#4A3228' }
         }}
         onMouseLeave={e => {
+          if (showRequested) return
           if (isOutline) { e.currentTarget.style.background = 'transparent' }
           else { e.currentTarget.style.background = '#5C4033' }
         }}
       >
-        {config.cta}
+        {ctaText}
       </button>
     )
   }
@@ -423,6 +431,21 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
   const { events, loading, hasMore, loadMore, liveCount } = useLiveFeed(currentUserId)
   const [isMobile, setIsMobile] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [sentRequestIds, setSentRequestIds] = useState(new Set())
+
+  // Fetch sent connection requests so CTA buttons can show "Request Sent"
+  useEffect(() => {
+    if (!currentUserId) return
+    import('@/lib/supabase').then(({ supabase }) => {
+      supabase
+        .from('user_interests')
+        .select('interested_in_user_id')
+        .eq('user_id', currentUserId)
+        .then(({ data }) => {
+          if (data) setSentRequestIds(new Set(data.map(r => r.interested_in_user_id)))
+        })
+    })
+  }, [currentUserId])
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640)
@@ -515,6 +538,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
                     onCta={onCtaClick}
                     isMobile={isMobile}
                     currentUserId={currentUserId}
+                    sentRequestIds={sentRequestIds}
                   />
                 ))
           }
