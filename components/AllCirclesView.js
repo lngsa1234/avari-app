@@ -32,7 +32,7 @@ const COVER_COLORS = [
 const COVER_ICONS = ['🚀', '🤖', '🛠️', '💰', '🎨', '🌱', '🌸', '👩‍👧', '📚', '💫'];
 const AVATAR_COLORS = ['#7A5C44', '#4A7A5C', '#6A5A8A', '#A06030', '#7A5A8A', '#6B4F3A', '#C4A882'];
 
-export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
+export default function AllCirclesView({ currentUser, supabase, onNavigate, previousView }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -140,7 +140,7 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate }) {
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
           <button
-            onClick={() => onNavigate?.('home')}
+            onClick={() => onNavigate?.(previousView || 'home')}
             aria-label="Go back"
             style={{
               width: '44px', height: '44px', borderRadius: '50%',

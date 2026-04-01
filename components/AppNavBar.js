@@ -23,6 +23,8 @@ export default function AppNavBar({
 
   const isActive = (path) => {
     if (path === '/home') return pathname === '/home' || pathname === '/'
+    // /circles/browse is "All Circles" from Discover, not the Circles tab
+    if (path === '/circles' && pathname === '/circles/browse') return false
     return pathname.startsWith(path)
   }
 
