@@ -1,10 +1,21 @@
-// Mock Supabase client for testing
+/**
+ * Reusable Supabase mock factory for tests.
+ *
+ * Usage:
+ *   const sb = createMockSupabase({
+ *     profiles: { data: [{ id: 'u1', name: 'Alice' }] },
+ *     rpc: { get_mutual_matches: { data: [{ matched_user_id: 'u2' }] } },
+ *     auth: { user: { id: 'user-1' } },
+ *   })
+ */
+
 export function createMockSupabase(mockData = {}) {
   const chainable = (resolvedValue) => {
     const chain = {
       select: jest.fn().mockReturnValue(chain),
       insert: jest.fn().mockReturnValue(chain),
       update: jest.fn().mockReturnValue(chain),
+      upsert: jest.fn().mockReturnValue(chain),
       delete: jest.fn().mockReturnValue(chain),
       eq: jest.fn().mockReturnValue(chain),
       neq: jest.fn().mockReturnValue(chain),
@@ -13,18 +24,30 @@ export function createMockSupabase(mockData = {}) {
       not: jest.fn().mockReturnValue(chain),
       or: jest.fn().mockReturnValue(chain),
       gte: jest.fn().mockReturnValue(chain),
+      lte: jest.fn().mockReturnValue(chain),
+      gt: jest.fn().mockReturnValue(chain),
+      lt: jest.fn().mockReturnValue(chain),
+      contains: jest.fn().mockReturnValue(chain),
       order: jest.fn().mockReturnValue(chain),
       limit: jest.fn().mockReturnValue(chain),
+      range: jest.fn().mockReturnValue(chain),
+      filter: jest.fn().mockReturnValue(chain),
+      single: jest.fn().mockResolvedValue(resolvedValue),
       then: (resolve) => resolve(resolvedValue),
     }
-    // Make it thenable so await works
-    chain[Symbol.for('jest.asymmetricMatch')] = undefined
     return chain
   }
 
   const rpcResults = mockData.rpc || {}
+  const authUser = mockData.auth?.user ?? { id: 'user-123' }
 
   return {
+    auth: {
+      getUser: jest.fn().mockResolvedValue({ data: { user: authUser } }),
+      getSession: jest.fn().mockResolvedValue({
+        data: { session: authUser ? { access_token: 'mock-token', user: authUser } : null },
+      }),
+    },
     from: jest.fn((table) => {
       const tableData = mockData[table] || { data: [], error: null }
       return chainable(tableData)
@@ -61,12 +84,12 @@ export const TEST_USERS = {
     state: null,
     profile_picture: null,
   },
-  mi: {
-    id: '57c05f6e-d18a-4cbb-ab9f-7203a1e69a84',
-    name: 'MI',
-    career: 'Engineer',
-    city: 'New York',
-    state: 'NY',
+  tester: {
+    id: 'test-user-001',
+    name: 'Tester',
+    career: 'QA Tester',
+    city: 'Bloomfield Hills',
+    state: 'MICHIGAN',
     profile_picture: null,
   },
 }
