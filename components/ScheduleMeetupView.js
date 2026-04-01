@@ -289,8 +289,10 @@ export default function ScheduleMeetupView({
     if (error) throw error;
 
     // Invalidate SWR caches so coffee page and home page show the new chat
+    // Must pass undefined to clear cached data since revalidateIfStale is false
     const { invalidateQuery } = await import('@/hooks/useSupabaseQuery');
-    invalidateQuery(`meetups-coffee-${currentUser.id}`);
+    invalidateQuery(`meetups-coffee-${currentUser.id}`, undefined, { revalidate: true });
+    invalidateQuery(`home-primary-${currentUser.id}`, undefined, { revalidate: true });
 
     const eventDate = new Date(scheduledDate + 'T00:00:00');
     const formattedTime = scheduledTime.includes(':') ? scheduledTime : `${scheduledTime}:00`;
