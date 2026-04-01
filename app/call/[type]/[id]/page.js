@@ -984,7 +984,7 @@ export default function UnifiedCallPage() {
       remotePeerIdRef.current = from;
       // If polite peer receives offer on a dead connection, recreate first
       const currentPc = peerConnectionRef.current;
-      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed') {
+      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed' || currentPc.connectionState === 'disconnected') {
         console.log('[WebRTC] Polite peer recreating connection for new offer');
         pc = createPeerConnection();
       }
@@ -1030,9 +1030,9 @@ export default function UnifiedCallPage() {
         _lastUpdate: Date.now(),
       })));
 
-      // If old connection is dead, create a fresh one
+      // If old connection is dead or dying, create a fresh one
       const currentPc = peerConnectionRef.current;
-      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed') {
+      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed' || currentPc.connectionState === 'disconnected') {
         console.log('[WebRTC] Old connection dead, creating fresh peer connection');
         pc = createPeerConnection();
       }
@@ -1569,7 +1569,6 @@ export default function UnifiedCallPage() {
           const offerCollision = pc.signalingState !== 'stable';
           if (offerCollision && !isPolite) {
             console.log('[WebRTC] Impolite peer ignoring colliding offer');
-            // Clear queued ICE candidates — they belong to the ignored offer's SDP session
             iceCandidateQueueRef.current = [];
             return;
           }
@@ -1577,7 +1576,14 @@ export default function UnifiedCallPage() {
             console.log('[WebRTC] Polite peer rolling back to accept offer');
             await pc.setLocalDescription({ type: 'rollback' });
           }
-          await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+          } catch (sdpError) {
+            // m-line mismatch — stale PC from previous session. Recreate and retry.
+            console.log('[WebRTC] SDP error, recreating peer connection:', sdpError.message);
+            pc = createPeerConnection();
+            await pc.setRemoteDescription(new RTCSessionDescription(signal.offer));
+          }
           await flushIceCandidates(pc);
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
