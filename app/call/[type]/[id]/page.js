@@ -2350,11 +2350,13 @@ export default function UnifiedCallPage() {
     setIsLeaving(false);
 
     // Generate AI recap in background if needed
-    const hasContent = currentTranscript.length > 0 || currentMessages.length > 0;
-    const recentlySummarized = savedRecap?.ai_summary && savedRecap?.updated_at &&
-      (Date.now() - new Date(savedRecap.updated_at).getTime() < 2 * 60 * 1000);
+    // Regenerate if this user contributed new transcript content, even if a summary
+    // already exists — the previous summary may be based on partial data (e.g. only
+    // the first user's transcript). Skip only if this user had no new content.
+    const hasNewContent = currentTranscript.length > 0 || currentMessages.length > 0;
+    const summaryExistsAndNoNewContent = savedRecap?.ai_summary && !hasNewContent;
 
-    if (hasContent && !recentlySummarized) {
+    if (hasNewContent && !summaryExistsAndNoNewContent) {
       console.log('[UnifiedCall] Generating AI recap in background...');
 
       // Fetch combined transcript from ALL sessions (no time filter)
@@ -2431,8 +2433,8 @@ export default function UnifiedCallPage() {
       // and they serve as a backup if recap data needs to be rebuilt.
     } else {
       setLoadingSummary(false);
-      if (recentlySummarized) {
-        console.log('[UnifiedCall] AI recap exists and was generated recently — skipping regeneration');
+      if (summaryExistsAndNoNewContent) {
+        console.log('[UnifiedCall] AI recap exists and no new transcript from this user — skipping regeneration');
       }
     }
   };
