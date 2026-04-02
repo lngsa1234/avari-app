@@ -45,8 +45,8 @@ describe('CALL_TYPE_CONFIG', () => {
     expect(CALL_TYPE_CONFIG.meetup.features.maxParticipants).toBe(100)
   })
 
-  test('coffee disables screen share', () => {
-    expect(CALL_TYPE_CONFIG.coffee.features.screenShare).toBe(false)
+  test('coffee enables screen share', () => {
+    expect(CALL_TYPE_CONFIG.coffee.features.screenShare).toBe(true)
   })
 
   test('meetup and circle enable screen share', () => {

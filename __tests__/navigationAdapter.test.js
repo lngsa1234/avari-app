@@ -141,10 +141,11 @@ describe('getPreviousView', () => {
     expect(getPreviousView(mockSearchParams('/profile'))).toBe('profile')
   })
 
-  test('handles dynamic routes', () => {
-    expect(getPreviousView(mockSearchParams('/circles/abc-123'))).toBe('circleDetail')
-    expect(getPreviousView(mockSearchParams('/people/user-456'))).toBe('userProfile')
-    expect(getPreviousView(mockSearchParams('/events/evt-789'))).toBe('eventDetail')
+  test('handles dynamic routes with _path: prefix', () => {
+    expect(getPreviousView(mockSearchParams('/circles/abc-123'))).toBe('_path:/circles/abc-123')
+    expect(getPreviousView(mockSearchParams('/people/user-456'))).toBe('_path:/people/user-456')
+    expect(getPreviousView(mockSearchParams('/events/evt-789'))).toBe('_path:/events/evt-789')
+    expect(getPreviousView(mockSearchParams('/recaps/recap-001'))).toBe('_path:/recaps/recap-001')
   })
 
   test('returns fallback when from is missing', () => {
