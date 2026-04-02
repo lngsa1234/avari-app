@@ -18,7 +18,7 @@ import {
   deleteGroupMessage
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive } from '@/lib/activityHelpers';
-import { parseLocalDate, toLocalDateString } from '../lib/dateUtils';
+import { parseLocalDate, toLocalDateString, isEventPast, SESSION_GRACE_MINUTES } from '../lib/dateUtils';
 import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
@@ -137,7 +137,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       });
 
       const nextMeetupByCircle = {};
-      upcomingMeetups.forEach(meetup => {
+      // Filter out today's meetups whose time + grace has passed
+      const actuallyUpcoming = upcomingMeetups.filter(m =>
+        !m.time || !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), SESSION_GRACE_MINUTES)
+      );
+      actuallyUpcoming.forEach(meetup => {
         const existing = nextMeetupByCircle[meetup.circle_id];
         if (!existing) {
           nextMeetupByCircle[meetup.circle_id] = meetup;
