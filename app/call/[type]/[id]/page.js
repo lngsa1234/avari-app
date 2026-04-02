@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCallTypeConfig, isValidCallType } from '@/lib/video/callTypeConfig';
 import { saveCallRecap } from '@/lib/callRecapHelpers';
+import { completeCoffeeChat } from '@/lib/coffeeChatHelpers';
 import { io } from 'socket.io-client';
 import { useCallRoom } from '@/hooks/useCallRoom';
 import { useRecording } from '@/hooks/useRecording';
@@ -2250,6 +2251,16 @@ export default function UnifiedCallPage() {
     // Step 2: End room and cleanup video call
     await endRoom();
     await leaveCall();
+
+    // Step 2b: Mark coffee chat as completed
+    if (callType === 'coffee') {
+      const chatId = roomId?.startsWith('coffee-') ? roomId.replace('coffee-', '') : roomId;
+      try {
+        await completeCoffeeChat(supabase, chatId);
+      } catch (e) {
+        console.warn('[UnifiedCall] Failed to mark coffee chat completed:', e.message);
+      }
+    }
 
     // Step 3: Clear all video-related state
     setLocalVideoTrack(null);
