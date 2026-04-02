@@ -244,10 +244,10 @@ function DualAvatars({ actor, target, isLive, isMobile }) {
   )
 }
 
-function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new Set(), connectedIds = new Set(), incomingRequestIds = new Set() }) {
+function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new Set(), connectedIds = new Set(), incomingRequestIds = new Set(), memberCircleIds = new Set() }) {
   const config = EVENT_CONFIG[event.event_type]
   if (!config) return null
-  const actorId = event.actor_id
+  const actorId = event.actor_id || event.actor?.id
   const isConnected = connectedIds.has(actorId)
   const alreadyRequested = sentRequestIds.has(actorId)
   const hasIncomingRequest = incomingRequestIds.has(actorId)
@@ -292,6 +292,7 @@ function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new 
     actionPart = null
   } else if (config.cta && actorId !== currentUserId) {
     const isConnectType = config.cta === 'Connect' || config.cta === 'Say hi'
+    const isCircleJoin = event.event_type === 'circle_join' || event.event_type === 'circle_schedule'
     // Determine the right CTA state
     let ctaText = config.cta
     let isDisabled = false
@@ -303,6 +304,9 @@ function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new 
       isDisabled = true
     } else if (isConnectType && hasIncomingRequest) {
       ctaText = 'Accept'
+    } else if (isCircleJoin && event.circle_id && memberCircleIds.has(event.circle_id)) {
+      ctaText = 'Member'
+      isDisabled = true
     }
     const isOutline = config.ctaStyle === 'outline' || isDisabled
     actionPart = (
@@ -448,6 +452,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
   const [sentRequestIds, setSentRequestIds] = useState(new Set())
   const [connectedIds, setConnectedIds] = useState(new Set())
   const [incomingRequestIds, setIncomingRequestIds] = useState(new Set())
+  const [memberCircleIds, setMemberCircleIds] = useState(new Set())
 
   // Fetch connection state so CTA buttons show the right label
   useEffect(() => {
@@ -474,6 +479,15 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
         .rpc('get_mutual_matches', { for_user_id: currentUserId })
         .then(({ data }) => {
           if (data) setConnectedIds(new Set(data.map(r => r.matched_user_id)))
+        })
+      // Circle memberships (accepted)
+      supabase
+        .from('connection_group_members')
+        .select('group_id')
+        .eq('user_id', currentUserId)
+        .eq('status', 'accepted')
+        .then(({ data }) => {
+          if (data) setMemberCircleIds(new Set(data.map(r => r.group_id)))
         })
     })
   }, [currentUserId])
@@ -572,6 +586,7 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
                     sentRequestIds={sentRequestIds}
                     connectedIds={connectedIds}
                     incomingRequestIds={incomingRequestIds}
+                    memberCircleIds={memberCircleIds}
                   />
                 ))
           }

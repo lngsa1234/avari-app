@@ -5,9 +5,10 @@
 
 describe('LiveFeed CTA button states', () => {
   // Simulate the CTA state logic from LiveFeed.jsx FeedItem
-  function getCTAState({ configCta, isConnected, alreadyRequested, hasIncomingRequest, isOwnEvent }) {
+  function getCTAState({ configCta, eventType, isConnected, alreadyRequested, hasIncomingRequest, isOwnEvent, isMemberOfCircle }) {
     if (isOwnEvent) return { text: null, disabled: true } // no CTA for own events
     const isConnectType = configCta === 'Connect' || configCta === 'Say hi'
+    const isCircleJoin = eventType === 'circle_join' || eventType === 'circle_schedule'
 
     let ctaText = configCta
     let isDisabled = false
@@ -20,6 +21,9 @@ describe('LiveFeed CTA button states', () => {
       isDisabled = true
     } else if (isConnectType && hasIncomingRequest) {
       ctaText = 'Accept'
+    } else if (isCircleJoin && isMemberOfCircle) {
+      ctaText = 'Member'
+      isDisabled = true
     }
 
     return { text: ctaText, disabled: isDisabled }
@@ -65,6 +69,24 @@ describe('LiveFeed CTA button states', () => {
     const state = getCTAState({ configCta: 'RSVP', isConnected: true, alreadyRequested: true, hasIncomingRequest: true })
     expect(state.text).toBe('RSVP')
     expect(state.disabled).toBe(false)
+  })
+
+  test('circle_join shows "Member" when user is already a member', () => {
+    const state = getCTAState({ configCta: 'Join', eventType: 'circle_join', isMemberOfCircle: true })
+    expect(state.text).toBe('Member')
+    expect(state.disabled).toBe(true)
+  })
+
+  test('circle_join shows "Join" when user is not a member', () => {
+    const state = getCTAState({ configCta: 'Join', eventType: 'circle_join', isMemberOfCircle: false })
+    expect(state.text).toBe('Join')
+    expect(state.disabled).toBe(false)
+  })
+
+  test('circle_schedule shows "Member" when user is already a member', () => {
+    const state = getCTAState({ configCta: 'RSVP', eventType: 'circle_schedule', isMemberOfCircle: true })
+    expect(state.text).toBe('Member')
+    expect(state.disabled).toBe(true)
   })
 
   test('"Say hi" follows same logic as "Connect"', () => {
