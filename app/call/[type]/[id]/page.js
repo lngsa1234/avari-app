@@ -827,6 +827,8 @@ export default function UnifiedCallPage() {
         { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: turnUser, credential: turnCred },
       );
       console.log('[WebRTC] TURN servers configured');
+    } else {
+      console.warn('[WebRTC] ⚠️ TURN servers NOT configured — calls will fail behind symmetric NAT, corporate Wi-Fi, or cellular networks. Set NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL env vars.');
     }
 
     // Create (or recreate) a peer connection with all event handlers wired up
@@ -933,6 +935,21 @@ export default function UnifiedCallPage() {
 
       newPc.oniceconnectionstatechange = () => {
         console.log('[WebRTC] ICE state:', newPc.iceConnectionState);
+        if (newPc.iceConnectionState === 'failed') {
+          console.error('[WebRTC] ❌ ICE FAILED — likely NAT traversal issue. Check TURN server config.');
+          newPc.getStats().then(stats => {
+            let candidatePairs = 0;
+            let relayCandidates = 0;
+            stats.forEach(report => {
+              if (report.type === 'candidate-pair') candidatePairs++;
+              if (report.type === 'local-candidate' && report.candidateType === 'relay') relayCandidates++;
+            });
+            console.log(`[WebRTC] Candidate pairs attempted: ${candidatePairs}, relay candidates: ${relayCandidates}`);
+            if (relayCandidates === 0) {
+              console.error('[WebRTC] ❌ No relay (TURN) candidates — TURN server is missing or not working');
+            }
+          });
+        }
       };
 
       newPc.onicecandidate = (event) => {
@@ -942,6 +959,13 @@ export default function UnifiedCallPage() {
             to: remotePeerIdRef.current,
           });
         }
+        if (!event.candidate) {
+          console.log('[WebRTC] ICE gathering complete');
+        }
+      };
+
+      newPc.onicegatheringstatechange = () => {
+        console.log('[WebRTC] ICE gathering state:', newPc.iceGatheringState);
       };
 
       console.log('[WebRTC] Peer connection created');
