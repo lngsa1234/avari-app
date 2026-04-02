@@ -2254,13 +2254,18 @@ export default function UnifiedCallPage() {
     await endRoom();
     await leaveCall();
 
-    // Step 2b: Mark coffee chat as completed
+    // Step 2b: Mark coffee chat as completed only if the call actually connected
+    // and this is the last person leaving. If call never connected, keep 'accepted'
+    // so the user can retry. Stale chats are auto-abandoned by cron after 2 hours.
     if (callType === 'coffee') {
       const chatId = roomId?.startsWith('coffee-') ? roomId.replace('coffee-', '') : roomId;
-      try {
-        await completeCoffeeChat(supabase, chatId);
-      } catch (e) {
-        console.warn('[UnifiedCall] Failed to mark coffee chat completed:', e.message);
+      const callConnected = participantIds.length > 1;
+      if (isLastPerson && callConnected) {
+        try {
+          await completeCoffeeChat(supabase, chatId);
+        } catch (e) {
+          console.warn('[UnifiedCall] Failed to mark coffee chat completed:', e.message);
+        }
       }
     }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { parseLocalDate } from '@/lib/dateUtils'
+import { parseLocalDate, isCoffeeChatUpcoming } from '@/lib/dateUtils'
 import { supabase } from '@/lib/supabase'
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery'
 
@@ -28,11 +28,7 @@ async function fetchPrimaryHomeData(sb, userId) {
   if (coffeeProfiles.length > 0) {
     const profileMap = {}
     coffeeProfiles.forEach(p => { profileMap[p.id] = p })
-    const gracePeriod = new Date(now.getTime() - 4 * 60 * 60 * 1000)
-    upcomingCoffeeChats = chats.filter(chat => {
-      if (!chat.scheduled_time) return true
-      return new Date(chat.scheduled_time) > gracePeriod
-    }).map(chat => {
+    upcomingCoffeeChats = chats.filter(chat => isCoffeeChatUpcoming(chat)).map(chat => {
       const otherId = chat.requester_id === userId ? chat.recipient_id : chat.requester_id
       return { ...chat, _otherPerson: profileMap[otherId] || null }
     })
@@ -643,11 +639,12 @@ export default function useHomeData(currentUser) {
 
       if (error) throw error
       setCircleInvitations(prev => prev.filter(r => r.id !== membershipId))
+      mutatePrimary()
       console.log('✅ Accepted circle invitation:', membershipId)
     } catch (err) {
       console.error('💥 Error accepting circle invitation:', err)
     }
-  }, [supabase])
+  }, [supabase, mutatePrimary])
 
   // Decline a circle invitation (invitee perspective — uses update, not delete, due to RLS)
   const handleDeclineCircleInvitation = useCallback(async (membershipId) => {

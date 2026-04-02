@@ -13,6 +13,8 @@ import {
   formatEventTime,
   formatEventDate,
   formatDate,
+  SESSION_GRACE_MINUTES,
+  isCoffeeChatUpcoming,
 } from '@/lib/dateUtils'
 
 describe('parseLocalDate', () => {
@@ -330,5 +332,48 @@ describe('formatDate edge cases', () => {
     // formatDate catches exceptions and returns the input
     const result = formatDate('not-a-real-date-format!!!')
     expect(typeof result).toBe('string')
+  })
+})
+
+describe('SESSION_GRACE_MINUTES', () => {
+  test('is exported as a number', () => {
+    expect(typeof SESSION_GRACE_MINUTES).toBe('number')
+    expect(SESSION_GRACE_MINUTES).toBe(60)
+  })
+})
+
+describe('isCoffeeChatUpcoming', () => {
+  test('terminal statuses are never upcoming', () => {
+    const base = { scheduled_time: new Date(Date.now() + 60000).toISOString() }
+    expect(isCoffeeChatUpcoming({ ...base, status: 'completed' })).toBe(false)
+    expect(isCoffeeChatUpcoming({ ...base, status: 'cancelled' })).toBe(false)
+    expect(isCoffeeChatUpcoming({ ...base, status: 'declined' })).toBe(false)
+    expect(isCoffeeChatUpcoming({ ...base, status: 'abandoned' })).toBe(false)
+  })
+
+  test('accepted chat with no scheduled_time is upcoming', () => {
+    expect(isCoffeeChatUpcoming({ status: 'accepted' })).toBe(true)
+    expect(isCoffeeChatUpcoming({ status: 'accepted', scheduled_time: null })).toBe(true)
+  })
+
+  test('pending chat with no scheduled_time is upcoming', () => {
+    expect(isCoffeeChatUpcoming({ status: 'pending' })).toBe(true)
+  })
+
+  test('future chat is upcoming', () => {
+    const inOneHour = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    expect(isCoffeeChatUpcoming({ status: 'accepted', scheduled_time: inOneHour })).toBe(true)
+  })
+
+  test('chat within grace period is still upcoming', () => {
+    // Chat scheduled 45 min ago (30 min duration + 60 min grace = 90 min window)
+    const fortyFiveMinAgo = new Date(Date.now() - 45 * 60 * 1000).toISOString()
+    expect(isCoffeeChatUpcoming({ status: 'accepted', scheduled_time: fortyFiveMinAgo })).toBe(true)
+  })
+
+  test('chat past grace period is not upcoming', () => {
+    // Chat scheduled 3 hours ago (30 min duration + 60 min grace = 90 min window, 3hr > 90min)
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    expect(isCoffeeChatUpcoming({ status: 'accepted', scheduled_time: threeHoursAgo })).toBe(false)
   })
 })

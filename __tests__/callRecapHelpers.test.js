@@ -13,6 +13,7 @@ const mockChain = {}
 const methods = ['select', 'insert', 'update', 'upsert', 'delete', 'eq', 'neq', 'in', 'or', 'gte', 'order', 'limit', 'contains', 'filter']
 methods.forEach(m => { mockChain[m] = jest.fn().mockReturnValue(mockChain) })
 mockChain.single = jest.fn()
+mockChain.maybeSingle = jest.fn()
 mockChain.then = (resolve) => resolve({ data: [], error: null })
 
 const mockFrom = jest.fn().mockReturnValue(mockChain)
@@ -58,22 +59,22 @@ describe('getMyCallRecaps', () => {
 describe('getCallRecapByChannel', () => {
   test('returns recap for channel', async () => {
     const recap = { id: 'r1', channel_name: 'ch-1', ai_summary: 'summary' }
-    mockChain.single.mockResolvedValue({ data: recap, error: null })
+    mockChain.maybeSingle.mockResolvedValue({ data: recap, error: null })
 
     const result = await getCallRecapByChannel('ch-1')
     expect(result).toEqual(recap)
     expect(mockFrom).toHaveBeenCalledWith('call_recaps')
   })
 
-  test('returns null when not found (PGRST116)', async () => {
-    mockChain.single.mockResolvedValue({ data: null, error: { code: 'PGRST116' } })
+  test('returns null when not found', async () => {
+    mockChain.maybeSingle.mockResolvedValue({ data: null, error: null })
 
     const result = await getCallRecapByChannel('nonexistent')
     expect(result).toBeNull()
   })
 
   test('returns null on other errors', async () => {
-    mockChain.single.mockResolvedValue({ data: null, error: { code: 'OTHER', message: 'fail' } })
+    mockChain.maybeSingle.mockResolvedValue({ data: null, error: { code: 'OTHER', message: 'fail' } })
 
     const result = await getCallRecapByChannel('ch-1')
     expect(result).toBeNull()
@@ -115,14 +116,14 @@ describe('updateRecapSummary', () => {
 describe('updateRecapSummaryByChannel', () => {
   test('updates AI summary by channel name', async () => {
     const updated = { id: 'r1', ai_summary: 'new' }
-    mockChain.single.mockResolvedValue({ data: updated, error: null })
+    mockChain.maybeSingle.mockResolvedValue({ data: updated, error: null })
 
     const result = await updateRecapSummaryByChannel('ch-1', 'new')
     expect(result).toEqual(updated)
   })
 
   test('returns null on error', async () => {
-    mockChain.single.mockResolvedValue({ data: null, error: { message: 'fail' } })
+    mockChain.maybeSingle.mockResolvedValue({ data: null, error: { message: 'fail' } })
     const result = await updateRecapSummaryByChannel('ch-1', 'x')
     expect(result).toBeNull()
   })

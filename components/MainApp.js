@@ -30,7 +30,7 @@ import CoffeeChatDetailView from './CoffeeChatDetailView'
 import { updateLastActiveThrottled } from '@/lib/activityHelpers'
 import NudgeBanner from './NudgeBanner'
 import { ToastContainer, useToast } from './Toast'
-import { parseLocalDate, formatEventTime, isEventPast, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
+import { parseLocalDate, formatEventTime, isEventPast, isEventLive, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '@/lib/dateUtils'
 import LiveFeed from './LiveFeed'
 import { colors as tokens, fonts } from '@/lib/designTokens'
 import useHomeData from '@/hooks/useHomeData'
@@ -435,23 +435,17 @@ function MainApp({ currentUser, onSignOut }) {
   const upcomingMeetups = (() => {
     const filteredMeetups = meetups.filter(m =>
       m.status !== 'cancelled' &&
-      !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), 30)
+      !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), SESSION_GRACE_MINUTES)
     )
     // Merge upcoming coffee chats as pseudo-meetup objects (filter out past ones)
-    const now = new Date()
-    const coffeeMeetups = upcomingCoffeeChats.filter(chat => {
-      if (chat.status === 'completed' || chat.status === 'cancelled' || chat.status === 'declined') return false
-      if (!chat.scheduled_time) return true // No time = show it (pending/accepted)
-      // Coffee chats last ~30 min, add 30 min grace
-      return new Date(chat.scheduled_time).getTime() + 60 * 60 * 1000 > now.getTime()
-    }).map(chat => {
+    const coffeeMeetups = upcomingCoffeeChats.filter(chat => isCoffeeChatUpcoming(chat)).map(chat => {
       const otherPerson = chat._otherPerson
       const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : new Date()
       const dateStr = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, '0')}-${String(scheduledDate.getDate()).padStart(2, '0')}`
       const timeStr = `${String(scheduledDate.getHours()).padStart(2, '0')}:${String(scheduledDate.getMinutes()).padStart(2, '0')}`
       return {
         id: chat.id,
-        topic: `Coffee chat with ${otherPerson?.name || 'Someone'}`,
+        topic: chat.topic || `Coffee chat with ${otherPerson?.name || 'Someone'}`,
         date: dateStr,
         time: timeStr,
         duration: '30',

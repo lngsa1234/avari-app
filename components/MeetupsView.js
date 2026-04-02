@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus, ChevronLeft, FileText, Check, Circle } from 'lucide-react';
-import { parseLocalDate, isEventPast, formatEventTime, eventDateTimeToUTC } from '../lib/dateUtils';
+import { parseLocalDate, isEventPast, formatEventTime, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
@@ -114,12 +114,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
       const now = new Date();
 
-      const upcomingChats = (data || []).filter(chat => {
-        if (chat.status === 'completed' || chat.status === 'declined' || chat.status === 'cancelled') return false;
-        if (!chat.scheduled_time) return true;
-        const chatTime = new Date(chat.scheduled_time);
-        return chatTime.getTime() + 60 * 60 * 1000 > now.getTime();
-      });
+      const upcomingChats = (data || []).filter(chat => isCoffeeChatUpcoming(chat));
 
       const otherUserIds = upcomingChats.map(chat =>
         chat.requester_id === currentUser.id ? chat.recipient_id : chat.requester_id
@@ -202,7 +197,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const upcomingFiltered = (signedUpMeetups || []).filter(meetup => {
         if (meetup.status === 'completed' || meetup.status === 'cancelled') return false;
         if (!meetup.date) return false;
-        return !isEventPast(meetup.date, meetup.time, meetup.timezone, parseInt(meetup.duration || '60'), 240);
+        return !isEventPast(meetup.date, meetup.time, meetup.timezone, parseInt(meetup.duration || '60'), SESSION_GRACE_MINUTES);
       });
 
       const upcomingMeetupIds = upcomingFiltered.map(m => m.id);
@@ -382,7 +377,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const coffeeData = coffeeResult.data || [];
       const pastChats = coffeeData.filter(chat => {
         if (!chat.scheduled_time) return false;
-        if (chat.status === 'completed') return true;
+        if (chat.status === 'completed' || chat.status === 'abandoned') return true;
         if (chat.status === 'accepted') {
           const chatTime = new Date(chat.scheduled_time);
           return chatTime < gracePeriod && !!findMatchingRecap(chat.id);

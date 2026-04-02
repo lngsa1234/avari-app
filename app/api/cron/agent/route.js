@@ -28,6 +28,7 @@ export async function GET(request) {
       nudges: null,
       eventRecommendations: null,
       discussionTopics: null,
+      abandonStale: null,
       errors: []
     };
 
@@ -38,7 +39,7 @@ export async function GET(request) {
     };
 
     // Run batch jobs in parallel
-    const [nudgeResult, eventRecResult, topicsResult] = await Promise.allSettled([
+    const [nudgeResult, eventRecResult, topicsResult, abandonResult] = await Promise.allSettled([
       // Batch nudges
       fetch(`${baseUrl}/api/agent/nudges`, {
         method: 'POST',
@@ -58,6 +59,12 @@ export async function GET(request) {
         method: 'POST',
         headers: internalHeaders,
         body: JSON.stringify({ batch: true })
+      }).then(r => r.json()),
+
+      // Auto-abandon stale coffee chats that never connected
+      fetch(`${baseUrl}/api/cron/abandon-stale`, {
+        method: 'POST',
+        headers: internalHeaders,
       }).then(r => r.json())
     ]);
 
@@ -78,6 +85,12 @@ export async function GET(request) {
       results.discussionTopics = topicsResult.value;
     } else {
       results.errors.push({ job: 'discussionTopics', error: topicsResult.reason?.message || 'Unknown error' });
+    }
+
+    if (abandonResult.status === 'fulfilled') {
+      results.abandonStale = abandonResult.value;
+    } else {
+      results.errors.push({ job: 'abandonStale', error: abandonResult.reason?.message || 'Unknown error' });
     }
 
     console.log('[Cron] Agent batch completed:', results);
