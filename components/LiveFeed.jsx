@@ -244,10 +244,13 @@ function DualAvatars({ actor, target, isLive, isMobile }) {
   )
 }
 
-function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new Set() }) {
+function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new Set(), connectedIds = new Set(), incomingRequestIds = new Set() }) {
   const config = EVENT_CONFIG[event.event_type]
   if (!config) return null
-  const alreadyRequested = sentRequestIds.has(event.actor_id)
+  const actorId = event.actor_id
+  const isConnected = connectedIds.has(actorId)
+  const alreadyRequested = sentRequestIds.has(actorId)
+  const hasIncomingRequest = incomingRequestIds.has(actorId)
 
   const hasDualAvatar = event.target && (event.event_type === 'coffee_live' || event.event_type === 'coffee_scheduled' || event.event_type === 'connection')
   const headline = config.getHeadline(event)
@@ -287,32 +290,43 @@ function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new 
   if (config.isPrivate) {
     // No badge needed — all coffee chats are private by nature
     actionPart = null
-  } else if (config.cta && event.actor_id !== currentUserId) {
-    const showRequested = alreadyRequested && (config.cta === 'Connect' || config.cta === 'Say hi')
-    const ctaText = showRequested ? 'Request Sent' : config.cta
-    const isOutline = config.ctaStyle === 'outline' || showRequested
+  } else if (config.cta && actorId !== currentUserId) {
+    const isConnectType = config.cta === 'Connect' || config.cta === 'Say hi'
+    // Determine the right CTA state
+    let ctaText = config.cta
+    let isDisabled = false
+    if (isConnectType && isConnected) {
+      ctaText = 'Connected'
+      isDisabled = true
+    } else if (isConnectType && alreadyRequested) {
+      ctaText = 'Request Sent'
+      isDisabled = true
+    } else if (isConnectType && hasIncomingRequest) {
+      ctaText = 'Accept'
+    }
+    const isOutline = config.ctaStyle === 'outline' || isDisabled
     actionPart = (
       <button
-        onClick={(e) => { e.stopPropagation(); if (!showRequested) onCta?.(event) }}
-        disabled={showRequested}
+        onClick={(e) => { e.stopPropagation(); if (!isDisabled) onCta?.(event) }}
+        disabled={isDisabled}
         style={{
           padding: isMobile ? '7px 14px' : '8px 18px', borderRadius: 22,
           fontSize: isMobile ? '12px' : '13px', fontWeight: 600,
-          cursor: showRequested ? 'default' : 'pointer',
+          cursor: isDisabled ? 'default' : 'pointer',
           fontFamily: fonts.sans, whiteSpace: 'nowrap', letterSpacing: '0.15px',
           transition: 'all 0.15s ease',
-          opacity: showRequested ? 0.7 : 1,
+          opacity: isDisabled ? 0.7 : 1,
           border: isOutline ? '1px solid #C4A882' : 'none',
           background: isOutline ? 'transparent' : '#5C4033',
           color: isOutline ? '#5C4033' : '#FAF5EF',
         }}
         onMouseEnter={e => {
-          if (showRequested) return
+          if (isDisabled) return
           if (isOutline) { e.currentTarget.style.background = '#F0E8DF' }
           else { e.currentTarget.style.background = '#4A3228' }
         }}
         onMouseLeave={e => {
-          if (showRequested) return
+          if (isDisabled) return
           if (isOutline) { e.currentTarget.style.background = 'transparent' }
           else { e.currentTarget.style.background = '#5C4033' }
         }}
@@ -432,17 +446,34 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
   const [isMobile, setIsMobile] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [sentRequestIds, setSentRequestIds] = useState(new Set())
+  const [connectedIds, setConnectedIds] = useState(new Set())
+  const [incomingRequestIds, setIncomingRequestIds] = useState(new Set())
 
-  // Fetch sent connection requests so CTA buttons can show "Request Sent"
+  // Fetch connection state so CTA buttons show the right label
   useEffect(() => {
     if (!currentUserId) return
     import('@/lib/supabase').then(({ supabase }) => {
+      // Sent requests (outgoing)
       supabase
         .from('user_interests')
         .select('interested_in_user_id')
         .eq('user_id', currentUserId)
         .then(({ data }) => {
           if (data) setSentRequestIds(new Set(data.map(r => r.interested_in_user_id)))
+        })
+      // Incoming requests
+      supabase
+        .from('user_interests')
+        .select('user_id')
+        .eq('interested_in_user_id', currentUserId)
+        .then(({ data }) => {
+          if (data) setIncomingRequestIds(new Set(data.map(r => r.user_id)))
+        })
+      // Mutual connections
+      supabase
+        .rpc('get_mutual_matches', { for_user_id: currentUserId })
+        .then(({ data }) => {
+          if (data) setConnectedIds(new Set(data.map(r => r.matched_user_id)))
         })
     })
   }, [currentUserId])
@@ -539,6 +570,8 @@ export default function LiveFeed({ currentUserId, onCtaClick, maxHeight = null, 
                     isMobile={isMobile}
                     currentUserId={currentUserId}
                     sentRequestIds={sentRequestIds}
+                    connectedIds={connectedIds}
+                    incomingRequestIds={incomingRequestIds}
                   />
                 ))
           }
