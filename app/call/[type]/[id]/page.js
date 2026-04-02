@@ -2352,19 +2352,14 @@ export default function UnifiedCallPage() {
     if (hasContent && !recentlySummarized) {
       console.log('[UnifiedCall] Generating AI recap in background...');
 
-      // Fetch combined transcript from all participants
+      // Fetch combined transcript from ALL sessions (no time filter)
+      // so multi-session meetings (disconnect + reconnect) get a complete recap
       let combinedTranscript = currentTranscript;
       try {
-        let transcriptQuery = supabase
+        const { data: dbTranscripts } = await supabase
           .from('call_transcripts')
           .select('speaker_name, text, timestamp, user_id')
-          .eq('channel_name', roomId);
-
-        if (startTime) {
-          transcriptQuery = transcriptQuery.gte('created_at', startTime);
-        }
-
-        const { data: dbTranscripts } = await transcriptQuery
+          .eq('channel_name', roomId)
           .order('timestamp', { ascending: true });
 
         if (dbTranscripts && dbTranscripts.length > 0) {
@@ -2426,20 +2421,9 @@ export default function UnifiedCallPage() {
         setLoadingSummary(false);
       }
 
-      // Clean up raw transcripts from call_transcripts table
-      try {
-        let deleteQuery = supabase
-          .from('call_transcripts')
-          .delete()
-          .eq('channel_name', roomId);
-        if (startTime) {
-          deleteQuery = deleteQuery.gte('created_at', startTime);
-        }
-        await deleteQuery;
-        console.log('[UnifiedCall] Session transcripts cleaned up');
-      } catch (cleanupErr) {
-        console.warn('[UnifiedCall] Failed to clean up transcripts:', cleanupErr);
-      }
+      // Keep call_transcripts as permanent source of truth.
+      // Other participants may still need them for their own recap generation,
+      // and they serve as a backup if recap data needs to be rebuilt.
     } else {
       setLoadingSummary(false);
       if (recentlySummarized) {
