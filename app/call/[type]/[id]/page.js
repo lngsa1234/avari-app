@@ -1026,6 +1026,7 @@ export default function UnifiedCallPage() {
       if (others.length > 0) {
         remotePeerId = others[0];
         remotePeerIdRef.current = others[0];
+        allParticipantIdsRef.current.add(others[0]);
         const polite = amIPolite(remotePeerId);
         console.log('[WebRTC] Peer already present, I am', polite ? 'polite' : 'impolite');
         if (!polite) {
@@ -1041,6 +1042,7 @@ export default function UnifiedCallPage() {
       if (joinedUserId === user?.id) return;
       remotePeerId = joinedUserId;
       remotePeerIdRef.current = joinedUserId;
+      allParticipantIdsRef.current.add(joinedUserId);
 
       // Clear disconnected state — peer is back
       setRemoteParticipants(prev => prev.map(p => ({
