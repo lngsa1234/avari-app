@@ -68,3 +68,15 @@ Solves the "signed up, never came back" retention problem. Key post-launch lever
 
 **Effort:** M with CC (~3-4 hours)
 **Depends on:** Launch + minimum ~10 active users.
+
+---
+
+## Add consent audit log for legal compliance
+**Priority:** Medium | **Added:** 2026-04-03 | **Source:** /plan-eng-review (outside voice)
+
+Add a permanent `consent_audit_log` table that records who consented to transcription, when, and for which call. Current `call_consent` table is ephemeral (rows deleted on call end), which means there's no proof of consent after the call.
+
+GDPR and US two-party consent laws (13 states) may require evidence that consent was obtained. This becomes important if CircleW operates in EU or California. The audit log should be append-only, never deleted (except by privacy deletion request), and include: channel_name, requester_id, responder_id, status, consented_at timestamp.
+
+**Effort:** S with CC (~1 hour)
+**Depends on:** Transcript consent system v1 shipping first.

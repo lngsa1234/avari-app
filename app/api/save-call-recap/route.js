@@ -30,6 +30,23 @@ export async function POST(request) {
 
     const supabase = createAdminClient();
 
+    // Check transcript consent before saving
+    // Don't trust client-supplied callType. Use consent row presence as signal.
+    let allowTranscript = true;
+    const { data: consentRow } = await supabase
+      .from('call_consent')
+      .select('status')
+      .eq('channel_name', channelName)
+      .maybeSingle();
+
+    if (consentRow && consentRow.status !== 'accepted') {
+      // Consent exists but was not accepted — strip transcript
+      allowTranscript = false;
+    }
+    // If no consent row exists: allow transcript (backwards compat, group calls)
+
+    const filteredTranscript = allowTranscript ? transcript : [];
+
     // Check for existing recap for this channel
     const { data: existing, error: fetchError } = await supabase
       .from('call_recaps')
@@ -55,7 +72,7 @@ export async function POST(request) {
       // Merge transcripts (deduplicate by timestamp + text)
       const oldTranscript = existing.transcript || [];
       const seen = new Set(oldTranscript.map(e => `${e.timestamp}|${e.text}`));
-      const newEntries = transcript.filter(e => !seen.has(`${e.timestamp}|${e.text}`));
+      const newEntries = filteredTranscript.filter(e => !seen.has(`${e.timestamp}|${e.text}`));
       const mergedTranscript = [...oldTranscript, ...newEntries]
         .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
@@ -102,7 +119,7 @@ export async function POST(request) {
         duration_seconds: clamped.durationSeconds,
         participant_count: participantIds.length,
         participant_ids: participantIds,
-        transcript,
+        transcript: filteredTranscript,
         ai_summary: aiSummary,
         metrics,
         created_by: user.id,

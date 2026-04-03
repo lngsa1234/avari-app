@@ -327,6 +327,10 @@ export default function ControlBar({
   isVideoDeviceSwitching = false,
   isAudioDeviceSwitching = false,
 
+  // Consent state
+  consentStatus,
+  consentMode,
+
   // Feature flags
   features = {},
 
@@ -404,7 +408,25 @@ export default function ControlBar({
         {!isTranscribing && features.transcription && isSpeechSupported && (
           <div className="flex items-center gap-1.5 text-stone-500 text-xs">
             <CaptionIcon />
-            <span>Captions off</span>
+            <button
+              onClick={onToggleTranscription}
+              disabled={consentStatus === 'exhausted'}
+              className={`text-xs transition-colors ${
+                consentStatus === 'pending'
+                  ? 'text-amber-400 animate-pulse'
+                  : consentStatus === 'exhausted'
+                    ? 'text-stone-600 cursor-not-allowed'
+                    : 'text-stone-400 hover:text-stone-200 cursor-pointer'
+              }`}
+            >
+              {consentStatus === 'pending'
+                ? 'Waiting for consent...'
+                : consentStatus === 'exhausted'
+                  ? 'Transcription unavailable'
+                  : consentStatus === 'declined'
+                    ? 'Start Transcription (retry)'
+                    : 'Start Transcription'}
+            </button>
           </div>
         )}
       </div>

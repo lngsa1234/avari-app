@@ -684,6 +684,49 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                 }} />
               </div>
             </div>
+            {/* Transcription preference */}
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 0', cursor: 'default',
+                borderTop: '1px solid #F0E6D8',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 15 }}>📝</span>
+                <div>
+                  <span className="profile-toggle-label" style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: COLORS.brown700, display: 'block' }}>
+                    Coffee chat transcription
+                  </span>
+                  <span className="profile-toggle-subtitle" style={{ fontFamily: FONT, fontSize: 12, color: COLORS.brown400, display: 'block', marginTop: 2 }}>
+                    How to respond when someone requests transcription
+                  </span>
+                </div>
+              </div>
+              <select
+                value={profile.transcription_preference || 'ask'}
+                onChange={async (e) => {
+                  const newVal = e.target.value;
+                  refreshProfile(prev => prev ? { ...prev, profile: { ...prev.profile, transcription_preference: newVal } } : prev, { revalidate: false });
+                  await supabase.from('profiles').update({ transcription_preference: newVal }).eq('id', currentUser.id);
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: `1px solid ${COLORS.border || '#E8D5C3'}`,
+                  fontFamily: FONT,
+                  fontSize: 13,
+                  color: COLORS.brown700,
+                  background: COLORS.white,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <option value="ask">Always ask me</option>
+                <option value="always">Always allow</option>
+                <option value="never">Never allow</option>
+              </select>
+            </div>
           </div>
 
           {/* Preferred time slots picker */}

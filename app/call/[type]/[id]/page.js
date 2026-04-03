@@ -10,9 +10,12 @@ import { io } from 'socket.io-client';
 import { useCallRoom } from '@/hooks/useCallRoom';
 import { useRecording } from '@/hooks/useRecording';
 import useTranscription from '@/hooks/useTranscription';
+import useTranscriptConsent from '@/hooks/useTranscriptConsent';
 import { useBackgroundBlur } from '@/hooks/useBackgroundBlur';
 import useDeviceSelection from '@/hooks/useDeviceSelection';
 import PostMeetingSummary from '@/components/PostMeetingSummary';
+import TranscriptConsentModal from '@/components/video/TranscriptConsentModal';
+import TranscriptIndicator from '@/components/video/TranscriptIndicator';
 
 import {
   VideoHeader,
@@ -93,6 +96,27 @@ export default function UnifiedCallPage() {
   const [transcript, setTranscript] = useState([]);
   const [transcriptionLanguage, setTranscriptionLanguage] = useState('zh-CN');
   const [pendingLanguageRestart, setPendingLanguageRestart] = useState(false);
+
+  // Transcript consent
+  const {
+    consentStatus,
+    consentRequester,
+    attemptCount,
+    requestConsent,
+    respondToConsent,
+    cancelConsent,
+    stopTranscription: stopConsentTranscription,
+    deleteConsentRow,
+  } = useTranscriptConsent({
+    roomId,
+    userId: user?.id,
+    userName: user?.name,
+    callType,
+    consentMode: config?.consentMode || 'host',
+    userPreference: user?.transcription_preference || 'ask',
+    supabase,
+    isJoined,
+  });
 
   // Discussion topics state
   const [discussionTopics, setDiscussionTopics] = useState(null);
@@ -419,7 +443,7 @@ export default function UnifiedCallPage() {
         // Fetch profile to get display name
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
-          .select('name, profile_picture, role')
+          .select('name, profile_picture, role, transcription_preference')
           .eq('id', authData.user.id)
           .single();
 
@@ -434,6 +458,7 @@ export default function UnifiedCallPage() {
           name: profile?.name || authData.user.email?.split('@')[0],
           profile_picture: profile?.profile_picture,
           role: profile?.role,
+          transcription_preference: profile?.transcription_preference || 'ask',
         });
         console.log('[UnifiedCall] User set, config:', config?.provider);
       } else {
@@ -785,11 +810,8 @@ export default function UnifiedCallPage() {
 
       await startRoom();
 
-      // Auto-start transcription for supported providers
-      if (config.features.transcription && isSpeechSupported) {
-        const started = startListening();
-        if (started) setIsTranscribing(true);
-      }
+      // Transcription now requires consent — don't auto-start
+      // User must click "Start Transcription" in the control bar
 
     } catch (error) {
       console.error('[UnifiedCall] Error initializing call:', error);
@@ -2102,7 +2124,7 @@ export default function UnifiedCallPage() {
     handleToggleScreenShare();
   };
 
-  const toggleTranscription = useCallback(() => {
+  const toggleTranscription = useCallback(async () => {
     if (isTranscribing) {
       stopListening();
       setIsTranscribing(false);
@@ -2113,11 +2135,29 @@ export default function UnifiedCallPage() {
         clearTimeout(interimTimeoutRef.current);
         interimTimeoutRef.current = null;
       }
+      // Stop consent-tracked transcription
+      stopConsentTranscription();
     } else {
+      // Go through consent flow
+      const consentGranted = await requestConsent();
+      if (!consentGranted) return;
+
+      // For host mode, consent is immediate — start transcription
+      if (config?.consentMode === 'host') {
+        const started = startListening();
+        if (started) setIsTranscribing(true);
+      }
+      // For mutual mode, transcription starts when consent-response arrives (see effect below)
+    }
+  }, [isTranscribing, startListening, stopListening, requestConsent, stopConsentTranscription, config?.consentMode]);
+
+  // Start transcription when mutual consent is accepted
+  useEffect(() => {
+    if (consentStatus === 'accepted' && !isTranscribing && config?.consentMode === 'mutual') {
       const started = startListening();
       if (started) setIsTranscribing(true);
     }
-  }, [isTranscribing, startListening, stopListening]);
+  }, [consentStatus, isTranscribing, startListening, config?.consentMode]);
 
   // Send message
   const handleSendMessage = async (e) => {
@@ -2350,6 +2390,9 @@ export default function UnifiedCallPage() {
     } catch (saveErr) {
       console.error('[UnifiedCall] Failed to save transcript:', saveErr);
     }
+
+    // Step 5b: Delete consent row AFTER recap save (ordering matters)
+    await deleteConsentRow();
 
     // Step 6: Show recap screen immediately, generate AI summary in background
     const callDuration = startTime && endTime ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000) : 0;
@@ -2746,6 +2789,26 @@ export default function UnifiedCallPage() {
           />
         )}
 
+        {/* Transcript Consent Modal */}
+        <TranscriptConsentModal
+          requesterName={consentRequester}
+          onAccept={() => respondToConsent(true)}
+          onDecline={() => respondToConsent(false)}
+          isVisible={consentStatus === 'incoming'}
+        />
+
+        {/* Transcript Consent Indicator */}
+        <TranscriptIndicator
+          status={consentStatus}
+          mode={config?.consentMode || 'host'}
+          onStop={() => {
+            stopListening();
+            setIsTranscribing(false);
+            stopConsentTranscription();
+          }}
+          isHost={callType !== 'coffee'}
+        />
+
         {/* Transcript Overlay */}
         <TranscriptOverlay
           transcript={transcript}
@@ -2787,6 +2850,8 @@ export default function UnifiedCallPage() {
           onAudioDeviceChange={handleAudioDeviceChange}
           isVideoDeviceSwitching={isVideoDeviceSwitching}
           isAudioDeviceSwitching={isAudioDeviceSwitching}
+          consentStatus={consentStatus}
+          consentMode={config?.consentMode}
           features={config.features}
           onToggleMute={handleToggleMute}
           onToggleVideo={handleToggleVideo}
