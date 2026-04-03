@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/components/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { createOnNavigate } from '@/lib/navigationAdapter'
-import { parseLocalDate, formatEventTime, isEventPast, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
+import { parseLocalDate, formatEventTime, isEventPast, isEventLive, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '@/lib/dateUtils'
 import { useToast } from '@/components/Toast'
 import useHomeData from '@/hooks/useHomeData'
 import useMeetups from '@/hooks/useMeetups'
@@ -76,14 +76,9 @@ export default function HomePage() {
   const upcomingMeetups = useMemo(() => {
     const filteredMeetups = meetups.filter(m =>
       m.status !== 'cancelled' &&
-      !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), 30)
+      !isEventPast(m.date, m.time, m.timezone, parseInt(m.duration || '60'), SESSION_GRACE_MINUTES)
     )
-    const now = new Date()
-    const coffeeMeetups = upcomingCoffeeChats.filter(chat => {
-      if (chat.status === 'completed' || chat.status === 'cancelled' || chat.status === 'declined') return false
-      if (!chat.scheduled_time) return true
-      return new Date(chat.scheduled_time).getTime() + 60 * 60 * 1000 > now.getTime()
-    }).map(chat => {
+    const coffeeMeetups = upcomingCoffeeChats.filter(chat => isCoffeeChatUpcoming(chat)).map(chat => {
       const otherPerson = chat._otherPerson
       const scheduledDate = chat.scheduled_time ? new Date(chat.scheduled_time) : new Date()
       const dateStr = `${scheduledDate.getFullYear()}-${String(scheduledDate.getMonth() + 1).padStart(2, '0')}-${String(scheduledDate.getDate()).padStart(2, '0')}`
@@ -93,7 +88,7 @@ export default function HomePage() {
         _isCoffeeChat: true,
         _coffeeChatId: chat.id,
         _coffeeChatData: chat,
-        topic: `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
+        topic: chat.topic || `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
         date: dateStr,
         time: timeStr,
         duration: '30',
