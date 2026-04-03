@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/agent",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/keepalive",
-      "schedule": "*/10 * * * *"
     }
   ]
 }
