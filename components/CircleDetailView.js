@@ -76,6 +76,7 @@ export default function CircleDetailView({
   onNavigate,
   circleId,
   previousView,
+  toast,
 }) {
   const [circle, setCircle] = useState(null);
   const [members, setMembers] = useState([]);
@@ -242,7 +243,7 @@ export default function CircleDetailView({
 
     // Check max members
     if (memberCount + selectedInvites.length > maxMembers) {
-      alert(`This circle can have at most ${maxMembers} members. Only ${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left.`);
+      toast?.error(`This circle can have at most ${maxMembers} members. Only ${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left.`);
       return;
     }
 
@@ -265,7 +266,7 @@ export default function CircleDetailView({
       loadCircleDetails();
     } catch (err) {
       console.error('Error sending invites:', err);
-      alert('Failed to send invites. Please try again.');
+      toast?.error('Failed to send invites. Please try again.');
     } finally {
       setInviteLoading(false);
     }
@@ -537,7 +538,7 @@ export default function CircleDetailView({
       onNavigate?.(previousView || 'allCircles');
     } catch (error) {
       console.error('Error leaving circle:', error);
-      alert('Error leaving circle: ' + error.message);
+      toast?.error('Error leaving circle: ' + error.message);
     } finally {
       setActionLoading(false);
     }
@@ -571,7 +572,7 @@ export default function CircleDetailView({
         window.location.href = `/call/circle/${channelName}`;
       }
     } catch (error) {
-      alert('Could not start video call: ' + error.message);
+      toast?.error('Could not start video call: ' + error.message);
     }
   };
 
@@ -587,7 +588,7 @@ export default function CircleDetailView({
 
   const handleSaveEdit = async () => {
     if (!editForm.name.trim()) {
-      alert('Circle name is required');
+      toast?.error('Circle name is required');
       return;
     }
 
@@ -635,10 +636,10 @@ export default function CircleDetailView({
 
       setShowEditModal(false);
       await loadCircleDetails();
-      alert('Circle updated successfully!');
+      toast?.success('Circle updated successfully!');
     } catch (error) {
       console.error('Error updating circle:', error);
-      alert('Error updating circle: ' + error.message);
+      toast?.error('Error updating circle: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -648,8 +649,8 @@ export default function CircleDetailView({
   async function handleCirclePhotoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Please select an image file'); return; }
-    if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); return; }
+    if (!file.type.startsWith('image/')) { toast?.error('Please select an image file'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast?.error('Image must be less than 5MB'); return; }
 
     setUploadingPhoto(true);
     try {
@@ -673,7 +674,7 @@ export default function CircleDetailView({
       setCircle(prev => ({ ...prev, image_url: publicUrl }));
     } catch (err) {
       console.error('Upload error:', err);
-      alert('Failed to upload photo: ' + err.message);
+      toast?.error('Failed to upload photo: ' + err.message);
     } finally {
       setUploadingPhoto(false);
     }

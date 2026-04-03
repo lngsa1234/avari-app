@@ -215,8 +215,8 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
   async function handlePhotoUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) { alert('Please select an image file'); return; }
-    if (file.size > 5 * 1024 * 1024) { alert('Image must be less than 5MB'); return; }
+    if (!file.type.startsWith('image/')) { toast?.error('Please select an image file'); return; }
+    if (file.size > 5 * 1024 * 1024) { toast?.error('Image must be less than 5MB'); return; }
 
     setUploadingPhoto(true);
     try {
@@ -241,7 +241,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
       onMeetupChanged?.();
     } catch (err) {
       console.error('Upload error:', err);
-      alert('Failed to upload photo: ' + err.message);
+      toast?.error('Failed to upload photo: ' + err.message);
     } finally {
       setUploadingPhoto(false);
     }
@@ -257,7 +257,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
       setMeetup(prev => ({ ...prev, image_url: null }));
       onMeetupChanged?.();
     } catch (err) {
-      alert('Failed to remove photo: ' + err.message);
+      toast?.error('Failed to remove photo: ' + err.message);
     }
   }
 
@@ -527,9 +527,9 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
 
       if (error) {
         if (error.code === '23505') {
-          alert('You have already signed up for this event!');
+          toast?.info('You have already signed up for this event!');
         } else {
-          alert('Error signing up: ' + error.message);
+          toast?.error('Error signing up: ' + error.message);
         }
       } else {
         setIsSignedUp(true);
@@ -537,7 +537,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
         await reloadAttendees();
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast?.error('Error: ' + err.message);
     } finally {
       setActionLoading(false);
     }
@@ -678,7 +678,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
       const table = isCoffee ? 'coffee_chats' : 'meetups';
       const { error } = await sb.from(table).update(updates).eq('id', meetupId);
       if (error) {
-        alert('Error saving: ' + error.message);
+        toast?.error('Error saving: ' + error.message);
       } else {
         const localUpdates = { ...updates };
         // For coffee chats, also update the normalized date/time fields
@@ -692,7 +692,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
         onMeetupChanged?.();
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast?.error('Error: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -705,13 +705,13 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
       if (newFormat === 'virtual') updates.location = 'Virtual';
       const { error } = await sb.from('meetups').update(updates).eq('id', meetupId);
       if (error) {
-        alert('Error saving: ' + error.message);
+        toast?.error('Error saving: ' + error.message);
       } else {
         setMeetup(prev => ({ ...prev, ...updates }));
         onMeetupChanged?.();
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      toast?.error('Error: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -1237,7 +1237,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                     try { await navigator.share({ title, text: lines }); } catch (e) { /* cancelled */ }
                   } else {
                     await navigator.clipboard.writeText(lines);
-                    alert('Recap copied to clipboard!');
+                    toast?.success('Recap copied to clipboard!');
                   }
                 }}
                 style={{
@@ -1499,7 +1499,7 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                         try { await navigator.share({ title, text: lines, url }); } catch (e) { /* cancelled */ }
                       } else {
                         await navigator.clipboard.writeText(lines);
-                        alert('Event details copied to clipboard!');
+                        toast?.success('Event details copied to clipboard!');
                       }
                     }}
                     style={{

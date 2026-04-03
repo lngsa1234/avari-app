@@ -86,7 +86,7 @@ function timeAgo(dateStr) {
   return `${months}mo ago`;
 }
 
-export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard, refreshKey }) {
+export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard, refreshKey, toast }) {
   const [removing, setRemoving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -239,7 +239,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       onNavigate?.(previousView || 'connectionGroups');
     } catch (err) {
       console.error('Error removing connection:', err);
-      alert('Failed to remove connection. Please try again.');
+      toast?.error('Failed to remove connection. Please try again.');
     } finally {
       setRemoving(false);
     }
@@ -263,7 +263,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       invalidateQuery(`home-primary-${currentUser.id}`);
     } catch (err) {
       console.error('Error accepting connection:', err);
-      alert('Failed to accept connection. Please try again.');
+      toast?.error('Failed to accept connection. Please try again.');
     } finally {
       setAccepting(false);
     }
@@ -294,7 +294,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       invalidateQuery(`circles-sent-requests-${currentUser.id}`);
     } catch (err) {
       console.error('Error sending connection request:', err);
-      alert('Failed to send connection request. Please try again.');
+      toast?.error('Failed to send connection request. Please try again.');
     } finally {
       setConnecting(false);
     }

@@ -23,7 +23,7 @@ import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, Fi
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
-export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate }) {
+export default function ConnectionGroupsView({ currentUser, supabase, connections: connectionsProp = [], onNavigate, toast }) {
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window !== 'undefined') return window.innerWidth < 640;
     return false;
@@ -661,7 +661,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       setEligibleConnections(connections);
 
       if (connections.length < 2) {
-        alert('You need at least 2 mutual connections to create a group.');
+        toast?.error('You need at least 2 mutual connections to create a group.');
         return false;
       }
       return true;
@@ -683,7 +683,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       setSelectedConnections(selectedConnections.filter(id => id !== connectionId));
     } else {
       if (selectedConnections.length >= 9) {
-        alert('Maximum group size is 10 people (you + 9 others)');
+        toast?.error('Maximum group size is 10 people (you + 9 others)');
         return;
       }
       setSelectedConnections([...selectedConnections, connectionId]);
@@ -692,12 +692,12 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
-      alert('Please enter a circle name');
+      toast?.error('Please enter a circle name');
       return;
     }
 
     if (selectedConnections.length < 2 || selectedConnections.length > 9) {
-      alert('Please select 2-9 people to invite');
+      toast?.error('Please select 2-9 people to invite');
       return;
     }
 
@@ -718,17 +718,17 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       invalidateQuery(`circles-page-${currentUser.id}`);
       invalidateQuery(`circles-sent-invites-${currentUser.id}`);
     } catch (error) {
-      alert('Error creating circle: ' + error.message);
+      toast?.error('Error creating circle: ' + error.message);
     }
   };
 
   const handleAcceptInvite = async (membershipId, groupName) => {
     try {
       await acceptGroupInvite(membershipId);
-      alert(`You joined "${groupName}"!`);
+      toast?.success(`You joined "${groupName}"!`);
       invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
-      alert('Error accepting invite: ' + error.message);
+      toast?.error('Error accepting invite: ' + error.message);
     }
   };
 
@@ -739,7 +739,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       await declineGroupInvite(membershipId);
       invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
-      alert('Error declining invite: ' + error.message);
+      toast?.error('Error declining invite: ' + error.message);
     }
   };
 
@@ -747,7 +747,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     try {
       const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
       if (!appId) {
-        alert('Video calls not configured.');
+        toast?.error('Video calls not configured.');
         return;
       }
 
@@ -764,7 +764,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       const { channelName } = await createConnectionGroupRoom(groupId, nextMeetup?.id);
       window.location.href = `/call/circle/${channelName}`;
     } catch (error) {
-      alert('Could not join video call: ' + error.message);
+      toast?.error('Could not join video call: ' + error.message);
     }
   };
 
@@ -775,7 +775,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       await deleteConnectionGroup(groupId);
       invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
-      alert('Error deleting group: ' + error.message);
+      toast?.error('Error deleting group: ' + error.message);
     }
   };
 
@@ -806,7 +806,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       setNewMessage('');
       await loadGroupChatMessages(selectedGroup.id);
     } catch (error) {
-      alert('Error sending message: ' + error.message);
+      toast?.error('Error sending message: ' + error.message);
     }
   };
 
@@ -817,7 +817,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       await deleteGroupMessage(supabase, messageId);
       await loadGroupChatMessages(selectedGroup.id);
     } catch (error) {
-      alert('Error deleting message: ' + error.message);
+      toast?.error('Error deleting message: ' + error.message);
     }
   };
 
