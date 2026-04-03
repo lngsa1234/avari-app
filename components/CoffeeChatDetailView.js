@@ -716,7 +716,9 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
     if (!meetup) return;
     if (meetup._isCoffeeChat) {
       // 1:1 coffee chat — WebRTC peer-to-peer
-      window.location.href = `/call/coffee/${meetup.id || meetupId}`;
+      // Strip "coffee-" prefix if present (some pages prefix IDs to avoid collisions)
+      const chatId = meetup._coffeeChatId || (typeof (meetup.id || meetupId) === 'string' && (meetup.id || meetupId).startsWith('coffee-') ? (meetup.id || meetupId).replace('coffee-', '') : (meetup.id || meetupId));
+      window.location.href = `/call/coffee/${chatId}`;
     } else if (meetup.circle_id) {
       // Use meetup ID for session-isolated channel names
       const channelName = `connection-group-${meetup.id || meetupId}`;

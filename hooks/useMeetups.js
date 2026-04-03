@@ -243,8 +243,10 @@ export default function useMeetups(currentUser, { refreshMeetups, refreshUserSig
       const isCoffeeChat = typeof meetup === 'object' && meetup._isCoffeeChat;
 
       // If this is a 1:1 coffee chat, route to WebRTC peer-to-peer call
+      // Strip "coffee-" prefix if present (some pages prefix IDs to avoid collisions with meetup IDs)
       if (isCoffeeChat) {
-        window.location.href = `/call/coffee/${meetupId}`;
+        const chatId = meetup._coffeeChatId || (typeof meetupId === 'string' && meetupId.startsWith('coffee-') ? meetupId.replace('coffee-', '') : meetupId);
+        window.location.href = `/call/coffee/${chatId}`;
         return;
       }
 
