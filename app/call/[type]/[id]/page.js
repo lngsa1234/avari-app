@@ -2136,9 +2136,11 @@ export default function UnifiedCallPage() {
         interimTimeoutRef.current = null;
       }
       // Stop consent-tracked transcription
+      transcriptStoppedRef.current = true;
       stopConsentTranscription();
     } else {
       // Go through consent flow
+      transcriptStoppedRef.current = false;
       const consentGranted = await requestConsent();
       if (!consentGranted) return;
 
@@ -2151,9 +2153,16 @@ export default function UnifiedCallPage() {
     }
   }, [isTranscribing, startListening, stopListening, requestConsent, stopConsentTranscription, config?.consentMode]);
 
-  // Start transcription when mutual consent is accepted
+  // Track whether user intentionally stopped transcription (prevents auto-restart)
+  const transcriptStoppedRef = useRef(false);
+
+  // Start transcription when mutual consent is accepted (only on consent transition, not restarts)
+  const prevConsentStatusRef = useRef(null);
   useEffect(() => {
-    if (consentStatus === 'accepted' && !isTranscribing && config?.consentMode === 'mutual') {
+    const justAccepted = consentStatus === 'accepted' && prevConsentStatusRef.current !== 'accepted';
+    prevConsentStatusRef.current = consentStatus;
+
+    if (justAccepted && !isTranscribing && !transcriptStoppedRef.current && config?.consentMode === 'mutual') {
       const started = startListening();
       if (started) setIsTranscribing(true);
     }
@@ -2802,6 +2811,7 @@ export default function UnifiedCallPage() {
           status={consentStatus}
           mode={config?.consentMode || 'host'}
           onStop={() => {
+            transcriptStoppedRef.current = true;
             stopListening();
             setIsTranscribing(false);
             stopConsentTranscription();
