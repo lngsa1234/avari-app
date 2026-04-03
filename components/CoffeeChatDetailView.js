@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { parseLocalDate, toLocalDateString, isEventPast, isEventLive, formatEventTime, formatEventDate, eventDateTimeToUTC } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
+import { invalidateQuery } from '@/hooks/useSupabaseQuery';
 
 const colors = {
   primary: tokens.primary,
@@ -625,6 +626,8 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
           toast?.error('Error canceling: ' + error.message);
         } else {
           await onMeetupChanged?.();
+          invalidateQuery(`meetups-coffee-${currentUser.id}`);
+          invalidateQuery(`meetups-past-${currentUser.id}`);
           onNavigate?.(previousView || 'meetups');
         }
       } catch (err) {
