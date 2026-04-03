@@ -445,7 +445,9 @@ function MainApp({ currentUser, onSignOut }) {
       const timeStr = `${String(scheduledDate.getHours()).padStart(2, '0')}:${String(scheduledDate.getMinutes()).padStart(2, '0')}`
       return {
         id: chat.id,
-        topic: chat.topic || `Coffee chat with ${otherPerson?.name || 'Someone'}`,
+        topic: chat.topic
+          ? `${chat.topic} - with ${otherPerson?.name || 'Someone'}`
+          : `Coffee chat with ${otherPerson?.name || 'Someone'}`,
         date: dateStr,
         time: timeStr,
         duration: '30',
