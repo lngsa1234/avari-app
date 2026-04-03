@@ -608,6 +608,8 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
           toast?.error('Error canceling: ' + error.message);
         } else {
           setIsSignedUp(false);
+          invalidateQuery(`meetups-group-${currentUser.id}`);
+          invalidateQuery(`home-primary-${currentUser.id}`);
           await reloadAttendees();
         }
       } catch (err) {

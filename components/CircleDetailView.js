@@ -533,7 +533,7 @@ export default function CircleDetailView({
 
       setShowLeaveConfirm(false);
       invalidateQuery(`circles-page-${currentUser.id}`);
-      alert('You have left the circle.');
+      invalidateQuery(`home-primary-${currentUser.id}`);
       onNavigate?.(previousView || 'allCircles');
     } catch (error) {
       console.error('Error leaving circle:', error);
@@ -1146,6 +1146,7 @@ export default function CircleDetailView({
                             await supabase.from('connection_group_members')
                               .update({ status: 'declined', responded_at: new Date().toISOString() })
                               .eq('id', member.id)
+                            invalidateQuery(`circles-page-${currentUser.id}`)
                             await loadCircleDetails()
                           } catch (err) { console.error('Error declining request:', err) }
                         }}
@@ -1161,6 +1162,7 @@ export default function CircleDetailView({
                             await supabase.from('connection_group_members')
                               .update({ status: 'accepted', responded_at: new Date().toISOString() })
                               .eq('id', member.id)
+                            invalidateQuery(`circles-page-${currentUser.id}`)
                             await loadCircleDetails()
                           } catch (err) { console.error('Error accepting request:', err) }
                         }}

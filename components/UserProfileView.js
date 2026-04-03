@@ -5,7 +5,7 @@ import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users
 import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 import { apiFetch } from '@/lib/apiFetch';
 import { colors as tokens, fonts } from '@/lib/designTokens';
-import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
+import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
 const COLORS = {
   bg: tokens.bgAlt,
@@ -232,6 +232,9 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       setShowConfirm(false);
       refreshProfile();
+      invalidateQuery(`circles-page-${currentUser.id}`);
+      invalidateQuery(`circles-peers-${currentUser.id}`);
+      invalidateQuery(`home-primary-${currentUser.id}`);
       onConnectionRemoved?.(userId);
       onNavigate?.(previousView || 'connectionGroups');
     } catch (err) {
@@ -255,6 +258,9 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       if (error && error.code !== '23505') throw error;
 
       refreshProfile();
+      invalidateQuery(`circles-page-${currentUser.id}`);
+      invalidateQuery(`circles-peers-${currentUser.id}`);
+      invalidateQuery(`home-primary-${currentUser.id}`);
     } catch (err) {
       console.error('Error accepting connection:', err);
       alert('Failed to accept connection. Please try again.');
@@ -285,6 +291,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       setLocalSentRequest(true);
       refreshProfile();
+      invalidateQuery(`circles-sent-requests-${currentUser.id}`);
     } catch (err) {
       console.error('Error sending connection request:', err);
       alert('Failed to send connection request. Please try again.');
@@ -305,6 +312,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
       if (error && error.code !== '23505') throw error;
 
       refreshProfile();
+      invalidateQuery(`home-primary-${currentUser.id}`);
     } catch (err) {
       console.error('Error ignoring connection:', err);
     }
