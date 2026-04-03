@@ -89,7 +89,7 @@ export default function HomePage() {
         _coffeeChatId: chat.id,
         _coffeeChatData: chat,
         topic: chat.topic
-          ? `${chat.topic} - with ${otherPerson?.name || 'Someone'}`
+          ? `${chat.topic} — with ${otherPerson?.name || 'Someone'}`
           : `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
         date: dateStr,
         time: timeStr,

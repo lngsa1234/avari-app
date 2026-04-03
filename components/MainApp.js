@@ -446,7 +446,7 @@ function MainApp({ currentUser, onSignOut }) {
       return {
         id: chat.id,
         topic: chat.topic
-          ? `${chat.topic} - with ${otherPerson?.name || 'Someone'}`
+          ? `${chat.topic} — with ${otherPerson?.name || 'Someone'}`
           : `Coffee chat with ${otherPerson?.name || 'Someone'}`,
         date: dateStr,
         time: timeStr,
