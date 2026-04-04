@@ -91,6 +91,7 @@ export default function AllPeopleView({
         .from('profiles')
         .select('*')
         .neq('id', currentUser.id)
+        .neq('profile_visibility', 'hidden')
         .not('name', 'is', null)
         .order('created_at', { ascending: false });
 
@@ -100,17 +101,23 @@ export default function AllPeopleView({
 
       // Fetch mutual matches, circle data, interests in parallel
       const profileIds = profilesData.map(p => p.id);
-      const [matchRes, myCirclesRes, myInterestsRes, incomingInterestsRes] = await Promise.all([
+      const [matchRes, myCirclesRes, myInterestsRes] = await Promise.all([
         supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
         supabase.from('connection_group_members').select('group_id').eq('user_id', currentUser.id).eq('status', 'accepted'),
         supabase.from('user_interests').select('interested_in_user_id').eq('user_id', currentUser.id),
-        supabase.from('user_interests').select('user_id').eq('interested_in_user_id', currentUser.id),
       ]);
 
       const myConnectionIds = new Set((matchRes.data || []).map(m => m.matched_user_id));
       const myCircleIds = (myCirclesRes.data || []).map(c => c.group_id);
       const myInterestIds = new Set((myInterestsRes.data || []).map(i => i.interested_in_user_id));
-      const incomingRequestIds = new Set((incomingInterestsRes.data || []).map(i => i.user_id));
+
+      // Scope incoming interests to only the visible profile IDs
+      const { data: incomingInterests } = await supabase
+        .from('user_interests')
+        .select('user_id')
+        .eq('interested_in_user_id', currentUser.id)
+        .in('user_id', profileIds);
+      const incomingRequestIds = new Set((incomingInterests || []).map(i => i.user_id));
 
       // Fetch circle memberships and meetup counts
       let circleMembers = [];

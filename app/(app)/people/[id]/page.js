@@ -45,6 +45,7 @@ export default function UserProfilePage() {
           router.replace('/people')
         }
       })
+      .catch(() => router.replace('/people'))
   }, [id, router])
 
   if (!currentUser || !resolvedUserId) return <div style={{ minHeight: "50vh" }} />

@@ -4,7 +4,7 @@ import React, { useState, useCallback } from 'react';
 import { X, Compass } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-export default function EditProfileModal({ currentUser, onClose, onSaved }) {
+export default function EditProfileModal({ currentUser, onClose, onSaved, toast }) {
   const [editedProfile, setEditedProfile] = useState({ ...currentUser });
   const [profileErrors, setProfileErrors] = useState({});
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -16,11 +16,11 @@ export default function EditProfileModal({ currentUser, onClose, onSaved }) {
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      (toast?.error || alert)('Please select an image file');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
+      (toast?.error || alert)('Image must be less than 5MB');
       return;
     }
 
@@ -42,7 +42,7 @@ export default function EditProfileModal({ currentUser, onClose, onSaved }) {
 
       setEditedProfile(prev => ({ ...prev, profile_picture: publicUrl }));
     } catch (err) {
-      alert('Failed to upload photo: ' + err.message);
+      (toast?.error || alert)('Failed to upload photo: ' + err.message);
     } finally {
       setUploadingPhoto(false);
     }
@@ -117,13 +117,13 @@ export default function EditProfileModal({ currentUser, onClose, onSaved }) {
         .eq('id', currentUser.id);
 
       if (error) {
-        alert('Error updating profile: ' + error.message);
+        (toast?.error || alert)('Error updating profile: ' + error.message);
       } else {
         onSaved(editedProfile);
         onClose();
       }
     } catch (err) {
-      alert('Error: ' + err.message);
+      (toast?.error || alert)('Error: ' + err.message);
     } finally {
       setSaving(false);
     }

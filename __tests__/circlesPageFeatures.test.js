@@ -218,6 +218,14 @@ describe('Recommend to Connect toggle', () => {
   test('empty state button toggles discover inline', () => {
     expect(source).toMatch(/setShowDiscoverInline\(prev => !prev\)/)
   })
+
+  test('Create Circle info card shows "Connect with 2+ people first"', () => {
+    expect(source).toMatch(/Connect with 2\+ people first/)
+  })
+
+  test('"Find People" button in info card navigates to allPeople', () => {
+    expect(source).toMatch(/onNavigate\?\.\('allPeople'\)/)
+  })
 })
 
 // ─── Profile visibility ───────────────────────────────────────────────────

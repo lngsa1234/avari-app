@@ -19,7 +19,7 @@ import {
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive } from '@/lib/activityHelpers';
 import { parseLocalDate, toLocalDateString, isEventPast, SESSION_GRACE_MINUTES } from '../lib/dateUtils';
-import { MapPin, Users, UserPlus, Check, ChevronLeft, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
+import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
@@ -50,7 +50,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
   const [selectedUser, setSelectedUser] = useState(null);
   const [showDiscoverInline, setShowDiscoverInline] = useState(false);
-  const slideBarRef = useRef(null);
 
   // Connect with People
   const [sentRequests, setSentRequests] = useState(new Set());
@@ -1007,20 +1006,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               >Recommend to Connect</button>
             </div>
           ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              onClick={() => { slideBarRef.current?.scrollBy({ left: -200, behavior: 'smooth' }); }}
-              style={{
-                width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(139,111,92,0.15)',
-                background: 'white', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, color: '#8B6F5C',
-              }}
-              aria-label="Scroll left"
-            >
-              <ChevronLeft size={16} />
-            </button>
-          <div ref={slideBarRef} style={{ ...styles.slideBar, flex: 1, minWidth: 0 }}>
+          <div style={styles.slideBar}>
             {/* Discover prompt card */}
             <div
               style={{
@@ -1120,19 +1106,6 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               </div>
             ))}
 
-          </div>
-            <button
-              onClick={() => { slideBarRef.current?.scrollBy({ left: 200, behavior: 'smooth' }); }}
-              style={{
-                width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(139,111,92,0.15)',
-                background: 'white', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, color: '#8B6F5C',
-              }}
-              aria-label="Scroll right"
-            >
-              <ChevronRight size={16} />
-            </button>
           </div>
           )}
 
