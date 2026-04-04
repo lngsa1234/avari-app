@@ -15,6 +15,8 @@ import {
   Coffee,
   Sparkles,
   UserPlus,
+  LayoutGrid,
+  List,
 } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
@@ -61,6 +63,7 @@ export default function AllPeopleView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedInterest, setSelectedInterest] = useState('All');
   const [sortBy, setSortBy] = useState('default');
+  const [viewMode, setViewMode] = useState('list');
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [connectionRequested, setConnectionRequested] = useState(false);
 
@@ -369,25 +372,53 @@ export default function AllPeopleView({
         })}
       </div>
 
-      {/* Toolbar: count + sort */}
+      {/* Toolbar: count + sort + view toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
         <span style={{ fontSize: '13px', color: colors.mochaLight }}>
           <strong style={{ color: colors.mocha, fontWeight: '500' }}>{filteredPeople.length}</strong> women to connect with
         </span>
-        <select
-          value={sortBy}
-          onChange={(e) => setSortBy(e.target.value)}
-          style={{
-            height: '34px', padding: '0 12px', borderRadius: '8px',
-            border: `1px solid ${colors.border}`, background: 'white',
-            fontSize: '13px', color: colors.mocha, fontFamily: fonts.sans,
-            cursor: 'pointer', outline: 'none',
-          }}
-        >
-          <option value="default">Sort: Recommended</option>
-          <option value="chat">Coffee chat open</option>
-          <option value="mutual">Most connections</option>
-        </select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', border: `1px solid ${colors.border}`, borderRadius: '8px', overflow: 'hidden' }}>
+            <button
+              onClick={() => setViewMode('grid')}
+              aria-label="Grid view"
+              style={{
+                width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: viewMode === 'grid' ? colors.mocha : 'white',
+                color: viewMode === 'grid' ? 'white' : colors.mochaMuted,
+                border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >
+              <LayoutGrid size={15} />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              aria-label="List view"
+              style={{
+                width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: viewMode === 'list' ? colors.mocha : 'white',
+                color: viewMode === 'list' ? 'white' : colors.mochaMuted,
+                border: 'none', borderLeft: `1px solid ${colors.border}`, cursor: 'pointer', transition: 'all 0.15s',
+              }}
+            >
+              <List size={15} />
+            </button>
+          </div>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{
+              height: '34px', padding: '0 12px', borderRadius: '8px',
+              border: `1px solid ${colors.border}`, background: 'white',
+              fontSize: '13px', color: colors.mocha, fontFamily: fonts.sans,
+              cursor: 'pointer', outline: 'none',
+            }}
+          >
+            <option value="default">Sort: Recommended</option>
+            <option value="chat">Coffee chat open</option>
+            <option value="mutual">Most connections</option>
+          </select>
+        </div>
       </div>
 
       {/* How it works banner */}
@@ -407,12 +438,12 @@ export default function AllPeopleView({
         </div>
       </div>
 
-      {/* People Grid */}
+      {/* People Grid / List */}
       {filteredPeople.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 16px', color: colors.mochaMuted, fontSize: '14px' }}>
           No results found. Try a different search or filter.
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
           {filteredPeople.map((person, idx) => (
             <PersonCard
@@ -444,6 +475,18 @@ export default function AllPeopleView({
               Send Invite
             </button>
           </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', background: colors.border, borderRadius: '14px', overflow: 'hidden', border: `1px solid ${colors.border}` }}>
+          {filteredPeople.map((person, idx) => (
+            <PersonRow
+              key={person.id}
+              person={person}
+              avatarColor={AVATAR_COLORS[idx % AVATAR_COLORS.length]}
+              onClick={() => onNavigate?.('userProfile', { userId: person.id })}
+              onConnect={() => setSelectedPerson(person)}
+            />
+          ))}
         </div>
       )}
 
@@ -592,6 +635,88 @@ function PersonCard({ person, bannerColor, avatarColor, onClick, onConnect }) {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// === Person Row (list view — compact, one line per person) ===
+function PersonRow({ person, avatarColor, onClick, onConnect }) {
+  const initial = person.name ? person.name.charAt(0).toUpperCase() : '?';
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '12px 16px', background: 'white', cursor: 'pointer',
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = colors.mochaPale; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+    >
+      {/* Avatar */}
+      {person.profile_picture ? (
+        <img
+          src={person.profile_picture}
+          alt={person.name}
+          style={{
+            width: '42px', height: '42px', borderRadius: '50%',
+            objectFit: 'cover', flexShrink: 0,
+          }}
+        />
+      ) : (
+        <div style={{
+          width: '42px', height: '42px', borderRadius: '50%',
+          background: avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '16px', fontWeight: '500', color: 'white', flexShrink: 0,
+          fontFamily: fonts.serif,
+        }}>
+          {initial}
+        </div>
+      )}
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {person.name}
+          </span>
+          {person.open_to_coffee_chat && (
+            <Coffee size={13} style={{ color: colors.chatText, flexShrink: 0 }} />
+          )}
+        </div>
+        <div style={{ fontSize: '12px', color: colors.mochaLight, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {[person.career, person.industry].filter(Boolean).join(' · ')}
+        </div>
+        {person.city && (
+          <div style={{ fontSize: '11px', color: colors.mochaMuted, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
+            <MapPin size={10} />{person.city}{person.state ? `, ${person.state}` : ''}
+          </div>
+        )}
+      </div>
+
+      {/* Right side: status or connect */}
+      <div style={{ flexShrink: 0 }}>
+        {person.isConnected ? (
+          <span style={{ fontSize: '11px', color: colors.success, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <Heart size={10} fill={colors.success} /> Connected
+          </span>
+        ) : (
+          <button
+            onClick={(e) => { e.stopPropagation(); onConnect?.(); }}
+            style={{
+              height: '30px', padding: '0 14px', borderRadius: '16px', fontSize: '12px',
+              fontWeight: '500', cursor: 'pointer', fontFamily: fonts.sans,
+              background: person.hasPendingRequest ? colors.mochaPale : colors.mocha,
+              color: person.hasPendingRequest ? colors.mochaMuted : 'white',
+              border: 'none', transition: 'background 0.15s',
+            }}
+            disabled={person.hasPendingRequest}
+          >
+            {person.hasPendingRequest ? 'Requested' : 'Connect'}
+          </button>
+        )}
       </div>
     </div>
   );
