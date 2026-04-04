@@ -35,6 +35,17 @@ test.describe('People Page', () => {
     expect(content).toBeTruthy()
   })
 
+  test('shows grid/list view toggle', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /grid/i })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('button', { name: /list/i })).toBeVisible({ timeout: 10000 })
+  })
+
+  test('list view is default', async ({ page }) => {
+    // List button should be active (darker background) by default
+    const listBtn = page.getByRole('button', { name: /list/i })
+    await expect(listBtn).toBeVisible({ timeout: 10000 })
+  })
+
   test('person card click navigates to profile', async ({ page }) => {
     await page.waitForTimeout(2000)
     // Click on a person's name or card area

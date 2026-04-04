@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import {
-  Search, Users, ChevronLeft, ChevronRight, X, Check, Clock, Heart,
+  Search, Users, ChevronLeft, ChevronRight, X, Check, Clock, Heart, LayoutGrid, List,
 } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
@@ -35,6 +35,7 @@ const AVATAR_COLORS = ['#7A5C44', '#4A7A5C', '#6A5A8A', '#A06030', '#7A5A8A', '#
 export default function AllCirclesView({ currentUser, supabase, onNavigate, previousView }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [viewMode, setViewMode] = useState('list');
   const [searchFocused, setSearchFocused] = useState(false);
 
   const [isMobile, setIsMobile] = useState(false);
@@ -207,6 +208,36 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
         })}
       </div>
 
+      {/* View toggle */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', border: `1px solid ${colors.border}`, borderRadius: '8px', overflow: 'hidden' }}>
+          <button
+            onClick={() => setViewMode('grid')}
+            aria-label="Grid view"
+            style={{
+              width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: viewMode === 'grid' ? colors.mocha : 'white',
+              color: viewMode === 'grid' ? 'white' : colors.mochaMuted,
+              border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            <LayoutGrid size={15} />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            aria-label="List view"
+            style={{
+              width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: viewMode === 'list' ? colors.mocha : 'white',
+              color: viewMode === 'list' ? 'white' : colors.mochaMuted,
+              border: 'none', borderLeft: `1px solid ${colors.border}`, cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            <List size={15} />
+          </button>
+        </div>
+      </div>
+
       {/* Explainer banner */}
       <div style={{
         display: 'flex', gap: '14px', alignItems: 'flex-start',
@@ -234,22 +265,31 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
 
       {/* My Circles */}
       {myCircles.length > 0 && (
-        <CircleSection title="My Circles" count={myCircles.length} isMobile={isMobile}>
-          {myCircles.map(c => <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} isMember />)}
+        <CircleSection title="My Circles" count={myCircles.length} isMobile={isMobile} viewMode={viewMode}>
+          {myCircles.map(c => viewMode === 'grid'
+            ? <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} isMember />
+            : <CircleRow key={c.id} circle={c} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} isMember />
+          )}
         </CircleSection>
       )}
 
       {/* Open to Join */}
       {openCircles.length > 0 && (
-        <CircleSection title="Open to Join" count={openCircles.length} isMobile={isMobile}>
-          {openCircles.map(c => <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />)}
+        <CircleSection title="Open to Join" count={openCircles.length} isMobile={isMobile} viewMode={viewMode}>
+          {openCircles.map(c => viewMode === 'grid'
+            ? <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />
+            : <CircleRow key={c.id} circle={c} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />
+          )}
         </CircleSection>
       )}
 
       {/* Currently Full */}
       {fullCircles.length > 0 && (
-        <CircleSection title="Currently Full" count={fullCircles.length} isMobile={isMobile} marginTop="40px">
-          {fullCircles.map(c => <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />)}
+        <CircleSection title="Currently Full" count={fullCircles.length} isMobile={isMobile} viewMode={viewMode} marginTop="40px">
+          {fullCircles.map(c => viewMode === 'grid'
+            ? <CircleCard key={c.id} circle={c} isMobile={isMobile} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />
+            : <CircleRow key={c.id} circle={c} onClick={() => onNavigate?.('circleDetail', { circleId: c.id })} />
+          )}
         </CircleSection>
       )}
 
@@ -296,7 +336,7 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
 }
 
 // === Section header with count badge ===
-function CircleSection({ title, count, isMobile, marginTop = '0', children }) {
+function CircleSection({ title, count, isMobile, viewMode = 'grid', marginTop = '0', children }) {
   return (
     <div style={{ marginTop }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -305,9 +345,15 @@ function CircleSection({ title, count, isMobile, marginTop = '0', children }) {
           {count} circle{count !== 1 ? 's' : ''}
         </span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        {children}
-      </div>
+      {viewMode === 'grid' ? (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          {children}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', background: colors.border, borderRadius: '14px', overflow: 'hidden', border: `1px solid ${colors.border}`, marginBottom: '24px' }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -329,7 +375,7 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
     >
       {/* Cover */}
       <div style={{
-        height: '110px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '160px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: circle.image_url ? `url(${circle.image_url}) center/cover no-repeat` : circle.coverColor,
         overflow: 'hidden',
       }}>
@@ -458,6 +504,69 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// === Circle Row (list view — compact, one row per circle) ===
+function CircleRow({ circle, onClick, isMember = false }) {
+  const spotsLeft = circle.spotsLeft;
+
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '12px 16px', background: 'white', cursor: 'pointer',
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = colors.mochaPale; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; }}
+    >
+      {/* Circle icon */}
+      <div style={{
+        width: '56px', height: '56px', borderRadius: '12px', flexShrink: 0,
+        background: circle.image_url ? `url(${circle.image_url}) center/cover no-repeat` : circle.coverColor,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {!circle.image_url && (
+          <span style={{ fontSize: '16px', fontWeight: '600', fontFamily: fonts.serif, color: colors.mocha, opacity: 0.5 }}>
+            {circle.name?.charAt(0)?.toUpperCase() || 'C'}
+          </span>
+        )}
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '14px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {circle.name}
+          </span>
+          <span style={{ fontSize: '11px', background: colors.tagBg, color: colors.tagText, padding: '2px 8px', borderRadius: '10px', flexShrink: 0 }}>
+            {circle.category}
+          </span>
+        </div>
+        <div style={{ fontSize: '12px', color: colors.mochaLight, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {circle.memberCount}/{circle.totalSpots} members · {circle.freq}
+        </div>
+      </div>
+
+      {/* Right side: status */}
+      <div style={{ flexShrink: 0 }}>
+        {isMember ? (
+          <span style={{ fontSize: '11px', color: colors.success, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <Check size={10} /> Member
+          </span>
+        ) : circle.isFull ? (
+          <span style={{ fontSize: '11px', color: colors.mochaMuted, fontWeight: '500' }}>Full</span>
+        ) : (
+          <span style={{ fontSize: '11px', color: spotsLeft <= 3 ? colors.warning : colors.mochaLight, fontWeight: '500' }}>
+            {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
+      <ChevronRight size={14} style={{ color: colors.mochaMuted, flexShrink: 0 }} />
     </div>
   );
 }

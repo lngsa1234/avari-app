@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { generateUsername } from '../lib/generateUsername'
 
 const AuthContext = createContext(null)
 
@@ -55,12 +56,15 @@ export function AuthProvider({ children }) {
           : 'User'
 
         const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        const displayName = userName || defaultName;
+        const username = await generateUsername(displayName, supabase);
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
           .insert({
             id: userId,
             email: userEmail || user?.email,
-            name: userName || defaultName,
+            name: displayName,
+            username,
             timezone: detectedTz,
           })
           .select()
@@ -99,6 +103,12 @@ export function AuthProvider({ children }) {
           const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
           await supabase.from('profiles').update({ timezone: detectedTz }).eq('id', userId);
           data.timezone = detectedTz;
+        }
+        // Auto-generate username if missing (backfill for existing users)
+        if (!data.username && data.name) {
+          const username = await generateUsername(data.name, supabase);
+          await supabase.from('profiles').update({ username }).eq('id', userId);
+          data.username = username;
         }
         setProfile(data)
         setStatus('ready')

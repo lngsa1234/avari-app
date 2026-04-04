@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock, Activity, Share2 } from 'lucide-react';
+import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock, Activity, Share2, Download, Copy, X } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 import { apiFetch } from '@/lib/apiFetch';
 import { colors as tokens, fonts } from '@/lib/designTokens';
@@ -99,21 +100,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const isOwnProfile = userId === currentUser.id;
-  const [linkCopied, setLinkCopied] = useState(false);
-
-  async function handleShareProfile() {
-    const profileUrl = `${window.location.origin}/people/${userId}`;
-    const name = profile?.name || 'someone';
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: `${name} on CircleW`, url: profileUrl });
-      } catch (e) { /* cancelled */ }
-    } else {
-      await navigator.clipboard.writeText(profileUrl);
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
-    }
-  }
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // SWR: profile data cached across navigation
   const { data: profileData, isLoading: loading, mutate: refreshProfile } = useSupabaseQuery(
@@ -451,18 +438,18 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
               </button>
             )}
             <button
-              onClick={handleShareProfile}
+              onClick={() => setShowShareModal(true)}
               style={{
-                background: linkCopied ? COLORS.greenLight : 'none',
+                background: 'none',
                 border: 'none', cursor: 'pointer',
-                color: linkCopied ? COLORS.green : COLORS.brown500,
+                color: COLORS.brown500,
                 display: 'flex', alignItems: 'center',
                 gap: 4, fontFamily: FONT, fontSize: 13, fontWeight: 600,
-                padding: '4px 6px', borderRadius: 6, transition: 'all 0.2s',
+                padding: '4px 6px', borderRadius: 6,
               }}
             >
-              {linkCopied ? <Check size={15} /> : <Share2 size={15} />}
-              <span>{linkCopied ? 'Copied!' : 'Share'}</span>
+              <Share2 size={15} />
+              <span>Share</span>
             </button>
           </div>
         </div>
@@ -520,6 +507,14 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
               }}>
                 {profile.name}
               </h1>
+              {profile.username && (
+                <span style={{
+                  fontFamily: FONT, fontSize: 13, color: COLORS.brown300,
+                  fontWeight: 500, marginTop: 2, display: 'block',
+                }}>
+                  @{profile.username}
+                </span>
+              )}
 
               {/* Hook / Headline */}
               {profile.hook && (
@@ -1331,13 +1326,168 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           </span>
         </div>
       </div>
+
+      {/* ─── Share Profile Modal ─── */}
+      {showShareModal && (
+        <div
+          onClick={() => setShowShareModal(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, animation: 'fadeIn 0.2s',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white', borderRadius: 20,
+              padding: '24px 24px 28px', width: '90%', maxWidth: 420,
+              animation: 'slideUp 0.25s',
+            }}
+          >
+            {/* Close button */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <span style={{ fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600, color: COLORS.brown700 }}>
+                Share Profile
+              </span>
+              <button
+                onClick={() => setShowShareModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: COLORS.brown400 }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* QR Code */}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+              <div style={{
+                background: 'white', padding: 16, borderRadius: 16,
+                border: `1px solid ${COLORS.brown100}`,
+              }}>
+                <QRCodeSVG
+                  id="profile-qr-code"
+                  value={`${typeof window !== 'undefined' ? window.location.origin : ''}/people/${profile?.username || userId}`}
+                  size={180}
+                  level="M"
+                  fgColor={COLORS.brown700}
+                  bgColor="white"
+                />
+              </div>
+            </div>
+
+            {/* Profile name under QR */}
+            <p style={{
+              textAlign: 'center', fontFamily: FONT, fontSize: 13,
+              color: COLORS.brown400, marginBottom: 24,
+            }}>
+              @{profile?.username || profile?.name || 'Profile'} on CircleW
+            </p>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 12 }}>
+              {/* Share Profile */}
+              <button
+                onClick={async () => {
+                  const url = `${window.location.origin}/people/${profile?.username || userId}`;
+                  if (navigator.share) {
+                    try {
+                      await navigator.share({ title: `@${profile?.username || profile?.name || 'Someone'} on CircleW`, url });
+                    } catch (e) { /* cancelled */ }
+                  }
+                }}
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  padding: '14px 8px', borderRadius: 14, border: `1px solid ${COLORS.brown100}`,
+                  background: COLORS.bgCard, cursor: 'pointer', fontFamily: FONT,
+                }}
+              >
+                <Share2 size={20} style={{ color: COLORS.brown500 }} />
+                <span style={{ fontSize: 12, fontWeight: 500, color: COLORS.brown700 }}>Share</span>
+              </button>
+
+              {/* Copy Link */}
+              <ShareCopyButton profileUrl={`${typeof window !== 'undefined' ? window.location.origin : ''}/people/${profile?.username || userId}`} />
+
+              {/* Download QR */}
+              <button
+                onClick={() => {
+                  const svg = document.getElementById('profile-qr-code');
+                  if (!svg) return;
+                  const canvas = document.createElement('canvas');
+                  const ctx = canvas.getContext('2d');
+                  const svgData = new XMLSerializer().serializeToString(svg);
+                  const img = new Image();
+                  img.onload = () => {
+                    const name = profile?.username ? `@${profile.username}` : (profile?.name || 'Profile');
+                    canvas.width = 600;
+                    canvas.height = 680;
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, 600, 680);
+                    ctx.drawImage(img, 60, 40, 480, 480);
+                    // Name
+                    ctx.fillStyle = '#3D2B1F';
+                    ctx.font = 'bold 28px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(name, 300, 570);
+                    // "on CircleW"
+                    ctx.fillStyle = '#A68B7B';
+                    ctx.font = '20px sans-serif';
+                    ctx.fillText('on CircleW', 300, 605);
+                    const link = document.createElement('a');
+                    link.download = `${(profile?.name || 'profile').replace(/\s+/g, '-')}-circlew-qr.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                  };
+                  img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+                }}
+                style={{
+                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                  padding: '14px 8px', borderRadius: 14, border: `1px solid ${COLORS.brown100}`,
+                  background: COLORS.bgCard, cursor: 'pointer', fontFamily: FONT,
+                }}
+              >
+                <Download size={20} style={{ color: COLORS.brown500 }} />
+                <span style={{ fontSize: 12, fontWeight: 500, color: COLORS.brown700 }}>Download</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+// Copy link button with copied state
+function ShareCopyButton({ profileUrl }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        await navigator.clipboard.writeText(profileUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      style={{
+        flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        padding: '14px 8px', borderRadius: 14,
+        border: `1px solid ${copied ? COLORS.green : COLORS.brown100}`,
+        background: copied ? COLORS.greenLight : COLORS.bgCard,
+        cursor: 'pointer', fontFamily: fonts.sans, transition: 'all 0.2s',
+      }}
+    >
+      {copied ? <Check size={20} style={{ color: COLORS.green }} /> : <Copy size={20} style={{ color: COLORS.brown500 }} />}
+      <span style={{ fontSize: 12, fontWeight: 500, color: copied ? COLORS.green : COLORS.brown700 }}>
+        {copied ? 'Copied!' : 'Copy Link'}
+      </span>
+    </button>
   );
 }
 
 const keyframeStyles = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600;700&display=swap');
   @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 
   .profile-container { width: 100%; padding: 0 0 60px; }
   .profile-avatar { width: 96px; height: 96px; }

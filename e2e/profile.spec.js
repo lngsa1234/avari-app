@@ -185,6 +185,45 @@ test.describe('Profile Page', () => {
     await expect(shareBtn).toBeVisible({ timeout: 15000 })
   })
 
+  test('shows share button that opens share modal', async ({ page }) => {
+    const shareBtn = page.getByRole('button', { name: /share/i })
+    await expect(shareBtn).toBeVisible({ timeout: 15000 })
+    await shareBtn.click()
+
+    // Modal should appear with "Share Profile" text
+    await expect(page.getByText('Share Profile')).toBeVisible({ timeout: 5000 })
+  })
+
+  test('share modal has copy link and download buttons', async ({ page }) => {
+    const shareBtn = page.getByRole('button', { name: /share/i })
+    await expect(shareBtn).toBeVisible({ timeout: 15000 })
+    await shareBtn.click()
+    await expect(page.getByText('Share Profile')).toBeVisible({ timeout: 5000 })
+
+    await expect(page.getByText(/copy link/i)).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText(/download/i)).toBeVisible({ timeout: 5000 })
+  })
+
+  test('share modal closes on X button', async ({ page }) => {
+    const shareBtn = page.getByRole('button', { name: /share/i })
+    await expect(shareBtn).toBeVisible({ timeout: 15000 })
+    await shareBtn.click()
+
+    const modalTitle = page.getByText('Share Profile')
+    await expect(modalTitle).toBeVisible({ timeout: 5000 })
+
+    // Click the X / close button inside the modal
+    const closeBtn = page.locator('button').filter({ has: page.locator('svg') }).last()
+    await closeBtn.click()
+
+    await expect(modalTitle).not.toBeVisible({ timeout: 5000 })
+  })
+
+  test('shows @username on profile', async ({ page }) => {
+    const body = await page.textContent('body')
+    expect(body).toMatch(/@\w+/)
+  })
+
   test('toggle switches are interactive', async ({ page }) => {
     try {
       const toggle = page.locator('button[role="switch"], input[type="checkbox"], [class*="toggle"], [class*="switch"]').first()

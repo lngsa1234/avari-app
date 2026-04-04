@@ -682,6 +682,9 @@ function PersonRow({ person, avatarColor, onClick, onConnect }) {
           <span style={{ fontSize: '14px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {person.name}
           </span>
+          {person.username && (
+            <span style={{ fontSize: '11px', color: colors.mochaMuted, flexShrink: 0 }}>@{person.username}</span>
+          )}
           {person.open_to_coffee_chat && (
             <Coffee size={13} style={{ color: colors.chatText, flexShrink: 0 }} />
           )}

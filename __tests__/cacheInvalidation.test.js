@@ -284,3 +284,13 @@ describe('Discover page cache invalidation', () => {
     expect(containsInvalidation(region, CACHE_KEYS.discoverRequests)).toBe(true)
   })
 })
+
+// ─── Share URL uses username ───────────────────────────────────────────────
+
+describe('Share URL uses username', () => {
+  const profileView = readComponent('UserProfileView.js')
+
+  test('share URL construction references profile?.username', () => {
+    expect(profileView).toMatch(/profile\?\.username/)
+  })
+})
