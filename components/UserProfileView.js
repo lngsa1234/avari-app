@@ -421,7 +421,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
               <ChevronLeft size={20} />
             </button>
           )}
-          <span style={{ fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600, color: COLORS.brown900 }}>
+          <span style={{ fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600, color: COLORS.brown900, flex: 1 }}>
             Profile
           </span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
