@@ -106,6 +106,85 @@ test.describe('Profile Page', () => {
     await page.getByRole('button', { name: /save changes/i }).click()
   })
 
+  test('edit profile cancel closes modal without saving', async ({ page }) => {
+    const editBtn = page.getByRole('button', { name: /edit/i }).first()
+    await expect(editBtn).toBeVisible({ timeout: 15000 })
+    await editBtn.click()
+
+    const modal = page.getByText('Edit Profile')
+    await expect(modal).toBeVisible({ timeout: 5000 })
+
+    // Change the name but cancel
+    const nameInput = page.getByRole('textbox').first()
+    const originalName = await nameInput.inputValue()
+    await nameInput.clear()
+    await nameInput.fill('Should Not Save')
+
+    await page.getByRole('button', { name: /cancel/i }).click()
+
+    // Modal should close
+    await expect(modal).not.toBeVisible({ timeout: 5000 })
+
+    // Original name should still be shown
+    await expect(page.getByText(originalName).first()).toBeVisible({ timeout: 3000 })
+  })
+
+  test('edit profile validation blocks save when name is empty', async ({ page }) => {
+    const editBtn = page.getByRole('button', { name: /edit/i }).first()
+    await expect(editBtn).toBeVisible({ timeout: 15000 })
+    await editBtn.click()
+
+    const modal = page.getByText('Edit Profile')
+    await expect(modal).toBeVisible({ timeout: 5000 })
+
+    // Clear the name field
+    const nameInput = page.getByRole('textbox').first()
+    await nameInput.clear()
+
+    await page.getByRole('button', { name: /save changes/i }).click()
+
+    // Modal should stay open — save was blocked
+    await expect(modal).toBeVisible({ timeout: 2000 })
+
+    // Error message should appear
+    await expect(page.getByText(/name is required/i)).toBeVisible({ timeout: 2000 })
+  })
+
+  test('edit profile changes persist after page reload', async ({ page }) => {
+    const editBtn = page.getByRole('button', { name: /edit/i }).first()
+    await expect(editBtn).toBeVisible({ timeout: 15000 })
+    await editBtn.click()
+
+    const modal = page.getByText('Edit Profile')
+    await expect(modal).toBeVisible({ timeout: 5000 })
+
+    const nameInput = page.getByRole('textbox').first()
+    const originalName = await nameInput.inputValue()
+    const testName = originalName === 'Persist Test' ? 'Persist Test 2' : 'Persist Test'
+
+    await nameInput.clear()
+    await nameInput.fill(testName)
+    await page.getByRole('button', { name: /save changes/i }).click()
+    await expect(modal).not.toBeVisible({ timeout: 5000 })
+
+    // Reload the page — data must come from DB, not just local state
+    await page.reload({ waitUntil: 'networkidle' })
+    await expect(page.getByText(testName).first()).toBeVisible({ timeout: 15000 })
+
+    // Restore original name
+    await page.getByRole('button', { name: /edit/i }).first().click()
+    await expect(page.getByText('Edit Profile')).toBeVisible({ timeout: 5000 })
+    const nameInputAgain = page.getByRole('textbox').first()
+    await nameInputAgain.clear()
+    await nameInputAgain.fill(originalName)
+    await page.getByRole('button', { name: /save changes/i }).click()
+  })
+
+  test('shows share button', async ({ page }) => {
+    const shareBtn = page.getByRole('button', { name: /share/i })
+    await expect(shareBtn).toBeVisible({ timeout: 15000 })
+  })
+
   test('toggle switches are interactive', async ({ page }) => {
     try {
       const toggle = page.locator('button[role="switch"], input[type="checkbox"], [class*="toggle"], [class*="switch"]').first()

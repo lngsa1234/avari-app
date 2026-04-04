@@ -76,6 +76,36 @@ test.describe('User Profile', () => {
     await expect(page.getByRole('button', { name: /log out/i })).toBeVisible({ timeout: 10000 })
   })
 
+  test('edit button is not visible on other people profiles', async ({ page }) => {
+    await login(page)
+    // Navigate to people directory and open someone else's profile
+    await page.goto('/people', { waitUntil: 'networkidle' })
+    await page.waitForTimeout(2000)
+
+    // Click the first person card to open their profile
+    const profileLink = page.locator('a[href^="/people/"]').first()
+    if (await profileLink.isVisible()) {
+      await profileLink.click()
+      await page.waitForURL(/\/people\/.+/, { timeout: 10000 })
+
+      // Edit button should NOT be visible on someone else's profile
+      const editBtn = page.getByRole('button', { name: /^edit$/i })
+      await expect(editBtn).not.toBeVisible({ timeout: 3000 })
+
+      // Share button should still be visible
+      const shareBtn = page.getByRole('button', { name: /share/i })
+      await expect(shareBtn).toBeVisible({ timeout: 5000 })
+    }
+  })
+
+  test('unauthenticated user visiting /people/[id] is redirected to login', async ({ page }) => {
+    // Do NOT log in — visit a profile URL directly
+    await page.goto('/people/00000000-0000-0000-0000-000000000000', { waitUntil: 'networkidle' })
+
+    // Should end up at the root/login page, not the profile
+    await expect(page).toHaveURL(/^\/$|\/\?next=/, { timeout: 10000 })
+  })
+
   test('back button from profile goes to previous page', async ({ page }) => {
     await login(page)
     // Navigate from circles to profile
