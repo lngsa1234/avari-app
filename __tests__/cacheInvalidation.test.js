@@ -182,6 +182,24 @@ describe('Meetup cache invalidation', () => {
   })
 })
 
+// ─── Profile edit actions ───────────────────────────────────────────────────
+
+describe('Profile edit cache invalidation', () => {
+  const profilePage = fs.readFileSync(path.join(__dirname, '..', 'app', '(app)', 'profile', 'page.js'), 'utf8')
+
+  test('onSaved optimistically updates user-profile cache', () => {
+    // Must use invalidateQuery with the profile SWR key — not just refreshProfile()
+    // which would trigger a slow cold refetch instead of an instant optimistic update
+    expect(profilePage).toMatch(/invalidateQuery/)
+    expect(profilePage).toMatch(/user-profile-/)
+  })
+
+  test('onSaved patches cache without revalidate (optimistic, not cold refetch)', () => {
+    // revalidate: false means the UI updates instantly from local data
+    expect(profilePage).toMatch(/revalidate.*false/)
+  })
+})
+
 // ─── Connection actions ─────────────────────────────────────────────────────
 
 describe('Connection cache invalidation', () => {

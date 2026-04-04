@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock, Activity } from 'lucide-react';
+import { ChevronLeft, MapPin, Briefcase, MessageCircle, Coffee, UserMinus, Users, Edit3, BookOpen, Shield, LogOut, Flag, Check, UserPlus, Heart, Clock, Activity, Share2 } from 'lucide-react';
 import { DAYS, TIMES, getDayLabel, getTimeLabel, formatCoffeeSlots } from '@/lib/coffeeChatSlots';
 import { apiFetch } from '@/lib/apiFetch';
 import { colors as tokens, fonts } from '@/lib/designTokens';
@@ -86,7 +86,7 @@ function timeAgo(dateStr) {
   return `${months}mo ago`;
 }
 
-export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard, refreshKey, toast }) {
+export default function UserProfileView({ currentUser, supabase, userId, onNavigate, previousView, onConnectionRemoved, onEditProfile, onShowTutorial, onSignOut, onAdminDashboard, refreshKey, toast, hideBack }) {
   const [removing, setRemoving] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -99,6 +99,21 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const isOwnProfile = userId === currentUser.id;
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  async function handleShareProfile() {
+    const profileUrl = `${window.location.origin}/people/${userId}`;
+    const name = profile?.name || 'someone';
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `${name} on CircleW`, url: profileUrl });
+      } catch (e) { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(profileUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  }
 
   // SWR: profile data cached across navigation
   const { data: profileData, isLoading: loading, mutate: refreshProfile } = useSupabaseQuery(
@@ -409,29 +424,47 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           padding: '16px 0', position: 'sticky', top: 0, zIndex: 10,
           ...fadeIn(0),
         }}>
-          <button
-            onClick={() => onNavigate?.(previousView || (isOwnProfile ? 'home' : 'connectionGroups'))}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}
-          >
-            <ChevronLeft size={20} />
-          </button>
+          {hideBack ? (
+            <div style={{ width: 28 }} />
+          ) : (
+            <button
+              onClick={() => onNavigate?.(previousView || (isOwnProfile ? 'home' : 'connectionGroups'))}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}
+            >
+              <ChevronLeft size={20} />
+            </button>
+          )}
           <span style={{ fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600, color: COLORS.brown900 }}>
             Profile
           </span>
-          {isOwnProfile && onEditProfile ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {isOwnProfile && onEditProfile && (
+              <button
+                onClick={onEditProfile}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: COLORS.brown500, display: 'flex', alignItems: 'center',
+                  gap: 4, fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: 4,
+                }}
+              >
+                <Edit3 size={15} /> Edit
+              </button>
+            )}
             <button
-              onClick={onEditProfile}
+              onClick={handleShareProfile}
               style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: COLORS.brown500, display: 'flex', alignItems: 'center',
-                gap: 4, fontFamily: FONT, fontSize: 13, fontWeight: 600, padding: 4,
+                background: linkCopied ? COLORS.greenLight : 'none',
+                border: 'none', cursor: 'pointer',
+                color: linkCopied ? COLORS.green : COLORS.brown500,
+                display: 'flex', alignItems: 'center',
+                gap: 4, fontFamily: FONT, fontSize: 13, fontWeight: 600,
+                padding: '4px 6px', borderRadius: 6, transition: 'all 0.2s',
               }}
             >
-              <Edit3 size={15} /> Edit
+              {linkCopied ? <Check size={15} /> : <Share2 size={15} />}
+              <span>{linkCopied ? 'Copied!' : 'Share'}</span>
             </button>
-          ) : (
-            <div style={{ width: 40 }} />
-          )}
+          </div>
         </div>
 
         {/* ─── Hero Section ─── */}

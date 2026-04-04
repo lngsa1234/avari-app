@@ -70,6 +70,42 @@ test.describe('Profile Page', () => {
     }
   })
 
+  test('edit profile updates name immediately without reload', async ({ page }) => {
+    // Open edit modal
+    const editBtn = page.getByRole('button', { name: /edit/i }).first()
+    await expect(editBtn).toBeVisible({ timeout: 15000 })
+    await editBtn.click()
+
+    // Modal should appear
+    const modal = page.getByText('Edit Profile')
+    await expect(modal).toBeVisible({ timeout: 5000 })
+
+    // Read current name and set a new one
+    const nameInput = page.getByRole('textbox').first()
+    const originalName = await nameInput.inputValue()
+    const testName = originalName === 'Test User' ? 'Test User 2' : 'Test User'
+
+    await nameInput.clear()
+    await nameInput.fill(testName)
+
+    // Save
+    await page.getByRole('button', { name: /save changes/i }).click()
+
+    // Modal should close
+    await expect(modal).not.toBeVisible({ timeout: 5000 })
+
+    // Name should update immediately — within 500ms, no reload needed
+    await expect(page.getByText(testName).first()).toBeVisible({ timeout: 500 })
+
+    // Restore original name
+    await editBtn.click()
+    await expect(page.getByText('Edit Profile')).toBeVisible({ timeout: 5000 })
+    const nameInputAgain = page.getByRole('textbox').first()
+    await nameInputAgain.clear()
+    await nameInputAgain.fill(originalName)
+    await page.getByRole('button', { name: /save changes/i }).click()
+  })
+
   test('toggle switches are interactive', async ({ page }) => {
     try {
       const toggle = page.locator('button[role="switch"], input[type="checkbox"], [class*="toggle"], [class*="switch"]').first()

@@ -19,8 +19,11 @@ export default function RootPage() {
       // Check for deep link params before redirecting
       const params = new URLSearchParams(window.location.search)
       const eventId = params.get('event')
+      const next = params.get('next')
       if (eventId) {
         router.replace(`/events/${eventId}`)
+      } else if (next) {
+        router.replace(next)
       } else {
         router.replace('/home')
       }
