@@ -100,15 +100,17 @@ export default function AllPeopleView({
 
       // Fetch mutual matches, circle data, interests in parallel
       const profileIds = profilesData.map(p => p.id);
-      const [matchRes, myCirclesRes, myInterestsRes] = await Promise.all([
+      const [matchRes, myCirclesRes, myInterestsRes, incomingInterestsRes] = await Promise.all([
         supabase.rpc('get_mutual_matches', { for_user_id: currentUser.id }),
         supabase.from('connection_group_members').select('group_id').eq('user_id', currentUser.id).eq('status', 'accepted'),
         supabase.from('user_interests').select('interested_in_user_id').eq('user_id', currentUser.id),
+        supabase.from('user_interests').select('user_id').eq('interested_in_user_id', currentUser.id),
       ]);
 
       const myConnectionIds = new Set((matchRes.data || []).map(m => m.matched_user_id));
       const myCircleIds = (myCirclesRes.data || []).map(c => c.group_id);
       const myInterestIds = new Set((myInterestsRes.data || []).map(i => i.interested_in_user_id));
+      const incomingRequestIds = new Set((incomingInterestsRes.data || []).map(i => i.user_id));
 
       // Fetch circle memberships and meetup counts
       let circleMembers = [];
@@ -200,9 +202,16 @@ export default function AllPeopleView({
         circles: userCircles[person.id] || [],
         isConnected: myConnectionIds.has(person.id),
         hasPendingRequest: !myConnectionIds.has(person.id) && myInterestIds.has(person.id),
+        hasIncomingRequest: !myConnectionIds.has(person.id) && incomingRequestIds.has(person.id) && !myInterestIds.has(person.id),
       }));
 
-      return enriched;
+      // Filter by profile visibility setting
+      return enriched.filter(person => {
+        const visibility = person.profile_visibility || 'public';
+        if (visibility === 'public') return true;
+        if (visibility === 'connections') return myConnectionIds.has(person.id);
+        return false; // hidden
+      });
     } catch (error) {
       console.error('Error loading people:', error);
       return [];
@@ -277,7 +286,7 @@ export default function AllPeopleView({
             <ChevronLeft size={16} style={{ color: colors.mocha }} />
           </button>
           <h1 style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: 0, letterSpacing: '0.01em' }}>
-            Connect with Women
+            Discover Women
           </h1>
         </div>
         <p style={{ fontSize: '13px', color: colors.mochaLight, margin: 0, paddingLeft: '46px' }}>
@@ -296,7 +305,7 @@ export default function AllPeopleView({
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-          placeholder="Search by name, role, or interest..."
+          placeholder="Search by name, role, city, or industry..."
           style={{
             width: '100%', height: '44px', padding: '0 40px 0 42px',
             borderRadius: '24px', border: `1px solid ${searchFocused ? colors.mochaMuted : colors.border}`,
@@ -313,64 +322,6 @@ export default function AllPeopleView({
         )}
       </div>
 
-      {/* Search hints — show when focused and no query yet */}
-      {searchFocused && !searchQuery && (() => {
-        // Build hints from actual data: top cities, careers, industries
-        const hints = [];
-        const cityCounts = {};
-        const careerCounts = {};
-        people.forEach(p => {
-          if (p.city) cityCounts[p.city] = (cityCounts[p.city] || 0) + 1;
-          if (p.career) careerCounts[p.career] = (careerCounts[p.career] || 0) + 1;
-        });
-        const topCities = Object.entries(cityCounts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([c]) => c);
-        const topCareers = Object.entries(careerCounts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c]) => c);
-        topCareers.forEach(c => hints.push(c));
-        topCities.forEach(c => hints.push(c));
-        return hints.length > 0 ? (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '8px' }}>
-            <span style={{ fontSize: '11px', color: colors.mochaMuted, lineHeight: '28px' }}>Try:</span>
-            {hints.slice(0, 5).map((hint, i) => (
-              <button
-                key={i}
-                onMouseDown={(e) => { e.preventDefault(); setSearchQuery(hint); }}
-                style={{
-                  height: '28px', padding: '0 12px', borderRadius: '14px',
-                  border: `1px solid ${colors.border}`, background: 'white',
-                  fontSize: '12px', color: colors.mochaLight, cursor: 'pointer',
-                  fontFamily: fonts.sans, transition: 'all 0.15s', whiteSpace: 'nowrap',
-                }}
-              >
-                {hint}
-              </button>
-            ))}
-          </div>
-        ) : null;
-      })()}
-
-      {/* Filter chips */}
-      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '12px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-        {INTEREST_FILTERS.map((interest) => {
-          const isActive = selectedInterest === interest;
-          return (
-            <button
-              key={interest}
-              onClick={() => setSelectedInterest(interest)}
-              style={{
-                height: '36px', padding: '0 16px', borderRadius: '20px',
-                border: `1px solid ${isActive ? colors.mocha : colors.border}`,
-                background: isActive ? colors.mocha : 'white',
-                color: isActive ? 'white' : colors.mochaLight,
-                fontSize: '13px', fontWeight: isActive ? '500' : '400',
-                cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                fontFamily: fonts.sans, transition: 'all 0.15s',
-              }}
-            >
-              {interest}
-            </button>
-          );
-        })}
-      </div>
 
       {/* Toolbar: count + sort + view toggle */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -438,57 +389,61 @@ export default function AllPeopleView({
         </div>
       </div>
 
-      {/* People Grid / List */}
+      {/* People Sections */}
       {filteredPeople.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '48px 16px', color: colors.mochaMuted, fontSize: '14px' }}>
           No results found. Try a different search or filter.
         </div>
-      ) : viewMode === 'grid' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
-          {filteredPeople.map((person, idx) => (
-            <PersonCard
-              key={person.id}
-              person={person}
-              bannerColor={BANNER_COLORS[idx % BANNER_COLORS.length]}
-              avatarColor={AVATAR_COLORS[idx % AVATAR_COLORS.length]}
-              onClick={() => onNavigate?.('userProfile', { userId: person.id })}
-              onConnect={() => setSelectedPerson(person)}
-            />
-          ))}
+      ) : (() => {
+        const incoming = filteredPeople.filter(p => p.hasIncomingRequest);
+        const suggested = filteredPeople.filter(p => !p.hasIncomingRequest && !p.isConnected && (p.mutualConnections > 0 || p.mutualCircles > 0));
+        const more = filteredPeople.filter(p => !p.hasIncomingRequest && !p.isConnected && !p.mutualConnections && !p.mutualCircles);
 
-          {/* Invite card */}
-          <div style={{
-            background: 'white', borderRadius: '14px', border: `2px dashed ${colors.border}`,
-            padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', textAlign: 'center', minHeight: '200px', cursor: 'pointer',
-          }}>
-            <UserPlus size={36} style={{ color: colors.mochaMuted, marginBottom: '12px' }} />
-            <h3 style={{ fontSize: '15px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, margin: '0 0 4px' }}>
-              Know someone amazing?
-            </h3>
-            <p style={{ fontSize: '13px', color: colors.mochaLight, margin: '0 0 16px' }}>Invite her to join!</p>
-            <button style={{
-              padding: '8px 20px', background: colors.mocha, color: 'white',
-              border: 'none', borderRadius: '20px', fontSize: '12px', fontWeight: '500',
-              cursor: 'pointer', fontFamily: fonts.sans,
-            }}>
-              Send Invite
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', background: colors.border, borderRadius: '14px', overflow: 'hidden', border: `1px solid ${colors.border}` }}>
-          {filteredPeople.map((person, idx) => (
-            <PersonRow
-              key={person.id}
-              person={person}
-              avatarColor={AVATAR_COLORS[idx % AVATAR_COLORS.length]}
-              onClick={() => onNavigate?.('userProfile', { userId: person.id })}
-              onConnect={() => setSelectedPerson(person)}
-            />
-          ))}
-        </div>
-      )}
+        const renderSection = (title, people, startIdx) => {
+          if (people.length === 0) return null;
+          return (
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '600', color: colors.mocha, fontFamily: fonts.serif, margin: '0 0 10px' }}>
+                {title}
+              </h3>
+              {viewMode === 'grid' ? (
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, minmax(0, 1fr))', gap: '16px' }}>
+                  {people.map((person, idx) => (
+                    <PersonCard
+                      key={person.id}
+                      person={person}
+                      bannerColor={BANNER_COLORS[(startIdx + idx) % BANNER_COLORS.length]}
+                      avatarColor={AVATAR_COLORS[(startIdx + idx) % AVATAR_COLORS.length]}
+                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
+                      onConnect={() => setSelectedPerson(person)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', background: colors.border, borderRadius: '14px', overflow: 'hidden', border: `1px solid ${colors.border}` }}>
+                  {people.map((person, idx) => (
+                    <PersonRow
+                      key={person.id}
+                      person={person}
+                      avatarColor={AVATAR_COLORS[(startIdx + idx) % AVATAR_COLORS.length]}
+                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
+                      onConnect={() => setSelectedPerson(person)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        return (
+          <>
+            {renderSection('Suggested for You', suggested, 0)}
+            {renderSection('Approval Connections', incoming, suggested.length)}
+            {renderSection('More Suggestions', more, suggested.length + incoming.length)}
+          </>
+        );
+      })()}
 
       {/* Profile overlay */}
       {selectedPerson && (
@@ -508,6 +463,7 @@ export default function AllPeopleView({
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         div::-webkit-scrollbar { height: 0; width: 0; }
+        input::placeholder { color: #C4A882; opacity: 1; }
       `}</style>
     </div>
   );
@@ -613,7 +569,7 @@ function PersonCard({ person, bannerColor, avatarColor, onClick, onConnect }) {
         {/* Footer: social proof + view button */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '12px', borderTop: `1px solid ${colors.border}` }}>
           <span style={{ fontSize: '11px', color: colors.mochaMuted }}>
-            {person.mutualConnections || 0} mutual · {person.mutualCircles || 0} circle{person.mutualCircles !== 1 ? 's' : ''}
+            {person.mutualConnections || 0} mutual · {person.mutualCircles || 0} shared circle{person.mutualCircles !== 1 ? 's' : ''}
           </span>
           {person.isConnected ? (
             <span style={{ fontSize: '11px', color: colors.success, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -661,7 +617,7 @@ function PersonRow({ person, avatarColor, onClick, onConnect }) {
           src={person.profile_picture}
           alt={person.name}
           style={{
-            width: '42px', height: '42px', borderRadius: '50%',
+            width: '52px', height: '52px', borderRadius: '50%',
             objectFit: 'cover', flexShrink: 0,
           }}
         />
@@ -695,6 +651,13 @@ function PersonRow({ person, avatarColor, onClick, onConnect }) {
         {person.city && (
           <div style={{ fontSize: '11px', color: colors.mochaMuted, display: 'flex', alignItems: 'center', gap: '3px', marginTop: '1px' }}>
             <MapPin size={10} />{person.city}{person.state ? `, ${person.state}` : ''}
+          </div>
+        )}
+        {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
+          <div style={{ fontSize: '11px', color: colors.mochaMuted, marginTop: '2px' }}>
+            {person.mutualConnections > 0 && `${person.mutualConnections} mutual${person.mutualConnections !== 1 ? 's' : ''}`}
+            {person.mutualConnections > 0 && person.mutualCircles > 0 && ' · '}
+            {person.mutualCircles > 0 && `${person.mutualCircles} shared circle${person.mutualCircles !== 1 ? 's' : ''}`}
           </div>
         )}
       </div>

@@ -19,7 +19,7 @@ import {
 } from '@/lib/connectionGroupHelpers';
 import { isUserActive } from '@/lib/activityHelpers';
 import { parseLocalDate, toLocalDateString, isEventPast, SESSION_GRACE_MINUTES } from '../lib/dateUtils';
-import { MapPin, Users, UserPlus, Check, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
+import { MapPin, Users, UserPlus, Check, ChevronLeft, ChevronRight, MessageCircle, Coffee, FileText, Clock, Calendar, PartyPopper } from 'lucide-react';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
@@ -49,6 +49,8 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   const [selectedConnections, setSelectedConnections] = useState([]);
 
   const [selectedUser, setSelectedUser] = useState(null);
+  const [showDiscoverInline, setShowDiscoverInline] = useState(false);
+  const slideBarRef = useRef(null);
 
   // Connect with People
   const [sentRequests, setSentRequests] = useState(new Set());
@@ -671,10 +673,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     }
   };
 
+  const [showCreateInfo, setShowCreateInfo] = useState(false);
+
   const handleCreateClick = async () => {
     const hasConnections = await loadEligibleConnections();
     if (hasConnections) {
       setShowCreateModal(true);
+    } else {
+      setShowCreateInfo(true);
     }
   };
 
@@ -990,7 +996,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 color: '#A08070', margin: '0 0 16px',
               }}>Connect with people to start building meaningful relationships</p>
               <button
-                onClick={() => onNavigate?.('allPeople')}
+                onClick={() => setShowDiscoverInline(prev => !prev)}
                 style={{
                   padding: '8px 20px', borderRadius: '20px',
                   fontSize: '13px', fontWeight: '600',
@@ -998,10 +1004,47 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   color: '#FAF5EF', cursor: 'pointer',
                   fontFamily: fonts.sans,
                 }}
-              >Discover People</button>
+              >Recommend to Connect</button>
             </div>
           ) : (
-          <div style={styles.slideBar}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              onClick={() => { slideBarRef.current?.scrollBy({ left: -200, behavior: 'smooth' }); }}
+              style={{
+                width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(139,111,92,0.15)',
+                background: 'white', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, color: '#8B6F5C',
+              }}
+              aria-label="Scroll left"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          <div ref={slideBarRef} style={{ ...styles.slideBar, flex: 1, minWidth: 0 }}>
+            {/* Discover prompt card */}
+            <div
+              style={{
+                ...styles.slideCard,
+                border: showDiscoverInline ? '1.5px solid rgba(139, 111, 92, 0.4)' : '1.5px dashed rgba(139, 111, 92, 0.25)',
+                background: showDiscoverInline ? 'rgba(139, 111, 92, 0.08)' : 'rgba(139, 111, 92, 0.04)',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+              className="circles-slide-card"
+              onClick={(e) => { e.stopPropagation(); setShowDiscoverInline(prev => !prev); }}
+            >
+              <div style={{
+                width: isMobile ? 40 : 48, height: isMobile ? 40 : 48,
+                borderRadius: '50%', background: showDiscoverInline ? 'rgba(139, 111, 92, 0.18)' : 'rgba(139, 111, 92, 0.1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 6,
+                transition: 'background 0.2s',
+              }}>
+                <UserPlus size={20} style={{ color: '#8B6F5C' }} />
+              </div>
+              <span style={{ ...styles.slideName, color: '#8B6F5C', fontSize: 12 }}>Recommend</span>
+              <span style={{ ...styles.slideRole, fontSize: 10 }}>to Connect</span>
+            </div>
             {connections.map((user, index) => (
               <div
                 key={user.id}
@@ -1078,6 +1121,178 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             ))}
 
           </div>
+            <button
+              onClick={() => { slideBarRef.current?.scrollBy({ left: 200, behavior: 'smooth' }); }}
+              style={{
+                width: 32, height: 32, borderRadius: '50%', border: '1px solid rgba(139,111,92,0.15)',
+                background: 'white', boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, color: '#8B6F5C',
+              }}
+              aria-label="Scroll right"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          )}
+
+          {/* Inline Discover — expands when Discover card is tapped */}
+          {showDiscoverInline && peerSuggestions.length > 0 && (
+            <div style={{
+              marginTop: 16,
+              background: 'rgba(139, 111, 92, 0.03)',
+              border: '1px solid rgba(139, 111, 92, 0.1)',
+              borderRadius: 16,
+              padding: isMobile ? '14px 12px' : '16px',
+              animation: 'fadeInUp 0.25s ease',
+            }}>
+              <div style={{ marginBottom: 12 }}>
+                <h3 style={{ fontFamily: fonts.serif, fontSize: isMobile ? '16px' : '17px', fontWeight: 600, color: '#3F1906', margin: 0 }}>
+                  Suggested for You
+                </h3>
+              </div>
+              {(() => {
+                const withMutuals = peerSuggestions.filter(p => p.mutualConnections > 0 || p.mutualCircles > 0);
+                const withoutMutuals = peerSuggestions.filter(p => !p.mutualConnections && !p.mutualCircles);
+                const shown = [...withMutuals, ...withoutMutuals.slice(0, Math.max(0, 3 - withMutuals.length))];
+                const remaining = peerSuggestions.filter(p => !shown.includes(p));
+                return (
+              <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+                {shown.map((person) => (
+                  <div
+                    key={person.id}
+                    style={{
+                      flexShrink: 0, width: isMobile ? 130 : 150,
+                      background: 'white', borderRadius: 14,
+                      border: '1px solid rgba(139, 111, 92, 0.12)',
+                      padding: '14px 12px', textAlign: 'center',
+                      cursor: 'pointer', transition: 'all 0.2s',
+                    }}
+                    onClick={() => onNavigate?.('userProfile', { userId: person.id })}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(88,66,51,0.08)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}
+                  >
+                    <div style={{
+                      width: 52, height: 52, borderRadius: '50%',
+                      background: '#6B5344', margin: '0 auto 8px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 20, color: 'white', fontWeight: 600, overflow: 'hidden',
+                    }}>
+                      {person.profile_picture ? (
+                        <img src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (person.name?.[0] || '?').toUpperCase()}
+                    </div>
+                    <div style={{
+                      fontFamily: fonts.serif, fontSize: 13, fontWeight: 600,
+                      color: '#2C1810', marginBottom: 2,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {person.name}
+                    </div>
+                    <div style={{
+                      fontFamily: fonts.sans, fontSize: 11, color: '#8B7A6B',
+                      marginBottom: 4,
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {person.career || 'Professional'}
+                    </div>
+                    <div style={{
+                      fontFamily: fonts.sans, fontSize: 10, color: '#8B6F5C',
+                      marginBottom: 6,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                    }}>
+                      {person.mutualConnections > 0 || person.mutualCircles > 0 ? (<>
+                        <Users size={10} />
+                        {person.mutualConnections > 0 && <span>{person.mutualConnections} mutual{person.mutualConnections !== 1 ? 's' : ''}</span>}
+                        {person.mutualConnections > 0 && person.mutualCircles > 0 && <span>·</span>}
+                        {person.mutualCircles > 0 && <span>{person.mutualCircles} circle{person.mutualCircles !== 1 ? 's' : ''}</span>}
+                      </>) : (
+                        <span style={{ color: '#B8A089' }}>Suggested for you</span>
+                      )}
+                    </div>
+                    {sentRequests.has(person.id) ? (
+                      <div style={{
+                        padding: '5px 0', fontSize: 11, fontWeight: 600,
+                        color: '#8B6F5C', fontFamily: fonts.sans,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+                      }}>
+                        <Check size={11} /> Requested
+                      </div>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleConnect(person.id); }}
+                        style={{
+                          width: '100%', padding: '6px 0', borderRadius: 10,
+                          background: '#8B6F5C', color: 'white', border: 'none',
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          fontFamily: fonts.sans, display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', gap: 3,
+                        }}
+                      >
+                        <UserPlus size={11} /> Connect
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {/* "Find more" end card with avatar collage */}
+                <div
+                  onClick={() => onNavigate?.('allPeople')}
+                  style={{
+                    flexShrink: 0, width: isMobile ? 130 : 150,
+                    background: 'rgba(139, 111, 92, 0.04)',
+                    border: '1.5px dashed rgba(139, 111, 92, 0.2)',
+                    borderRadius: 14, padding: '14px 12px',
+                    display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center',
+                    textAlign: 'center', cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(139, 111, 92, 0.08)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(139, 111, 92, 0.04)'; }}
+                >
+                  {/* Avatar collage */}
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 8 }}>
+                    {remaining.slice(0, 2).map((p, i) => (
+                      <div key={p.id} style={{
+                        width: 28, height: 28, borderRadius: '50%',
+                        background: '#6B5344', border: '2px solid rgba(139, 111, 92, 0.04)',
+                        marginLeft: i > 0 ? -8 : 0, position: 'relative', zIndex: 4 - i,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, color: 'white', fontWeight: 600, overflow: 'hidden',
+                      }}>
+                        {p.profile_picture ? (
+                          <img src={p.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (p.name?.[0] || '?').toUpperCase()}
+                      </div>
+                    ))}
+                    {remaining.length > 2 && (
+                      <div style={{
+                        width: 28, height: 28, borderRadius: '50%',
+                        background: '#B8A089', border: '2px solid rgba(139, 111, 92, 0.04)',
+                        marginLeft: -8, position: 'relative', zIndex: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 9, color: 'white', fontWeight: 600,
+                      }}>
+                        +{remaining.length - 2}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontFamily: fonts.sans, fontSize: 11, fontWeight: 500, color: '#3F1906', marginBottom: 10, lineHeight: 1.4 }}>
+                    Find more people to connect with
+                  </div>
+                  <div style={{
+                    width: '100%', padding: '6px 0', borderRadius: 10,
+                    background: '#8B6F5C', color: 'white', border: 'none',
+                    fontSize: 11, fontWeight: 600, fontFamily: fonts.sans,
+                    textAlign: 'center',
+                  }}>
+                    See all
+                  </div>
+                </div>
+              </div>
+                );
+              })()}
+            </div>
           )}
 
           {/* My Active Circles */}
@@ -1085,7 +1300,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
             <>
               <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.1)', margin: '20px 0 0' }} />
               <div style={{ marginTop: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                   <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
                     My Active Circles
                   </h2>
@@ -1096,9 +1311,60 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       background: 'none', border: 'none', color: '#8B6F5C',
                       fontSize: '13px', fontWeight: '600', cursor: 'pointer',
                     }}>
-                    Discover <ChevronRight size={14} />
+                    See all <ChevronRight size={14} />
                   </button>
                 </div>
+                <button onClick={handleCreateClick} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  width: '100%', padding: '12px', marginBottom: isMobile ? '10px' : '14px',
+                  backgroundColor: 'transparent', border: '1.5px dashed rgba(139, 111, 92, 0.25)',
+                  borderRadius: '12px', color: '#8B6F5C', fontSize: '14px', fontWeight: '600',
+                  cursor: 'pointer', fontFamily: fonts.serif, transition: 'all 0.2s ease',
+                }}>
+                  <UserPlus size={16} /> Create a Circle
+                </button>
+
+                {showCreateInfo && (
+                  <div style={{
+                    padding: isMobile ? '16px' : '20px', marginBottom: isMobile ? '10px' : '14px',
+                    background: '#FFFBF7', border: '1px solid rgba(139, 111, 92, 0.15)',
+                    borderRadius: 14, animation: 'fadeInUp 0.25s ease',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                      <Users size={20} style={{ color: '#8B6F5C', flexShrink: 0, marginTop: 2 }} />
+                      <div>
+                        <p style={{ fontFamily: fonts.serif, fontSize: 15, fontWeight: 600, color: '#3F1906', margin: '0 0 4px' }}>
+                          Connect with 2+ people first
+                        </p>
+                        <p style={{ fontFamily: fonts.sans, fontSize: 13, color: '#8B7A6B', margin: '0 0 12px', lineHeight: 1.5 }}>
+                          Circles are small groups built from your connections. Connect with at least 2 people, then invite them to form a circle.
+                        </p>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            onClick={() => { setShowCreateInfo(false); onNavigate?.('allPeople'); }}
+                            style={{
+                              padding: '8px 16px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                              background: '#8B6F5C', color: 'white', border: 'none',
+                              cursor: 'pointer', fontFamily: fonts.sans,
+                            }}
+                          >
+                            Find People
+                          </button>
+                          <button
+                            onClick={() => setShowCreateInfo(false)}
+                            style={{
+                              padding: '8px 16px', borderRadius: 20, fontSize: 13, fontWeight: 500,
+                              background: 'none', color: '#8B6F5C', border: '1px solid rgba(139,111,92,0.2)',
+                              cursor: 'pointer', fontFamily: fonts.sans,
+                            }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div style={styles.circlesList}>
                   {(showAllCircles ? enrichedGroups : enrichedGroups.slice(0, 3)).map(({ group, acceptedMembers, activeMembers, activeNames, theme, hasUpcoming, sessionCount, daysUntilMeetup, hasNoActivity }, index) => (
@@ -1321,223 +1587,11 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   </button>
                 )}
 
-                <button onClick={handleCreateClick} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                  width: '100%', padding: '12px', marginTop: '12px',
-                  backgroundColor: 'transparent', border: '1.5px dashed rgba(139, 111, 92, 0.25)',
-                  borderRadius: '12px', color: '#8B6F5C', fontSize: '14px', fontWeight: '600',
-                  cursor: 'pointer', fontFamily: fonts.serif, transition: 'all 0.2s ease',
-                }}>
-                  <UserPlus size={16} /> Create a Circle
-                </button>
               </div>
             </>
           )}
 
-          {/* People you may know */}
-          {peerSuggestions.length > 0 && (
-            <>
-              <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.1)', margin: '20px 0 0' }} />
-              <div style={{ marginTop: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '14px' }}>
-                  <h2 style={{...styles.cardTitle, fontSize: isMobile ? '18px' : '20px'}}>
-                    Recommend to Connect
-                  </h2>
-                  <button
-                    onClick={() => onNavigate?.('allPeople')}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '4px',
-                      background: 'none', border: 'none', color: '#8B6F5C',
-                      fontSize: '13px', fontWeight: '600', cursor: 'pointer',
-                    }}>
-                    See all <ChevronRight size={14} />
-                  </button>
-                </div>
-
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-                  gap: isMobile ? '10px' : '12px',
-                }}>
-                  {peerSuggestions.slice(0, 4).map((person) => (
-                    <div
-                      key={person.id}
-                      onClick={() => onNavigate?.('userProfile', { userId: person.id })}
-                      style={{
-                        width: '100%',
-                        background: '#FFFBF7',
-                        border: '1px solid rgba(124, 96, 65, 0.12)',
-                        borderRadius: '20px',
-                        padding: isMobile ? '16px' : '20px',
-                        display: 'flex', flexDirection: 'column',
-                        boxSizing: 'border-box',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        minHeight: isMobile ? 'auto' : '200px',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(88, 66, 51, 0.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}
-                    >
-                      {/* Avatar + Name/Career */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-                        <div style={{ position: 'relative', flexShrink: 0 }}>
-                          <div style={{
-                            width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px',
-                            borderRadius: '50%',
-                            backgroundColor: '#6B5344',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: isMobile ? '18px' : '20px', color: 'white', fontWeight: '600',
-                            overflow: 'hidden',
-                          }}>
-                            {person.profile_picture ? (
-                              <img src={person.profile_picture} alt={person.name}
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : (
-                              (person.name?.[0] || '?').toUpperCase()
-                            )}
-                          </div>
-                          {person.last_active && (
-                            <span style={{
-                              position: 'absolute', bottom: '2px', right: '2px',
-                              width: '10px', height: '10px', borderRadius: '50%',
-                              backgroundColor: isUserActive(person.last_active, 10) ? '#4CAF50' : '#FFA726',
-                              border: '2px solid #FFFBF7',
-                            }} />
-                          )}
-                        </div>
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <h4 style={{
-                            fontFamily: fonts.serif, fontSize: isMobile ? '15px' : '17px', fontWeight: '700',
-                            color: '#2C1810', margin: 0,
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
-                            {person.name}
-                          </h4>
-                          <p style={{
-                            fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '13px',
-                            color: '#5C4033', margin: '2px 0 0',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          }}>
-                            {person.career || 'Professional'}
-                          </p>
-                          {/* Interest Tags */}
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
-                            {(person.interests?.length ? person.interests : [person.industry].filter(Boolean)).slice(0, 3).map((tag, i) => (
-                              <span key={i} style={{
-                                fontFamily: fonts.sans, fontSize: '10px', fontWeight: 500,
-                                color: '#5C4033', backgroundColor: '#E8DDD6',
-                                border: 'none',
-                                borderRadius: '8px', padding: '2px 8px',
-                                whiteSpace: 'nowrap',
-                              }}>
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Hook / Description */}
-                      {person.hook && (
-                        <p style={{
-                          fontFamily: fonts.sans, fontSize: isMobile ? '12px' : '13px',
-                          color: '#3D2B1F', margin: '0 0 10px', lineHeight: '1.4',
-                          overflow: 'hidden', textOverflow: 'ellipsis',
-                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                        }}>
-                          {person.hook}
-                        </p>
-                      )}
-
-                      {/* Mutuals + Activity */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: '6px',
-                        fontFamily: fonts.sans, fontSize: isMobile ? '11px' : '12px',
-                        color: '#8B7A6B', marginBottom: '12px',
-                      }}>
-                        {(person.mutualConnections > 0 || person.mutualCircles > 0) && (
-                          <>
-                            <span style={{
-                              width: '16px', height: '16px', borderRadius: '50%',
-                              backgroundColor: '#4CAF50', display: 'inline-flex',
-                              alignItems: 'center', justifyContent: 'center',
-                            }}>
-                              <Check size={10} style={{ color: 'white' }} />
-                            </span>
-                            <span>{person.mutualConnections || person.mutualCircles || 0} mutuals</span>
-                            <span style={{ color: '#B8A089' }}>·</span>
-                          </>
-                        )}
-                        <span>{(() => {
-                          if (!person.last_active) return 'Not yet active';
-                          const diff = Date.now() - new Date(person.last_active).getTime();
-                          const mins = Math.floor(diff / 60000);
-                          if (mins < 10) return 'Active now';
-                          if (mins < 60) return `Active ${mins}m ago`;
-                          const hours = Math.floor(mins / 60);
-                          if (hours < 24) return `Active ${hours}h ago`;
-                          const days = Math.floor(hours / 24);
-                          if (days < 7) return 'Active this week';
-                          if (days < 30) return `Active ${Math.floor(days / 7)}w ago`;
-                          return `Active ${Math.floor(days / 30)}mo+ ago`;
-                        })()}</span>
-                      </div>
-
-                      {/* Bottom row: Coffee Chat left, Connect right */}
-                      <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: isMobile ? '8px' : '0' }}>
-                        {person.open_to_coffee_chat ? (
-                          <span style={{
-                            fontFamily: fonts.sans, fontSize: isMobile ? '10px' : '11px', fontWeight: 600,
-                            color: '#5C4033', backgroundColor: '#FDF3EB',
-                            border: '1px solid rgba(124, 96, 65, 0.15)',
-                            borderRadius: '8px', padding: '3px 10px',
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                            whiteSpace: 'nowrap',
-                          }}>
-                            <Coffee size={10} /> Open to Coffee Chat
-                          </span>
-                        ) : <div />}
-                        {sentRequests.has(person.id) ? (
-                          <div style={{
-                            padding: '5px 14px',
-                            backgroundColor: 'rgba(92, 64, 51, 0.06)',
-                            color: '#8B6F5C',
-                            border: '1.5px solid rgba(139, 111, 92, 0.2)',
-                            borderRadius: '10px', fontSize: '12px', fontWeight: '600',
-                            display: 'inline-flex', alignItems: 'center', gap: '4px',
-                          }}>
-                            <Check size={11} /> Requested
-                          </div>
-                        ) : (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleConnect(person.id); }}
-                            style={{
-                              padding: '5px 14px',
-                              backgroundColor: '#8B6F5C', color: '#FFF',
-                              border: 'none', borderRadius: '10px',
-                              fontSize: '12px', fontWeight: '600', cursor: 'pointer',
-                              display: 'inline-flex', alignItems: 'center', gap: '4px',
-                              transition: 'background 0.2s ease',
-                            }}
-                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#7A5C42'; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = '#8B6F5C'; }}
-                          >
-                            <UserPlus size={11} /> Connect
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
+          {/* "Recommend to Connect" is now inline under the Discover card — see showDiscoverInline above */}
         </section>
 
         {/* Recent Chats */}

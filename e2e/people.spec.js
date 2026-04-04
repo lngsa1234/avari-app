@@ -133,3 +133,27 @@ test.describe('User Profile', () => {
     expect(url).not.toContain('/profile')
   })
 })
+
+test.describe('Circles Page', () => {
+  test.beforeEach(async ({ page }) => {
+    await login(page)
+    await page.goto('/circles')
+    await expect(page).toHaveURL(/\/circles/)
+  })
+
+  test('shows My Connections section', async ({ page }) => {
+    await expect(page.getByText('My Connections')).toBeVisible({ timeout: 15000 })
+  })
+
+  test('shows My Active Circles section', async ({ page }) => {
+    await expect(page.getByText('My Active Circles')).toBeVisible({ timeout: 15000 })
+  })
+
+  test('shows Create a Circle button', async ({ page }) => {
+    await expect(page.getByText('Create a Circle')).toBeVisible({ timeout: 15000 })
+  })
+
+  test('shows See all link for circles', async ({ page }) => {
+    await expect(page.getByText('See all')).toBeVisible({ timeout: 15000 })
+  })
+})

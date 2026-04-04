@@ -152,7 +152,7 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
             <ChevronLeft size={16} style={{ color: colors.mocha }} />
           </button>
           <span style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: '500', color: colors.mocha, fontFamily: fonts.serif, letterSpacing: '0.01em' }}>
-            Circles
+            Discover Circles
           </span>
         </div>
         <p style={{ fontSize: '13px', color: colors.mochaLight, margin: 0, paddingLeft: '46px' }}>
@@ -171,7 +171,7 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
           onChange={(e) => setSearchQuery(e.target.value)}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
-          placeholder="Search circles by name or topic..."
+          placeholder="Search by name, topic, or category..."
           style={{
             width: '100%', height: '44px', padding: '0 40px 0 42px',
             borderRadius: '24px', border: `1px solid ${searchFocused ? colors.mochaMuted : colors.border}`,
@@ -186,26 +186,6 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
             <X size={16} style={{ color: colors.mochaMuted }} />
           </button>
         )}
-      </div>
-
-      {/* Filter chips */}
-      <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', marginBottom: '20px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-        {CATEGORIES.map(cat => {
-          const active = selectedCategory === cat;
-          return (
-            <button key={cat} onClick={() => setSelectedCategory(cat)} style={{
-              height: '36px', padding: '0 16px', borderRadius: '20px',
-              border: `1px solid ${active ? colors.mocha : colors.border}`,
-              background: active ? colors.mocha : 'white',
-              color: active ? 'white' : colors.mochaLight,
-              fontSize: '13px', fontWeight: active ? '500' : '400',
-              cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-              fontFamily: fonts.sans, transition: 'all 0.15s',
-            }}>
-              {cat}
-            </button>
-          );
-        })}
       </div>
 
       {/* View toggle */}
@@ -329,6 +309,7 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        input::placeholder { color: #C4A882; opacity: 1; }
         div::-webkit-scrollbar { height: 0; width: 0; }
       `}</style>
     </div>

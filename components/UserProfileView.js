@@ -234,7 +234,14 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
 
       setShowConfirm(false);
       refreshProfile();
-      invalidateQuery(`circles-page-${currentUser.id}`);
+      // Optimistically remove from circles-page cache so My Connections updates instantly
+      invalidateQuery(`circles-page-${currentUser.id}`, prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          connections: (prev.connections || []).filter(c => c.id !== userId && c.userId !== userId),
+        };
+      }, { revalidate: true });
       invalidateQuery(`circles-peers-${currentUser.id}`);
       invalidateQuery(`home-primary-${currentUser.id}`);
       onConnectionRemoved?.(userId);
@@ -393,6 +400,38 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
     );
   }
 
+  // Visibility guard: block access if profile is hidden or connections-only for non-connections
+  const visibility = profile.profile_visibility || 'public';
+  if (!isOwnProfile && visibility === 'hidden') {
+    return (
+      <div style={{ width: '100%', fontFamily: FONT }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
+          <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
+            <ChevronLeft size={20} />
+          </button>
+        </div>
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <p style={{ color: COLORS.brown400, fontSize: 16 }}>This profile is not available</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isOwnProfile && visibility === 'connections' && !isConnected) {
+    return (
+      <div style={{ width: '100%', fontFamily: FONT }}>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
+          <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
+            <ChevronLeft size={20} />
+          </button>
+        </div>
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <p style={{ color: COLORS.brown400, fontSize: 16 }}>This profile is only visible to connections</p>
+        </div>
+      </div>
+    );
+  }
+
   const locationText = profile.city
     ? `${profile.city}${profile.state ? `, ${profile.state}` : ''}`
     : profile.state || null;
@@ -507,14 +546,40 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
               }}>
                 {profile.name}
               </h1>
-              {profile.username && (
-                <span style={{
-                  fontFamily: FONT, fontSize: 13, color: COLORS.brown300,
-                  fontWeight: 500, marginTop: 2, display: 'block',
-                }}>
-                  @{profile.username}
-                </span>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                {profile.username && (
+                  <span style={{
+                    fontFamily: FONT, fontSize: 13, color: COLORS.brown300,
+                    fontWeight: 500,
+                  }}>
+                    @{profile.username}
+                  </span>
+                )}
+                {profile.last_active && (
+                  <span style={{
+                    fontFamily: FONT, fontSize: 12, fontWeight: 500,
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    color: isActive ? COLORS.green : COLORS.brown400,
+                  }}>
+                    <span style={{
+                      width: 7, height: 7, borderRadius: '50%',
+                      background: isActive ? COLORS.greenDot : '#C4A882',
+                      display: 'inline-block',
+                    }} />
+                    {(() => {
+                      if (isActive) return 'Active now';
+                      const diff = Date.now() - new Date(profile.last_active).getTime();
+                      const mins = Math.floor(diff / 60000);
+                      if (mins < 60) return `${mins}m ago`;
+                      const hours = Math.floor(mins / 60);
+                      if (hours < 24) return `${hours}h ago`;
+                      const days = Math.floor(hours / 24);
+                      if (days < 7) return `${days}d ago`;
+                      return `${Math.floor(days / 7)}w ago`;
+                    })()}
+                  </span>
+                )}
+              </div>
 
               {/* Hook / Headline */}
               {profile.hook && (
@@ -630,9 +695,52 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           </div>
         </div>
 
-        {/* ─── Quick Toggles (own profile only) ─── */}
+        {/* ─── Empty state prompts (own profile, no connections or circles) ─── */}
+        {isOwnProfile && (connectionCount === 0 || mutualCircles.length === 0) && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16, ...fadeIn(0.13) }}>
+            {connectionCount === 0 && (
+              <button
+                onClick={() => onNavigate?.('allPeople')}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '10px 20px', borderRadius: 24,
+                  background: COLORS.accent, border: 'none',
+                  cursor: 'pointer', fontFamily: FONT,
+                  fontSize: 13, fontWeight: 600, color: 'white',
+                }}
+              >
+                <Users size={15} /> Find People
+              </button>
+            )}
+            {mutualCircles.length === 0 && (
+              <button
+                onClick={() => onNavigate?.('allCircles')}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  padding: '10px 20px', borderRadius: 24,
+                  background: COLORS.accent, border: 'none',
+                  cursor: 'pointer', fontFamily: FONT,
+                  fontSize: 13, fontWeight: 600, color: 'white',
+                }}
+              >
+                <Heart size={15} /> Join a Circle
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ─── Settings (own profile only) ─── */}
         {isOwnProfile && (<>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, marginTop: 16, padding: '4px 0', ...fadeIn(0.15) }}>
+          <div style={{ height: 1, background: `linear-gradient(90deg, transparent, ${COLORS.brown100}, transparent)`, margin: '20px 0 0' }} />
+          <div style={{ marginTop: 16, ...fadeIn(0.15) }}>
+            <h3 style={{
+              fontFamily: DISPLAY_FONT, fontSize: 16, fontWeight: 600,
+              color: COLORS.brown700, margin: '0 0 8px',
+            }}>
+              Settings
+            </h3>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, padding: '4px 0', ...fadeIn(0.15) }}>
             {/* Hosting toggle */}
             <div
               onClick={async () => {
@@ -753,6 +861,49 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
                 <option value="ask">Always ask me</option>
                 <option value="always">Always allow</option>
                 <option value="never">Never allow</option>
+              </select>
+            </div>
+            {/* Profile visibility */}
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 0', cursor: 'default',
+                borderTop: '1px solid #F0E6D8',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Shield size={15} style={{ color: COLORS.brown500 }} />
+                <div>
+                  <span className="profile-toggle-label" style={{ fontFamily: FONT, fontSize: 14, fontWeight: 500, color: COLORS.brown700, display: 'block' }}>
+                    Profile visibility
+                  </span>
+                  <span className="profile-toggle-subtitle" style={{ fontFamily: FONT, fontSize: 12, color: COLORS.brown400, display: 'block', marginTop: 2 }}>
+                    Who can find and view your profile
+                  </span>
+                </div>
+              </div>
+              <select
+                value={profile.profile_visibility || 'public'}
+                onChange={async (e) => {
+                  const newVal = e.target.value;
+                  refreshProfile(prev => prev ? { ...prev, profile: { ...prev.profile, profile_visibility: newVal } } : prev, { revalidate: false });
+                  await supabase.from('profiles').update({ profile_visibility: newVal }).eq('id', currentUser.id);
+                }}
+                style={{
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: `1px solid ${COLORS.border || '#E8D5C3'}`,
+                  fontFamily: FONT,
+                  fontSize: 13,
+                  color: COLORS.brown700,
+                  background: COLORS.white,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <option value="public">Open to all</option>
+                <option value="connections">Connections only</option>
+                <option value="hidden">Hidden</option>
               </select>
             </div>
           </div>
