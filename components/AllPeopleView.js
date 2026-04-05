@@ -398,8 +398,35 @@ export default function AllPeopleView({
 
       {/* People Sections */}
       {filteredPeople.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '48px 16px', color: colors.mochaMuted, fontSize: '14px' }}>
-          No results found. Try a different search or filter.
+        <div style={{
+          textAlign: 'center', padding: '48px 24px',
+          background: tokens.white, border: `1px dashed ${tokens.borderMedium}`,
+          borderRadius: '14px',
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: tokens.bgCard, margin: '0 auto 12px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Search size={24} color={tokens.textMuted} />
+          </div>
+          <h3 style={{
+            fontFamily: fonts.serif, fontSize: 18, fontWeight: 600,
+            color: tokens.text, margin: '0 0 6px',
+          }}>No people found</h3>
+          <p style={{
+            fontFamily: fonts.sans, fontSize: 14, color: tokens.textLight,
+            margin: '0 0 16px', lineHeight: 1.5,
+          }}>Try a different search or filter, or join a circle to meet new people.</p>
+          <button
+            onClick={() => onNavigate?.('allCircles')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '10px 20px', background: tokens.buttonBg,
+              color: tokens.buttonText, border: 'none', borderRadius: 10,
+              fontFamily: fonts.sans, fontSize: 14, fontWeight: 500, cursor: 'pointer',
+            }}
+          ><Users size={15} /> Join a Circle</button>
         </div>
       ) : (() => {
         const incoming = filteredPeople.filter(p => p.hasIncomingRequest);

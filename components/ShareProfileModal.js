@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Share2, Download, Copy, X, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { colors as tokens, fonts } from '@/lib/designTokens';
+import { colors as tokens, fonts, breakpoints } from '@/lib/designTokens';
 
 const COLORS = {
   brown700: tokens.buttonBg,
@@ -25,23 +25,53 @@ export default function ShareProfileModal({ userId, username, name, onClose }) {
     : '';
   const displayHandle = username ? `@${username}` : (name || 'Profile');
 
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < breakpoints.mobile;
+  });
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < breakpoints.mobile);
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  // Trap focus inside modal and close on Escape
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
   return (
     <div
       onClick={onClose}
+      role="dialog"
+      aria-label="Share profile"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        display: 'flex',
+        alignItems: isMobile ? 'flex-end' : 'center',
+        justifyContent: 'center',
         zIndex: 9999, animation: 'fadeIn 0.2s',
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'white', borderRadius: 20,
-          padding: '24px 24px 28px', width: '90%', maxWidth: 420,
-          animation: 'slideUp 0.25s',
+          background: 'white',
+          borderRadius: isMobile ? '20px 20px 0 0' : 20,
+          padding: isMobile ? '20px 20px 28px' : '24px 24px 28px',
+          paddingBottom: isMobile ? 'calc(28px + env(safe-area-inset-bottom, 0px))' : '28px',
+          width: isMobile ? '100%' : '90%',
+          maxWidth: isMobile ? 'none' : 420,
+          animation: isMobile ? 'slideUpSheet 0.3s ease-out' : 'slideUp 0.25s',
         }}
       >
+        <style>{`
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes slideUpSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        `}</style>
         {/* Close button */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <span style={{ fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600, color: COLORS.brown700 }}>
