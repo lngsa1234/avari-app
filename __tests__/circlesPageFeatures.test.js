@@ -242,11 +242,11 @@ describe('Profile visibility setting', () => {
   })
 
   test('profile page blocks hidden profiles for non-owners', () => {
-    expect(profileView).toMatch(/This profile is not available/)
+    expect(profileView).toMatch(/This profile is private/)
   })
 
   test('profile page blocks connections-only profiles for non-connections', () => {
-    expect(profileView).toMatch(/This profile is only visible to connections/)
+    expect(profileView).toMatch(/Connect to see their full profile/)
   })
 
   test('people directory filters by profile_visibility', () => {

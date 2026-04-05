@@ -25,12 +25,12 @@ describe('UserProfileView visibility guard', () => {
     expect(source).toMatch(/visibility === ['"]hidden['"]/)
   })
 
-  test('hidden profile shows "This profile is not available"', () => {
-    expect(source).toMatch(/This profile is not available/)
+  test('hidden profile shows warm private message', () => {
+    expect(source).toMatch(/This profile is private/)
   })
 
-  test('connections-only shows "This profile is only visible to connections"', () => {
-    expect(source).toMatch(/This profile is only visible to connections/)
+  test('connections-only shows connect prompt', () => {
+    expect(source).toMatch(/Connect to see their full profile/)
   })
 
   test('defaults visibility to public when not set', () => {

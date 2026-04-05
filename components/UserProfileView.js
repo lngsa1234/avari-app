@@ -410,14 +410,45 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             <ChevronLeft size={20} />
           </button>
         </div>
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <p style={{ color: COLORS.brown400, fontSize: 16 }}>This profile is not available</p>
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 24px',
+          background: tokens.white,
+          border: `1px dashed ${tokens.borderMedium}`,
+          borderRadius: '14px',
+          margin: '0 16px',
+        }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: '50%',
+            background: tokens.bgCard, margin: '0 auto 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Shield size={32} color={tokens.textMuted} />
+          </div>
+          <h3 style={{
+            fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600,
+            color: tokens.text, margin: '0 0 6px 0',
+          }}>This profile is private</h3>
+          <p style={{
+            fontFamily: FONT, fontSize: 14, color: tokens.textLight,
+            margin: '0 0 20px 0', lineHeight: 1.5,
+          }}>They've chosen to keep their profile private.</p>
+          <button
+            onClick={() => onNavigate?.('allPeople')}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '10px 20px', background: tokens.buttonBg,
+              color: tokens.buttonText, border: 'none', borderRadius: 10,
+              fontFamily: FONT, fontSize: 14, fontWeight: 500, cursor: 'pointer',
+            }}
+          ><Users size={15} /> Browse People</button>
         </div>
       </div>
     );
   }
 
   if (!isOwnProfile && visibility === 'connections' && !isConnected) {
+    const displayName = profile.name || 'This member';
     return (
       <div style={{ width: '100%', fontFamily: FONT }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
@@ -425,8 +456,49 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
             <ChevronLeft size={20} />
           </button>
         </div>
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-          <p style={{ color: COLORS.brown400, fontSize: 16 }}>This profile is only visible to connections</p>
+        <div style={{
+          textAlign: 'center',
+          padding: '48px 24px',
+          background: tokens.white,
+          border: `1px solid ${tokens.border}`,
+          borderRadius: '14px',
+          margin: '0 16px',
+        }}>
+          {profile.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt=""
+              style={{
+                width: 80, height: 80, borderRadius: '50%',
+                objectFit: 'cover', margin: '0 auto 12px', display: 'block',
+              }}
+            />
+          ) : (
+            <div style={{
+              width: 80, height: 80, borderRadius: '50%',
+              background: tokens.bgCard, margin: '0 auto 12px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: DISPLAY_FONT, fontSize: 28, fontWeight: 600, color: tokens.primary,
+            }}>{(profile.name || '?')[0].toUpperCase()}</div>
+          )}
+          <h3 style={{
+            fontFamily: DISPLAY_FONT, fontSize: 18, fontWeight: 600,
+            color: tokens.text, margin: '0 0 4px 0',
+          }}>{displayName}</h3>
+          <p style={{
+            fontFamily: FONT, fontSize: 14, color: tokens.textLight,
+            margin: '0 0 20px 0', lineHeight: 1.5,
+          }}>Connect to see their full profile.</p>
+          <button
+            onClick={handleSendConnectionRequest}
+            disabled={connecting}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '10px 20px', background: tokens.buttonBg,
+              color: tokens.buttonText, border: 'none', borderRadius: 10,
+              fontFamily: FONT, fontSize: 14, fontWeight: 500, cursor: 'pointer',
+            }}
+          ><UserPlus size={15} /> Send Connection Request</button>
         </div>
       </div>
     );

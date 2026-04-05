@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Calendar, Coffee, Users, User, Heart, Video, Sparkles, ChevronRight } from 'lucide-react'
+import { Calendar, Coffee, Users, User, Heart, Video, Sparkles, ChevronRight, Share2, Search } from 'lucide-react'
 import { parseLocalDate, formatEventTime, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
-import { fonts } from '@/lib/designTokens'
+import { colors as designColors, fonts } from '@/lib/designTokens'
 import NudgeBanner from './NudgeBanner'
 
 // --- Helper functions ---
@@ -437,8 +437,83 @@ export default function HomeView({
     },
   }
 
+  // Welcome card for new users — show once after onboarding
+  const [showWelcome, setShowWelcome] = useState(false)
+  useEffect(() => {
+    if (!currentUser?.username) return
+    const key = `circlew_welcomed_${currentUser.id}`
+    if (!localStorage.getItem(key)) {
+      setShowWelcome(true)
+      localStorage.setItem(key, 'true')
+    }
+  }, [currentUser?.id, currentUser?.username])
+
   return (
     <div style={homeStyles.container}>
+      {/* Welcome card for new users */}
+      {showWelcome && currentUser?.username && (
+        <div style={{
+          background: designColors.bgCard,
+          border: `1px solid ${designColors.border}`,
+          borderRadius: '14px',
+          padding: '28px',
+          textAlign: 'center',
+          marginBottom: '20px',
+          position: 'relative',
+        }}>
+          <button
+            onClick={() => setShowWelcome(false)}
+            style={{
+              position: 'absolute', top: 12, right: 12,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: designColors.textMuted, fontSize: '18px', lineHeight: 1,
+            }}
+            aria-label="Dismiss welcome card"
+          >&times;</button>
+          <h2 style={{
+            fontFamily: fonts.serif,
+            fontSize: '20px',
+            fontWeight: '600',
+            color: designColors.text,
+            margin: '0 0 8px 0',
+          }}>Welcome to CircleW, @{currentUser.username}</h2>
+          <p style={{
+            fontFamily: fonts.sans,
+            fontSize: '14px',
+            color: designColors.textLight,
+            margin: '0 0 4px 0',
+          }}>Your profile link:</p>
+          <p style={{
+            fontFamily: fonts.sans,
+            fontSize: '16px',
+            fontWeight: '600',
+            color: designColors.primary,
+            margin: '0 0 20px 0',
+          }}>circlew.app/@{currentUser.username}</p>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => { handleNavigate('profile'); setShowWelcome(false) }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '10px 20px', background: designColors.buttonBg,
+                color: designColors.buttonText, border: 'none', borderRadius: '10px',
+                fontFamily: fonts.sans, fontSize: '14px', fontWeight: '500', cursor: 'pointer',
+              }}
+            ><Share2 size={15} /> Share Profile</button>
+            <button
+              onClick={() => { handleNavigate('allPeople'); setShowWelcome(false) }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '10px 20px', background: designColors.white,
+                color: designColors.text, border: `1px solid ${designColors.border}`,
+                borderRadius: '10px', fontFamily: fonts.sans, fontSize: '14px',
+                fontWeight: '500', cursor: 'pointer',
+              }}
+            ><Search size={15} /> Find People</button>
+          </div>
+        </div>
+      )}
+
       {/* Title Section */}
       <section style={homeStyles.titleSection}>
         <div>
