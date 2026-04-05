@@ -193,7 +193,8 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
         <div style={{ display: 'flex', border: `1px solid ${colors.border}`, borderRadius: '8px', overflow: 'hidden' }}>
           <button
             onClick={() => setViewMode('grid')}
-            aria-label="Grid view"
+            aria-label="Switch to grid view"
+            aria-pressed={viewMode === 'grid'}
             style={{
               width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: viewMode === 'grid' ? colors.mocha : 'white',
@@ -205,7 +206,8 @@ export default function AllCirclesView({ currentUser, supabase, onNavigate, prev
           </button>
           <button
             onClick={() => setViewMode('list')}
-            aria-label="List view"
+            aria-label="Switch to list view"
+            aria-pressed={viewMode === 'list'}
             style={{
               width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: viewMode === 'list' ? colors.mocha : 'white',

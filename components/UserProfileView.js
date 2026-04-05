@@ -406,11 +406,11 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
     return (
       <div style={{ width: '100%', fontFamily: FONT }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
-          <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
+          <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} aria-label="Go back" style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
             <ChevronLeft size={20} />
           </button>
         </div>
-        <div style={{
+        <div role="status" style={{
           textAlign: 'center',
           padding: '60px 24px',
           background: tokens.white,
@@ -418,7 +418,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           borderRadius: '14px',
           margin: '0 16px',
         }}>
-          <div style={{
+          <div aria-hidden="true" style={{
             width: 80, height: 80, borderRadius: '50%',
             background: tokens.bgCard, margin: '0 auto 16px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -435,6 +435,7 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
           }}>They've chosen to keep their profile private.</p>
           <button
             onClick={() => onNavigate?.('allPeople')}
+            aria-label="Browse people directory"
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '10px 20px', background: tokens.buttonBg,
@@ -452,11 +453,11 @@ export default function UserProfileView({ currentUser, supabase, userId, onNavig
     return (
       <div style={{ width: '100%', fontFamily: FONT }}>
         <div style={{ display: 'flex', alignItems: 'center', padding: '16px 0' }}>
-          <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
+          <button onClick={() => onNavigate?.(previousView || 'connectionGroups')} aria-label="Go back" style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.brown500, display: 'flex', padding: 4 }}>
             <ChevronLeft size={20} />
           </button>
         </div>
-        <div style={{
+        <div role="status" style={{
           textAlign: 'center',
           padding: '48px 24px',
           background: tokens.white,

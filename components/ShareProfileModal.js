@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Share2, Download, Copy, X, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { colors as tokens, fonts, breakpoints } from '@/lib/designTokens';
@@ -35,9 +35,34 @@ export default function ShareProfileModal({ userId, username, name, onClose }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // Trap focus inside modal and close on Escape
+  // Focus trap: capture focus inside modal, return on close
+  const modalRef = useRef(null);
+  const previousFocus = useRef(null);
+
   useEffect(() => {
-    const handleKey = (e) => { if (e.key === 'Escape') onClose(); };
+    previousFocus.current = document.activeElement;
+    // Focus the first focusable element in the modal
+    const timer = setTimeout(() => {
+      const focusable = modalRef.current?.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])');
+      if (focusable?.length) focusable[0].focus();
+    }, 50);
+    return () => {
+      clearTimeout(timer);
+      previousFocus.current?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const focusable = modalRef.current?.querySelectorAll('button, [href], input, [tabindex]:not([tabindex="-1"])');
+      if (!focusable?.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
   }, [onClose]);
@@ -46,6 +71,7 @@ export default function ShareProfileModal({ userId, username, name, onClose }) {
     <div
       onClick={onClose}
       role="dialog"
+      aria-modal="true"
       aria-label="Share profile"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -56,6 +82,7 @@ export default function ShareProfileModal({ userId, username, name, onClose }) {
       }}
     >
       <div
+        ref={modalRef}
         onClick={(e) => e.stopPropagation()}
         style={{
           background: 'white',
@@ -71,6 +98,9 @@ export default function ShareProfileModal({ userId, username, name, onClose }) {
           @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
           @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
           @keyframes slideUpSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+          @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+          }
         `}</style>
         {/* Close button */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -79,6 +109,7 @@ export default function ShareProfileModal({ userId, username, name, onClose }) {
           </span>
           <button
             onClick={onClose}
+            aria-label="Close share modal"
             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: COLORS.brown400 }}
           >
             <X size={20} />
