@@ -80,3 +80,13 @@ GDPR and US two-party consent laws (13 states) may require evidence that consent
 
 **Effort:** S with CC (~1 hour)
 **Depends on:** Transcript consent system v1 shipping first.
+
+---
+
+## Create reusable brand asset template for PNG generation
+**Priority:** Low | **Added:** 2026-04-04 | **Source:** /plan-design-review
+
+Document a shared spec for all generated PNG assets (QR downloads, invite cards, event shares, circle promos). Current spec: 1200x1200px, bgCard (#F5EDE4) background, Lora serif for display text, DM Sans for labels, CircleW brand mark. Multiple PNG-generation features are likely (invite link system in TODOS). Without a shared template, each feature invents its own brand treatment.
+
+**Effort:** XS with CC (~30 min)
+**Depends on:** QR download PNG implementation (establishes first template).
