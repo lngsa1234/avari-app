@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
+const TRANSCRIPT_BUCKET = 'call-transcripts';
+
 /**
- * Save AI-generated recap summary to call_recaps.
+ * Save AI-generated recap summary to Supabase Storage.
  * Uses service role to bypass RLS (any participant can trigger this).
  *
  * POST /api/save-recap-summary
@@ -20,14 +22,55 @@ export async function POST(request) {
     }
 
     const supabase = createAdminClient();
-    const { error } = await supabase
-      .from('call_recaps')
-      .update({ ai_summary: aiSummary })
-      .eq('id', recapId);
 
-    if (error) {
-      console.error('[SaveRecapSummary] Update failed:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // Get the recap's storage path
+    const { data: recap, error: fetchError } = await supabase
+      .from('call_recaps')
+      .select('id, channel_name, transcript_path')
+      .eq('id', recapId)
+      .single();
+
+    if (fetchError) {
+      console.error('[SaveRecapSummary] Fetch failed:', fetchError);
+      return NextResponse.json({ error: fetchError.message }, { status: 500 });
+    }
+
+    const storagePath = recap.transcript_path || `recaps/${recap.channel_name}.json`;
+
+    // Download existing storage file, merge summary
+    let existing = { transcript: [], aiSummary: null };
+    const { data: fileData, error: dlError } = await supabase.storage
+      .from(TRANSCRIPT_BUCKET)
+      .download(storagePath);
+
+    if (!dlError && fileData) {
+      try {
+        existing = JSON.parse(await fileData.text());
+      } catch (e) {
+        // File doesn't exist or invalid — will create new
+      }
+    }
+
+    existing.aiSummary = aiSummary;
+
+    const { error: uploadError } = await supabase.storage
+      .from(TRANSCRIPT_BUCKET)
+      .upload(storagePath, JSON.stringify(existing), {
+        contentType: 'application/json',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('[SaveRecapSummary] Storage upload failed:', uploadError);
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    }
+
+    // Ensure transcript_path is set on the recap row
+    if (!recap.transcript_path) {
+      await supabase
+        .from('call_recaps')
+        .update({ transcript_path: storagePath })
+        .eq('id', recapId);
     }
 
     return NextResponse.json({ success: true });

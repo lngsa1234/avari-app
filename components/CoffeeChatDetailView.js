@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiFetch';
+import { getRecapTranscriptFromStorage } from '@/lib/callRecapHelpers';
 import {
   ChevronLeft,
   Calendar,
@@ -398,13 +399,18 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
       // Load recap if available (for any event that has had a call)
       const { data: recapData, error: recapError } = await sb
         .from('call_recaps')
-        .select('*')
+        .select('id, channel_name, call_type, provider, started_at, ended_at, duration_seconds, participant_count, participant_ids, transcript_path, metrics, created_by, created_at, updated_at')
         .ilike('channel_name', `%${meetupId}%`)
         .order('created_at', { ascending: false })
         .limit(1);
 
       if (recapData && recapData.length > 0) {
         const recapRecord = recapData[0];
+        // Load transcript + AI summary from storage
+        const { transcript: storedTranscript, aiSummary: storedAiSummary } =
+          await getRecapTranscriptFromStorage(recapRecord.transcript_path);
+        recapRecord.transcript = storedTranscript;
+        recapRecord.ai_summary = storedAiSummary;
         setRecap(recapRecord);
         setParsed(parseAISummary(recapRecord.ai_summary));
 

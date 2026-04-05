@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
 
+const TRANSCRIPT_BUCKET = 'call-transcripts';
+
 /**
  * Server-authoritative recap save/merge.
  * Uses service role to bypass RLS — guarantees one recap per channel_name.
@@ -47,10 +49,10 @@ export async function POST(request) {
 
     const filteredTranscript = allowTranscript ? transcript : [];
 
-    // Check for existing recap for this channel
+    // Check for existing recap for this channel (no longer fetch transcript from DB)
     const { data: existing, error: fetchError } = await supabase
       .from('call_recaps')
-      .select('id, transcript, started_at, participant_ids, ai_summary')
+      .select('id, transcript_path, started_at, participant_ids')
       .eq('channel_name', channelName)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -68,9 +70,30 @@ export async function POST(request) {
       scheduledDate, scheduledTime, scheduledDuration
     );
 
+    const storagePath = `recaps/${channelName}.json`;
+
     if (existing) {
-      // Merge transcripts (deduplicate by timestamp + text)
-      const oldTranscript = existing.transcript || [];
+      // Merge transcripts via storage
+      let oldTranscript = [];
+      let oldAiSummary = null;
+
+      if (existing.transcript_path) {
+        // Read existing transcript from storage
+        const { data: fileData, error: dlError } = await supabase.storage
+          .from(TRANSCRIPT_BUCKET)
+          .download(existing.transcript_path);
+        if (!dlError && fileData) {
+          try {
+            const parsed = JSON.parse(await fileData.text());
+            oldTranscript = parsed.transcript || [];
+            oldAiSummary = parsed.aiSummary || null;
+          } catch (e) {
+            console.error('[SaveCallRecap] Error parsing storage file:', e);
+          }
+        }
+      }
+
+      // Deduplicate by timestamp + text
       const seen = new Set(oldTranscript.map(e => `${e.timestamp}|${e.text}`));
       const newEntries = filteredTranscript.filter(e => !seen.has(`${e.timestamp}|${e.text}`));
       const mergedTranscript = [...oldTranscript, ...newEntries]
@@ -81,16 +104,32 @@ export async function POST(request) {
         ...participantIds,
       ])];
 
+      // Upload merged transcript + summary to storage
+      const storagePayload = {
+        transcript: mergedTranscript,
+        aiSummary: (aiSummary !== undefined && aiSummary !== null) ? aiSummary : oldAiSummary,
+      };
+      const { error: uploadError } = await supabase.storage
+        .from(TRANSCRIPT_BUCKET)
+        .upload(storagePath, JSON.stringify(storagePayload), {
+          contentType: 'application/json',
+          upsert: true,
+        });
+
+      if (uploadError) {
+        console.error('[SaveCallRecap] Storage upload error:', uploadError);
+        return NextResponse.json({ error: 'Failed to save transcript to storage' }, { status: 500 });
+      }
+
       const updateFields = {
         ended_at: clamped.clampedEnd,
         duration_seconds: clamped.durationSeconds,
         participant_count: mergedParticipantIds.length,
         participant_ids: mergedParticipantIds,
-        transcript: mergedTranscript,
+        transcript_path: storagePath,
+        transcript: [],
+        ai_summary: null,
       };
-      if (aiSummary !== undefined && aiSummary !== null) {
-        updateFields.ai_summary = aiSummary;
-      }
 
       const { data, error } = await supabase
         .from('call_recaps')
@@ -108,6 +147,23 @@ export async function POST(request) {
     }
 
     // No existing recap — create new one
+    // Upload transcript + summary to storage
+    const storagePayload = {
+      transcript: filteredTranscript,
+      aiSummary: aiSummary || null,
+    };
+    const { error: uploadError } = await supabase.storage
+      .from(TRANSCRIPT_BUCKET)
+      .upload(storagePath, JSON.stringify(storagePayload), {
+        contentType: 'application/json',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      console.error('[SaveCallRecap] Storage upload error:', uploadError);
+      return NextResponse.json({ error: 'Failed to save transcript to storage' }, { status: 500 });
+    }
+
     const { data, error } = await supabase
       .from('call_recaps')
       .insert({
@@ -119,8 +175,9 @@ export async function POST(request) {
         duration_seconds: clamped.durationSeconds,
         participant_count: participantIds.length,
         participant_ids: participantIds,
-        transcript: filteredTranscript,
-        ai_summary: aiSummary,
+        transcript: [],
+        transcript_path: storagePath,
+        ai_summary: null,
         metrics,
         created_by: user.id,
       })

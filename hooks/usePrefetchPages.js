@@ -48,7 +48,7 @@ export default function usePrefetchPages(currentUser, supabase) {
         const round2Promises = []
         const round2Keys = []
         if (channelNames.length > 0) {
-          round2Promises.push(sb.from('call_recaps').select('id, channel_name, created_at, ai_summary').in('channel_name', channelNames).order('created_at', { ascending: false }))
+          round2Promises.push(sb.from('call_recaps').select('id, channel_name, created_at, transcript_path').in('channel_name', channelNames).order('created_at', { ascending: false }))
           round2Keys.push('recaps')
         }
         if (matchedUserIds.length > 0) {

@@ -258,10 +258,10 @@ export function useCallRoom(callType, roomId) {
         .eq('channel_name', roomId)
         .order('created_at', { ascending: true });
 
-      // Get transcripts if available
+      // Get transcripts if available (select only needed columns)
       const { data: transcripts } = await supabase
         .from('call_transcripts')
-        .select('*')
+        .select('user_id, speaker_name, text, timestamp, is_final')
         .eq('channel_name', roomId)
         .order('timestamp', { ascending: true });
 

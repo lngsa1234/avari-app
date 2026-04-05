@@ -326,7 +326,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       const [recapResult, coffeeResult, signupsResult, membershipResult] = await Promise.all([
         supabase
           .from('call_recaps')
-          .select('*')
+          .select('id, channel_name, call_type, provider, started_at, ended_at, duration_seconds, participant_count, participant_ids, transcript_path, metrics, created_by, created_at, updated_at')
           .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
           .order('created_at', { ascending: false })
           .limit(50),

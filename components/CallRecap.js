@@ -12,7 +12,7 @@ import {
   createConnectionFromRecommendation,
   fetchSuggestedMemberProfiles
 } from '@/lib/connectionRecommendationHelpers';
-import { updateRecapSummaryByChannel } from '@/lib/callRecapHelpers';
+import { updateRecapSummaryByChannel, getRecapTranscriptFromStorage } from '@/lib/callRecapHelpers';
 
 /**
  * CallRecap - Enhanced post-call summary with transcription and metrics
@@ -34,7 +34,8 @@ export default function CallRecap({
   endedAt,
   participants = [],
   currentUserId,
-  transcript = [], // Array of { speakerId, speakerName, text, timestamp }
+  transcript: transcriptProp = [], // Array of { speakerId, speakerName, text, timestamp }
+  transcriptPath = null, // Storage path for lazy-loading saved recaps
   metrics = null, // { latency, packetLoss, connectionQuality }
   onClose,
   onConnect,
@@ -42,11 +43,37 @@ export default function CallRecap({
 }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [transcript, setTranscript] = useState(transcriptProp);
   const [aiSummary, setAiSummary] = useState(null);
   const [topicsDiscussed, setTopicsDiscussed] = useState([]);
   const [keyTakeaways, setKeyTakeaways] = useState([]);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'transcript', 'metrics', 'recommendations'
+  const [storageLoaded, setStorageLoaded] = useState(false);
+
+  // Lazy-load transcript + summary from storage when transcript prop is empty
+  useEffect(() => {
+    if (transcriptProp.length > 0 || !transcriptPath || storageLoaded) return;
+
+    const loadFromStorage = async () => {
+      const { transcript: storedTranscript, aiSummary: storedSummary } =
+        await getRecapTranscriptFromStorage(transcriptPath);
+      if (storedTranscript.length > 0) setTranscript(storedTranscript);
+      if (storedSummary) {
+        try {
+          const parsed = JSON.parse(storedSummary);
+          setAiSummary(parsed.summary || storedSummary);
+          setTopicsDiscussed(parsed.topicsDiscussed || []);
+          setKeyTakeaways(parsed.keyTakeaways || []);
+        } catch {
+          setAiSummary(storedSummary);
+        }
+      }
+      setStorageLoaded(true);
+    };
+
+    loadFromStorage();
+  }, [transcriptPath, transcriptProp, storageLoaded]);
 
   // Recommendations state
   const [connectionRecs, setConnectionRecs] = useState([]);

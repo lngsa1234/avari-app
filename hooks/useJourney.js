@@ -18,7 +18,7 @@ export default function useJourney(currentUser) {
       const [{ data, error }, { data: viewedData }] = await Promise.all([
         supabase
           .from('call_recaps')
-          .select('*')
+          .select('id, channel_name, call_type, started_at, ended_at, duration_seconds, participant_count, participant_ids, created_by, created_at')
           .or(`created_by.eq.${currentUser.id},participant_ids.cs.{${currentUser.id}}`)
           .gte('created_at', cutoff.toISOString())
           .order('created_at', { ascending: false }),

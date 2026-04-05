@@ -97,7 +97,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       if (channelNames.length > 0) {
         round2Promises.push(
           sb.from('call_recaps')
-            .select('id, channel_name, created_at, ai_summary')
+            .select('id, channel_name, created_at, transcript_path')
             .in('channel_name', channelNames)
             .order('created_at', { ascending: false })
         );
