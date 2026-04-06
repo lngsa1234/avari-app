@@ -174,6 +174,14 @@ export default function AdminFeedbackView({ currentUser, supabase }) {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
+      {/* Back button */}
+      <button
+        onClick={() => window.history.back()}
+        className="flex items-center gap-1 text-sm text-[#8B6F5C] hover:text-[#6B5344] mb-4 transition-colors"
+      >
+        ← Back
+      </button>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>

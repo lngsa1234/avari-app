@@ -141,20 +141,51 @@ describe('updateLastActive', () => {
 describe('updateLastActiveThrottled', () => {
   beforeEach(() => {
     mockUpdate.mockClear()
+    jest.useFakeTimers()
   })
 
-  test('calls update on first invocation', async () => {
-    // Reset the throttle by waiting (or accepting that prior tests may have set it)
-    // We test that it calls mockUpdate at least once
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  test('calls update on first invocation after throttle window expires', async () => {
+    // Advance time far enough to guarantee we're past any prior throttle
+    jest.advanceTimersByTime(10 * 60 * 1000)
     await updateLastActiveThrottled('user-999')
-    // The function may or may not call update depending on throttle state from prior tests,
-    // but it should not throw
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
   })
 
-  test('does not throw on rapid successive calls', async () => {
+  test('throttles rapid successive calls to one update', async () => {
+    jest.advanceTimersByTime(10 * 60 * 1000) // clear any prior throttle
+    await updateLastActiveThrottled('user-123')
+    mockUpdate.mockClear()
+
+    // These should all be throttled
     await updateLastActiveThrottled('user-123')
     await updateLastActiveThrottled('user-123')
     await updateLastActiveThrottled('user-123')
-    // Should not throw regardless of throttle state
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  test('allows update after 5-minute throttle window passes', async () => {
+    jest.advanceTimersByTime(10 * 60 * 1000) // clear any prior throttle
+    await updateLastActiveThrottled('user-123')
+    mockUpdate.mockClear()
+
+    // Advance just under 5 minutes — should still be throttled
+    jest.advanceTimersByTime(4 * 60 * 1000)
+    await updateLastActiveThrottled('user-123')
+    expect(mockUpdate).not.toHaveBeenCalled()
+
+    // Advance past the 5-minute mark — should allow update
+    jest.advanceTimersByTime(2 * 60 * 1000)
+    await updateLastActiveThrottled('user-123')
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not call update when userId is falsy', async () => {
+    jest.advanceTimersByTime(10 * 60 * 1000)
+    await updateLastActiveThrottled(null)
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })

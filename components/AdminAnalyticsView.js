@@ -82,6 +82,14 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
 
   return (
     <div className="space-y-6">
+      {/* Back button */}
+      <button
+        onClick={() => window.history.back()}
+        className="flex items-center gap-1 text-sm text-[#8B6F5C] hover:text-[#6B5344] mb-4 transition-colors"
+      >
+        ← Back
+      </button>
+
       {/* Header */}
       <div className="bg-gradient-to-r from-[#F4EEE6] to-[#E8DDD0] rounded-lg p-6 border border-[#D4A574]">
         <div className="flex items-center justify-between">

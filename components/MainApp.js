@@ -308,19 +308,14 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [currentUser?.id, handleNavigate])
 
-  // Track user activity (update last_active timestamp)
+  // Track user activity (update last_active timestamp) — passive only, no polling
   useEffect(() => {
     if (!currentUser?.id) return
 
     // Update on initial load
     updateLastActiveThrottled(currentUser.id)
 
-    // Update periodically while user is active (every 5 minutes)
-    const interval = setInterval(() => {
-      updateLastActiveThrottled(currentUser.id)
-    }, 5 * 60 * 1000)
-
-    // Update on user interactions
+    // Update only on actual user interactions
     const handleActivity = () => {
       updateLastActiveThrottled(currentUser.id)
     }
@@ -329,7 +324,6 @@ function MainApp({ currentUser, onSignOut }) {
     window.addEventListener('keydown', handleActivity)
 
     return () => {
-      clearInterval(interval)
       window.removeEventListener('click', handleActivity)
       window.removeEventListener('keydown', handleActivity)
     }

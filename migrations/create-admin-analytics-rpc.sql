@@ -103,7 +103,7 @@ BEGIN
       'meetup_signups', (SELECT COUNT(*) FROM meetup_signups WHERE created_at > now_ts - (days_back || ' days')::INTERVAL),
       'messages_sent', (SELECT COUNT(*) FROM messages WHERE created_at > now_ts - (days_back || ' days')::INTERVAL),
       'circles_created', (SELECT COUNT(*) FROM connection_groups WHERE created_at > now_ts - (days_back || ' days')::INTERVAL),
-      'circles_joined', (SELECT COUNT(*) FROM connection_group_members WHERE created_at > now_ts - (days_back || ' days')::INTERVAL),
+      'circles_joined', (SELECT COUNT(*) FROM connection_group_members WHERE invited_at > now_ts - (days_back || ' days')::INTERVAL),
       'calls_made', (SELECT COUNT(*) FROM call_recaps WHERE created_at > now_ts - (days_back || ' days')::INTERVAL),
       'total_call_minutes', (SELECT COALESCE(SUM(duration_seconds) / 60, 0) FROM call_recaps WHERE created_at > now_ts - (days_back || ' days')::INTERVAL)
     ),
