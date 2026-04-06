@@ -786,7 +786,11 @@ export default function UnifiedCallPage() {
 
       hasInitialized.current = true;
       setIsJoined(true);
-      setIsConnecting(false);
+      // Keep isConnecting true for WebRTC until the peer connection actually establishes.
+      // For LiveKit/Agora, the room join means we're connected.
+      if (config.provider !== 'webrtc') {
+        setIsConnecting(false);
+      }
 
       const startTime = new Date().toISOString();
       setCallStartTime(startTime);
@@ -934,6 +938,7 @@ export default function UnifiedCallPage() {
             clearTimeout(disconnectGraceRef.current);
             disconnectGraceRef.current = null;
           }
+          setIsConnecting(false);
           setRemoteParticipants(prev => prev.map(p => ({
             ...p,
             isDisconnected: false,
@@ -952,6 +957,10 @@ export default function UnifiedCallPage() {
               }
             });
           });
+          // Reset stats baseline so the quality monitor doesn't use stale data
+          // from a previous PC, which produces phantom packet loss (e.g. 152%)
+          // and triggers aggressive encoding changes that destabilize the connection
+          prevStatsRef.current = null;
           startQualityMonitor(newPc);
         }
       };
@@ -1568,8 +1577,9 @@ export default function UnifiedCallPage() {
             if (prev && prev.packetsSent !== undefined) {
               const packetsSent = report.packetsSent - prev.packetsSent;
               const nackCount = (report.nackCount || 0) - (prev.nackCount || 0);
-              if (packetsSent > 0) {
-                packetLoss = (nackCount / packetsSent) * 100;
+              if (packetsSent > 10) {
+                // Clamp to 0-100% — values over 100% are measurement artifacts
+                packetLoss = Math.min((nackCount / packetsSent) * 100, 100);
               }
             }
             prevStatsRef.current = { packetsSent: report.packetsSent, nackCount: report.nackCount || 0 };
