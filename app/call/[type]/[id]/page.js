@@ -863,7 +863,8 @@ export default function UnifiedCallPage() {
         }
         try { peerConnectionRef.current.close(); } catch (e) { /* ignore */ }
       }
-      iceCandidateQueueRef.current = [];
+      // Do NOT clear iceCandidateQueueRef here — candidates may have arrived
+      // before the offer. The queue is flushed after setRemoteDescription().
 
       const newPc = new RTCPeerConnection({ iceServers });
       peerConnectionRef.current = newPc;
@@ -1047,10 +1048,10 @@ export default function UnifiedCallPage() {
       console.log('[WebRTC] Received offer from:', from);
       remotePeerId = from;
       remotePeerIdRef.current = from;
-      // If polite peer receives offer on a dead connection, recreate first
+      // Create or repair PC if needed — the offer is the synchronization point
       const currentPc = peerConnectionRef.current;
-      if (currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed' || currentPc.connectionState === 'disconnected') {
-        console.log('[WebRTC] Polite peer recreating connection for new offer');
+      if (!currentPc || currentPc.connectionState === 'failed' || currentPc.connectionState === 'closed' || currentPc.connectionState === 'disconnected') {
+        console.log('[WebRTC] Creating fresh peer connection for incoming offer');
         pc = createPeerConnection();
       }
       handleWebRTCSignal({ type: 'offer', offer }, peerConnectionRef.current, amIPolite(from));
@@ -1097,18 +1098,17 @@ export default function UnifiedCallPage() {
         _lastUpdate: Date.now(),
       })));
 
-      // Always create a fresh peer connection when a peer joins.
-      // The peer may have refreshed their page (destroying their old PC),
-      // even though our local PC still shows 'connected' briefly.
-      console.log('[WebRTC] Peer joined, creating fresh peer connection');
-      pc = createPeerConnection();
-
       const polite = amIPolite(remotePeerId);
       console.log('[WebRTC] I am', polite ? 'polite' : 'impolite');
       if (!polite) {
+        // Impolite peer: create fresh PC and send offer immediately
+        console.log('[WebRTC] Peer joined, creating fresh peer connection');
+        pc = createPeerConnection();
         createWebRTCOffer(peerConnectionRef.current);
       }
-      // Polite peer waits for offer from the impolite peer
+      // Polite peer: wait for the offer — it is the true synchronization point.
+      // Creating a fresh PC here causes a race condition where queued ICE
+      // candidates get cleared before the offer arrives.
     });
 
     socket.on('user-left', ({ userId: leftUserId }) => {
