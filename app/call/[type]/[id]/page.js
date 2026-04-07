@@ -917,15 +917,17 @@ export default function UnifiedCallPage() {
       newPc.onconnectionstatechange = () => {
         console.log('[WebRTC] Connection state:', newPc.connectionState);
         if (newPc.connectionState === 'disconnected') {
+          // Don't update UI immediately — wait for grace period.
+          // Media keeps flowing during brief ICE disruptions.
           if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
           disconnectGraceRef.current = setTimeout(() => {
+            // Check if this PC is still the current one (might have been replaced by ICE restart)
+            if (peerConnectionRef.current !== newPc) return;
             if (newPc.connectionState === 'disconnected' || newPc.connectionState === 'failed') {
-              // Still disconnected after 5s — try ICE restart instead of just showing disconnected
               const attempts = (newPc._iceRestartAttempts || 0) + 1;
               newPc._iceRestartAttempts = attempts;
               if (attempts <= 3 && signalingSocketRef.current?.connected) {
                 console.log(`[WebRTC] ICE restart from disconnected, attempt ${attempts}/3`);
-                setIsConnecting(true);
                 newPc.createOffer({ iceRestart: true }).then(offer => {
                   newPc.setLocalDescription(offer);
                   signalingSocketRef.current.emit('offer', {
@@ -950,12 +952,13 @@ export default function UnifiedCallPage() {
           }, 5000);
         } else if (newPc.connectionState === 'failed') {
           if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
-          // Attempt ICE restart before giving up (up to 3 attempts)
+          // Check if this PC is still the current one
+          if (peerConnectionRef.current !== newPc) return;
+          // Attempt ICE restart before updating UI (up to 3 attempts)
           const attempts = (newPc._iceRestartAttempts || 0) + 1;
           newPc._iceRestartAttempts = attempts;
           if (attempts <= 3 && signalingSocketRef.current?.connected) {
             console.log(`[WebRTC] ICE restart attempt ${attempts}/3`);
-            setIsConnecting(true);
             newPc.createOffer({ iceRestart: true }).then(offer => {
               newPc.setLocalDescription(offer);
               signalingSocketRef.current.emit('offer', {
