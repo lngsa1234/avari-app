@@ -917,39 +917,21 @@ export default function UnifiedCallPage() {
       newPc.onconnectionstatechange = () => {
         console.log('[WebRTC] Connection state:', newPc.connectionState);
         if (newPc.connectionState === 'disconnected') {
-          // Don't update UI immediately — wait for grace period.
-          // Media keeps flowing during brief ICE disruptions.
+          // Disconnected is temporary — media keeps flowing. Don't restart ICE here,
+          // the connection usually recovers on its own. Only show UI after 8 seconds.
           if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
           disconnectGraceRef.current = setTimeout(() => {
-            // Check if this PC is still the current one (might have been replaced by ICE restart)
             if (peerConnectionRef.current !== newPc) return;
-            if (newPc.connectionState === 'disconnected' || newPc.connectionState === 'failed') {
-              const attempts = (newPc._iceRestartAttempts || 0) + 1;
-              newPc._iceRestartAttempts = attempts;
-              if (attempts <= 3 && signalingSocketRef.current?.connected) {
-                console.log(`[WebRTC] ICE restart from disconnected, attempt ${attempts}/3`);
-                newPc.createOffer({ iceRestart: true }).then(offer => {
-                  newPc.setLocalDescription(offer);
-                  signalingSocketRef.current.emit('offer', {
-                    offer,
-                    to: remotePeerIdRef.current,
-                  });
-                }).catch(() => {
-                  setRemoteParticipants(prev => prev.map(p => ({
-                    ...p,
-                    isDisconnected: true,
-                    _lastUpdate: Date.now(),
-                  })));
-                });
-              } else {
-                setRemoteParticipants(prev => prev.map(p => ({
-                  ...p,
-                  isDisconnected: true,
-                  _lastUpdate: Date.now(),
-                })));
-              }
+            if (peerLeftIntentionallyRef.current) return;
+            if (newPc.connectionState === 'disconnected') {
+              console.log('[WebRTC] Still disconnected after 8s, showing reconnecting UI');
+              setRemoteParticipants(prev => prev.map(p => ({
+                ...p,
+                isDisconnected: true,
+                _lastUpdate: Date.now(),
+              })));
             }
-          }, 5000);
+          }, 8000);
         } else if (newPc.connectionState === 'failed') {
           if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
           // Check if this PC is still the current one
