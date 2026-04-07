@@ -969,20 +969,34 @@ export default function UnifiedCallPage() {
       };
 
       newPc.oniceconnectionstatechange = () => {
-        console.log('[WebRTC] ICE state:', newPc.iceConnectionState);
-        if (newPc.iceConnectionState === 'failed') {
-          console.error('[WebRTC] ❌ ICE FAILED — likely NAT traversal issue. Check TURN server config.');
+        const iceState = newPc.iceConnectionState;
+        console.log('[WebRTC] ICE state:', iceState);
+        if (iceState === 'disconnected' || iceState === 'failed') {
+          // Dump diagnostic info at the moment of disruption
           newPc.getStats().then(stats => {
-            let candidatePairs = 0;
-            let relayCandidates = 0;
+            const diag = { candidatePairs: [], localCandidates: [], remoteCandidates: [] };
             stats.forEach(report => {
-              if (report.type === 'candidate-pair') candidatePairs++;
-              if (report.type === 'local-candidate' && report.candidateType === 'relay') relayCandidates++;
+              if (report.type === 'candidate-pair') {
+                diag.candidatePairs.push({
+                  state: report.state,
+                  nominated: report.nominated,
+                  bytesSent: report.bytesSent,
+                  bytesReceived: report.bytesReceived,
+                  requestsReceived: report.requestsReceived,
+                  requestsSent: report.requestsSent,
+                  responsesReceived: report.responsesReceived,
+                  responsesSent: report.responsesSent,
+                  currentRoundTripTime: report.currentRoundTripTime,
+                });
+              }
+              if (report.type === 'local-candidate') {
+                diag.localCandidates.push({ type: report.candidateType, protocol: report.protocol, address: report.address });
+              }
+              if (report.type === 'remote-candidate') {
+                diag.remoteCandidates.push({ type: report.candidateType, protocol: report.protocol, address: report.address });
+              }
             });
-            console.log(`[WebRTC] Candidate pairs attempted: ${candidatePairs}, relay candidates: ${relayCandidates}`);
-            if (relayCandidates === 0) {
-              console.error('[WebRTC] ❌ No relay (TURN) candidates — TURN server is missing or not working');
-            }
+            console.log(`[WebRTC] ICE ${iceState} diagnostics:`, JSON.stringify(diag, null, 2));
           });
         }
       };
