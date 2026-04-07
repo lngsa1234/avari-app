@@ -2685,8 +2685,10 @@ export default function UnifiedCallPage() {
       if (!isJoined) return 'Connecting...';
       const partnerName = relatedData?.partner_name || 'Partner';
       const hasRemote = remoteParticipants.length > 0;
-      const partnerDisconnected = remoteParticipants.some(p => p.isDisconnected);
-      if (partnerDisconnected) return `${partnerName} disconnected`;
+      const partnerLeft = remoteParticipants.some(p => p.hasLeft);
+      const partnerDisconnected = remoteParticipants.some(p => p.isDisconnected && !p.hasLeft);
+      if (partnerLeft) return `${partnerName} left the call`;
+      if (partnerDisconnected) return `Reconnecting with ${partnerName}...`;
       if (!hasRemote) return `Waiting for ${partnerName} to join...`;
       return `Connected with ${partnerName}`;
     } else if (callType === 'meetup' && relatedData) {
