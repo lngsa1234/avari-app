@@ -920,11 +920,32 @@ export default function UnifiedCallPage() {
           if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
           disconnectGraceRef.current = setTimeout(() => {
             if (newPc.connectionState === 'disconnected' || newPc.connectionState === 'failed') {
-              setRemoteParticipants(prev => prev.map(p => ({
-                ...p,
-                isDisconnected: true,
-                _lastUpdate: Date.now(),
-              })));
+              // Still disconnected after 5s — try ICE restart instead of just showing disconnected
+              const attempts = (newPc._iceRestartAttempts || 0) + 1;
+              newPc._iceRestartAttempts = attempts;
+              if (attempts <= 3 && signalingSocketRef.current?.connected) {
+                console.log(`[WebRTC] ICE restart from disconnected, attempt ${attempts}/3`);
+                setIsConnecting(true);
+                newPc.createOffer({ iceRestart: true }).then(offer => {
+                  newPc.setLocalDescription(offer);
+                  signalingSocketRef.current.emit('offer', {
+                    offer,
+                    to: remotePeerIdRef.current,
+                  });
+                }).catch(() => {
+                  setRemoteParticipants(prev => prev.map(p => ({
+                    ...p,
+                    isDisconnected: true,
+                    _lastUpdate: Date.now(),
+                  })));
+                });
+              } else {
+                setRemoteParticipants(prev => prev.map(p => ({
+                  ...p,
+                  isDisconnected: true,
+                  _lastUpdate: Date.now(),
+                })));
+              }
             }
           }, 5000);
         } else if (newPc.connectionState === 'failed') {
