@@ -1159,6 +1159,7 @@ export default function UnifiedCallPage() {
 
     socket.on('user-joined', ({ userId: joinedUserId }) => {
       if (joinedUserId === user?.id) return;
+      peerLeftIntentionallyRef.current = false;
       remotePeerId = joinedUserId;
       remotePeerIdRef.current = joinedUserId;
       allParticipantIdsRef.current.add(joinedUserId);
@@ -1187,10 +1188,18 @@ export default function UnifiedCallPage() {
     socket.on('user-left', ({ userId: leftUserId }) => {
       console.log('[WebRTC] Peer left:', leftUserId);
       peerLeftIntentionallyRef.current = true;
-      // Peer intentionally left — clear grace timer and mark disconnected immediately
+      // Peer intentionally left — close PC, clear timers, stop quality monitor
       if (disconnectGraceRef.current) {
         clearTimeout(disconnectGraceRef.current);
         disconnectGraceRef.current = null;
+      }
+      if (qualityMonitorRef.current) {
+        clearInterval(qualityMonitorRef.current);
+        qualityMonitorRef.current = null;
+      }
+      if (peerConnectionRef.current) {
+        try { peerConnectionRef.current.close(); } catch (e) { /* ignore */ }
+        peerConnectionRef.current = null;
       }
       setRemoteParticipants(prev => prev.map(p => ({
         ...p,
