@@ -205,6 +205,7 @@ export default function UnifiedCallPage() {
   const iceCandidateQueueRef = useRef([]); // Buffer ICE candidates until remote description is set
   const qualityMonitorRef = useRef(null); // Adaptive bitrate stats interval
   const disconnectGraceRef = useRef(null); // Grace period before showing "Disconnected"
+  const peerLeftIntentionallyRef = useRef(false); // True when peer left via signaling (not network drop)
   const prevStatsRef = useRef(null); // Previous stats snapshot for delta calculation
   const realtimeChannelRef = useRef(null); // Supabase channel (unused for WebRTC now)
   const signalingSocketRef = useRef(null); // Socket.IO signaling for WebRTC
@@ -1122,6 +1123,7 @@ export default function UnifiedCallPage() {
 
     socket.on('user-left', ({ userId: leftUserId }) => {
       console.log('[WebRTC] Peer left:', leftUserId);
+      peerLeftIntentionallyRef.current = true;
       // Peer intentionally left — clear grace timer and mark disconnected immediately
       if (disconnectGraceRef.current) {
         clearTimeout(disconnectGraceRef.current);
@@ -1130,6 +1132,7 @@ export default function UnifiedCallPage() {
       setRemoteParticipants(prev => prev.map(p => ({
         ...p,
         isDisconnected: true,
+        hasLeft: true,
         _lastUpdate: Date.now(),
       })));
     });
