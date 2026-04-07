@@ -1001,8 +1001,8 @@ export default function UnifiedCallPage() {
                 const localId = report.localCandidateId;
                 const remoteId = report.remoteCandidateId;
                 stats.forEach(s => {
-                  if (s.id === localId) console.log('[WebRTC] Local candidate:', s.candidateType, s.protocol, s.address);
-                  if (s.id === remoteId) console.log('[WebRTC] Remote candidate:', s.candidateType, s.protocol, s.address);
+                  if (s.id === localId) console.log('[WebRTC] Local candidate:', s.candidateType, s.protocol, s.address + ':' + s.port);
+                  if (s.id === remoteId) console.log('[WebRTC] Remote candidate:', s.candidateType, s.protocol, s.address + ':' + s.port);
                 });
                 console.log('[WebRTC] Round-trip time:', report.currentRoundTripTime, 's');
               }
@@ -1038,10 +1038,10 @@ export default function UnifiedCallPage() {
                 });
               }
               if (report.type === 'local-candidate') {
-                diag.localCandidates.push({ type: report.candidateType, protocol: report.protocol, address: report.address });
+                diag.localCandidates.push({ type: report.candidateType, protocol: report.protocol, address: report.address, port: report.port });
               }
               if (report.type === 'remote-candidate') {
-                diag.remoteCandidates.push({ type: report.candidateType, protocol: report.protocol, address: report.address });
+                diag.remoteCandidates.push({ type: report.candidateType, protocol: report.protocol, address: report.address, port: report.port });
               }
             });
             console.log(`[WebRTC] ICE ${iceState} diagnostics:`, JSON.stringify(diag, null, 2));
