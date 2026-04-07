@@ -1160,10 +1160,11 @@ export default function UnifiedCallPage() {
       remotePeerIdRef.current = joinedUserId;
       allParticipantIdsRef.current.add(joinedUserId);
 
-      // Clear disconnected state — peer is back
+      // Clear disconnected/left state — peer is back
       setRemoteParticipants(prev => prev.map(p => ({
         ...p,
         isDisconnected: false,
+        hasLeft: false,
         _lastUpdate: Date.now(),
       })));
 
