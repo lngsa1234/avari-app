@@ -843,17 +843,19 @@ export default function UnifiedCallPage() {
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
     ];
+    // TURN servers temporarily disabled for testing — checking if expired
+    // TURN credentials cause ICE churn that destabilizes the initial connection
     const turnUser = process.env.NEXT_PUBLIC_TURN_USERNAME;
     const turnCred = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
     if (turnUser && turnCred) {
-      iceServers.push(
-        { urls: 'stun:stun.relay.metered.ca:80' },
-        { urls: 'turn:global.relay.metered.ca:80', username: turnUser, credential: turnCred },
-        { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: turnUser, credential: turnCred },
-        { urls: 'turn:global.relay.metered.ca:443', username: turnUser, credential: turnCred },
-        { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: turnUser, credential: turnCred },
-      );
-      console.log('[WebRTC] TURN servers configured');
+      // iceServers.push(
+      //   { urls: 'stun:stun.relay.metered.ca:80' },
+      //   { urls: 'turn:global.relay.metered.ca:80', username: turnUser, credential: turnCred },
+      //   { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: turnUser, credential: turnCred },
+      //   { urls: 'turn:global.relay.metered.ca:443', username: turnUser, credential: turnCred },
+      //   { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: turnUser, credential: turnCred },
+      // );
+      console.log('[WebRTC] TURN servers DISABLED for testing (STUN only)');
     } else {
       console.warn('[WebRTC] ⚠️ TURN servers NOT configured — calls will fail behind symmetric NAT, corporate Wi-Fi, or cellular networks. Set NEXT_PUBLIC_TURN_USERNAME and NEXT_PUBLIC_TURN_CREDENTIAL env vars.');
     }
