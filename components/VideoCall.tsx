@@ -83,8 +83,9 @@ export default function VideoCall({
   onEndCall,
 }: VideoCallProps) {
   // State
-  const [callState, setCallState] = useState<'idle' | 'calling' | 'ringing' | 'connected' | 'ended'>('idle');
+  const [callState, setCallState] = useState<'idle' | 'calling' | 'ringing' | 'connected' | 'reconnecting' | 'ended'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [livekitMode, setLivekitMode] = useState(false);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -117,6 +118,7 @@ export default function VideoCall({
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const livekitRoomRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const interimTranscriptRef = useRef<string>(''); // Track interim transcript for updates
@@ -298,8 +300,8 @@ export default function VideoCall({
         peerConnection.connectionState === 'failed' ||
         peerConnection.connectionState === 'disconnected'
       ) {
-        setError('Connection lost');
-        handleEndCall();
+        // Don't end call — show "Poor connection" overlay with retry
+        setCallState('reconnecting');
       }
     };
 
@@ -459,8 +461,12 @@ export default function VideoCall({
   };
 
   // Toggle audio
-  const toggleAudio = () => {
-    if (localStreamRef.current) {
+  const toggleAudio = async () => {
+    if (livekitMode && livekitRoomRef.current) {
+      const enabled = !isAudioEnabled;
+      await livekitRoomRef.current.localParticipant.setMicrophoneEnabled(enabled);
+      setIsAudioEnabled(enabled);
+    } else if (localStreamRef.current) {
       localStreamRef.current.getAudioTracks().forEach((track) => {
         track.enabled = !track.enabled;
       });
@@ -469,8 +475,12 @@ export default function VideoCall({
   };
 
   // Toggle video
-  const toggleVideo = () => {
-    if (localStreamRef.current) {
+  const toggleVideo = async () => {
+    if (livekitMode && livekitRoomRef.current) {
+      const enabled = !isVideoEnabled;
+      await livekitRoomRef.current.localParticipant.setCameraEnabled(enabled);
+      setIsVideoEnabled(enabled);
+    } else if (localStreamRef.current) {
       localStreamRef.current.getVideoTracks().forEach((track) => {
         track.enabled = !track.enabled;
       });
@@ -561,6 +571,101 @@ export default function VideoCall({
     } catch (error) {
       console.error('[CircleW] Error toggling screen share:', error);
       setError('Failed to share screen');
+    }
+  };
+
+  // Retry with LiveKit fallback when WebRTC fails
+  const retryWithLiveKit = async () => {
+    try {
+      console.log('[CircleW] Switching to LiveKit fallback');
+      setError(null);
+      setCallState('calling');
+
+      // Close WebRTC peer connection but keep local stream alive
+      if (peerConnectionRef.current) {
+        peerConnectionRef.current.close();
+        peerConnectionRef.current = null;
+      }
+
+      // Dynamically import LiveKit
+      const { Room, RoomEvent, Track } = await import('livekit-client');
+
+      // Fetch token
+      const tokenRes = await fetch('/api/livekit-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: matchId,
+          participantId: userId,
+          participantName: currentUserName || userId,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        throw new Error('Failed to get connection token');
+      }
+
+      const { token } = await tokenRes.json();
+      const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
+
+      if (!livekitUrl) {
+        throw new Error('Video server not configured');
+      }
+
+      // Create and connect to LiveKit room
+      const room = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+
+      // Handle remote tracks
+      room.on(RoomEvent.TrackSubscribed, (track: any, publication: any, participant: any) => {
+        console.log('[CircleW/LiveKit] Remote track subscribed:', track.kind);
+        if (track.kind === 'video' && remoteVideoRef.current) {
+          track.attach(remoteVideoRef.current);
+        } else if (track.kind === 'audio') {
+          // Audio tracks auto-play when attached to an element
+          const audioEl = track.attach();
+          document.body.appendChild(audioEl);
+        }
+      });
+
+      room.on(RoomEvent.TrackUnsubscribed, (track: any) => {
+        track.detach();
+      });
+
+      room.on(RoomEvent.Disconnected, () => {
+        console.log('[CircleW/LiveKit] Disconnected');
+        setCallState('reconnecting');
+      });
+
+      room.on(RoomEvent.ParticipantConnected, () => {
+        console.log('[CircleW/LiveKit] Remote participant connected');
+      });
+
+      await room.connect(livekitUrl, token);
+      livekitRoomRef.current = room;
+
+      // Publish existing local tracks into LiveKit room
+      if (localStreamRef.current) {
+        const audioTrack = localStreamRef.current.getAudioTracks()[0];
+        const videoTrack = localStreamRef.current.getVideoTracks()[0];
+
+        if (audioTrack) {
+          await room.localParticipant.publishTrack(audioTrack, { name: 'microphone' });
+        }
+        if (videoTrack) {
+          await room.localParticipant.publishTrack(videoTrack, { name: 'camera' });
+        }
+      }
+
+      setLivekitMode(true);
+      setCallState('connected');
+      console.log('[CircleW] Successfully switched to LiveKit');
+    } catch (err) {
+      console.error('[CircleW] LiveKit fallback failed:', err);
+      setError('Could not reconnect. Please try again.');
+      setCallState('reconnecting');
     }
   };
 
@@ -783,7 +888,14 @@ export default function VideoCall({
       peerConnectionRef.current = null;
     }
 
+    // Disconnect LiveKit room if in fallback mode
+    if (livekitRoomRef.current) {
+      livekitRoomRef.current.disconnect();
+      livekitRoomRef.current = null;
+    }
+
     pendingCandidatesRef.current = [];
+    setLivekitMode(false);
   };
 
   // Initialize call on mount - AUTO START VERSION
@@ -1301,6 +1413,17 @@ export default function VideoCall({
                 </div>
               )}
               {callState === 'ringing' && <p className="text-slate-400">Incoming call...</p>}
+              {callState === 'reconnecting' && (
+                <div className="flex flex-col items-center gap-4">
+                  <p className="text-amber-400 text-lg">Poor connection</p>
+                  <button
+                    onClick={retryWithLiveKit}
+                    className="bg-white text-slate-900 font-medium px-6 py-2.5 rounded-lg hover:bg-slate-100 transition"
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
               {callState === 'ended' && <p className="text-slate-400">Call ended</p>}
             </div>
           </div>
