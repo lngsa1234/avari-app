@@ -119,6 +119,7 @@ export default function VideoCall({
   const screenStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const livekitRoomRef = useRef<any>(null);
+  const livekitAudioElementsRef = useRef<HTMLElement[]>([]);
   const metricsRef = useRef<any>({ latency: 0, packetLoss: 0, bitrate: 0, connectionQuality: 'unknown', videoResolution: '', fps: 0, maxLatency: 0, minLatency: Infinity });
   const metricsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -305,12 +306,12 @@ export default function VideoCall({
         }
         // Start collecting metrics
         startMetricsCollection();
-      } else if (
-        peerConnection.connectionState === 'failed' ||
-        peerConnection.connectionState === 'disconnected'
-      ) {
-        // Don't end call — show "Poor connection" overlay with retry
+      } else if (peerConnection.connectionState === 'failed') {
+        // ICE restarts exhausted — show "Poor connection" overlay with retry
         setCallState('reconnecting');
+      } else if (peerConnection.connectionState === 'disconnected') {
+        // Temporary disruption — let WebRTC auto-recover, don't show overlay
+        console.log('[CircleW] Connection temporarily disrupted, waiting for recovery...');
       }
     };
 
@@ -672,6 +673,7 @@ export default function VideoCall({
       const livekitUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
       if (!livekitUrl) {
+        console.error('[CircleW] NEXT_PUBLIC_LIVEKIT_URL not configured — LiveKit fallback unavailable');
         throw new Error('Video server not configured');
       }
 
@@ -690,6 +692,7 @@ export default function VideoCall({
           // Audio tracks auto-play when attached to an element
           const audioEl = track.attach();
           document.body.appendChild(audioEl);
+          livekitAudioElementsRef.current.push(audioEl);
         }
       });
 
@@ -965,6 +968,10 @@ export default function VideoCall({
       livekitRoomRef.current.disconnect();
       livekitRoomRef.current = null;
     }
+
+    // Remove orphaned LiveKit audio elements
+    livekitAudioElementsRef.current.forEach(el => el.remove());
+    livekitAudioElementsRef.current = [];
 
     pendingCandidatesRef.current = [];
     setLivekitMode(false);
