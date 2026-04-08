@@ -296,7 +296,10 @@ function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new 
     // Determine the right CTA state
     let ctaText = config.cta
     let isDisabled = false
-    if (isConnectType && isConnected) {
+    if (isConnectType && isConnected && event.event_type === 'coffee_available') {
+      ctaText = 'Schedule'
+      isDisabled = false
+    } else if (isConnectType && isConnected) {
       ctaText = 'Connected'
       isDisabled = true
     } else if (isConnectType && alreadyRequested) {
@@ -311,7 +314,7 @@ function FeedItem({ event, onCta, isMobile, currentUserId, sentRequestIds = new 
     const isOutline = config.ctaStyle === 'outline' || isDisabled
     actionPart = (
       <button
-        onClick={(e) => { e.stopPropagation(); if (!isDisabled) onCta?.(event) }}
+        onClick={(e) => { e.stopPropagation(); if (!isDisabled) onCta?.({ ...event, _ctaText: ctaText }) }}
         disabled={isDisabled}
         style={{
           padding: isMobile ? '7px 14px' : '8px 18px', borderRadius: 22,

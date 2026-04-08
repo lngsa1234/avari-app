@@ -1043,20 +1043,30 @@ export default function HomeView({
                             {meetup.topic || 'Community Event'}
                           </h4>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50', flexWrap: 'wrap' }}>
+                            <span style={{
+                              fontSize: '9px', fontWeight: '600', textTransform: 'uppercase',
+                              letterSpacing: '0.6px', padding: '2px 6px', borderRadius: '4px', flexShrink: 0,
+                              ...(meetup._isCoffeeChat ? { background: '#F0E4D8', color: '#6B4632' } : meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
+                            }}>
+                              {meetup._isCoffeeChat ? '1:1' : meetup.circle_id ? 'Circle' : 'Event'}
+                            </span>
+                            {isLive && (
+                              <span style={{
+                                fontSize: '9px', fontWeight: '600', textTransform: 'uppercase',
+                                letterSpacing: '0.6px', padding: '2px 6px', borderRadius: '4px',
+                                background: '#FEF0EC', color: '#D45B3E',
+                                display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+                              }}>
+                                <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
+                                Live
+                              </span>
+                            )}
+                            <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
                             <svg width="14" height="14" fill="none" stroke="#C4A07C" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                             <span style={{ fontWeight: '600', color: '#5C3A24' }}>{formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false })}</span>
-                            {meetup.location ? (
-                              <>
-                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                                <span>{meetup.location}</span>
-                              </>
-                            ) : (
-                              <>
-                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
-                                <span>Virtual</span>
-                              </>
-                            )}
+                            <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                            <span>{meetup.location || 'Virtual'}</span>
                           </div>
 
                           {(() => {
@@ -1217,13 +1227,20 @@ export default function HomeView({
                       <EventDateBadge date={meetup.date} time={meetup.time} timezone={meetup.timezone} />
 
                       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <h4 style={{
+                          fontFamily: fonts.serif, fontSize: '20px', fontWeight: '600',
+                          color: '#523C2E', margin: 0, lineHeight: '20px', letterSpacing: '0.15px',
+                        }}>
+                          {meetup.topic || 'Community Event'}
+                        </h4>
+
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
                           <span style={{
                             fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
                             letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
                             ...(meetup._isCoffeeChat ? { background: '#F0E4D8', color: '#6B4632' } : meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
                           }}>
-                            {meetup._isCoffeeChat ? '1:1 Coffee Chat' : meetup.circle_id ? 'Circle' : 'Event'}
+                            {meetup._isCoffeeChat ? '1:1' : meetup.circle_id ? 'Circle' : 'Event'}
                           </span>
                           {isLive && (
                             <span style={{
@@ -1236,16 +1253,7 @@ export default function HomeView({
                               Live
                             </span>
                           )}
-                        </div>
-
-                        <h4 style={{
-                          fontFamily: fonts.serif, fontSize: '20px', fontWeight: '600',
-                          color: '#523C2E', margin: 0, lineHeight: '20px', letterSpacing: '0.15px',
-                        }}>
-                          {meetup.topic || 'Community Event'}
-                        </h4>
-
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center' }}>
+                          <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: fonts.serif, fontSize: '15px', color: '#523C2E' }}>
                             <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                             <span style={{ fontWeight: '600' }}>{formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false })}</span>

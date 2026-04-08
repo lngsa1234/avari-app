@@ -13,7 +13,10 @@ describe('LiveFeed CTA button states', () => {
     let ctaText = configCta
     let isDisabled = false
 
-    if (isConnectType && isConnected) {
+    if (isConnectType && isConnected && eventType === 'coffee_available') {
+      ctaText = 'Schedule'
+      isDisabled = false
+    } else if (isConnectType && isConnected) {
       ctaText = 'Connected'
       isDisabled = true
     } else if (isConnectType && alreadyRequested) {
@@ -43,6 +46,24 @@ describe('LiveFeed CTA button states', () => {
 
   test('shows "Connected" when mutual connection exists', () => {
     const state = getCTAState({ configCta: 'Connect', isConnected: true, alreadyRequested: false, hasIncomingRequest: false })
+    expect(state.text).toBe('Connected')
+    expect(state.disabled).toBe(true)
+  })
+
+  test('coffee_available shows "Schedule" when already connected', () => {
+    const state = getCTAState({ configCta: 'Connect', eventType: 'coffee_available', isConnected: true })
+    expect(state.text).toBe('Schedule')
+    expect(state.disabled).toBe(false)
+  })
+
+  test('coffee_available shows "Connect" when not connected', () => {
+    const state = getCTAState({ configCta: 'Connect', eventType: 'coffee_available', isConnected: false })
+    expect(state.text).toBe('Connect')
+    expect(state.disabled).toBe(false)
+  })
+
+  test('non-coffee event still shows "Connected" when connected', () => {
+    const state = getCTAState({ configCta: 'Connect', eventType: 'member_joined', isConnected: true })
     expect(state.text).toBe('Connected')
     expect(state.disabled).toBe(true)
   })
@@ -664,5 +685,107 @@ describe('Home page coffee chat display consistency', () => {
 
     expect(visibleIds.size).toBe(0)
     expect(remaining.length).toBe(0)
+  })
+})
+
+describe('LiveFeed coffee_available → Schedule flow', () => {
+  // Simulate the navigation URL builder from navigationAdapter.js
+  function buildScheduleUrl({ meetupType, scheduleConnectionId, scheduleConnectionName }) {
+    const p = new URLSearchParams()
+    if (meetupType) p.set('type', meetupType)
+    if (scheduleConnectionId) p.set('connectionId', scheduleConnectionId)
+    if (scheduleConnectionName) p.set('connectionName', scheduleConnectionName)
+    const qs = p.toString()
+    return qs ? `/schedule?${qs}` : '/schedule'
+  }
+
+  test('Schedule button builds URL with coffee type and connection', () => {
+    const url = buildScheduleUrl({ meetupType: 'coffee', scheduleConnectionId: 'user-123', scheduleConnectionName: 'Lingyi' })
+    expect(url).toContain('type=coffee')
+    expect(url).toContain('connectionId=user-123')
+    expect(url).toContain('connectionName=Lingyi')
+  })
+
+  // Simulate the schedule page reading query params and mapping to props
+  function mapSchedulePageProps(searchParams) {
+    const initialType = searchParams.get('type') || null
+    const connectionId = searchParams.get('connectionId') || null
+    const connectionName = searchParams.get('connectionName') || null
+    const circleId = searchParams.get('circleId') || null
+    const circleName = searchParams.get('circleName') || null
+    return {
+      initialType,
+      initialConnectionId: connectionId,
+      initialConnectionName: connectionName,
+      initialCircleId: circleId,
+      initialCircleName: circleName,
+    }
+  }
+
+  test('schedule page maps query params to ScheduleMeetupView props', () => {
+    const params = new URLSearchParams('type=coffee&connectionId=user-123&connectionName=Lingyi')
+    const props = mapSchedulePageProps(params)
+    expect(props.initialType).toBe('coffee')
+    expect(props.initialConnectionId).toBe('user-123')
+    expect(props.initialConnectionName).toBe('Lingyi')
+  })
+
+  test('schedule page handles missing params gracefully', () => {
+    const params = new URLSearchParams('')
+    const props = mapSchedulePageProps(params)
+    expect(props.initialType).toBeNull()
+    expect(props.initialConnectionId).toBeNull()
+    expect(props.initialConnectionName).toBeNull()
+  })
+
+  test('schedule page maps circle params correctly', () => {
+    const params = new URLSearchParams('type=circle&circleId=circle-1&circleName=Founders')
+    const props = mapSchedulePageProps(params)
+    expect(props.initialType).toBe('circle')
+    expect(props.initialCircleId).toBe('circle-1')
+    expect(props.initialCircleName).toBe('Founders')
+    expect(props.initialConnectionId).toBeNull()
+  })
+
+  // Simulate ScheduleMeetupView initial state from props
+  function getScheduleInitialState({ initialType, initialConnectionId, initialConnectionName }) {
+    return {
+      meetupType: initialType || null,
+      selectedConnection: initialConnectionId ? { id: initialConnectionId, name: initialConnectionName } : null,
+    }
+  }
+
+  test('ScheduleMeetupView prefills coffee type and connection from props', () => {
+    const state = getScheduleInitialState({ initialType: 'coffee', initialConnectionId: 'user-123', initialConnectionName: 'Lingyi' })
+    expect(state.meetupType).toBe('coffee')
+    expect(state.selectedConnection).toEqual({ id: 'user-123', name: 'Lingyi' })
+  })
+
+  test('ScheduleMeetupView has no connection when not provided', () => {
+    const state = getScheduleInitialState({ initialType: 'coffee' })
+    expect(state.meetupType).toBe('coffee')
+    expect(state.selectedConnection).toBeNull()
+  })
+
+  test('ScheduleMeetupView has no type when not provided', () => {
+    const state = getScheduleInitialState({})
+    expect(state.meetupType).toBeNull()
+    expect(state.selectedConnection).toBeNull()
+  })
+
+  // End-to-end: feed event → URL → page props → component state
+  test('full flow: coffee_available Schedule → prefilled 1:1 coffee chat', () => {
+    // Step 1: Build URL from feed CTA
+    const url = buildScheduleUrl({ meetupType: 'coffee', scheduleConnectionId: 'user-456', scheduleConnectionName: 'Xueting' })
+
+    // Step 2: Parse URL params (simulating page load)
+    const params = new URLSearchParams(url.split('?')[1])
+    const props = mapSchedulePageProps(params)
+
+    // Step 3: Component initializes from props
+    const state = getScheduleInitialState(props)
+
+    expect(state.meetupType).toBe('coffee')
+    expect(state.selectedConnection).toEqual({ id: 'user-456', name: 'Xueting' })
   })
 })

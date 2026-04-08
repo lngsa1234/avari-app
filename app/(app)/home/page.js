@@ -183,7 +183,9 @@ export default function HomePage() {
         <LiveFeed
           currentUserId={currentUser.id}
           onCtaClick={(event) => {
-            if (event.event_type === 'coffee_available' || event.event_type === 'member_joined') {
+            if (event.event_type === 'coffee_available' && event._ctaText === 'Schedule') {
+              handleNavigate('scheduleMeetup', { meetupType: 'coffee', scheduleConnectionId: event.actor?.id, scheduleConnectionName: event.actor?.name })
+            } else if (event.event_type === 'coffee_available' || event.event_type === 'member_joined') {
               handleNavigate('userProfile', { userId: event.actor?.id })
             } else if (event.event_type === 'circle_join' || event.event_type === 'circle_schedule') {
               handleNavigate('circleDetail', { circleId: event.circle_id || event.circle?.id })

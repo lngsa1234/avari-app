@@ -33,13 +33,10 @@ export default function SchedulePage() {
       onNavigate={handleNavigate}
       previousView={getPreviousView(searchParams, 'home')}
       initialType={initialType}
-      scheduleContext={{
-        type: initialType,
-        circleId,
-        circleName,
-        connectionId,
-        connectionName,
-      }}
+      initialCircleId={circleId}
+      initialCircleName={circleName}
+      initialConnectionId={connectionId}
+      initialConnectionName={connectionName}
     />
   )
 }
