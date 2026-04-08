@@ -256,14 +256,11 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
 
       console.log('👤 Loaded profiles:', profiles);
 
-      // Batch fetch: get all messages involving current user and any matched user (1 query instead of N)
-      const matchedUserIdList = matchedUserIds.map(id => `sender_id.eq.${id},receiver_id.eq.${id}`).join(',');
+      // Batch fetch: get all messages where current user is sender or receiver (1 query instead of N)
       const { data: allMessages } = await supabase
         .from('messages')
         .select('*')
         .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
-        .in('sender_id', [...matchedUserIds, currentUser.id])
-        .in('receiver_id', [...matchedUserIds, currentUser.id])
         .order('created_at', { ascending: false });
 
       // Group messages by conversation partner

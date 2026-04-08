@@ -477,39 +477,18 @@ export default function VideoCall({
       const pc = peerConnectionRef.current;
       if (!pc || pc.connectionState !== 'connected') return;
       try {
-        const stats = await pc.getStats();
-        let rtt = 0;
-        let packetLoss = 0;
-        let bitrate = 0;
+        const { collectWebRTCMetrics, updateAccumulatedMetrics } = await import('@/lib/video/collectMetrics');
+        const sample = await collectWebRTCMetrics(pc);
+        if (sample) {
+          updateAccumulatedMetrics(metricsRef.current, sample);
 
-        stats.forEach((report: any) => {
-          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-            rtt = report.currentRoundTripTime ? report.currentRoundTripTime * 1000 : 0;
+          // Video resolution (track-specific, not in shared helper)
+          const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+          if (videoTrack) {
+            const settings = videoTrack.getSettings();
+            metricsRef.current.videoResolution = `${settings.width || 0}x${settings.height || 0}`;
+            metricsRef.current.fps = settings.frameRate || 30;
           }
-          if (report.type === 'inbound-rtp' && report.packetsLost !== undefined) {
-            const total = report.packetsReceived + report.packetsLost;
-            packetLoss = total > 0 ? (report.packetsLost / total) * 100 : 0;
-          }
-          if (report.type === 'outbound-rtp' && report.bytesSent) {
-            bitrate = report.bytesSent / 1000;
-          }
-        });
-
-        const quality = rtt < 100 ? 'excellent' : rtt < 200 ? 'good' : rtt < 400 ? 'fair' : 'poor';
-        const m = metricsRef.current;
-        m.latency = Math.round(rtt);
-        m.packetLoss = Math.round(packetLoss * 100) / 100;
-        m.bitrate = Math.round(bitrate);
-        m.connectionQuality = quality;
-        m.maxLatency = Math.max(m.maxLatency, Math.round(rtt));
-        m.minLatency = Math.min(m.minLatency === Infinity ? rtt : m.minLatency, Math.round(rtt));
-
-        // Video resolution
-        const videoTrack = localStreamRef.current?.getVideoTracks()[0];
-        if (videoTrack) {
-          const settings = videoTrack.getSettings();
-          m.videoResolution = `${settings.width || 0}x${settings.height || 0}`;
-          m.fps = settings.frameRate || 30;
         }
       } catch {
         // Stats not available

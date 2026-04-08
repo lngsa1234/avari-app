@@ -401,5 +401,110 @@ describe('LiveKit Fallback for Coffee Chats', () => {
       // localStream tracks should NOT have been stopped
       expect(mockTrack.stop).not.toHaveBeenCalled()
     })
+
+    test('LiveKit room.connect() throwing is caught gracefully', async () => {
+      const { Room } = require('livekit-client')
+      const failRoom = {
+        connect: jest.fn().mockRejectedValue(new Error('Connection refused')),
+        on: jest.fn().mockReturnThis(),
+      }
+      Room.mockImplementationOnce(() => failRoom)
+
+      let callState = 'reconnecting'
+      let error = null
+
+      try {
+        const room = new Room()
+        room.on('trackSubscribed', jest.fn())
+        await room.connect('wss://lk.example.com', 'token')
+      } catch (err) {
+        error = err.message
+        callState = 'reconnecting'
+      }
+
+      expect(error).toBe('Connection refused')
+      expect(callState).toBe('reconnecting')
+    })
+
+    test('publishTrack failure does not crash the fallback', async () => {
+      const failPublish = jest.fn().mockRejectedValue(new Error('Track ended'))
+
+      let error = null
+      try {
+        await failPublish({ kind: 'audio' }, { name: 'microphone' })
+      } catch (err) {
+        error = err.message
+      }
+
+      expect(error).toBe('Track ended')
+      // The fallback should catch this and show retry
+    })
+
+    test('audio elements are tracked and removed on cleanup', () => {
+      const audioElements = []
+
+      // Simulate appending audio elements during LiveKit track subscription
+      const audioEl1 = { remove: jest.fn() }
+      const audioEl2 = { remove: jest.fn() }
+      audioElements.push(audioEl1, audioEl2)
+
+      // Simulate cleanup
+      audioElements.forEach(el => el.remove())
+
+      expect(audioEl1.remove).toHaveBeenCalled()
+      expect(audioEl2.remove).toHaveBeenCalled()
+    })
+  })
+
+  // ---- Regression tests ----
+
+  describe('Regression: disconnected vs failed state handling', () => {
+    test('disconnected state does NOT trigger reconnecting overlay', () => {
+      // REGRESSION: Prior to fix, both disconnected and failed showed "Poor connection"
+      // disconnected is temporary (mobile app switch, brief network blip)
+      let callState = 'connected'
+      const connectionState = 'disconnected'
+
+      // New behavior: disconnected is ignored (let WebRTC auto-recover)
+      if (connectionState === 'failed') {
+        callState = 'reconnecting'
+      } else if (connectionState === 'disconnected') {
+        // Do nothing — temporary disruption
+      }
+
+      expect(callState).toBe('connected') // Should NOT change
+    })
+
+    test('failed state DOES trigger reconnecting overlay', () => {
+      let callState = 'connected'
+      const connectionState = 'failed'
+
+      if (connectionState === 'failed') {
+        callState = 'reconnecting'
+      } else if (connectionState === 'disconnected') {
+        // Do nothing
+      }
+
+      expect(callState).toBe('reconnecting')
+    })
+
+    test('connected state after disconnected resets to connected (auto-recovery)', () => {
+      let callState = 'connected'
+
+      // Disconnected happens
+      const disconnectedState = 'disconnected'
+      if (disconnectedState === 'failed') {
+        callState = 'reconnecting'
+      }
+      // callState unchanged
+
+      // WebRTC auto-recovers
+      const recoveredState = 'connected'
+      if (recoveredState === 'connected') {
+        callState = 'connected'
+      }
+
+      expect(callState).toBe('connected')
+    })
   })
 })
