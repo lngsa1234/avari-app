@@ -518,6 +518,56 @@ describe('Home page coffee chat display consistency', () => {
     expect(getActionText({ isCoffee: true, isPending: true, isInviteReceived: false, isMobile: true })).toBe('Awaiting')
   })
 
+  // Home page action button: recipient vs sender
+  function getHomeActionButtonV2({ isCoffeeChat, coffeeChatStatus, recipientId, currentUserId, isSignedUp }) {
+    if (isCoffeeChat && coffeeChatStatus === 'pending' && recipientId === currentUserId) {
+      return { show: 'accept_decline', buttons: ['Accept', 'Decline'] }
+    }
+    if (isCoffeeChat && coffeeChatStatus === 'pending') {
+      return { show: 'awaiting', text: 'Awaiting response' }
+    }
+    if (isSignedUp) {
+      return { show: 'join', text: 'Join' }
+    }
+    return { show: 'reserve', text: 'Reserve spot' }
+  }
+
+  test('recipient sees Accept/Decline on home page for pending coffee chat', () => {
+    const state = getHomeActionButtonV2({ isCoffeeChat: true, coffeeChatStatus: 'pending', recipientId: 'u2', currentUserId: 'u2', isSignedUp: true })
+    expect(state.show).toBe('accept_decline')
+    expect(state.buttons).toContain('Accept')
+    expect(state.buttons).toContain('Decline')
+  })
+
+  test('sender sees Awaiting response on home page for pending coffee chat', () => {
+    const state = getHomeActionButtonV2({ isCoffeeChat: true, coffeeChatStatus: 'pending', recipientId: 'u2', currentUserId: 'u1', isSignedUp: true })
+    expect(state.show).toBe('awaiting')
+  })
+
+  test('both see Join after coffee chat is accepted', () => {
+    const sender = getHomeActionButtonV2({ isCoffeeChat: true, coffeeChatStatus: 'accepted', recipientId: 'u2', currentUserId: 'u1', isSignedUp: true })
+    const recipient = getHomeActionButtonV2({ isCoffeeChat: true, coffeeChatStatus: 'accepted', recipientId: 'u2', currentUserId: 'u2', isSignedUp: true })
+    expect(sender.show).toBe('join')
+    expect(recipient.show).toBe('join')
+  })
+
+  // Detail page button states
+  function getDetailPageButton({ isCoffeeChat, status, meetingFormat }) {
+    if (isCoffeeChat && status === 'pending') return { show: 'awaiting', text: 'Awaiting response' }
+    if (meetingFormat !== 'in_person') return { show: 'join', text: 'Join Call' }
+    return { show: 'none' }
+  }
+
+  test('detail page shows Awaiting response for pending coffee chat', () => {
+    const state = getDetailPageButton({ isCoffeeChat: true, status: 'pending', meetingFormat: 'virtual' })
+    expect(state.show).toBe('awaiting')
+  })
+
+  test('detail page shows Join Call for accepted coffee chat', () => {
+    const state = getDetailPageButton({ isCoffeeChat: true, status: 'accepted', meetingFormat: 'virtual' })
+    expect(state.show).toBe('join')
+  })
+
   // Coffee chat status transition: pending → accepted
   test('status transition from pending to accepted changes button', () => {
     const pending = getHomeActionButton({ isCoffeeChat: true, coffeeChatStatus: 'pending', isSignedUp: true })
@@ -526,5 +576,93 @@ describe('Home page coffee chat display consistency', () => {
     const accepted = getHomeActionButton({ isCoffeeChat: true, coffeeChatStatus: 'accepted', isSignedUp: true })
     expect(accepted.show).toBe('join')
     expect(accepted.text).toBe('Join')
+  })
+
+  // Coffee chat request deduplication between upcoming meetups and requests section
+  function getVisibleCoffeeRequestIds(upcomingMeetups, sliceCount) {
+    return new Set(
+      upcomingMeetups.slice(0, sliceCount)
+        .filter(m => m._isCoffeeChat)
+        .map(m => m._coffeeChatId)
+        .filter(Boolean)
+    )
+  }
+
+  function filterRemainingCoffeeRequests(coffeeChatRequests, visibleIds) {
+    return coffeeChatRequests.filter(r => !visibleIds.has(r.id))
+  }
+
+  test('coffee request shown in upcoming is excluded from requests section', () => {
+    const upcomingMeetups = [
+      { _isCoffeeChat: true, _coffeeChatId: 'chat-1' },
+      { _isCoffeeChat: false },
+      { _isCoffeeChat: true, _coffeeChatId: 'chat-2' },
+    ]
+    const coffeeChatRequests = [
+      { id: 'chat-1', requester: { name: 'Alice' } },
+      { id: 'chat-3', requester: { name: 'Bob' } },
+    ]
+    const visibleIds = getVisibleCoffeeRequestIds(upcomingMeetups, 3)
+    const remaining = filterRemainingCoffeeRequests(coffeeChatRequests, visibleIds)
+
+    expect(visibleIds.has('chat-1')).toBe(true)
+    expect(remaining.length).toBe(1)
+    expect(remaining[0].id).toBe('chat-3')
+  })
+
+  test('coffee request NOT in top 3 upcoming stays in requests section', () => {
+    const upcomingMeetups = [
+      { _isCoffeeChat: false },
+      { _isCoffeeChat: false },
+      { _isCoffeeChat: false },
+      { _isCoffeeChat: true, _coffeeChatId: 'chat-4' }, // position 4, not visible
+    ]
+    const coffeeChatRequests = [
+      { id: 'chat-4', requester: { name: 'Charlie' } },
+    ]
+    const visibleIds = getVisibleCoffeeRequestIds(upcomingMeetups, 3)
+    const remaining = filterRemainingCoffeeRequests(coffeeChatRequests, visibleIds)
+
+    expect(visibleIds.has('chat-4')).toBe(false)
+    expect(remaining.length).toBe(1)
+    expect(remaining[0].id).toBe('chat-4')
+  })
+
+  test('all coffee requests in upcoming means requests section is empty', () => {
+    const upcomingMeetups = [
+      { _isCoffeeChat: true, _coffeeChatId: 'chat-a' },
+      { _isCoffeeChat: true, _coffeeChatId: 'chat-b' },
+    ]
+    const coffeeChatRequests = [
+      { id: 'chat-a' },
+      { id: 'chat-b' },
+    ]
+    const visibleIds = getVisibleCoffeeRequestIds(upcomingMeetups, 3)
+    const remaining = filterRemainingCoffeeRequests(coffeeChatRequests, visibleIds)
+
+    expect(remaining.length).toBe(0)
+  })
+
+  test('no upcoming coffee chats means all requests stay', () => {
+    const upcomingMeetups = [
+      { _isCoffeeChat: false },
+      { _isCoffeeChat: false },
+    ]
+    const coffeeChatRequests = [
+      { id: 'chat-x' },
+      { id: 'chat-y' },
+    ]
+    const visibleIds = getVisibleCoffeeRequestIds(upcomingMeetups, 3)
+    const remaining = filterRemainingCoffeeRequests(coffeeChatRequests, visibleIds)
+
+    expect(remaining.length).toBe(2)
+  })
+
+  test('empty upcoming and empty requests produces nothing', () => {
+    const visibleIds = getVisibleCoffeeRequestIds([], 3)
+    const remaining = filterRemainingCoffeeRequests([], visibleIds)
+
+    expect(visibleIds.size).toBe(0)
+    expect(remaining.length).toBe(0)
   })
 })

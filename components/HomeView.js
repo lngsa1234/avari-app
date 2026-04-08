@@ -615,13 +615,22 @@ export default function HomeView({
       {/* Main Content */}
       <div style={homeStyles.contentGrid}>
         {/* Connection & Circle Join Requests Section */}
-          {(connectionRequests.length > 0 || coffeeChatRequests.length > 0 || circleInvitations.length > 0 || circleJoinRequests.length > 0) && (() => {
+          {(() => {
+            // Filter out coffee chat requests already shown in the upcoming meetups section
+            const visibleCoffeeChatIds = new Set(
+              upcomingMeetups.slice(0, 3)
+                .filter(m => m._isCoffeeChat)
+                .map(m => m._coffeeChatId || m._coffeeChatData?.id)
+                .filter(Boolean)
+            )
+            const remainingCoffeeRequests = coffeeChatRequests.filter(r => !visibleCoffeeChatIds.has(r.id))
             const allRequests = [
               ...connectionRequests.map(r => ({ ...r, type: r.type || 'connection_request' })),
               ...circleJoinRequests,
               ...circleInvitations,
-              ...coffeeChatRequests.map(r => ({ ...r, type: 'coffee_chat_request' })),
+              ...remainingCoffeeRequests.map(r => ({ ...r, type: 'coffee_chat_request' })),
             ].sort((a, b) => new Date(b.requested_at || b.created_at || 0) - new Date(a.requested_at || a.created_at || 0))
+            if (allRequests.length === 0) return null
 
             return (
             <div style={homeStyles.card}>
@@ -897,7 +906,7 @@ export default function HomeView({
           {/* Upcoming Events Section with Date Badges */}
           <div style={homeStyles.card}>
             <div style={homeStyles.cardHeader}>
-              <h3 style={homeStyles.cardTitle}>Upcoming Meetups</h3>
+              <h3 style={homeStyles.cardTitle}>Your Coffee Chats</h3>
               <button
                 onClick={() => handleNavigate('meetups')}
                 style={homeStyles.seeAllBtn}
@@ -984,7 +993,7 @@ export default function HomeView({
                   if (isMobile) return (
                     <div
                       key={meetup.id}
-                      onClick={() => !meetup._isCoffeeChat && handleNavigate('eventDetail', { meetupId: meetup.id })}
+                      onClick={() => meetup._isCoffeeChat ? handleNavigate('eventDetail', { meetupId: meetup._coffeeChatId || meetup._coffeeChatData?.id, meetupCategory: 'coffee' }) : handleNavigate('eventDetail', { meetupId: meetup.id })}
                       style={{
                         background: 'transparent',
                         borderRadius: '16px',
@@ -1037,6 +1046,17 @@ export default function HomeView({
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '13px', color: '#6B5B50' }}>
                             <svg width="14" height="14" fill="none" stroke="#C4A07C" strokeWidth="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                             <span style={{ fontWeight: '600', color: '#5C3A24' }}>{formatEventTime(meetup.date, meetup.time, meetup.timezone, { showTimezone: false })}</span>
+                            {meetup.location ? (
+                              <>
+                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                                <span>{meetup.location}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
+                                <span>Virtual</span>
+                              </>
+                            )}
                           </div>
 
                           {(() => {
@@ -1106,7 +1126,29 @@ export default function HomeView({
 
                         {/* Action button - right column */}
                         <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px 0 0', flexShrink: 0 }}>
-                          {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' ? (
+                          {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' && meetup._coffeeChatData?.recipient_id === currentUser.id ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleAcceptCoffeeChat(meetup._coffeeChatId || meetup._coffeeChatData?.id) }}
+                                style={{
+                                  background: '#3B2314', color: 'white', border: 'none',
+                                  padding: '7px 14px', borderRadius: '10px',
+                                  fontFamily: fonts.sans, fontSize: '12px', fontWeight: '600',
+                                  cursor: 'pointer', whiteSpace: 'nowrap',
+                                }}
+                              >Accept</button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDeclineCoffeeChat(meetup._coffeeChatId || meetup._coffeeChatData?.id) }}
+                                style={{
+                                  background: 'none', color: '#9B8A7E',
+                                  border: '1px solid rgba(139,111,92,0.2)',
+                                  padding: '5px 10px', borderRadius: '10px',
+                                  fontFamily: fonts.sans, fontSize: '11px', fontWeight: '500',
+                                  cursor: 'pointer', whiteSpace: 'nowrap',
+                                }}
+                              >Decline</button>
+                            </div>
+                          ) : meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' ? (
                             <span style={{
                               fontSize: '11px', fontWeight: '600',
                               color: '#8B6F5C', fontFamily: fonts.sans,
@@ -1158,7 +1200,7 @@ export default function HomeView({
                         <div style={{ height: '1px', background: 'rgba(139, 111, 92, 0.25)', margin: '0 8px' }} />
                       )}
                     <div
-                      onClick={() => !meetup._isCoffeeChat && handleNavigate('eventDetail', { meetupId: meetup.id })}
+                      onClick={() => meetup._isCoffeeChat ? handleNavigate('eventDetail', { meetupId: meetup._coffeeChatId || meetup._coffeeChatData?.id, meetupCategory: 'coffee' }) : handleNavigate('eventDetail', { meetupId: meetup.id })}
                       style={{
                         display: 'flex',
                         gap: '16px',
@@ -1308,7 +1350,29 @@ export default function HomeView({
                       </div>
 
                       <div style={{ flexShrink: 0 }}>
-                        {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' ? (
+                        {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' && meetup._coffeeChatData?.recipient_id === currentUser.id ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleAcceptCoffeeChat(meetup._coffeeChatId || meetup._coffeeChatData?.id) }}
+                              style={{
+                                background: 'rgba(88, 66, 51, 0.9)', color: '#F5EDE9', border: 'none',
+                                padding: '9px 18px', borderRadius: '14px',
+                                fontFamily: fonts.sans, fontSize: '13px', fontWeight: '600',
+                                cursor: 'pointer', whiteSpace: 'nowrap',
+                              }}
+                            >Accept</button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleDeclineCoffeeChat(meetup._coffeeChatId || meetup._coffeeChatData?.id) }}
+                              style={{
+                                background: 'none', color: '#9B8A7E',
+                                border: '1px solid rgba(139,111,92,0.2)',
+                                padding: '7px 14px', borderRadius: '14px',
+                                fontFamily: fonts.sans, fontSize: '12px', fontWeight: '500',
+                                cursor: 'pointer', whiteSpace: 'nowrap',
+                              }}
+                            >Decline</button>
+                          </div>
+                        ) : meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' ? (
                           <span style={{
                             fontSize: '13px', fontWeight: '600',
                             color: '#8B6F5C', fontFamily: fonts.sans,

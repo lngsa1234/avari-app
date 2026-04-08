@@ -1268,7 +1268,18 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
                 <>
                 {(isSignedUp || isHost) ? (
                   <>
-                    {meetup.meeting_format !== 'in_person' && (
+                    {meetup._isCoffeeChat && meetup.status === 'pending' ? (
+                      <span style={{
+                        flex: 1,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                        padding: '12px 20px', borderRadius: '14px',
+                        backgroundColor: 'rgba(196, 149, 106, 0.15)', color: '#8B6F5C',
+                        border: 'none', fontSize: '15px', fontWeight: '600',
+                        fontFamily: fonts.sans,
+                      }}>
+                        <Clock size={18} /> Awaiting response
+                      </span>
+                    ) : meetup.meeting_format !== 'in_person' && (
                       <button
                         onClick={handleJoinCall}
                         style={{

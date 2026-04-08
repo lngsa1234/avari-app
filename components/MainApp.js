@@ -1,6 +1,7 @@
 'use client'
 
 import { supabase } from '@/lib/supabase'
+import { invalidateQuery } from '@/hooks/useSupabaseQuery'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Calendar, Coffee, Users, MapPin, Clock, User, Heart, MessageCircle, Send, X, Video, Compass, Search, Sparkles, ChevronRight, FileText, CheckCircle } from 'lucide-react'
 import DatePicker from 'react-datepicker'
@@ -410,12 +411,12 @@ function MainApp({ currentUser, onSignOut }) {
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'coffee_chats',
           filter: `requester_id=eq.${currentUser.id}` },
-        () => { homeData.refreshCoffeeChats() }
+        () => { homeData.refreshCoffeeChats(); invalidateQuery(`meetups-coffee-${currentUser.id}`) }
       )
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'coffee_chats',
           filter: `recipient_id=eq.${currentUser.id}` },
-        () => { homeData.refreshCoffeeChats() }
+        () => { homeData.refreshCoffeeChats(); invalidateQuery(`meetups-coffee-${currentUser.id}`) }
       )
       .subscribe()
 

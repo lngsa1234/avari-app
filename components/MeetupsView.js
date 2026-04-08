@@ -6,7 +6,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2, MoreHorizontal, ImagePlus, ChevronLeft, FileText, Check, Circle } from 'lucide-react';
-import { parseLocalDate, isEventPast, formatEventTime, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '../lib/dateUtils';
+import { parseLocalDate, isEventPast, isEventLive, formatEventTime, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 
@@ -1103,6 +1103,14 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               const isCoffee = item.type === 'coffee';
               const title = isCoffee ? (item.topic || 'Coffee Chat') : (item.title || 'Community Event');
               const time = item.time && item.time !== 'TBD' ? item.time : null;
+              const isLive = (() => {
+                if (!item.rawDate) return false;
+                const start = new Date(item.rawDate);
+                if (isNaN(start.getTime())) return false;
+                const durationMs = (isCoffee ? 30 : parseInt(item.durationMin || '60')) * 60 * 1000;
+                const now = Date.now();
+                return now >= start.getTime() && now <= start.getTime() + durationMs;
+              })();
               const attendees = isCoffee
                 ? [
                     { id: currentUser.id, name: currentUser.name, profile_picture: currentUser.profile_picture },
@@ -1268,6 +1276,18 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           fontFamily: fonts.sans,
                         }}>
                           {item.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
+                        </span>
+                      )}
+                      {isLive && (
+                        <span style={{
+                          fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
+                          background: isToday ? 'rgba(255,255,255,0.2)' : '#FEF0EC',
+                          color: isToday ? '#FFF' : '#D45B3E',
+                          fontFamily: fonts.sans,
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                        }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isToday ? '#FFF' : '#D45B3E', animation: 'pulse-live 1.5s infinite' }} />
+                          Live
                         </span>
                       )}
                     </div>
@@ -1467,21 +1487,6 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               );
             });
           })()}
-          {/* View past link */}
-          {filteredItems.length > 0 && pastMeetups.length > 0 && (
-            <button
-              onClick={() => onNavigate?.('pastMeetings')}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                fontFamily: fonts.sans, fontSize: '13px', fontWeight: '500',
-                color: '#B8A089', padding: '16px 0 4px', margin: '0 auto', display: 'block',
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#8B6F5C'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#B8A089'; }}
-            >
-              View past meetings →
-            </button>
-          )}
         </div>
       ) : (
         // Past Meetings — redesigned
