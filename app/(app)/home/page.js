@@ -88,9 +88,7 @@ export default function HomePage() {
         _isCoffeeChat: true,
         _coffeeChatId: chat.id,
         _coffeeChatData: chat,
-        topic: chat.topic
-          ? `${chat.topic} — with ${otherPerson?.name || 'Someone'}`
-          : `Coffee Chat with ${otherPerson?.name || 'Someone'}`,
+        topic: chat.topic || 'Coffee Chat',
         date: dateStr,
         time: timeStr,
         duration: '30',

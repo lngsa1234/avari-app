@@ -1101,7 +1101,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               const isToday = itemDate && (() => { const d = new Date(itemDate); d.setHours(0,0,0,0); return d.getTime() === todayDate.getTime(); })();
 
               const isCoffee = item.type === 'coffee';
-              const title = isCoffee ? (item.topic ? `${item.topic} — with ${item.with}` : `Coffee Chat with ${item.with}`) : (item.title || 'Community Event');
+              const title = isCoffee ? (item.topic || 'Coffee Chat') : (item.title || 'Community Event');
               const time = item.time && item.time !== 'TBD' ? item.time : null;
               const attendees = isCoffee
                 ? [
@@ -1113,7 +1113,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               const attendeeCount = isCoffee ? 0 : (attendees.length || 0);
 
               // Category tag: meeting type
-              const categoryTag = isCoffee ? '1:1' : (item.isCircleMeetup ? 'Circle' : 'Event');
+              const categoryTag = isCoffee ? '1:1 Coffee Chat' : (item.isCircleMeetup ? 'Circle' : 'Event');
               const categoryColors = {
                 '1:1': { bg: 'rgba(155, 126, 196, 0.15)', color: '#7B5EA7' },
                 'Circle': { bg: 'rgba(139, 158, 126, 0.15)', color: '#5C7A4E' },
@@ -1249,7 +1249,17 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           {topicTag}
                         </span>
                       )}
-                      {/* Format tag (In-Person / Hybrid) */}
+                      {/* Format tag (Virtual / In-Person / Hybrid) */}
+                      {(isCoffee || !item.meeting_format || item.meeting_format === 'virtual') && (
+                        <span style={{
+                          fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
+                          background: isToday ? 'rgba(255,255,255,0.15)' : 'rgba(139, 111, 71, 0.08)',
+                          color: isToday ? 'rgba(255,255,255,0.8)' : '#7A5C42',
+                          fontFamily: fonts.sans,
+                        }}>
+                          Virtual
+                        </span>
+                      )}
                       {!isCoffee && item.meeting_format && item.meeting_format !== 'virtual' && (
                         <span style={{
                           fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
@@ -1258,17 +1268,6 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           fontFamily: fonts.sans,
                         }}>
                           {item.meeting_format === 'hybrid' ? 'Hybrid' : 'In-Person'}
-                        </span>
-                      )}
-                      {/* Pending status for coffee chats */}
-                      {isCoffee && item.isPending && (
-                        <span style={{
-                          fontSize: isMobile ? '9px' : '10px', fontWeight: '600', padding: isMobile ? '2px 7px' : '3px 9px', borderRadius: '6px',
-                          background: isToday ? 'rgba(255,255,255,0.15)' : 'rgba(196, 149, 106, 0.2)',
-                          color: isToday ? 'rgba(255,255,255,0.8)' : '#8B6F5C',
-                          fontFamily: fonts.sans,
-                        }}>
-                          {item.isInviteReceived ? 'Invited you' : 'Awaiting response'}
                         </span>
                       )}
                     </div>
@@ -1295,7 +1294,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
                     {/* Participant avatars + count */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '6px', marginTop: '2px' }}>
-                      {attendees.length > 0 && (
+                      {!isCoffee && attendees.length > 0 && (
                         <span style={{ display: 'flex', alignItems: 'center' }}>
                           {attendees.slice(0, isMobile ? 2 : 3).map((a, idx) => (
                             <span key={a.id || idx} style={{
@@ -1335,7 +1334,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                         color: isToday ? 'rgba(255,255,255,0.55)' : '#C4956A',
                       }}>
                         {isCoffee
-                          ? (item.isPending ? (item.isInviteReceived ? 'Invite received' : 'Awaiting response') : '1:1 Video Call')
+                          ? `with ${(item.with || 'Partner').split(' ')[0]}`
                           : `${attendeeCount} ${attendeeCount === 1 ? 'attendee' : 'attendees'}`}
                       </span>
                     </div>

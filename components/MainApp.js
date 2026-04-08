@@ -405,11 +405,26 @@ function MainApp({ currentUser, onSignOut }) {
       )
       .subscribe()
 
+    const coffeeChatsChannel = supabase
+      .channel('coffee_chats_changes')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'coffee_chats',
+          filter: `requester_id=eq.${currentUser.id}` },
+        () => { homeData.refreshCoffeeChats() }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'coffee_chats',
+          filter: `recipient_id=eq.${currentUser.id}` },
+        () => { homeData.refreshCoffeeChats() }
+      )
+      .subscribe()
+
     return () => {
       supabase.removeChannel(meetupsChannel)
       supabase.removeChannel(signupsChannel)
       supabase.removeChannel(interestsChannel)
       supabase.removeChannel(messagesChannel)
+      supabase.removeChannel(coffeeChatsChannel)
     }
   }, [currentUser?.id])
 
@@ -439,9 +454,7 @@ function MainApp({ currentUser, onSignOut }) {
       const timeStr = `${String(scheduledDate.getHours()).padStart(2, '0')}:${String(scheduledDate.getMinutes()).padStart(2, '0')}`
       return {
         id: chat.id,
-        topic: chat.topic
-          ? `${chat.topic} — with ${otherPerson?.name || 'Someone'}`
-          : `Coffee chat with ${otherPerson?.name || 'Someone'}`,
+        topic: chat.topic || 'Coffee Chat',
         date: dateStr,
         time: timeStr,
         duration: '30',

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Calendar, Coffee, Users, User, Heart, Video, Sparkles, ChevronRight, Share2, Search } from 'lucide-react'
+import { Calendar, Clock, Coffee, Users, User, Heart, Video, Sparkles, ChevronRight, Share2, Search } from 'lucide-react'
 import { parseLocalDate, formatEventTime, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
 import { colors as designColors, fonts } from '@/lib/designTokens'
 import NudgeBanner from './NudgeBanner'
@@ -1040,21 +1040,21 @@ export default function HomeView({
                           </div>
 
                           {(() => {
-                            // Hide attendee count for 1:1 coffee chats (always 2, not useful)
+                            // For coffee chats: show only the partner (not current user)
                             if (meetup._isCoffeeChat) {
-                              // Show partner avatar only
-                              const partner = meetupSignups.find(s => s.user_id !== currentUser.id)
-                              if (!partner) return null
+                              const otherPerson = meetup._coffeeChatData?._otherPerson
+                              const partnerName = otherPerson?.name || meetup.host?.name
+                              const partnerPic = otherPerson?.profile_picture || meetup.host?.profile_picture
                               return (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  {partner.profiles?.profile_picture ? (
-                                    <img loading="lazy" src={partner.profiles.profile_picture} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFFCF8' }} />
+                                  {partnerPic ? (
+                                    <img loading="lazy" src={partnerPic} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFFCF8' }} />
                                   ) : (
                                     <div style={{ width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: fonts.sans, fontSize: '9px', fontWeight: '600', color: 'white', background: '#8B6347' }}>
-                                      {(partner.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                      {(partnerName || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
                                     </div>
                                   )}
-                                  <span style={{ fontSize: '12px', color: '#6B5B50', fontWeight: '500' }}>with {partner.profiles?.name?.split(' ')[0] || 'Partner'}</span>
+                                  <span style={{ fontSize: '12px', color: '#6B5B50', fontWeight: '500' }}>with {partnerName?.split(' ')[0] || 'Partner'}</span>
                                 </div>
                               )
                             }
@@ -1106,7 +1106,19 @@ export default function HomeView({
 
                         {/* Action button - right column */}
                         <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px 0 0', flexShrink: 0 }}>
-                          {isSignedUp ? (
+                          {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' ? (
+                            <span style={{
+                              fontSize: '11px', fontWeight: '600',
+                              color: '#8B6F5C', fontFamily: fonts.sans,
+                              padding: '8px 12px', borderRadius: '10px',
+                              background: 'rgba(196, 149, 106, 0.15)',
+                              display: 'inline-flex', alignItems: 'center', gap: '5px',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              <Clock style={{ width: '12px', height: '12px' }} />
+                              Awaiting
+                            </span>
+                          ) : isSignedUp ? (
                             <button
                               onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
                               style={{
@@ -1169,17 +1181,8 @@ export default function HomeView({
                             letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
                             ...(meetup._isCoffeeChat ? { background: '#F0E4D8', color: '#6B4632' } : meetup.circle_id ? { background: '#F0E4D8', color: '#6B4632' } : { background: '#E8D5BE', color: '#5C3A24' }),
                           }}>
-                            {meetup._isCoffeeChat ? '1:1' : meetup.circle_id ? 'Circle' : 'Event'}
+                            {meetup._isCoffeeChat ? '1:1 Coffee Chat' : meetup.circle_id ? 'Circle' : 'Event'}
                           </span>
-                          {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' && (
-                            <span style={{
-                              fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
-                              letterSpacing: '0.8px', padding: '3px 8px', borderRadius: '5px', flexShrink: 0,
-                              background: '#FFF3E0', color: '#B8860B',
-                            }}>
-                              Pending
-                            </span>
-                          )}
                           {isLive && (
                             <span style={{
                               fontSize: '10px', fontWeight: '600', textTransform: 'uppercase',
@@ -1219,13 +1222,40 @@ export default function HomeView({
                               <span style={{ width: '3px', height: '3px', borderRadius: '50%', background: '#D4B896', flexShrink: 0 }} />
                               <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontFamily: fonts.serif, fontSize: '15px', color: '#523C2E' }}>
                                 <svg width="18" height="18" fill="none" stroke="#605045" strokeWidth="1.5" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                <span>Virtual · Video Call</span>
+                                <span>Virtual</span>
                               </div>
                             </>
                           )}
                         </div>
 
                         {(() => {
+                          if (meetup._isCoffeeChat) {
+                            // For coffee chats: show only the partner (not current user)
+                            const otherPerson = meetup._coffeeChatData?._otherPerson
+                            const partnerName = otherPerson?.name || meetup.host?.name
+                            const partnerPic = otherPerson?.profile_picture || meetup.host?.profile_picture
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {partnerPic ? (
+                                  <img loading="lazy" src={partnerPic} alt="" style={{ width: '34px', height: '34px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFFCF8' }} />
+                                ) : (
+                                  <div style={{
+                                    width: '34px', height: '34px', borderRadius: '50%',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontFamily: fonts.serif, fontSize: '10px', fontWeight: '700',
+                                    color: '#523C2E',
+                                    background: 'linear-gradient(180deg, rgba(158, 120, 104, 0.2) 0%, rgba(241, 225, 213, 0.2) 100%)',
+                                    boxShadow: '0px 1px 4px #9E7868',
+                                  }}>
+                                    {(partnerName || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                  </div>
+                                )}
+                                <span style={{ fontFamily: fonts.serif, fontSize: '15px', fontWeight: '600', color: '#523C2E', opacity: 0.82, letterSpacing: '0.15px' }}>
+                                  with {partnerName?.split(' ')[0] || 'Partner'}
+                                </span>
+                              </div>
+                            )
+                          }
                           const meetupSignupsList = meetupSignups
                           const attendeeCount = meetupSignupsList.length
                           const limit = meetup.participant_limit
@@ -1278,7 +1308,19 @@ export default function HomeView({
                       </div>
 
                       <div style={{ flexShrink: 0 }}>
-                        {isSignedUp ? (
+                        {meetup._isCoffeeChat && meetup._coffeeChatData?.status === 'pending' ? (
+                          <span style={{
+                            fontSize: '13px', fontWeight: '600',
+                            color: '#8B6F5C', fontFamily: fonts.sans,
+                            padding: '10px 18px', borderRadius: '14px',
+                            background: 'rgba(196, 149, 106, 0.15)',
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            whiteSpace: 'nowrap', letterSpacing: '0.2px',
+                          }}>
+                            <Clock style={{ width: '14px', height: '14px' }} />
+                            Awaiting response
+                          </span>
+                        ) : isSignedUp ? (
                           <button
                             onClick={(e) => { e.stopPropagation(); handleJoinVideoCall(meetup) }}
                             style={{

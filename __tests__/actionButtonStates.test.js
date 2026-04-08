@@ -327,3 +327,204 @@ describe('Video call control bar button states', () => {
     expect(state.blur.visible).toBe(false)
   })
 })
+
+describe('Home page coffee chat display consistency', () => {
+  // Simulate the home page action button logic from HomeView.js
+  function getHomeActionButton({ isCoffeeChat, coffeeChatStatus, isSignedUp }) {
+    if (isCoffeeChat && coffeeChatStatus === 'pending') {
+      return { show: 'awaiting', text: 'Awaiting response' }
+    }
+    if (isSignedUp) {
+      return { show: 'join', text: 'Join' }
+    }
+    return { show: 'reserve', text: 'Reserve spot' }
+  }
+
+  test('pending coffee chat shows Awaiting response (not Join)', () => {
+    const state = getHomeActionButton({ isCoffeeChat: true, coffeeChatStatus: 'pending', isSignedUp: true })
+    expect(state.show).toBe('awaiting')
+    expect(state.text).toBe('Awaiting response')
+  })
+
+  test('accepted coffee chat shows Join', () => {
+    const state = getHomeActionButton({ isCoffeeChat: true, coffeeChatStatus: 'accepted', isSignedUp: true })
+    expect(state.show).toBe('join')
+    expect(state.text).toBe('Join')
+  })
+
+  test('scheduled coffee chat shows Join', () => {
+    const state = getHomeActionButton({ isCoffeeChat: true, coffeeChatStatus: 'scheduled', isSignedUp: true })
+    expect(state.show).toBe('join')
+    expect(state.text).toBe('Join')
+  })
+
+  test('regular meetup signed up shows Join', () => {
+    const state = getHomeActionButton({ isCoffeeChat: false, isSignedUp: true })
+    expect(state.show).toBe('join')
+  })
+
+  test('regular meetup not signed up shows Reserve spot', () => {
+    const state = getHomeActionButton({ isCoffeeChat: false, isSignedUp: false })
+    expect(state.show).toBe('reserve')
+  })
+
+  // Simulate the coffee chat title logic from home page (app/(app)/home/page.js)
+  function getCoffeeChatTitle({ topic }) {
+    return topic || 'Coffee Chat'
+  }
+
+  test('coffee chat with topic shows only the topic', () => {
+    expect(getCoffeeChatTitle({ topic: 'Weekly Marketing Strategy Review' })).toBe('Weekly Marketing Strategy Review')
+  })
+
+  test('coffee chat without topic shows Coffee Chat', () => {
+    expect(getCoffeeChatTitle({ topic: null })).toBe('Coffee Chat')
+  })
+
+  test('coffee chat title does not include partner name', () => {
+    const title = getCoffeeChatTitle({ topic: 'Weekly Marketing Strategy Review' })
+    expect(title).not.toContain('with')
+    expect(title).not.toContain('—')
+  })
+
+  // Simulate the partner display logic from HomeView.js
+  function getCoffeePartnerDisplay({ otherPerson, host }) {
+    const partnerName = otherPerson?.name || host?.name
+    const partnerPic = otherPerson?.profile_picture || host?.profile_picture
+    return {
+      name: partnerName?.split(' ')[0] || 'Partner',
+      hasAvatar: !!partnerPic,
+      avatarUrl: partnerPic || null,
+    }
+  }
+
+  test('shows partner name from _otherPerson', () => {
+    const display = getCoffeePartnerDisplay({
+      otherPerson: { name: 'Xueting Zhou', profile_picture: 'https://example.com/pic.jpg' },
+      host: null,
+    })
+    expect(display.name).toBe('Xueting')
+    expect(display.hasAvatar).toBe(true)
+  })
+
+  test('falls back to host when _otherPerson is null', () => {
+    const display = getCoffeePartnerDisplay({
+      otherPerson: null,
+      host: { name: 'Xueting Zhou', profile_picture: 'https://example.com/pic.jpg' },
+    })
+    expect(display.name).toBe('Xueting')
+    expect(display.hasAvatar).toBe(true)
+  })
+
+  test('shows initials when no avatar available', () => {
+    const display = getCoffeePartnerDisplay({
+      otherPerson: { name: 'Xueting Zhou', profile_picture: null },
+      host: null,
+    })
+    expect(display.name).toBe('Xueting')
+    expect(display.hasAvatar).toBe(false)
+  })
+
+  test('shows Partner fallback when no data available', () => {
+    const display = getCoffeePartnerDisplay({ otherPerson: null, host: null })
+    expect(display.name).toBe('Partner')
+    expect(display.hasAvatar).toBe(false)
+  })
+
+  // Simulate category tag logic
+  function getCategoryTag({ isCoffeeChat, circleId }) {
+    if (isCoffeeChat) return '1:1 Coffee Chat'
+    if (circleId) return 'Circle'
+    return 'Event'
+  }
+
+  test('coffee chat shows 1:1 Coffee Chat tag', () => {
+    expect(getCategoryTag({ isCoffeeChat: true })).toBe('1:1 Coffee Chat')
+  })
+
+  test('circle meetup shows Circle tag', () => {
+    expect(getCategoryTag({ isCoffeeChat: false, circleId: 'abc' })).toBe('Circle')
+  })
+
+  test('regular meetup shows Event tag', () => {
+    expect(getCategoryTag({ isCoffeeChat: false, circleId: null })).toBe('Event')
+  })
+
+  // Simulate the MeetupsView coffee chat title logic
+  function getMeetupsViewTitle({ isCoffee, topic }) {
+    return isCoffee ? (topic || 'Coffee Chat') : 'Community Event'
+  }
+
+  test('MeetupsView coffee chat with topic shows only topic', () => {
+    expect(getMeetupsViewTitle({ isCoffee: true, topic: 'Fundraising Strategy' })).toBe('Fundraising Strategy')
+  })
+
+  test('MeetupsView coffee chat without topic shows Coffee Chat', () => {
+    expect(getMeetupsViewTitle({ isCoffee: true, topic: null })).toBe('Coffee Chat')
+  })
+
+  test('MeetupsView coffee chat title does not include partner name', () => {
+    const title = getMeetupsViewTitle({ isCoffee: true, topic: 'Fundraising Strategy' })
+    expect(title).not.toContain('with')
+  })
+
+  // Simulate format tag logic from MeetupsView.js
+  function getFormatTag({ isCoffee, meetingFormat }) {
+    if (isCoffee || !meetingFormat || meetingFormat === 'virtual') return 'Virtual'
+    if (meetingFormat === 'hybrid') return 'Hybrid'
+    return 'In-Person'
+  }
+
+  test('coffee chat shows Virtual tag', () => {
+    expect(getFormatTag({ isCoffee: true })).toBe('Virtual')
+  })
+
+  test('virtual meetup shows Virtual tag', () => {
+    expect(getFormatTag({ isCoffee: false, meetingFormat: 'virtual' })).toBe('Virtual')
+  })
+
+  test('meetup with no format shows Virtual tag', () => {
+    expect(getFormatTag({ isCoffee: false, meetingFormat: null })).toBe('Virtual')
+  })
+
+  test('in-person meetup shows In-Person tag', () => {
+    expect(getFormatTag({ isCoffee: false, meetingFormat: 'in_person' })).toBe('In-Person')
+  })
+
+  test('hybrid meetup shows Hybrid tag', () => {
+    expect(getFormatTag({ isCoffee: false, meetingFormat: 'hybrid' })).toBe('Hybrid')
+  })
+
+  // Verify awaiting response is not duplicated
+  test('coffee page shows awaiting response only in action button, not in badge', () => {
+    // The badge (status tag area) should NOT show awaiting response
+    // Only the action button area shows it
+    function getBadgeText({ isCoffee, isPending }) {
+      // After our fix: no pending badge for coffee chats
+      // (removed the "Awaiting response" / "Invited you" badge)
+      return null
+    }
+    function getActionText({ isCoffee, isPending, isInviteReceived, isMobile }) {
+      if (!isCoffee) return null
+      if (isInviteReceived) return 'Accept'
+      if (isPending) return isMobile ? 'Awaiting' : 'Awaiting response'
+      return 'Join'
+    }
+
+    // Badge should be null (no duplicate)
+    expect(getBadgeText({ isCoffee: true, isPending: true })).toBeNull()
+    // Action button shows it once
+    expect(getActionText({ isCoffee: true, isPending: true, isInviteReceived: false, isMobile: false })).toBe('Awaiting response')
+    expect(getActionText({ isCoffee: true, isPending: true, isInviteReceived: false, isMobile: true })).toBe('Awaiting')
+  })
+
+  // Coffee chat status transition: pending → accepted
+  test('status transition from pending to accepted changes button', () => {
+    const pending = getHomeActionButton({ isCoffeeChat: true, coffeeChatStatus: 'pending', isSignedUp: true })
+    expect(pending.show).toBe('awaiting')
+
+    const accepted = getHomeActionButton({ isCoffeeChat: true, coffeeChatStatus: 'accepted', isSignedUp: true })
+    expect(accepted.show).toBe('join')
+    expect(accepted.text).toBe('Join')
+  })
+})

@@ -128,7 +128,7 @@ BEGIN
 
     -- Coffee chat partner profiles
     'coffee_profiles', COALESCE((
-      SELECT json_agg(json_build_object('id', p.id, 'name', p.name))
+      SELECT json_agg(json_build_object('id', p.id, 'name', p.name, 'profile_picture', p.profile_picture))
       FROM profiles p
       WHERE p.id IN (
         SELECT CASE
