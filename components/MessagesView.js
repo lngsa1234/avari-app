@@ -49,8 +49,7 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
   // Set up subscription separately so it can access latest state via ref
   useEffect(() => {
     console.log('🔌 Setting up messages subscription for Safari/Chrome');
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    console.log('🌐 Browser:', isSafari ? 'Safari' : 'Chrome/Other');
+    console.log('📡 Setting up real-time message subscription');
     
     const channel = supabase
       .channel(`messages_view_${currentUser.id}_${Date.now()}`)  // Unique channel name with timestamp
@@ -194,76 +193,8 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
         }
       });
 
-    // Aggressive polling for Safari (and as fallback for all browsers)
-    // Poll more frequently when a conversation is open
-    let lastCheckedTime = new Date();
-    let pollInterval = null;
-    
-    // Only enable polling fallback for Safari or if real-time fails
-    if (isSafari) {
-      console.log('🔄 Enabling polling for Safari (2-second interval)');
-      pollInterval = setInterval(async () => {
-        const currentlySelected = selectedConversationRef.current;
-        
-        if (currentlySelected) {
-          try {
-            // Get all messages between current user and selected conversation
-            // that are newer than the last message we have
-            const { data: newMessages } = await supabase
-              .from('messages')
-              .select('*')
-              .eq('sender_id', currentlySelected.id)
-              .eq('receiver_id', currentUser.id)
-              .gt('created_at', lastCheckedTime.toISOString())
-              .order('created_at', { ascending: true });
-
-            if (newMessages && newMessages.length > 0) {
-              console.log(`🔄 [Safari Polling] Found ${newMessages.length} new message(s)`);
-              
-              setMessages(prev => {
-                // Add new messages, avoiding duplicates
-                const existingIds = new Set(prev.map(m => m.id));
-                const uniqueNewMessages = newMessages.filter(m => !existingIds.has(m.id));
-                
-                if (uniqueNewMessages.length > 0) {
-                  console.log(`📝 Adding ${uniqueNewMessages.length} new message(s) via polling`);
-                  return [...prev, ...uniqueNewMessages];
-                }
-                return prev;
-              });
-              
-              // Mark as read in database
-              const messageIds = newMessages.map(m => m.id);
-              const { error: readError } = await supabase
-                .from('messages')
-                .update({ read: true })
-                .in('id', messageIds);
-
-              if (!readError) {
-                console.log('✅ Marked polled messages as read');
-                // Update local state
-                setMessages(prev =>
-                  prev.map(m => messageIds.includes(m.id) ? { ...m, read: true } : m)
-                );
-                // Notify parent to refresh unread count
-                onUnreadCountChange?.();
-              }
-              
-              // Update last checked time to the newest message
-              lastCheckedTime = new Date(newMessages[newMessages.length - 1].created_at);
-            }
-          } catch (err) {
-            console.error('❌ Polling error:', err);
-          }
-        }
-      }, 2000); // Safari: poll every 2 seconds
-    } else {
-      console.log('✅ Chrome detected - using real-time only (no polling)');
-    }
-
     return () => {
       console.log('🧹 Cleaning up MessagesView subscription');
-      if (pollInterval) clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, [currentUser.id, supabase]); // Don't include messages - causes too many re-subscriptions
@@ -325,49 +256,61 @@ export default function MessagesView({ currentUser, supabase, onUnreadCountChang
 
       console.log('👤 Loaded profiles:', profiles);
 
-      // Combine matches with profiles
-      const conversationsWithLastMessage = await Promise.all(
-        matches.map(async (match) => {
-          const otherUserId = match.matched_user_id;
-          const profile = profiles.find(p => p.id === otherUserId);
+      // Batch fetch: get all messages involving current user and any matched user (1 query instead of N)
+      const matchedUserIdList = matchedUserIds.map(id => `sender_id.eq.${id},receiver_id.eq.${id}`).join(',');
+      const { data: allMessages } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+        .in('sender_id', [...matchedUserIds, currentUser.id])
+        .in('receiver_id', [...matchedUserIds, currentUser.id])
+        .order('created_at', { ascending: false });
 
-          if (!profile) {
-            console.warn('No profile found for user:', otherUserId);
-            return null;
-          }
+      // Group messages by conversation partner
+      const messagesByUser = {};
+      const unreadByUser = {};
+      (allMessages || []).forEach(msg => {
+        const otherUserId = msg.sender_id === currentUser.id ? msg.receiver_id : msg.sender_id;
+        if (!matchedUserIds.includes(otherUserId)) return;
 
-          const { data: lastMessage } = await supabase
-            .from('messages')
-            .select('*')
-            .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${currentUser.id})`)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
+        // Track last message per user
+        if (!messagesByUser[otherUserId]) {
+          messagesByUser[otherUserId] = msg; // First one is newest (ordered desc)
+        }
 
-          // Get unread count
-          const { count: unreadCount } = await supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('sender_id', otherUserId)
-            .eq('receiver_id', currentUser.id)
-            .eq('read', false);
+        // Count unread messages from this user
+        if (msg.sender_id === otherUserId && msg.receiver_id === currentUser.id && msg.read === false) {
+          unreadByUser[otherUserId] = (unreadByUser[otherUserId] || 0) + 1;
+        }
+      });
 
-          return {
-            id: otherUserId,
-            user: {
-              id: profile.id,
-              name: profile.name || 'Unknown User',
-              career: profile.career || '',
-              city: profile.city || '',
-              state: profile.state || '',
-              bio: profile.bio || ''
-            },
-            lastMessage,
-            unreadCount: unreadCount || 0,
-            lastMessageTime: lastMessage?.created_at || match.matched_at
-          };
-        })
-      );
+      // Combine matches with profiles — no extra queries needed
+      const conversationsWithLastMessage = matches.map(match => {
+        const otherUserId = match.matched_user_id;
+        const profile = profiles.find(p => p.id === otherUserId);
+
+        if (!profile) {
+          console.warn('No profile found for user:', otherUserId);
+          return null;
+        }
+
+        const lastMessage = messagesByUser[otherUserId] || null;
+
+        return {
+          id: otherUserId,
+          user: {
+            id: profile.id,
+            name: profile.name || 'Unknown User',
+            career: profile.career || '',
+            city: profile.city || '',
+            state: profile.state || '',
+            bio: profile.bio || ''
+          },
+          lastMessage,
+          unreadCount: unreadByUser[otherUserId] || 0,
+          lastMessageTime: lastMessage?.created_at || match.matched_at
+        };
+      });
 
       // Filter out null entries (users without profiles)
       const validConversations = conversationsWithLastMessage.filter(conv => conv !== null);
