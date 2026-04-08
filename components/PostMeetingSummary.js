@@ -293,7 +293,7 @@ export default function PostMeetingSummary({
                 <div key={index} style={styles.personCard}>
                   <div style={styles.personAvatar}>
                     {person.profile_picture ? (
-                      <img src={person.profile_picture} alt={person.name} style={styles.avatarImg} />
+                      <img loading="lazy" src={person.profile_picture} alt={person.name} style={styles.avatarImg} />
                     ) : (
                       <span style={styles.avatarEmoji}>{person.emoji || '👤'}</span>
                     )}

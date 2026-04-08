@@ -576,7 +576,7 @@ function ComposeView({ contacts, onClose, onSend }) {
                     style={styles.contactItem}
                   >
                     {contact.avatar ? (
-                      <img src={contact.avatar} alt={contact.name} style={styles.contactAvatar} />
+                      <img loading="lazy" src={contact.avatar} alt={contact.name} style={styles.contactAvatar} />
                     ) : (
                       <div style={styles.contactEmojiAvatar}>{contact.emoji}</div>
                     )}
@@ -625,7 +625,7 @@ function ComposeView({ contacts, onClose, onSend }) {
         <main style={styles.composeMessageArea}>
           <div style={styles.composeMessageCenter}>
             {selectedContact.avatar ? (
-              <img src={selectedContact.avatar} alt={selectedContact.name} style={styles.composeAvatar} />
+              <img loading="lazy" src={selectedContact.avatar} alt={selectedContact.name} style={styles.composeAvatar} />
             ) : (
               <div style={styles.composeEmojiAvatar}>{selectedContact.emoji}</div>
             )}
@@ -762,7 +762,7 @@ function ConversationRow({ conversation, onClick }) {
       {/* Avatar */}
       <div style={styles.conversationAvatarContainer}>
         {conversation.avatar ? (
-          <img src={conversation.avatar} alt={conversation.name} style={styles.conversationAvatarImg} />
+          <img loading="lazy" src={conversation.avatar} alt={conversation.name} style={styles.conversationAvatarImg} />
         ) : (
           <div style={styles.conversationAvatar}>{conversation.emoji}</div>
         )}
@@ -838,7 +838,7 @@ function ChatView({ conversation, currentUser, onBack, onSendMessage }) {
           </button>
 
           {conversation.avatar ? (
-            <img src={conversation.avatar} alt={conversation.name} style={styles.chatAvatar} />
+            <img loading="lazy" src={conversation.avatar} alt={conversation.name} style={styles.chatAvatar} />
           ) : (
             <div style={styles.chatEmojiAvatar}>{conversation.emoji}</div>
           )}
@@ -924,7 +924,7 @@ function MessageBubble({ message, isGroup, showAvatar, showName }) {
       {showAvatar && (
         <div style={styles.messageAvatar}>
           {message.sender?.avatar ? (
-            <img src={message.sender.avatar} alt="" style={styles.messageAvatarImg} />
+            <img loading="lazy" src={message.sender.avatar} alt="" style={styles.messageAvatarImg} />
           ) : (
             message.sender?.name?.charAt(0) || '?'
           )}

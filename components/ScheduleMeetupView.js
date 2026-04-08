@@ -564,7 +564,7 @@ export default function ScheduleMeetupView({
                   onClick={() => setSelectedConnection(conn)}
                 >
                   {conn.profile_picture ? (
-                    <img src={conn.profile_picture} alt={conn.name} style={styles.avatar} />
+                    <img loading="lazy" src={conn.profile_picture} alt={conn.name} style={styles.avatar} />
                   ) : (
                     <div style={styles.avatarPlaceholder}>
                       <User size={20} />

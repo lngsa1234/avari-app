@@ -686,7 +686,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                     onClick={() => onNavigate?.('userProfile', { userId: profile.id })}
                   >
                     {profile.profile_picture ? (
-                      <img src={profile.profile_picture} alt={profile.name} style={{
+                      <img loading="lazy" src={profile.profile_picture} alt={profile.name} style={{
                         width: isMobile ? '20px' : '24px', height: isMobile ? '20px' : '24px',
                         borderRadius: '50%', objectFit: 'cover',
                       }} />
@@ -727,7 +727,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                         onClick={() => onNavigate?.('userProfile', { userId: profile.id })}
                       >
                         {profile.profile_picture ? (
-                          <img src={profile.profile_picture} alt={profile.name} style={{
+                          <img loading="lazy" src={profile.profile_picture} alt={profile.name} style={{
                             width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover',
                           }} />
                         ) : (

@@ -1048,7 +1048,7 @@ export default function HomeView({
                               return (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                   {partner.profiles?.profile_picture ? (
-                                    <img src={partner.profiles.profile_picture} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFFCF8' }} />
+                                    <img loading="lazy" src={partner.profiles.profile_picture} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFFCF8' }} />
                                   ) : (
                                     <div style={{ width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: fonts.sans, fontSize: '9px', fontWeight: '600', color: 'white', background: '#8B6347' }}>
                                       {(partner.profiles?.name || '?').split(' ').map(n => n[0]).join('').slice(0, 2)}
@@ -1066,7 +1066,7 @@ export default function HomeView({
                                 <div style={{ display: 'flex', alignItems: 'center' }}>
                                   {meetupSignupsList.slice(0, 3).map((signup, i) => (
                                     signup.profiles?.profile_picture ? (
-                                      <img key={signup.user_id || i} src={signup.profiles.profile_picture} alt="" style={{
+                                      <img loading="lazy" key={signup.user_id || i} src={signup.profiles.profile_picture} alt="" style={{
                                         width: '24px', height: '24px', borderRadius: '50%',
                                         border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-7px',
                                         objectFit: 'cover',
@@ -1236,7 +1236,7 @@ export default function HomeView({
                               <div style={{ display: 'flex', alignItems: 'center' }}>
                                 {meetupSignupsList.slice(0, 3).map((signup, i) => (
                                   signup.profiles?.profile_picture ? (
-                                    <img key={signup.user_id || i} src={signup.profiles.profile_picture} alt="" style={{
+                                    <img loading="lazy" key={signup.user_id || i} src={signup.profiles.profile_picture} alt="" style={{
                                       width: '34px', height: '34px', borderRadius: '50%',
                                       border: '2px solid #FFFCF8', marginLeft: i === 0 ? 0 : '-8px',
                                       objectFit: 'cover',
@@ -1598,7 +1598,7 @@ export default function HomeView({
                             overflow: 'hidden',
                           }}>
                             {member.user?.profile_picture ? (
-                              <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <img loading="lazy" src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
                               member.user?.name?.charAt(0) || '?'
                             )}
@@ -1626,7 +1626,7 @@ export default function HomeView({
                           overflow: 'hidden',
                         }}>
                           {creator?.user?.profile_picture ? (
-                            <img src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img loading="lazy" src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : creatorName.charAt(0)}
                         </div>
                         <span style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: '500', color: '#6B4F35' }}>{creatorName.split(' ')[0]}</span>

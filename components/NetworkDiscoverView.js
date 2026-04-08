@@ -874,7 +874,7 @@ export default function NetworkDiscoverView({
                             overflow: 'hidden',
                           }}>
                             {signup.profile?.profile_picture ? (
-                              <img src={signup.profile.profile_picture} alt=""
+                              <img loading="lazy" src={signup.profile.profile_picture} alt=""
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             ) : (
                               signup.profile?.name?.[0] || '?'
@@ -1064,7 +1064,7 @@ export default function NetworkDiscoverView({
                                 flexShrink: 0,
                               }}>
                                 {s.profile?.profile_picture ? (
-                                  <img src={s.profile.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <img loading="lazy" src={s.profile.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 ) : (
                                   (s.profile?.name || '?')[0].toUpperCase()
                                 )}
@@ -1518,7 +1518,7 @@ export default function NetworkDiscoverView({
                                   overflow: 'hidden',
                                 }}>
                                   {member.user?.profile_picture ? (
-                                    <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    <img loading="lazy" src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   ) : (
                                     member.user?.name?.charAt(0) || '?'
                                   )}
@@ -1552,7 +1552,7 @@ export default function NetworkDiscoverView({
                           overflow: 'hidden',
                         }}>
                           {creator?.user?.profile_picture ? (
-                            <img src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img loading="lazy" src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : creatorName.charAt(0)}
                         </div>
                         <span style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: '500', color: '#6B4F35' }}>{creatorName.split(' ')[0]}</span>

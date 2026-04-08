@@ -1188,7 +1188,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                       const avatarName = isCoffee ? (item.requester_id === currentUser.id ? (currentUser.name || '?') : (coffeeAvatar?.name || '?')) : (item.host || '?');
                       const avatarSize = isMobile ? 32 : 40;
                       return avatarSrc ? (
-                        <img src={avatarSrc} alt="" style={{
+                        <img loading="lazy" src={avatarSrc} alt="" style={{
                           width: avatarSize, height: avatarSize, borderRadius: '50%', objectFit: 'cover',
                           border: `2px solid ${isToday ? 'rgba(255,255,255,0.3)' : 'rgba(180, 160, 137, 0.2)'}`,
                         }} />
@@ -1307,7 +1307,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                               fontSize: '9px', color: '#FFF', fontWeight: 600, flexShrink: 0,
                             }}>
                               {a.profile_picture ? (
-                                <img src={a.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img loading="lazy" src={a.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               ) : (
                                 (a.name || '?')[0].toUpperCase()
                               )}
@@ -1324,7 +1324,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
                           fontSize: '9px', color: '#FFF', fontWeight: 600, flexShrink: 0,
                         }}>
                           {coffeeAvatar.profile_picture ? (
-                            <img src={coffeeAvatar.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img loading="lazy" src={coffeeAvatar.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
                             (coffeeAvatar.name || '?')[0].toUpperCase()
                           )}

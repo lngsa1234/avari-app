@@ -30,6 +30,7 @@ export default function VideoAvatar({
     <div className="text-center">
       {profilePicture ? (
         <img
+          loading="lazy"
           src={profilePicture}
           alt={name}
           className={`rounded-full object-cover mx-auto mb-2 ${avatarClass}`}

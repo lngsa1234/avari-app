@@ -1048,7 +1048,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                   }}
                 >
                   {user.avatar ? (
-                    <img src={user.avatar} alt={user.name} style={styles.slideAvatarImg} className="circles-slide-avatar" />
+                    <img loading="lazy" src={user.avatar} alt={user.name} style={styles.slideAvatarImg} className="circles-slide-avatar" />
                   ) : (
                     <div style={styles.slideAvatarPlaceholder} className="circles-slide-avatar">👤</div>
                   )}
@@ -1152,7 +1152,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                       fontSize: 20, color: 'white', fontWeight: 600, overflow: 'hidden',
                     }}>
                       {person.profile_picture ? (
-                        <img src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img loading="lazy" src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (person.name?.[0] || '?').toUpperCase()}
                     </div>
                     <div style={{
@@ -1234,7 +1234,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                         fontSize: 11, color: 'white', fontWeight: 600, overflow: 'hidden',
                       }}>
                         {p.profile_picture ? (
-                          <img src={p.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img loading="lazy" src={p.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         ) : (p.name?.[0] || '?').toUpperCase()}
                       </div>
                     ))}
@@ -1496,7 +1496,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                                 overflow: 'hidden', flexShrink: 0,
                               }}>
                                 {member.user?.profile_picture ? (
-                                  <img src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <img loading="lazy" src={member.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 ) : (member.user?.name?.[0] || '?').toUpperCase()}
                               </div>
                             ))}
@@ -1589,7 +1589,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
                 }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(139, 111, 92, 0.06)'; }}
                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = chat.unread ? 'rgba(139, 111, 92, 0.06)' : 'transparent'; }}>
                   <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden' }}>
-                    {chat.partner.profile_picture ? <img src={chat.partner.profile_picture} alt={chat.partner.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (chat.partner.name?.[0] || '?').toUpperCase()}
+                    {chat.partner.profile_picture ? <img loading="lazy" src={chat.partner.profile_picture} alt={chat.partner.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (chat.partner.name?.[0] || '?').toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1620,7 +1620,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               {sentRequestProfiles.map((person) => (
                 <div key={`conn-${person.id}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', backgroundColor: 'rgba(139, 111, 92, 0.06)', borderRadius: '12px', border: '1px solid rgba(139, 111, 92, 0.1)' }}>
                   <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }} onClick={() => onNavigate?.('userProfile', { userId: person.id })}>
-                    {person.profile_picture ? <img src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (person.name?.[0] || '?').toUpperCase()}
+                    {person.profile_picture ? <img loading="lazy" src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (person.name?.[0] || '?').toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{person.name}</div>
@@ -1632,7 +1632,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
               {sentCircleInvites.map((invite) => (
                 <div key={`circle-${invite.id}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', backgroundColor: 'rgba(139, 111, 92, 0.06)', borderRadius: '12px', border: '1px solid rgba(139, 111, 92, 0.1)' }}>
                   <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: '#8B6F5C', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', color: 'white', fontWeight: '600', flexShrink: 0, overflow: 'hidden', cursor: 'pointer' }} onClick={() => onNavigate?.('userProfile', { userId: invite.user.id })}>
-                    {invite.user.profile_picture ? <img src={invite.user.profile_picture} alt={invite.user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (invite.user.name?.[0] || '?').toUpperCase()}
+                    {invite.user.profile_picture ? <img loading="lazy" src={invite.user.profile_picture} alt={invite.user.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (invite.user.name?.[0] || '?').toUpperCase()}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '14px', fontWeight: '600', color: '#3E2723', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{invite.user.name}</div>

@@ -1026,7 +1026,7 @@ export default function CircleDetailView({
             <div style={styles.hostCard}>
               <div style={styles.avatar}>
                 {host.profile_picture ? (
-                  <img src={host.profile_picture} alt={host.name} style={styles.avatarImg} />
+                  <img loading="lazy" src={host.profile_picture} alt={host.name} style={styles.avatarImg} />
                 ) : (
                   <span style={styles.avatarText}>{host.name?.charAt(0) || '?'}</span>
                 )}
@@ -1085,7 +1085,7 @@ export default function CircleDetailView({
               >
                 <div style={styles.memberAvatar}>
                   {member.profile?.profile_picture ? (
-                    <img src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
+                    <img loading="lazy" src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
                   ) : (
                     <span style={styles.avatarText}>{member.profile?.name?.charAt(0) || '?'}</span>
                   )}
@@ -1132,7 +1132,7 @@ export default function CircleDetailView({
                   >
                     <div style={{ ...styles.memberAvatar, width: '32px', height: '32px' }}>
                       {member.profile?.profile_picture ? (
-                        <img src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
+                        <img loading="lazy" src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
                       ) : (
                         <span style={{ ...styles.avatarText, fontSize: '12px' }}>{member.profile?.name?.charAt(0) || '?'}</span>
                       )}
@@ -1203,7 +1203,7 @@ export default function CircleDetailView({
                   >
                     <div style={{ ...styles.memberAvatar, width: '32px', height: '32px' }}>
                       {member.profile?.profile_picture ? (
-                        <img src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
+                        <img loading="lazy" src={member.profile.profile_picture} alt={member.profile.name} style={styles.avatarImg} />
                       ) : (
                         <span style={{ ...styles.avatarText, fontSize: '12px' }}>{member.profile?.name?.charAt(0) || '?'}</span>
                       )}
@@ -1899,7 +1899,7 @@ export default function CircleDetailView({
                           flexShrink: 0,
                         }}>
                           {person.profile_picture ? (
-                            <img src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img loading="lazy" src={person.profile_picture} alt={person.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
                             <span style={{ fontSize: '14px', color: colors.primary }}>{person.name?.charAt(0)}</span>
                           )}

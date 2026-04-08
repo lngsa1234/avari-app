@@ -438,7 +438,7 @@ function CircleCard({ circle, isMobile, onClick, isMember = false }) {
           <div style={{ display: 'flex', marginRight: '2px' }}>
             {circle.members?.slice(0, 4).map((m, i) => (
               m.user?.profile_picture ? (
-                <img key={m.id} src={m.user.profile_picture} alt="" style={{
+                <img loading="lazy" key={m.id} src={m.user.profile_picture} alt="" style={{
                   width: '22px', height: '22px', borderRadius: '50%', border: '2px solid white',
                   objectFit: 'cover', marginLeft: i > 0 ? '-6px' : 0, position: 'relative', zIndex: 4 - i,
                 }} />
