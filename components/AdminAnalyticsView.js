@@ -15,7 +15,9 @@ import {
   ChevronDown,
   ArrowUp,
   ArrowDown,
-  Minus
+  Minus,
+  Video,
+  Wifi
 } from 'lucide-react';
 import { colors as tokens } from '@/lib/designTokens';
 
@@ -78,6 +80,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
     { id: 'acquisition', label: 'Acquisition', icon: UserPlus },
     { id: 'retention', label: 'Retention', icon: TrendingUp },
     { id: 'engagement', label: 'Engagement', icon: Activity },
+    { id: 'video', label: 'Video', icon: Video },
   ];
 
   return (
@@ -146,6 +149,7 @@ export default function AdminAnalyticsView({ currentUser, supabase }) {
       {activeTab === 'acquisition' && <AcquisitionTab data={data} />}
       {activeTab === 'retention' && <RetentionTab data={data} />}
       {activeTab === 'engagement' && <EngagementTab data={data} />}
+      {activeTab === 'video' && <VideoTab data={data} />}
     </div>
   );
 }
@@ -480,6 +484,269 @@ function EngagementTab({ data }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Video Performance Tab ──────────────────────────────────
+
+const PROVIDER_LABELS = { webrtc: 'WebRTC', livekit: 'LiveKit', agora: 'Agora' };
+const PROVIDER_DESCRIPTIONS = {
+  webrtc: 'Peer-to-peer · 1:1 Coffee Chats',
+  livekit: 'SFU Server · Meetups & Fallback',
+  agora: 'SFU Server · Connection Groups',
+};
+
+const QUALITY_COLORS = {
+  excellent: '#22c55e',
+  good: '#84cc16',
+  fair: '#eab308',
+  poor: '#ef4444',
+};
+
+function qualityScore(row) {
+  const total = (row.excellent_count || 0) + (row.good_count || 0) + (row.fair_count || 0) + (row.poor_count || 0);
+  if (total === 0) return 0;
+  return Math.round(
+    ((row.excellent_count * 4 + row.good_count * 3 + row.fair_count * 2 + row.poor_count * 1) / total) * 25
+  ); // 0-100 scale
+}
+
+function VideoTab({ data }) {
+  const providerSummary = data.provider_metrics_summary || [];
+  const callsByProvider = data.calls_by_provider || [];
+  const callsByWeek = data.calls_by_week_provider || [];
+
+  // Merge metrics by provider (aggregate across call types)
+  const byProvider = {};
+  providerSummary.forEach(row => {
+    if (!byProvider[row.provider]) {
+      byProvider[row.provider] = {
+        provider: row.provider,
+        total_calls: 0, avg_latency: 0, avg_packet_loss: 0, avg_bitrate: 0,
+        avg_duration_minutes: 0, excellent_count: 0, good_count: 0, fair_count: 0, poor_count: 0,
+        _count: 0,
+      };
+    }
+    const p = byProvider[row.provider];
+    p.total_calls += row.total_calls;
+    p.avg_latency += (row.avg_latency || 0) * row.total_calls;
+    p.avg_packet_loss += (row.avg_packet_loss || 0) * row.total_calls;
+    p.avg_bitrate += (row.avg_bitrate || 0) * row.total_calls;
+    p.avg_duration_minutes += (row.avg_duration_minutes || 0) * row.total_calls;
+    p.excellent_count += row.excellent_count || 0;
+    p.good_count += row.good_count || 0;
+    p.fair_count += row.fair_count || 0;
+    p.poor_count += row.poor_count || 0;
+    p._count += row.total_calls;
+  });
+
+  // Weighted averages
+  Object.values(byProvider).forEach(p => {
+    if (p._count > 0) {
+      p.avg_latency = Math.round(p.avg_latency / p._count);
+      p.avg_packet_loss = Math.round((p.avg_packet_loss / p._count) * 100) / 100;
+      p.avg_bitrate = Math.round(p.avg_bitrate / p._count);
+      p.avg_duration_minutes = Math.round((p.avg_duration_minutes / p._count) * 10) / 10;
+    }
+  });
+
+  const providers = ['webrtc', 'livekit', 'agora'];
+  const hasData = providerSummary.length > 0 || callsByProvider.length > 0;
+
+  // Total calls from call_recaps
+  const totalCalls = callsByProvider.reduce((sum, p) => sum + p.total_calls, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Overview Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total Video Calls" value={totalCalls} icon={Video} />
+        <StatCard
+          label="Call Minutes"
+          value={Math.round(callsByProvider.reduce((sum, p) => sum + (p.total_seconds || 0), 0) / 60)}
+          icon={Clock}
+        />
+        <StatCard label="Providers Active" value={callsByProvider.length} icon={Wifi} />
+        <StatCard
+          label="Avg Duration"
+          value={callsByProvider.length > 0
+            ? `${Math.round(callsByProvider.reduce((s, p) => s + (p.avg_duration_minutes || 0), 0) / callsByProvider.length)}m`
+            : '0m'}
+          icon={Clock}
+        />
+      </div>
+
+      {/* Provider Cards */}
+      {providers.map(providerKey => {
+        const p = byProvider[providerKey];
+        const recap = callsByProvider.find(c => c.provider === providerKey);
+        const totalQuality = p ? (p.excellent_count + p.good_count + p.fair_count + p.poor_count) : 0;
+
+        return (
+          <div key={providerKey} className="bg-white rounded-lg p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700">{PROVIDER_LABELS[providerKey]}</h4>
+                <p className="text-xs text-gray-400">{PROVIDER_DESCRIPTIONS[providerKey]}</p>
+              </div>
+              {p && (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                  qualityScore(p) >= 75 ? 'bg-green-100 text-green-700' :
+                  qualityScore(p) >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                  qualityScore(p) >= 25 ? 'bg-orange-100 text-orange-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  Score: {p ? qualityScore(p) : 0}/100
+                </span>
+              )}
+            </div>
+
+            {!p && !recap ? (
+              <p className="text-sm text-gray-400 text-center py-4">No data yet</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Calls</p>
+                    <p className="text-lg font-bold text-gray-800">{recap?.total_calls || p?.total_calls || 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Avg Latency</p>
+                    <p className="text-lg font-bold text-gray-800">{p?.avg_latency || 0}<span className="text-xs font-normal text-gray-400">ms</span></p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Packet Loss</p>
+                    <p className="text-lg font-bold text-gray-800">{p?.avg_packet_loss || 0}<span className="text-xs font-normal text-gray-400">%</span></p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Avg Bitrate</p>
+                    <p className="text-lg font-bold text-gray-800">{p?.avg_bitrate || 0}<span className="text-xs font-normal text-gray-400">kbps</span></p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Avg Duration</p>
+                    <p className="text-lg font-bold text-gray-800">{p?.avg_duration_minutes || recap?.avg_duration_minutes || 0}<span className="text-xs font-normal text-gray-400">min</span></p>
+                  </div>
+                </div>
+
+                {/* Connection Quality Distribution */}
+                {totalQuality > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">Connection Quality Distribution</p>
+                    <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                      {['excellent', 'good', 'fair', 'poor'].map(q => {
+                        const count = p[`${q}_count`] || 0;
+                        const pct = (count / totalQuality) * 100;
+                        if (pct === 0) return null;
+                        return (
+                          <div
+                            key={q}
+                            className="h-full transition-all"
+                            style={{ width: `${pct}%`, backgroundColor: QUALITY_COLORS[q] }}
+                            title={`${q}: ${count} (${Math.round(pct)}%)`}
+                          />
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-4 mt-2">
+                      {['excellent', 'good', 'fair', 'poor'].map(q => {
+                        const count = p[`${q}_count`] || 0;
+                        if (count === 0) return null;
+                        return (
+                          <div key={q} className="flex items-center gap-1">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: QUALITY_COLORS[q] }} />
+                            <span className="text-[10px] text-gray-500 capitalize">{q} {count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Provider Comparison Table */}
+      {hasData && (
+        <div className="bg-white rounded-lg p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
+          <h4 className="text-sm font-semibold text-gray-700 mb-4">Provider Comparison</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-2 text-xs font-medium text-gray-500">Metric</th>
+                  {providers.map(p => (
+                    <th key={p} className="text-right py-2 px-2 text-xs font-medium text-gray-500">
+                      {PROVIDER_LABELS[p]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: 'Total Calls', key: 'total_calls', fallbackKey: 'total_calls' },
+                  { label: 'Avg Latency (ms)', key: 'avg_latency' },
+                  { label: 'Packet Loss (%)', key: 'avg_packet_loss' },
+                  { label: 'Avg Bitrate (kbps)', key: 'avg_bitrate' },
+                  { label: 'Avg Duration (min)', key: 'avg_duration_minutes' },
+                ].map((metric, i) => (
+                  <tr key={i} className="border-b border-gray-50">
+                    <td className="py-2 px-2 text-gray-600">{metric.label}</td>
+                    {providers.map(providerKey => {
+                      const p = byProvider[providerKey];
+                      const recap = callsByProvider.find(c => c.provider === providerKey);
+                      let val = p ? p[metric.key] : 0;
+                      if (!val && metric.fallbackKey && recap) val = recap[metric.fallbackKey];
+                      return (
+                        <td key={providerKey} className="py-2 px-2 text-right text-gray-800 font-medium">
+                          {val || '\u2014'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+                <tr className="border-b border-gray-50">
+                  <td className="py-2 px-2 text-gray-600">Quality Score</td>
+                  {providers.map(providerKey => {
+                    const p = byProvider[providerKey];
+                    const score = p ? qualityScore(p) : 0;
+                    return (
+                      <td key={providerKey} className="py-2 px-2 text-right">
+                        {p ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            score >= 75 ? 'bg-green-100 text-green-700' :
+                            score >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                            score >= 25 ? 'bg-orange-100 text-orange-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {score}/100
+                          </span>
+                        ) : '\u2014'}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Weekly Call Volume by Provider */}
+      {callsByWeek.length > 0 && (
+        <div className="bg-white rounded-lg p-5 border border-[#E6D5C3]" style={{ boxShadow: '0 2px 8px rgba(107, 79, 63, 0.08)' }}>
+          <h4 className="text-sm font-semibold text-gray-700 mb-3">Weekly Call Volume</h4>
+          <MiniBarChart data={callsByWeek} labelKey="week" valueKey="total" />
+          <div className="flex gap-4 mt-3 justify-center">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-[#6B5344]" />
+              <span className="text-[10px] text-gray-500">Total calls per week</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
