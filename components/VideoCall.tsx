@@ -119,6 +119,8 @@ export default function VideoCall({
   const screenStreamRef = useRef<MediaStream | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const livekitRoomRef = useRef<any>(null);
+  const metricsRef = useRef<any>({ latency: 0, packetLoss: 0, bitrate: 0, connectionQuality: 'unknown', videoResolution: '', fps: 0, maxLatency: 0, minLatency: Infinity });
+  const metricsIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const interimTranscriptRef = useRef<string>(''); // Track interim transcript for updates
@@ -234,7 +236,10 @@ export default function VideoCall({
       },
       onCallEnded: (from) => {
         console.log('[CircleW] Call ended by other party');
+        stopMetricsCollection();
         setCallState('ended');
+        const finalMetrics = { ...metricsRef.current };
+        if (finalMetrics.minLatency === Infinity) finalMetrics.minLatency = 0;
         cleanup();
         stopTranscription();
         // Pass recap data to parent
@@ -248,6 +253,8 @@ export default function VideoCall({
             message: m.message,
             created_at: m.created_at
           })),
+          metrics: finalMetrics,
+          provider: livekitMode ? 'livekit' : 'webrtc',
           topic: currentTopic
         });
       },
@@ -296,6 +303,8 @@ export default function VideoCall({
         if (!callStartTime) {
           setCallStartTime(new Date().toISOString());
         }
+        // Start collecting metrics
+        startMetricsCollection();
       } else if (
         peerConnection.connectionState === 'failed' ||
         peerConnection.connectionState === 'disconnected'
@@ -457,6 +466,60 @@ export default function VideoCall({
       await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
       console.error('[CircleW] Error adding ICE candidate:', err);
+    }
+  };
+
+  // Collect WebRTC performance metrics every 5 seconds
+  const startMetricsCollection = () => {
+    if (metricsIntervalRef.current) return;
+    metricsIntervalRef.current = setInterval(async () => {
+      const pc = peerConnectionRef.current;
+      if (!pc || pc.connectionState !== 'connected') return;
+      try {
+        const stats = await pc.getStats();
+        let rtt = 0;
+        let packetLoss = 0;
+        let bitrate = 0;
+
+        stats.forEach((report: any) => {
+          if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+            rtt = report.currentRoundTripTime ? report.currentRoundTripTime * 1000 : 0;
+          }
+          if (report.type === 'inbound-rtp' && report.packetsLost !== undefined) {
+            const total = report.packetsReceived + report.packetsLost;
+            packetLoss = total > 0 ? (report.packetsLost / total) * 100 : 0;
+          }
+          if (report.type === 'outbound-rtp' && report.bytesSent) {
+            bitrate = report.bytesSent / 1000;
+          }
+        });
+
+        const quality = rtt < 100 ? 'excellent' : rtt < 200 ? 'good' : rtt < 400 ? 'fair' : 'poor';
+        const m = metricsRef.current;
+        m.latency = Math.round(rtt);
+        m.packetLoss = Math.round(packetLoss * 100) / 100;
+        m.bitrate = Math.round(bitrate);
+        m.connectionQuality = quality;
+        m.maxLatency = Math.max(m.maxLatency, Math.round(rtt));
+        m.minLatency = Math.min(m.minLatency === Infinity ? rtt : m.minLatency, Math.round(rtt));
+
+        // Video resolution
+        const videoTrack = localStreamRef.current?.getVideoTracks()[0];
+        if (videoTrack) {
+          const settings = videoTrack.getSettings();
+          m.videoResolution = `${settings.width || 0}x${settings.height || 0}`;
+          m.fps = settings.frameRate || 30;
+        }
+      } catch {
+        // Stats not available
+      }
+    }, 5000);
+  };
+
+  const stopMetricsCollection = () => {
+    if (metricsIntervalRef.current) {
+      clearInterval(metricsIntervalRef.current);
+      metricsIntervalRef.current = null;
     }
   };
 
@@ -846,8 +909,14 @@ export default function VideoCall({
       }
     }
 
+    stopMetricsCollection();
     endSignalingCall(otherUserId);
     setCallState('ended');
+
+    // Capture metrics before cleanup destroys the refs
+    const finalMetrics = { ...metricsRef.current };
+    if (finalMetrics.minLatency === Infinity) finalMetrics.minLatency = 0;
+
     cleanup();
 
     // Pass recap data to parent (VideoCallButton handles showing the recap)
@@ -861,6 +930,8 @@ export default function VideoCall({
         message: m.message,
         created_at: m.created_at
       })),
+      metrics: finalMetrics,
+      provider: livekitMode ? 'livekit' : 'webrtc',
       topic: currentTopic
     });
   };
@@ -877,6 +948,7 @@ export default function VideoCall({
   // Cleanup
   const cleanup = () => {
     console.log('[CircleW] Cleaning up resources');
+    stopMetricsCollection();
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());

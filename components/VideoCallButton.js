@@ -4,7 +4,7 @@ import { useState } from 'react';
 import VideoCall from './VideoCall';
 import CallRecap from './CallRecap';
 import { supabase } from '@/lib/supabase';
-import { saveCallRecap } from '@/lib/callRecapHelpers';
+import { saveCallRecap, saveProviderMetrics } from '@/lib/callRecapHelpers';
 
 /**
  * VideoCallButton - Socket.IO Version
@@ -93,10 +93,11 @@ export default function VideoCallButton({ meetup, currentUserId }) {
 
       // Save recap to database for call history
       try {
+        const provider = data.provider || 'webrtc';
         await saveCallRecap({
           channelName: recapInfo.channelName,
           callType: recapInfo.callType,
-          provider: recapInfo.provider,
+          provider,
           startedAt: recapInfo.startedAt,
           endedAt: recapInfo.endedAt,
           participants: participants,
@@ -105,6 +106,21 @@ export default function VideoCallButton({ meetup, currentUserId }) {
           userId: currentUserId
         });
         console.log('Recap saved to database');
+
+        // Save provider metrics for analytics dashboard
+        if (recapInfo.metrics && recapInfo.metrics.latency !== undefined) {
+          const durationSeconds = recapInfo.startedAt && recapInfo.endedAt
+            ? Math.floor((new Date(recapInfo.endedAt) - new Date(recapInfo.startedAt)) / 1000)
+            : 0;
+          saveProviderMetrics({
+            provider,
+            callType: '1on1',
+            channelName: recapInfo.channelName,
+            metrics: recapInfo.metrics,
+            participantCount: 2,
+            durationSeconds,
+          }).catch(err => console.error('Failed to save provider metrics:', err));
+        }
       } catch (err) {
         console.error('Failed to save recap:', err);
       }

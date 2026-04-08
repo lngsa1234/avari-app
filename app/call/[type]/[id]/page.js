@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { getCallTypeConfig, isValidCallType } from '@/lib/video/callTypeConfig';
-import { saveCallRecap } from '@/lib/callRecapHelpers';
+import { saveCallRecap, saveProviderMetrics } from '@/lib/callRecapHelpers';
 import { completeCoffeeChat } from '@/lib/coffeeChatHelpers';
 import { io } from 'socket.io-client';
 import { useCallRoom } from '@/hooks/useCallRoom';
@@ -207,6 +207,7 @@ export default function UnifiedCallPage() {
   const disconnectGraceRef = useRef(null); // Grace period before showing "Disconnected"
   const peerLeftIntentionallyRef = useRef(false); // True when peer left via signaling (not network drop)
   const prevStatsRef = useRef(null); // Previous stats snapshot for delta calculation
+  const callMetricsRef = useRef({ latency: 0, maxLatency: 0, minLatency: Infinity, packetLoss: 0, bitrate: 0, connectionQuality: 'unknown', videoResolution: '', fps: 0 }); // Accumulated call metrics
   const realtimeChannelRef = useRef(null); // Supabase channel (unused for WebRTC now)
   const signalingSocketRef = useRef(null); // Socket.IO signaling for WebRTC
   const remotePeerIdRef = useRef(null); // Remote peer user ID for Socket.IO targeted messages
@@ -1694,6 +1695,16 @@ export default function UnifiedCallPage() {
         params.encodings[0].scaleResolutionDownBy = tier.scaleDown;
         await sender.setParameters(params);
         console.log(`[WebRTC] Quality: ${tier.label} (bitrate: ${tier.maxBitrate/1000}kbps, scale: 1/${tier.scaleDown}, rtt: ${rtt?.toFixed(3)}s, loss: ${packetLoss?.toFixed(1)}%)`);
+
+        // Update accumulated call metrics
+        const m = callMetricsRef.current;
+        const rttMs = Math.round(rtt * 1000);
+        m.latency = rttMs;
+        m.maxLatency = Math.max(m.maxLatency, rttMs);
+        m.minLatency = m.minLatency === Infinity ? rttMs : Math.min(m.minLatency, rttMs);
+        if (packetLoss !== null) m.packetLoss = Math.round(packetLoss * 100) / 100;
+        m.bitrate = Math.round(tier.maxBitrate / 1000);
+        m.connectionQuality = tier.label === 'HD' ? 'excellent' : tier.label === 'SD' ? 'good' : tier.label === 'Low' ? 'fair' : 'poor';
       } catch (e) {
         // Stats collection can fail if connection is closing
       }
@@ -2476,13 +2487,31 @@ export default function UnifiedCallPage() {
         participants: allParticipants,
         transcript: currentTranscript,
         aiSummary: null,  // null = don't overwrite existing summary
-        metrics: {},
+        metrics: callMetricsRef.current.minLatency === Infinity
+          ? { ...callMetricsRef.current, minLatency: 0 }
+          : { ...callMetricsRef.current },
         userId: user?.id,
         scheduledDate: schedDate,
         scheduledTime: schedTime,
         scheduledDuration: schedDuration,
       });
       console.log('[UnifiedCall] Transcript saved to database');
+
+      // Save provider metrics for analytics dashboard
+      const cm = callMetricsRef.current;
+      if (cm.latency > 0 || cm.packetLoss > 0) {
+        const durationSeconds = startTime && endTime
+          ? Math.floor((new Date(endTime) - new Date(startTime)) / 1000)
+          : 0;
+        saveProviderMetrics({
+          provider: config.provider,
+          callType: config.internalType,
+          channelName: roomId,
+          metrics: cm.minLatency === Infinity ? { ...cm, minLatency: 0 } : { ...cm },
+          participantCount: allParticipants.length,
+          durationSeconds,
+        }).catch(err => console.error('[UnifiedCall] Failed to save provider metrics:', err));
+      }
     } catch (saveErr) {
       console.error('[UnifiedCall] Failed to save transcript:', saveErr);
     }
