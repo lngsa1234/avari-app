@@ -178,6 +178,91 @@ describe('Connection Request Logic', () => {
     })
   })
 
+  describe('Request card profile navigation', () => {
+    // Simulates the clickable profile area logic from HomeView.js
+    // All request types (connection, circle join, circle invitation, coffee chat)
+    // should allow navigating to the requester's profile
+    function getRequestCardNavigation(request) {
+      const isCoffeeChatRequest = request.type === 'coffee_chat_request'
+      const user = isCoffeeChatRequest ? (request.requester || {}) : (request.user || request)
+      return {
+        userId: user.id || null,
+        canNavigate: !!user.id,
+        navigateTo: user.id ? { view: 'userProfile', params: { userId: user.id } } : null,
+      }
+    }
+
+    test('circle join request allows navigation to requester profile', () => {
+      const request = {
+        id: 'membership-1',
+        type: 'circle_join_request',
+        user: { id: 'mikayla-123', name: 'Mikayla', career: 'Designer' },
+        circleName: 'Founders SF',
+      }
+      const nav = getRequestCardNavigation(request)
+      expect(nav.canNavigate).toBe(true)
+      expect(nav.navigateTo).toEqual({ view: 'userProfile', params: { userId: 'mikayla-123' } })
+    })
+
+    test('circle invitation allows navigation to inviter profile', () => {
+      const request = {
+        id: 'invite-1',
+        type: 'circle_invitation',
+        user: { id: 'alice-456', name: 'Alice', career: 'PM' },
+        circleName: 'Product Leaders',
+      }
+      const nav = getRequestCardNavigation(request)
+      expect(nav.canNavigate).toBe(true)
+      expect(nav.userId).toBe('alice-456')
+    })
+
+    test('coffee chat request allows navigation to requester profile', () => {
+      const request = {
+        id: 'chat-1',
+        type: 'coffee_chat_request',
+        requester: { id: 'bob-789', name: 'Bob', career: 'Engineer' },
+      }
+      const nav = getRequestCardNavigation(request)
+      expect(nav.canNavigate).toBe(true)
+      expect(nav.userId).toBe('bob-789')
+    })
+
+    test('connection request allows navigation to requester profile', () => {
+      const request = {
+        id: 'user-abc',
+        type: 'connection_request',
+        name: 'Charlie',
+        career: 'Founder',
+      }
+      // For connection requests, user = request itself (no .user property)
+      const nav = getRequestCardNavigation(request)
+      expect(nav.canNavigate).toBe(true)
+      expect(nav.userId).toBe('user-abc')
+    })
+
+    test('request with missing user id cannot navigate', () => {
+      const request = {
+        id: 'membership-2',
+        type: 'circle_join_request',
+        user: { name: 'Unknown' }, // no id
+        circleName: 'Test Circle',
+      }
+      const nav = getRequestCardNavigation(request)
+      expect(nav.canNavigate).toBe(false)
+      expect(nav.navigateTo).toBeNull()
+    })
+
+    test('coffee chat request with missing requester cannot navigate', () => {
+      const request = {
+        id: 'chat-2',
+        type: 'coffee_chat_request',
+        requester: null,
+      }
+      const nav = getRequestCardNavigation(request)
+      expect(nav.canNavigate).toBe(false)
+    })
+  })
+
   describe('Timestamp preservation', () => {
     test('connection requests include created_at as requested_at', () => {
       const pendingRequests = [

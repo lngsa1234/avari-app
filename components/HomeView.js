@@ -673,6 +673,10 @@ export default function HomeView({
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div
+                          onClick={() => user.id && handleNavigate('userProfile', { userId: user.id })}
+                          style={{ display: 'flex', alignItems: 'center', cursor: user.id ? 'pointer' : 'default', flex: 1, minWidth: 0 }}
+                        >
                         {user.profile_picture ? (
                           <img
                             src={user.profile_picture}
@@ -692,7 +696,7 @@ export default function HomeView({
                           </div>
                         )}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <h4 style={{ fontFamily: fonts.serif, fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px' }}>{user.name}</h4>
+                          <h4 style={{ fontFamily: fonts.serif, fontSize: isMobile ? '14px' : '16px', fontWeight: '700', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '20px', }}>{user.name}</h4>
                           {isCoffeeChatRequest ? (
                             <>
                               <p style={{ fontFamily: fonts.serif, fontSize: isMobile ? '12px' : '14px', color: '#523C2E', margin: 0, letterSpacing: '0.15px', lineHeight: '18px' }}>
@@ -722,6 +726,7 @@ export default function HomeView({
                           {(isCircleJoin || isCircleInvitation) && user.career && (
                             <p style={{ fontSize: '11px', color: '#B8A089', margin: 0 }}>{user.career}</p>
                           )}
+                        </div>
                         </div>
                         {!isMobile && (
                           <span style={{ fontFamily: fonts.serif, fontSize: '14px', fontWeight: '600', color: 'rgba(107, 86, 71, 0.77)', letterSpacing: '0.15px', marginLeft: '8px', flexShrink: 0 }}>· {timeAgo === 'Today' ? 'new' : timeAgo}</span>
