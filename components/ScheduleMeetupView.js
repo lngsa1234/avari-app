@@ -388,6 +388,11 @@ export default function ScheduleMeetupView({
       }
     }
 
+    // Invalidate SWR caches so meetups page and home page show the new meeting
+    const { invalidateQuery } = await import('@/hooks/useSupabaseQuery');
+    invalidateQuery(`meetups-group-${currentUser.id}`, undefined, { revalidate: true });
+    invalidateQuery(`home-primary-${currentUser.id}`, undefined, { revalidate: true });
+
     alert(`Meetup scheduled for ${selectedCircle.name}!`);
     onNavigate?.('circleDetail', { circleId: selectedCircle.id });
   };
@@ -463,6 +468,11 @@ export default function ScheduleMeetupView({
         }),
       }).catch(err => console.error('Initial topic generation failed:', err));
     }
+
+    // Invalidate SWR caches so meetups page and home page show the new event
+    const { invalidateQuery } = await import('@/hooks/useSupabaseQuery');
+    invalidateQuery(`meetups-group-${currentUser.id}`, undefined, { revalidate: true });
+    invalidateQuery(`home-primary-${currentUser.id}`, undefined, { revalidate: true });
 
     // Show success modal with event details
     const eventDate = new Date(scheduledDate + 'T00:00:00');

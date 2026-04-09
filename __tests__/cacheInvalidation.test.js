@@ -285,6 +285,42 @@ describe('Discover page cache invalidation', () => {
   })
 })
 
+// ─── Schedule meetup actions ───────────────────────────────────────────────
+
+describe('Schedule meetup cache invalidation', () => {
+  const scheduleView = readComponent('ScheduleMeetupView.js')
+
+  test('schedule coffee chat invalidates meetups-coffee', () => {
+    const region = getRegionAround(scheduleView, 'scheduleCoffeeChat')
+    expect(containsInvalidation(region, CACHE_KEYS.meetupsCoffee)).toBe(true)
+  })
+
+  test('schedule coffee chat invalidates home-primary', () => {
+    const region = getRegionAround(scheduleView, 'scheduleCoffeeChat')
+    expect(containsInvalidation(region, CACHE_KEYS.homePrimary)).toBe(true)
+  })
+
+  test('schedule circle meetup invalidates meetups-group', () => {
+    const region = getRegionAround(scheduleView, 'Meetup scheduled for')
+    expect(containsInvalidation(region, CACHE_KEYS.meetupsGroup)).toBe(true)
+  })
+
+  test('schedule circle meetup invalidates home-primary', () => {
+    const region = getRegionAround(scheduleView, 'Meetup scheduled for')
+    expect(containsInvalidation(region, CACHE_KEYS.homePrimary)).toBe(true)
+  })
+
+  test('schedule community event invalidates meetups-group', () => {
+    const region = getRegionAround(scheduleView, 'const scheduleCommunityEvent')
+    expect(containsInvalidation(region, CACHE_KEYS.meetupsGroup)).toBe(true)
+  })
+
+  test('schedule community event invalidates home-primary', () => {
+    const region = getRegionAround(scheduleView, 'const scheduleCommunityEvent')
+    expect(containsInvalidation(region, CACHE_KEYS.homePrimary)).toBe(true)
+  })
+})
+
 // ─── Share URL uses username ───────────────────────────────────────────────
 
 describe('Share URL uses username', () => {
