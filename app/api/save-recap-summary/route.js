@@ -65,14 +65,13 @@ export async function POST(request) {
       return NextResponse.json({ error: uploadError.message }, { status: 500 });
     }
 
-    // Update recap row: ensure transcript_path is set + write ai_summary to DB
-    // so the Past tab can read it directly without a storage fetch
-    const updateFields = { ai_summary: aiSummary };
-    if (!recap.transcript_path) updateFields.transcript_path = storagePath;
-    await supabase
-      .from('call_recaps')
-      .update(updateFields)
-      .eq('id', recapId);
+    // Ensure transcript_path is set on the recap row
+    if (!recap.transcript_path) {
+      await supabase
+        .from('call_recaps')
+        .update({ transcript_path: storagePath })
+        .eq('id', recapId);
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {
