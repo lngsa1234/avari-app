@@ -9,6 +9,7 @@ import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2
 import { parseLocalDate, isEventPast, isEventLive, formatEventTime, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
+import { apiFetch } from '@/lib/apiFetch';
 
 
 const formatDate = (isoStr) => {
@@ -629,6 +630,35 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           });
         } catch (e) {
           console.log('Could not fetch participants:', e.message);
+        }
+      }
+
+      // 5. Backfill ai_summary from storage for recaps that have transcript but no DB summary
+      //    (one-time self-healing after storage migration — writes back to DB so future loads are instant)
+      const needsBackfill = allPastMeetups.filter(m => m.recapData?.transcript_path && !m.recapData?.ai_summary);
+      if (needsBackfill.length > 0) {
+        try {
+          const { getRecapTranscriptFromStorage } = await import('@/lib/callRecapHelpers');
+          const results = await Promise.all(
+            needsBackfill.map(m =>
+              getRecapTranscriptFromStorage(m.recapData.transcript_path)
+                .then(r => ({ recapId: m.recapData.id, itemId: m.id, aiSummary: r.aiSummary }))
+                .catch(() => ({ recapId: m.recapData.id, itemId: m.id, aiSummary: null }))
+            )
+          );
+          results.forEach(r => {
+            if (!r.aiSummary) return;
+            const item = allPastMeetups.find(m => m.id === r.itemId);
+            if (item) item.recapData = { ...item.recapData, ai_summary: r.aiSummary };
+            // Write back to DB so this only happens once per recap
+            apiFetch('/api/save-recap-summary', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recapId: r.recapId, aiSummary: r.aiSummary }),
+            }).catch(() => {});
+          });
+        } catch (e) {
+          console.error('Backfill AI summaries failed:', e);
         }
       }
 
