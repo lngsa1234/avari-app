@@ -990,24 +990,28 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       ) : (
         <section style={{
           ...styles.titleSection,
-          flexDirection: isMobile ? 'column' : 'row',
-          alignItems: isMobile ? 'flex-start' : 'center',
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           marginBottom: isMobile ? '16px' : '24px',
         }}>
           <div style={styles.titleLeft}>
             <h1 style={{...styles.pageTitle, fontSize: isMobile ? '24px' : '32px'}}>Coffee Chats</h1>
-            <p style={{
-              ...styles.subtitle,
-              fontSize: isMobile ? '14px' : '15px',
-            }}>Schedule 1:1 video chats with your connections</p>
+            {!isMobile && (
+              <p style={{
+                ...styles.subtitle,
+                fontSize: '15px',
+              }}>Schedule 1:1 video chats with your connections</p>
+            )}
           </div>
           <button style={{
             ...styles.scheduleBtn,
-            padding: isMobile ? '10px 16px' : '12px 20px',
+            padding: isMobile ? '8px 14px' : '12px 20px',
             fontSize: isMobile ? '13px' : '14px',
-            width: isMobile ? '100%' : 'auto',
+            width: 'auto',
             justifyContent: 'center',
             boxShadow: isMobile ? '0 2px 8px rgba(139, 111, 92, 0.2)' : '0 4px 16px rgba(139, 111, 92, 0.25)',
+            flexShrink: 0,
           }} onClick={handleScheduleCoffeeChat}>
             Schedule
             <Plus size={isMobile ? 14 : 18} />
