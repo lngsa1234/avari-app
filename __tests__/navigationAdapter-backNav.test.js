@@ -101,3 +101,36 @@ describe('getPreviousView — round-trip preservation', () => {
     expect(getPreviousView(mockSearchParams(null), 'discover')).toBe('discover')
   })
 })
+
+describe('Recap page back navigation', () => {
+  test('navigates back to coffee page when from=/coffee', () => {
+    const previousView = getPreviousView(mockSearchParams('/coffee'), 'pastMeetings')
+    expect(previousView).toBe('meetups')
+
+    // Verify meetups resolves to /coffee
+    const { ROUTES } = require('../lib/navigationAdapter')
+    expect(ROUTES.meetups()).toBe('/coffee')
+  })
+
+  test('falls back to pastMeetings when no from param', () => {
+    const previousView = getPreviousView(mockSearchParams(null), 'pastMeetings')
+    expect(previousView).toBe('pastMeetings')
+
+    // Verify pastMeetings resolves to /coffee?view=past
+    const { ROUTES } = require('../lib/navigationAdapter')
+    expect(ROUTES.pastMeetings()).toBe('/coffee?view=past')
+  })
+
+  test('navigates back to home when from=/home', () => {
+    const previousView = getPreviousView(mockSearchParams('/home'), 'pastMeetings')
+    expect(previousView).toBe('home')
+  })
+
+  test('recap page source file uses getPreviousView not hardcoded home', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'recaps', '[id]', 'page.js'), 'utf8')
+    expect(src).toContain('getPreviousView')
+    expect(src).not.toContain('previousView="home"')
+  })
+})

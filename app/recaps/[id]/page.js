@@ -1,15 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams, usePathname } from 'next/navigation';
 import CoffeeChatRecapView from '@/components/CoffeeChatRecapView';
-import { createOnNavigate } from '@/lib/navigationAdapter';
+import { createOnNavigate, getPreviousView } from '@/lib/navigationAdapter';
 
 export default function RecapDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
   const recapId = params.id;
-  const handleNavigate = createOnNavigate(router);
+  const handleNavigate = createOnNavigate(router, pathname);
+  const previousView = getPreviousView(searchParams, 'pastMeetings');
 
   const [isMobile, setIsMobile] = useState(false);
 
@@ -40,7 +43,7 @@ export default function RecapDetailPage() {
         <CoffeeChatRecapView
           recapId={recapId}
           onNavigate={handleNavigate}
-          previousView="home"
+          previousView={previousView}
         />
       </div>
     </div>
