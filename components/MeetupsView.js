@@ -1009,8 +1009,8 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
             justifyContent: 'center',
             boxShadow: isMobile ? '0 2px 8px rgba(139, 111, 92, 0.2)' : '0 4px 16px rgba(139, 111, 92, 0.25)',
           }} onClick={handleScheduleCoffeeChat}>
+            Schedule
             <Plus size={isMobile ? 14 : 18} />
-            Host a Coffee Chat
           </button>
         </section>
       )}
