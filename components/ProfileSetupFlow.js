@@ -1642,11 +1642,15 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
           }} />
         </div>
 
-        {/* Header */}
-        <div style={{
-          padding: isMobile ? '20px 16px 16px' : '28px 28px 16px',
-          flexShrink: 0,
-        }}>
+        {/* Header — keyed to force remount on step change, preventing
+           removeChild errors when browser extensions wrap text nodes */}
+        <div
+          key={`header-${currentStepData.id}`}
+          style={{
+            padding: isMobile ? '20px 16px 16px' : '28px 28px 16px',
+            flexShrink: 0,
+          }}
+        >
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -1710,14 +1714,17 @@ function ProfileSetupFlowInner({ session, supabase, onComplete }) {
           {renderStepContent()}
         </div>
 
-        {/* Navigation */}
-        <div style={{
-          padding: isMobile ? '16px 16px' : '16px 28px 24px',
-          paddingBottom: isMobile ? 'max(24px, env(safe-area-inset-bottom))' : 24,
-          background: colors.warmWhite,
-          borderTop: `1px solid ${colors.border}`,
-          flexShrink: 0,
-        }}>
+        {/* Navigation — keyed to avoid removeChild errors from extension-modified text */}
+        <div
+          key={`nav-${currentStep}`}
+          style={{
+            padding: isMobile ? '16px 16px' : '16px 28px 24px',
+            paddingBottom: isMobile ? 'max(24px, env(safe-area-inset-bottom))' : 24,
+            background: colors.warmWhite,
+            borderTop: `1px solid ${colors.border}`,
+            flexShrink: 0,
+          }}
+        >
           <div style={{ display: 'flex', gap: 12 }}>
             {currentStep > 0 && (
               <button
