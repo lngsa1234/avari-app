@@ -131,11 +131,21 @@ describe('getCallRecapByChannel', () => {
 
 // ─── getRecapTranscriptFromStorage ──────────────────────────────────
 
+// Mock apiFetch for transcript storage tests (now uses server API instead of direct storage)
+const mockApiFetch = jest.fn()
+jest.mock('@/lib/apiFetch', () => ({
+  apiFetch: (...args) => mockApiFetch(...args),
+}))
+
 describe('getRecapTranscriptFromStorage', () => {
+  beforeEach(() => {
+    mockApiFetch.mockReset()
+  })
+
   test('returns empty defaults when no transcriptPath', async () => {
     const result = await getRecapTranscriptFromStorage(null)
     expect(result).toEqual({ transcript: [], aiSummary: null })
-    expect(mockStorageFrom).not.toHaveBeenCalled()
+    expect(mockApiFetch).not.toHaveBeenCalled()
   })
 
   test('returns empty defaults for undefined path', async () => {
@@ -143,7 +153,7 @@ describe('getRecapTranscriptFromStorage', () => {
     expect(result).toEqual({ transcript: [], aiSummary: null })
   })
 
-  test('downloads and parses transcript from storage', async () => {
+  test('fetches transcript via server API', async () => {
     const stored = {
       transcript: [
         { speakerId: 'u1', speakerName: 'Alice', text: 'Hello', timestamp: 1000 },
@@ -151,23 +161,22 @@ describe('getRecapTranscriptFromStorage', () => {
       ],
       aiSummary: '{"summary": "A brief chat"}',
     }
-    mockDownload.mockResolvedValue({
-      data: { text: () => Promise.resolve(JSON.stringify(stored)) },
-      error: null,
+    mockApiFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(stored),
     })
 
     const result = await getRecapTranscriptFromStorage('recaps/ch-1.json')
-    expect(mockStorageFrom).toHaveBeenCalledWith('call-transcripts')
-    expect(mockDownload).toHaveBeenCalledWith('recaps/ch-1.json')
+    expect(mockApiFetch).toHaveBeenCalledWith('/api/get-recap-transcript?path=recaps%2Fch-1.json')
     expect(result.transcript).toHaveLength(2)
     expect(result.transcript[0].text).toBe('Hello')
     expect(result.aiSummary).toBe('{"summary": "A brief chat"}')
   })
 
   test('handles missing transcript field gracefully', async () => {
-    mockDownload.mockResolvedValue({
-      data: { text: () => Promise.resolve(JSON.stringify({ aiSummary: 'summary' })) },
-      error: null,
+    mockApiFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ aiSummary: 'summary' }),
     })
 
     const result = await getRecapTranscriptFromStorage('recaps/ch-1.json')
@@ -176,9 +185,9 @@ describe('getRecapTranscriptFromStorage', () => {
   })
 
   test('handles missing aiSummary field gracefully', async () => {
-    mockDownload.mockResolvedValue({
-      data: { text: () => Promise.resolve(JSON.stringify({ transcript: [{ text: 'hi' }] })) },
-      error: null,
+    mockApiFetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ transcript: [{ text: 'hi' }] }),
     })
 
     const result = await getRecapTranscriptFromStorage('recaps/ch-1.json')
@@ -186,21 +195,18 @@ describe('getRecapTranscriptFromStorage', () => {
     expect(result.aiSummary).toBeNull()
   })
 
-  test('returns empty defaults on download error', async () => {
-    mockDownload.mockResolvedValue({
-      data: null,
-      error: { message: 'Not found' },
+  test('returns empty defaults on API error', async () => {
+    mockApiFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
     })
 
     const result = await getRecapTranscriptFromStorage('recaps/missing.json')
     expect(result).toEqual({ transcript: [], aiSummary: null })
   })
 
-  test('returns empty defaults on JSON parse error', async () => {
-    mockDownload.mockResolvedValue({
-      data: { text: () => Promise.resolve('not valid json') },
-      error: null,
-    })
+  test('returns empty defaults on network error', async () => {
+    mockApiFetch.mockRejectedValue(new Error('Network error'))
 
     const result = await getRecapTranscriptFromStorage('recaps/bad.json')
     expect(result).toEqual({ transcript: [], aiSummary: null })
