@@ -102,8 +102,8 @@ describe('POST /api/save-recap-summary', () => {
     // Should upload to fallback path
     expect(mockUpload.mock.calls[0][0]).toBe('recaps/my-channel.json')
 
-    // Should also update transcript_path in DB
-    expect(mockChain.update).toHaveBeenCalledWith({ transcript_path: 'recaps/my-channel.json' })
+    // Should also update transcript_path + ai_summary in DB
+    expect(mockChain.update).toHaveBeenCalledWith({ ai_summary: 'summary', transcript_path: 'recaps/my-channel.json' })
   })
 
   test('returns 500 when storage upload fails', async () => {
