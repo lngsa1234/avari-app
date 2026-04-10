@@ -9,6 +9,7 @@ import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2
 import { parseLocalDate, isEventPast, isEventLive, formatEventTime, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
+import { getRecapTranscriptFromStorage } from '@/lib/callRecapHelpers';
 
 const formatDate = (isoStr) => {
   try {
@@ -629,6 +630,25 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         } catch (e) {
           console.log('Could not fetch participants:', e.message);
         }
+      }
+
+      // 5. Batch-load AI summaries from storage for recaps that have a transcript_path
+      const recapsNeedingSummary = allPastMeetups.filter(m => m.recapData?.transcript_path && !m.recapData?.ai_summary);
+      if (recapsNeedingSummary.length > 0) {
+        const summaryResults = await Promise.all(
+          recapsNeedingSummary.map(m =>
+            getRecapTranscriptFromStorage(m.recapData.transcript_path)
+              .then(result => ({ id: m.id, aiSummary: result.aiSummary }))
+              .catch(() => ({ id: m.id, aiSummary: null }))
+          )
+        );
+        const summaryMap = {};
+        summaryResults.forEach(r => { if (r.aiSummary) summaryMap[r.id] = r.aiSummary; });
+        allPastMeetups.forEach(item => {
+          if (summaryMap[item.id]) {
+            item.recapData = { ...item.recapData, ai_summary: summaryMap[item.id] };
+          }
+        });
       }
 
       // Sort by date descending
