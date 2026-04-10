@@ -314,7 +314,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
 
   const loading = coffeeLoading || eventsLoading;
 
-  const { data: pastMeetups = EMPTY } = useSupabaseQuery(
+  const { data: pastMeetups = EMPTY, isLoading: pastLoading } = useSupabaseQuery(
     currentUser ? `meetups-past-${currentUser.id}` : null,
     async (sb) => {
     const t0 = Date.now();
@@ -1513,7 +1513,13 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
       ) : (
         // Past Meetings — redesigned
         <div style={styles.pastList}>
-          {pastMeetups.length === 0 ? (
+          {pastLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ height: '80px', borderRadius: '12px', background: '#EDE6DF', animation: 'pulse 1.5s infinite', animationDelay: `${i * 0.1}s` }} />
+              ))}
+            </div>
+          ) : pastMeetups.length === 0 ? (
             <div style={styles.emptyState}>
               <span style={styles.emptyIcon}>📚</span>
               <h3 style={styles.emptyTitle}>No past meetings yet</h3>
