@@ -12,7 +12,11 @@ export default function RecapDetailPage() {
   const pathname = usePathname();
   const recapId = params.id;
   const handleNavigate = createOnNavigate(router, pathname);
-  const previousView = getPreviousView(searchParams, 'pastMeetings');
+  // Recaps are always reached from past meetings — always go back to the past tab.
+  // The from= param may be just /coffee (no ?view=past) because tab switching
+  // is internal state, so we can't rely on getPreviousView here.
+  const fromParam = searchParams.get('from');
+  const previousView = fromParam?.startsWith('/coffee') ? 'pastMeetings' : getPreviousView(searchParams, 'pastMeetings');
 
   const [isMobile, setIsMobile] = useState(false);
 
