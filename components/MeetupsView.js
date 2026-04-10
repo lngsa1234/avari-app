@@ -1001,7 +1001,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
               <p style={{
                 ...styles.subtitle,
                 fontSize: '15px',
-              }}>Schedule 1:1 video chats with your connections</p>
+              }}>Schedule coffee chats with your connections</p>
             )}
           </div>
           <button style={{
