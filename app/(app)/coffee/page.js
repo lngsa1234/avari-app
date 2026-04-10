@@ -39,7 +39,6 @@ export default function CoffeePage() {
       userSignups={homeData.userSignups}
       onNavigate={handleNavigate}
       initialView={view === 'past' ? 'past' : null}
-      pastOnly={view === 'past'}
     />
   )
 }

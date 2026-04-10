@@ -944,7 +944,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
           borderBottom: '1px solid rgba(139, 111, 92, 0.1)',
         }}>
           <button
-            onClick={() => onNavigate?.('meetups')}
+            onClick={() => onNavigate?.('home')}
             style={{
               background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
               display: 'flex', alignItems: 'center', color: '#7E654D', flexShrink: 0,
