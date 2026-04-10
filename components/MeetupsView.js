@@ -9,7 +9,7 @@ import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2
 import { parseLocalDate, isEventPast, isEventLive, formatEventTime, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
-import { apiFetch } from '@/lib/apiFetch';
+import { getRecapTranscriptFromStorage } from '@/lib/callRecapHelpers';
 
 const formatDate = (isoStr) => {
   try {
@@ -632,36 +632,25 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         }
       }
 
-      // 5. Batch-load AI summaries from storage (single request for all recaps)
+      // 5. Batch-load AI summaries from storage for recaps that have a transcript_path
       const recapsNeedingSummary = allPastMeetups.filter(m => m.recapData?.transcript_path && !m.recapData?.ai_summary);
       console.log(`⏱️ Meetups: ${recapsNeedingSummary.length} recaps need AI summary from storage`);
       if (recapsNeedingSummary.length > 0) {
-        try {
-          const pathToIdMap = {};
-          recapsNeedingSummary.forEach(m => { pathToIdMap[m.recapData.transcript_path] = m.id; });
-          const paths = Object.keys(pathToIdMap);
-
-          const response = await apiFetch('/api/get-recap-summaries', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paths }),
-          });
-
-          if (response.ok) {
-            const { summaries } = await response.json();
-            let loaded = 0;
-            allPastMeetups.forEach(item => {
-              const path = item.recapData?.transcript_path;
-              if (path && summaries[path]) {
-                item.recapData = { ...item.recapData, ai_summary: summaries[path] };
-                loaded++;
-              }
-            });
-            console.log(`⏱️ Meetups: loaded ${loaded} AI summaries from storage`);
+        const summaryResults = await Promise.all(
+          recapsNeedingSummary.map(m =>
+            getRecapTranscriptFromStorage(m.recapData.transcript_path)
+              .then(result => ({ id: m.id, aiSummary: result.aiSummary }))
+              .catch((err) => { console.error('Failed to load summary for', m.id, err); return { id: m.id, aiSummary: null }; })
+          )
+        );
+        const summaryMap = {};
+        summaryResults.forEach(r => { if (r.aiSummary) summaryMap[r.id] = r.aiSummary; });
+        console.log(`⏱️ Meetups: loaded ${Object.keys(summaryMap).length} AI summaries from storage`);
+        allPastMeetups.forEach(item => {
+          if (summaryMap[item.id]) {
+            item.recapData = { ...item.recapData, ai_summary: summaryMap[item.id] };
           }
-        } catch (err) {
-          console.error('Failed to batch-load AI summaries:', err);
-        }
+        });
       }
 
       // Sort by date descending
