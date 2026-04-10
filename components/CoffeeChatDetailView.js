@@ -432,36 +432,57 @@ export default function CoffeeChatDetailView({ currentUser, supabase: supabasePr
           setCompletedActions(new Set(JSON.parse(savedActions)));
         }
 
-        // Lazy AI generation: if recap has transcript but no AI summary, generate now
-        if (!recapRecord.ai_summary && recapRecord.transcript?.length > 0) {
-          console.log('[EventDetail] No AI summary found, generating lazily...');
-          try {
-            const response = await apiFetch('/api/generate-recap-summary', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                transcript: recapRecord.transcript,
-                messages: [],
-                participants: participantNames.length > 0 ? participantNames : ['Participant'],
-                duration: recapRecord.duration_seconds || 0,
-                meetingTitle: meetup?.topic || 'Coffee Chat',
-                meetingType: meetup?.circle_id ? 'circle meetup' : 'community event'
-              })
-            });
-            if (response.ok) {
-              const summaryData = await response.json();
-              const aiSummaryJson = JSON.stringify(summaryData);
-              await apiFetch('/api/save-recap-summary', {
+        // Lazy AI generation: if no AI summary, try to generate one
+        if (!recapRecord.ai_summary) {
+          // If storage transcript is empty, try fetching from call_transcripts table
+          let transcriptForGeneration = recapRecord.transcript || [];
+          if (transcriptForGeneration.length === 0 && recapRecord.channel_name) {
+            console.log('[EventDetail] No transcript in storage, checking call_transcripts table...');
+            const { data: dbTranscripts } = await supabase
+              .from('call_transcripts')
+              .select('speaker_name, text, timestamp')
+              .eq('channel_name', recapRecord.channel_name)
+              .order('timestamp', { ascending: true });
+            if (dbTranscripts && dbTranscripts.length > 0) {
+              transcriptForGeneration = dbTranscripts.map(t => ({
+                speakerName: t.speaker_name || 'Speaker',
+                text: t.text,
+                timestamp: t.timestamp,
+              }));
+              console.log('[EventDetail] Found', transcriptForGeneration.length, 'entries in call_transcripts');
+            }
+          }
+
+          if (transcriptForGeneration.length > 0) {
+            console.log('[EventDetail] No AI summary found, generating lazily...');
+            try {
+              const response = await apiFetch('/api/generate-recap-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recapId: recapRecord.id, aiSummary: aiSummaryJson })
+                body: JSON.stringify({
+                  transcript: transcriptForGeneration,
+                  messages: [],
+                  participants: participantNames.length > 0 ? participantNames : ['Participant'],
+                  duration: recapRecord.duration_seconds || 0,
+                  meetingTitle: meetup?.topic || 'Coffee Chat',
+                  meetingType: meetup?.circle_id ? 'circle meetup' : 'community event'
+                })
               });
-              setParsed(parseAISummary(aiSummaryJson));
-              setRecap(prev => ({ ...prev, ai_summary: aiSummaryJson }));
-              console.log('[EventDetail] AI summary generated and saved');
+              if (response.ok) {
+                const summaryData = await response.json();
+                const aiSummaryJson = JSON.stringify(summaryData);
+                await apiFetch('/api/save-recap-summary', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ recapId: recapRecord.id, aiSummary: aiSummaryJson })
+                });
+                setParsed(parseAISummary(aiSummaryJson));
+                setRecap(prev => ({ ...prev, ai_summary: aiSummaryJson }));
+                console.log('[EventDetail] AI summary generated and saved');
+              }
+            } catch (genErr) {
+              console.error('[EventDetail] Lazy generation failed:', genErr);
             }
-          } catch (genErr) {
-            console.error('[EventDetail] Lazy generation failed:', genErr);
           }
         }
       }

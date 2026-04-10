@@ -369,49 +369,71 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
         setCompletedActions(new Set(JSON.parse(savedActions)));
       }
 
-      // Lazy AI generation: if recap has transcript but no AI summary, generate now
-      if (!data.ai_summary && data.transcript?.length > 0) {
-        console.log('[RecapDetail] No AI summary found, generating lazily...');
-        try {
-          const participantNames = Object.values(participantProfiles || {}).map(p => p.name).filter(Boolean);
-          // Fetch existing circles for AI context
-          const { data: circles } = await supabase
-            .from('connection_groups')
-            .select('id, name')
-            .eq('is_active', true);
-          const response = await apiFetch('/api/generate-recap-summary', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transcript: data.transcript,
-              messages: [],
-              participants: participantNames.length > 0 ? participantNames : ['Participant'],
-              duration: data.duration_seconds || 0,
-              meetingTitle: eventTitle || 'Coffee Chat',
-              meetingType: data.call_type === '1on1' ? '1:1 coffee chat' : 'circle meetup',
-              existingCircles: (circles || []).map(c => ({ name: c.name, id: c.id }))
-            })
-          });
-          if (response.ok) {
-            const summaryData = await response.json();
-            const aiSummaryJson = JSON.stringify(summaryData);
-            // Save via server-side API to bypass RLS
-            const saveResponse = await apiFetch('/api/save-recap-summary', {
+      // Lazy AI generation: if no AI summary, try to generate one
+      if (!data.ai_summary) {
+        // If storage transcript is empty, try fetching from call_transcripts table
+        // (permanent source of truth that survives consent filtering and storage failures)
+        let transcriptForGeneration = data.transcript || [];
+        if (transcriptForGeneration.length === 0 && data.channel_name) {
+          console.log('[RecapDetail] No transcript in storage, checking call_transcripts table...');
+          const { data: dbTranscripts } = await supabase
+            .from('call_transcripts')
+            .select('speaker_name, text, timestamp')
+            .eq('channel_name', data.channel_name)
+            .order('timestamp', { ascending: true });
+          if (dbTranscripts && dbTranscripts.length > 0) {
+            transcriptForGeneration = dbTranscripts.map(t => ({
+              speakerName: t.speaker_name || 'Speaker',
+              text: t.text,
+              timestamp: t.timestamp,
+            }));
+            console.log('[RecapDetail] Found', transcriptForGeneration.length, 'entries in call_transcripts');
+          }
+        }
+
+        if (transcriptForGeneration.length > 0) {
+          console.log('[RecapDetail] No AI summary found, generating lazily...');
+          try {
+            const participantNames = Object.values(participantProfiles || {}).map(p => p.name).filter(Boolean);
+            // Fetch existing circles for AI context
+            const { data: circles } = await supabase
+              .from('connection_groups')
+              .select('id, name')
+              .eq('is_active', true);
+            const response = await apiFetch('/api/generate-recap-summary', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recapId: data.id, aiSummary: aiSummaryJson })
+              body: JSON.stringify({
+                transcript: transcriptForGeneration,
+                messages: [],
+                participants: participantNames.length > 0 ? participantNames : ['Participant'],
+                duration: data.duration_seconds || 0,
+                meetingTitle: eventTitle || 'Coffee Chat',
+                meetingType: data.call_type === '1on1' ? '1:1 coffee chat' : 'circle meetup',
+                existingCircles: (circles || []).map(c => ({ name: c.name, id: c.id }))
+              })
             });
-            if (!saveResponse.ok) {
-              console.error('[RecapDetail] Failed to save AI summary:', await saveResponse.text());
+            if (response.ok) {
+              const summaryData = await response.json();
+              const aiSummaryJson = JSON.stringify(summaryData);
+              // Save via server-side API to bypass RLS
+              const saveResponse = await apiFetch('/api/save-recap-summary', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recapId: data.id, aiSummary: aiSummaryJson })
+              });
+              if (!saveResponse.ok) {
+                console.error('[RecapDetail] Failed to save AI summary:', await saveResponse.text());
+              } else {
+                console.log('[RecapDetail] AI summary generated and saved');
+              }
+              setParsed(parseAISummary(aiSummaryJson));
             } else {
-              console.log('[RecapDetail] AI summary generated and saved');
+              console.error('[RecapDetail] AI generation API failed:', response.status, await response.text());
             }
-            setParsed(parseAISummary(aiSummaryJson));
-          } else {
-            console.error('[RecapDetail] AI generation API failed:', response.status, await response.text());
+          } catch (genErr) {
+            console.error('[RecapDetail] Lazy generation failed:', genErr);
           }
-        } catch (genErr) {
-          console.error('[RecapDetail] Lazy generation failed:', genErr);
         }
       }
     } catch (error) {
