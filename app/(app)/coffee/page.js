@@ -15,9 +15,10 @@ export default function CoffeePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
-  const handleNavigate = createOnNavigate(router, pathname)
-
   const view = searchParams.get('view') // 'past', 'history', or null
+  // Include ?view= in the from param so back navigation preserves the active tab
+  const fullPath = view ? `${pathname}?view=${view}` : pathname
+  const handleNavigate = createOnNavigate(router, fullPath)
 
   const homeData = useHomeData(currentUser)
   const connectionsHook = useConnections(currentUser, {})

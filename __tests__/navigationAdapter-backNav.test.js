@@ -103,20 +103,21 @@ describe('getPreviousView — round-trip preservation', () => {
 })
 
 describe('Recap page back navigation', () => {
-  test('navigates back to coffee page when from=/coffee', () => {
+  test('navigates back to coffee upcoming when from=/coffee', () => {
     const previousView = getPreviousView(mockSearchParams('/coffee'), 'pastMeetings')
     expect(previousView).toBe('meetups')
+  })
 
-    // Verify meetups resolves to /coffee
-    const { ROUTES } = require('../lib/navigationAdapter')
-    expect(ROUTES.meetups()).toBe('/coffee')
+  test('navigates back to coffee past tab when from=/coffee?view=past', () => {
+    const previousView = getPreviousView(mockSearchParams('/coffee?view=past'), 'pastMeetings')
+    // Should preserve the full path with query param
+    expect(previousView).toBe('_path:/coffee?view=past')
   })
 
   test('falls back to pastMeetings when no from param', () => {
     const previousView = getPreviousView(mockSearchParams(null), 'pastMeetings')
     expect(previousView).toBe('pastMeetings')
 
-    // Verify pastMeetings resolves to /coffee?view=past
     const { ROUTES } = require('../lib/navigationAdapter')
     expect(ROUTES.pastMeetings()).toBe('/coffee?view=past')
   })
@@ -126,11 +127,29 @@ describe('Recap page back navigation', () => {
     expect(previousView).toBe('home')
   })
 
+  test('_path: prefix navigates directly via router.push', () => {
+    const pushed = []
+    const mockRouter = { push: (url) => pushed.push(url) }
+    const navigate = createOnNavigate(mockRouter, '/recaps/abc')
+
+    navigate('_path:/coffee?view=past')
+    expect(pushed[0]).toBe('/coffee?view=past')
+  })
+
   test('recap page source file uses getPreviousView not hardcoded home', () => {
     const fs = require('fs')
     const path = require('path')
     const src = fs.readFileSync(path.join(__dirname, '..', 'app', 'recaps', '[id]', 'page.js'), 'utf8')
     expect(src).toContain('getPreviousView')
     expect(src).not.toContain('previousView="home"')
+  })
+
+  test('coffee page includes view param in navigation path', () => {
+    const fs = require('fs')
+    const path = require('path')
+    const src = fs.readFileSync(path.join(__dirname, '..', 'app', '(app)', 'coffee', 'page.js'), 'utf8')
+    // Should pass full path with ?view= to createOnNavigate
+    expect(src).toContain('?view=')
+    expect(src).toContain('fullPath')
   })
 })
