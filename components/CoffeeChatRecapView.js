@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiFetch';
 import { getRecapTranscriptFromStorage } from '@/lib/callRecapHelpers';
+import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
 import {
   ChevronLeft,
   Calendar,
@@ -185,34 +186,17 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
   const isMobile = windowWidth < 640;
   const isTablet = windowWidth >= 640 && windowWidth < 768;
 
-  const [recap, setRecap] = useState(null);
-  const [parsed, setParsed] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [participantProfiles, setParticipantProfiles] = useState({});
-  const [completedActions, setCompletedActions] = useState(new Set());
-  const [signedUpProfiles, setSignedUpProfiles] = useState([]);
-  const [connectionStatus, setConnectionStatus] = useState({}); // userId -> 'connected' | 'sent' | 'incoming' | null
-  const [isHost, setIsHost] = useState(false);
-
-  const handleBack = () => {
-    onNavigate?.(previousView || 'home');
-  };
-
-  useEffect(() => {
-    if (recapId) loadRecap();
-  }, [recapId]);
-
-  async function loadRecap() {
-    try {
-      setLoading(true);
-
+  // SWR-cached primary data: recap row + transcript + event info + profiles
+  // Instant on revisit, fetches once per recap ID
+  const { data: primaryData, isLoading: loading } = useSupabaseQuery(
+    recapId ? `recap-detail-${recapId}` : null,
+    async (sb) => {
       // Phase 1: Fetch recap row
-      const { data, error } = await supabase
+      const { data, error } = await sb
         .from('call_recaps')
         .select('id, channel_name, call_type, provider, started_at, ended_at, duration_seconds, participant_count, participant_ids, transcript_path, metrics, created_by, created_at, updated_at')
         .eq('id', recapId)
         .single();
-
       if (error) throw error;
 
       const channelName = data.channel_name || '';
@@ -220,14 +204,14 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
       const entityId = uuidMatch ? uuidMatch[0] : null;
       const participantIds = data.participant_ids || [];
 
-      // Phase 2: Parallel fetch — transcript, event info, profiles, auth all at once
+      // Phase 2: Parallel fetch — transcript, event info, profiles all at once
       const transcriptPromise = getRecapTranscriptFromStorage(data.transcript_path);
 
       const eventPromise = (async () => {
         let meetup = null, group = null, coffeeChat = null, eventTitle = null;
         if (data.call_type === '1on1') {
           const lookupId = entityId || channelName;
-          const { data: chatData, error: chatError } = await supabase
+          const { data: chatData, error: chatError } = await sb
             .from('coffee_chats')
             .select('id, topic, scheduled_time, requester_id, recipient_id')
             .eq('id', lookupId)
@@ -236,7 +220,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
           coffeeChat = chatData;
           eventTitle = chatData?.topic || null;
         } else if (data.call_type === 'group' && entityId) {
-          const { data: meetupData } = await supabase
+          const { data: meetupData } = await sb
             .from('meetups')
             .select('id, topic, description, date, time, location, circle_id, created_by')
             .eq('id', entityId)
@@ -244,20 +228,20 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
           if (meetupData) {
             meetup = meetupData;
             if (meetupData.circle_id) {
-              const { data: groupData } = await supabase
+              const { data: groupData } = await sb
                 .from('connection_groups').select('id, name').eq('id', meetupData.circle_id).single();
               group = groupData;
             }
             const meetupDate = meetupData.date ? new Date(meetupData.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
             eventTitle = group?.name ? `${group.name}${meetupDate ? ' · ' + meetupDate : ''}` : meetupData.topic;
           } else {
-            const { data: groupData } = await supabase
+            const { data: groupData } = await sb
               .from('connection_groups').select('id, name').eq('id', entityId).single();
             group = groupData;
             eventTitle = groupData?.name || null;
           }
         } else if (entityId) {
-          const { data: meetupData } = await supabase
+          const { data: meetupData } = await sb
             .from('meetups')
             .select('id, topic, description, date, time, location, created_by')
             .eq('id', entityId)
@@ -269,56 +253,77 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
       })();
 
       const profilesPromise = participantIds.length > 0
-        ? supabase.from('profiles').select('id, name, profile_picture, career').in('id', participantIds)
+        ? sb.from('profiles').select('id, name, profile_picture, career').in('id', participantIds)
         : Promise.resolve({ data: [] });
 
-      const authPromise = supabase.auth.getUser();
-
-      // Wait for all parallel fetches
-      const [transcriptResult, eventResult, profilesResult, authResult] = await Promise.all([
-        transcriptPromise, eventPromise, profilesPromise, authPromise,
+      const [transcriptResult, eventResult, profilesResult] = await Promise.all([
+        transcriptPromise, eventPromise, profilesPromise,
       ]);
 
-      // Apply transcript
       data.transcript = transcriptResult.transcript;
       data.ai_summary = transcriptResult.aiSummary;
 
-      // Apply event info
       const { meetup, group, coffeeChat, eventTitle } = eventResult;
 
-      // Apply profiles
       const profileMap = {};
       (profilesResult.data || []).forEach(p => { profileMap[p.id] = p; });
-      setParticipantProfiles(profileMap);
 
-      // Build enriched recap and render immediately
-      const enriched = {
-        ...data, meetup, group, coffeeChat,
-        meetup_title: eventTitle,
-        meetup_date: meetup?.date || null,
-        meetup_time: meetup?.time || null,
-        meetup_location: meetup?.location || null,
+      return {
+        recap: {
+          ...data, meetup, group, coffeeChat,
+          meetup_title: eventTitle,
+          meetup_date: meetup?.date || null,
+          meetup_time: meetup?.time || null,
+          meetup_location: meetup?.location || null,
+        },
+        parsed: parseAISummary(data.ai_summary),
+        profileMap,
+        entityId,
       };
-      setRecap(enriched);
-      setParsed(parseAISummary(data.ai_summary));
-      localStorage.setItem(`recap_viewed_${recapId}`, 'true');
+    }
+  );
 
-      // Load completed actions from localStorage
-      const savedActions = localStorage.getItem('completed_recap_actions');
-      if (savedActions) {
-        setCompletedActions(new Set(JSON.parse(savedActions)));
-      }
+  const recap = primaryData?.recap || null;
+  const [participantProfiles, setParticipantProfiles] = useState({});
+  const [completedActions, setCompletedActions] = useState(new Set());
+  const [signedUpProfiles, setSignedUpProfiles] = useState([]);
+  const [connectionStatus, setConnectionStatus] = useState({});
+  const [isHost, setIsHost] = useState(false);
+  const [lazyParsed, setLazyParsed] = useState(null); // override from lazy AI generation
+  const parsed = lazyParsed || primaryData?.parsed || null;
+  const secondaryLoadedRef = useRef(null);
 
-      // Phase 3: Non-blocking secondary data (don't hold up the render)
-      setLoading(false);
+  const handleBack = () => {
+    onNavigate?.(previousView || 'home');
+  };
 
-      const authUser = authResult.data?.user;
+  // Apply profileMap from primary data
+  useEffect(() => {
+    if (primaryData?.profileMap) setParticipantProfiles(primaryData.profileMap);
+  }, [primaryData?.profileMap]);
 
-      // Connection status + signups in parallel
+  // Mark as viewed + load localStorage actions
+  useEffect(() => {
+    if (!recap) return;
+    localStorage.setItem(`recap_viewed_${recapId}`, 'true');
+    const savedActions = localStorage.getItem('completed_recap_actions');
+    if (savedActions) setCompletedActions(new Set(JSON.parse(savedActions)));
+  }, [recap, recapId]);
+
+  // Secondary data: connection status, signups, lazy AI — runs after primary render
+  useEffect(() => {
+    if (!primaryData || secondaryLoadedRef.current === recapId) return;
+    secondaryLoadedRef.current = recapId;
+
+    const { recap: data, profileMap, entityId } = primaryData;
+    const participantIds = data.participant_ids || [];
+
+    (async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
       const secondaryPromises = [];
 
       if (participantIds.length > 0 && authUser) {
-        if (meetup?.created_by === authUser.id || group?.creator_id === authUser.id || data.created_by === authUser.id) {
+        if (data.meetup?.created_by === authUser.id || data.group?.creator_id === authUser.id || data.created_by === authUser.id) {
           setIsHost(true);
         }
         secondaryPromises.push(
@@ -342,8 +347,8 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
         );
       }
 
-      if (meetup?.id || entityId) {
-        const meetupId = meetup?.id || entityId;
+      if (data.meetup?.id || entityId) {
+        const meetupId = data.meetup?.id || entityId;
         secondaryPromises.push(
           supabase.from('meetup_signups').select('user_id').eq('meetup_id', meetupId)
             .then(({ data: signups }) => {
@@ -353,17 +358,16 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
               }
               return { data: [] };
             })
-            .then(({ data: signupProfiles }) => setSignedUpProfiles(signupProfiles || []))
+            .then(({ data: sp }) => setSignedUpProfiles(sp || []))
         );
       }
 
       await Promise.all(secondaryPromises);
 
-      // Phase 4: Lazy AI generation (only if needed, after render)
+      // Lazy AI generation (only if no summary exists)
       if (!data.ai_summary) {
         let transcriptForGeneration = data.transcript || [];
         if (transcriptForGeneration.length === 0 && data.channel_name) {
-          console.log('[RecapDetail] No transcript in storage, checking call_transcripts table...');
           const { data: dbTranscripts } = await supabase
             .from('call_transcripts')
             .select('speaker_name, text, timestamp')
@@ -375,12 +379,10 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
               text: t.text,
               timestamp: t.timestamp,
             }));
-            console.log('[RecapDetail] Found', transcriptForGeneration.length, 'entries in call_transcripts');
           }
         }
 
         if (transcriptForGeneration.length > 0) {
-          console.log('[RecapDetail] No AI summary found, generating lazily...');
           try {
             const participantNames = Object.values(profileMap).map(p => p.name).filter(Boolean);
             const { data: circles } = await supabase
@@ -393,7 +395,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                 messages: [],
                 participants: participantNames.length > 0 ? participantNames : ['Participant'],
                 duration: data.duration_seconds || 0,
-                meetingTitle: eventTitle || 'Coffee Chat',
+                meetingTitle: data.meetup_title || 'Coffee Chat',
                 meetingType: data.call_type === '1on1' ? '1:1 coffee chat' : 'circle meetup',
                 existingCircles: (circles || []).map(c => ({ name: c.name, id: c.id }))
               })
@@ -406,21 +408,15 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ recapId: data.id, aiSummary: aiSummaryJson })
               }).catch(err => console.error('[RecapDetail] Failed to save AI summary:', err));
-              setParsed(parseAISummary(aiSummaryJson));
-            } else {
-              console.error('[RecapDetail] AI generation API failed:', response.status, await response.text());
+              setLazyParsed(parseAISummary(aiSummaryJson));
             }
           } catch (genErr) {
             console.error('[RecapDetail] Lazy generation failed:', genErr);
           }
         }
       }
-      return; // loading already set to false above
-    } catch (error) {
-      console.error('Error loading recap:', error);
-      setLoading(false);
-    }
-  }
+    })();
+  }, [primaryData, recapId]);
 
   function toggleActionItem(actionIndex) {
     const key = `${recapId}_${actionIndex}`;
