@@ -244,51 +244,86 @@ function extractJSON(text) {
   throw new Error('Could not extract valid JSON from response');
 }
 
-const ENHANCED_SYSTEM_PROMPT = `You are a helpful assistant that summarizes video call transcripts. The transcript may be in any language (English, Chinese, etc.) and may contain speech recognition errors — do your best to understand the intent.
+// Concise prompt for 1:1 coffee chats — focus on what matters
+const ONEONONE_SYSTEM_PROMPT = `You summarize 1:1 coffee chat transcripts. The transcript may be in any language and may contain speech recognition errors.
 
 RULES:
-1. Summarize what was ACTUALLY discussed based on the transcript content
-2. DO NOT fabricate topics or discussions not present in the transcript
-3. Write the summary in the same language as the majority of the transcript
-4. If the transcript is truly just greetings or test messages with no real content, say so briefly
+1. Summarize ONLY what was actually discussed. Never fabricate.
+2. Write in the same language as the majority of the transcript.
+3. Keep it concise. This is a casual 1:1, not a board meeting.
+4. Only include action items that were explicitly discussed or agreed upon.
 
-Return a JSON object with this structure:
+Return a JSON object:
 
 {
-  "summary": "2-3 sentence summary of the conversation and key points discussed",
-  "sentiment": {
-    "overall": "Overall mood/vibe of the conversation",
-    "emoji": "Single emoji representing the mood",
-    "highlights": ["Notable moments or positive aspects"]
-  },
-  "keyTakeaways": [
-    { "emoji": "💡", "text": "Key point or insight from the discussion" }
-  ],
+  "summary": "2-3 sentence summary. What did they talk about? What was the vibe?",
   "topicsDiscussed": [
-    { "topic": "Topic name", "details": ["Discussed specific aspect of the topic", "Explored another angle or conclusion"] }
-  ],
-  "memorableQuotes": [
-    { "quote": "Notable quote from transcript", "author": "Speaker Name" }
+    { "topic": "Topic name", "details": ["One-line description"] }
   ],
   "actionItems": [
-    { "text": "Action item if any were mentioned", "assignee": "Person Name", "done": false }
+    { "text": "Specific next step discussed", "assignee": "Person Name", "done": false }
   ],
   "suggestedFollowUps": [
-    { "personName": "Person Name", "reason": "Why to follow up with them", "suggestedTopic": "Topic to discuss" }
+    { "personName": "Person Name", "reason": "Brief reason", "suggestedTopic": "What to discuss next" }
+  ]
+}
+
+Guidelines:
+- summary: Warm and natural. 2-3 sentences max.
+- topicsDiscussed: 2-3 topics max. One detail line each. Skip if conversation was just casual catching up.
+- actionItems: Only real next steps someone committed to. Empty array if none. Do NOT invent action items.
+- suggestedFollowUps: 1 follow-up suggestion max.
+- Do NOT include: sentiment analysis, memorable quotes, key takeaways, or circle suggestions. Keep it simple.
+
+Return ONLY valid JSON.`;
+
+// Richer prompt for group meetings (circles, community events)
+const GROUP_SYSTEM_PROMPT = `You summarize group video call transcripts. The transcript may be in any language and may contain speech recognition errors.
+
+RULES:
+1. Summarize ONLY what was actually discussed. Never fabricate.
+2. Write in the same language as the majority of the transcript.
+3. Scale detail to the meeting length: short calls get short summaries.
+
+Return a JSON object:
+
+{
+  "summary": "2-4 sentence summary of the discussion and key outcomes.",
+  "sentiment": {
+    "overall": "Overall mood of the meeting",
+    "emoji": "Single emoji",
+    "highlights": ["1-2 notable moments"]
+  },
+  "keyTakeaways": [
+    { "emoji": "💡", "text": "Key insight or decision" }
+  ],
+  "topicsDiscussed": [
+    { "topic": "Topic name", "details": ["What was discussed", "What was decided or concluded"] }
+  ],
+  "actionItems": [
+    { "text": "Specific next step", "assignee": "Person Name", "done": false }
+  ],
+  "suggestedFollowUps": [
+    { "personName": "Person Name", "reason": "Why", "suggestedTopic": "Topic" }
   ],
   "suggestedCircles": []
 }
 
 Guidelines:
-- summary: Provide a warm, natural summary of the conversation. Mention what was discussed and the general vibe.
-- keyTakeaways: Extract actual insights or decisions from the conversation
-- topicsDiscussed: List 3-5 topics with exactly 2 bullet-point descriptions each. Each detail should start with a past-tense verb (e.g. "Discussed...", "Explored...", "Identified...", "Shared...")
-- actionItems: Only include if specific action items were mentioned. Assign each to the person responsible using their name from the transcript
-- suggestedFollowUps: Suggest 1-3 participants to follow up with based on the conversation. Use the participant names provided. Include a reason and a specific topic to discuss next
-- suggestedCircles: ONLY suggest when the conversation reveals a strong shared interest that would benefit from ongoing group discussion. Each entry should have: "type" ("join" for an existing circle, "create" for a new one), "name" (circle name), "reason" (why this is relevant based on the conversation), and for "create" type, "suggestedMembers" (participant names who showed interest). If existing circles are provided in the context, check if any are a strong match. Leave this array EMPTY if there is no compelling reason — do not force suggestions
-- If transcript is minimal (just greetings), keep arrays short but still describe what happened
+- summary: Natural and concise. Mention key outcomes.
+- keyTakeaways: 2-3 max. Only real insights or decisions.
+- topicsDiscussed: 3-5 topics, 1-2 detail lines each.
+- actionItems: Only items someone explicitly committed to. Empty if none.
+- suggestedFollowUps: 1-2 people max.
+- suggestedCircles: Only if conversation revealed a strong shared interest for ongoing discussion. Usually empty.
+- No memorable quotes section. Skip fluff.
 
-Return ONLY valid JSON, no additional text or markdown.`;
+Return ONLY valid JSON.`;
+
+function getSystemPrompt(meetingType) {
+  if (meetingType === '1:1 coffee chat') return ONEONONE_SYSTEM_PROMPT;
+  return GROUP_SYSTEM_PROMPT;
+}
 
 /**
  * Generate structured summary using OpenAI
@@ -319,7 +354,7 @@ async function generateWithOpenAI(apiKey, content, participants, duration, meeti
         messages: [
           {
             role: 'system',
-            content: ENHANCED_SYSTEM_PROMPT
+            content: getSystemPrompt(meetingType)
           },
           {
             role: 'user',
@@ -369,7 +404,7 @@ async function generateWithAnthropic(apiKey, content, participants, duration, me
         messages: [
           {
             role: 'user',
-            content: `${ENHANCED_SYSTEM_PROMPT}\n\n${buildUserPrompt(content, participants, duration, meetingTitle, meetingType, existingCircles)}`
+            content: `${getSystemPrompt(meetingType)}\n\n${buildUserPrompt(content, participants, duration, meetingTitle, meetingType, existingCircles)}`
           }
         ]
       })
@@ -401,30 +436,19 @@ async function generateWithAnthropic(apiKey, content, participants, duration, me
 }
 
 /**
- * Normalize and validate the AI response
+ * Normalize and validate the AI response.
+ * Only includes sections that the AI actually populated — no filler defaults.
  */
 function normalizeResponse(parsed, participants, duration, meetingTitle) {
-  return {
+  const result = {
     summary: parsed.summary || `A ${duration} minute meeting${meetingTitle ? ` about ${meetingTitle}` : ''}.`,
-    sentiment: {
-      overall: parsed.sentiment?.overall || 'Productive & Engaging',
-      emoji: parsed.sentiment?.emoji || '✨',
-      highlights: Array.isArray(parsed.sentiment?.highlights) ? parsed.sentiment.highlights : ['Good conversation']
-    },
-    keyTakeaways: Array.isArray(parsed.keyTakeaways)
-      ? parsed.keyTakeaways.map(t => ({
-          emoji: t.emoji || '💡',
-          text: typeof t === 'string' ? t : (t.text || '')
-        }))
-      : [{ emoji: '💡', text: 'Connection made' }],
     topicsDiscussed: Array.isArray(parsed.topicsDiscussed)
       ? parsed.topicsDiscussed.map(t => ({
           topic: typeof t === 'string' ? t : (t.topic || ''),
           details: Array.isArray(t.details) ? t.details.slice(0, 2) : [],
           mentions: t.mentions || 1
         }))
-      : [{ topic: 'General conversation', details: [], mentions: 1 }],
-    memorableQuotes: Array.isArray(parsed.memorableQuotes) ? parsed.memorableQuotes : [],
+      : [],
     actionItems: Array.isArray(parsed.actionItems)
       ? parsed.actionItems.map(a => ({
           text: typeof a === 'string' ? a : (a.text || ''),
@@ -432,26 +456,43 @@ function normalizeResponse(parsed, participants, duration, meetingTitle) {
           done: a.done || false
         }))
       : [],
-    suggestedFollowUps: Array.isArray(parsed.suggestedFollowUps)
+    suggestedFollowUps: Array.isArray(parsed.suggestedFollowUps) && parsed.suggestedFollowUps.length > 0
       ? parsed.suggestedFollowUps.map(f => ({
           personName: f.personName || f.person?.name || '',
           reason: f.reason || '',
           suggestedTopic: f.suggestedTopic || ''
         }))
-      : participants.slice(0, 2).map(p => ({
-          personName: typeof p === 'string' ? p : (p.name || ''),
-          reason: 'Continue the conversation',
-          suggestedTopic: 'Follow up on discussion'
-        })),
-    suggestedCircles: Array.isArray(parsed.suggestedCircles)
-      ? parsed.suggestedCircles.map(c => ({
-          type: c.type || 'join',
-          name: c.name || '',
-          reason: c.reason || '',
-          suggestedMembers: Array.isArray(c.suggestedMembers) ? c.suggestedMembers : []
-        })).filter(c => c.name)
-      : []
+      : [],
   };
+
+  // Only include richer sections if the AI returned them (group meetings)
+  if (parsed.sentiment) {
+    result.sentiment = {
+      overall: parsed.sentiment.overall || '',
+      emoji: parsed.sentiment.emoji || '✨',
+      highlights: Array.isArray(parsed.sentiment.highlights) ? parsed.sentiment.highlights : []
+    };
+  }
+  if (Array.isArray(parsed.keyTakeaways) && parsed.keyTakeaways.length > 0) {
+    result.keyTakeaways = parsed.keyTakeaways.map(t => ({
+      emoji: t.emoji || '💡',
+      text: typeof t === 'string' ? t : (t.text || '')
+    }));
+  }
+  if (Array.isArray(parsed.memorableQuotes) && parsed.memorableQuotes.length > 0) {
+    result.memorableQuotes = parsed.memorableQuotes;
+  }
+  if (Array.isArray(parsed.suggestedCircles) && parsed.suggestedCircles.length > 0) {
+    result.suggestedCircles = parsed.suggestedCircles
+      .map(c => ({
+        type: c.type || 'join',
+        name: c.name || '',
+        reason: c.reason || '',
+        suggestedMembers: Array.isArray(c.suggestedMembers) ? c.suggestedMembers : []
+      })).filter(c => c.name);
+  }
+
+  return result;
 }
 
 /**
