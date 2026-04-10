@@ -89,7 +89,7 @@ async function enrichEvents(events) {
 async function fetchAvailableProfiles(currentUserId) {
   const { data: profiles, error } = await supabase
     .from('profiles')
-    .select('id, name, profile_picture, career')
+    .select('id, name, profile_picture, career, coffee_chat_slots')
     .eq('open_to_coffee_chat', true)
     .neq('id', currentUserId)
     .limit(20)
@@ -100,7 +100,7 @@ async function fetchAvailableProfiles(currentUserId) {
     id: `available-${p.id}`,
     event_type: 'coffee_available',
     is_live: false,
-    metadata: { career: p.career },
+    metadata: { career: p.career, coffee_chat_slots: p.coffee_chat_slots },
     expires_at: null,
     created_at: new Date().toISOString(),
     actor: { id: p.id, name: p.name, profile_picture: p.profile_picture },

@@ -6,6 +6,7 @@
 import { useRef, useCallback, useState, useEffect } from 'react'
 import { useLiveFeed } from '@/hooks/useLiveFeed'
 import { colors as tokens, fonts } from '@/lib/designTokens'
+import { formatCoffeeSlots } from '@/lib/coffeeChatSlots'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -52,10 +53,12 @@ const EVENT_CONFIG = {
   },
   coffee_available: {
     typeLabel: 'Available',
-    getHeadline: (e) => `${firstName(e.actor)} is open to coffee chat`,
+    getHeadline: (e) => `☕ ${firstName(e.actor)} is open to coffee chat`,
     getSubline: (e) => {
       const career = e.metadata?.career
-      return career || 'Community member'
+      const slots = formatCoffeeSlots(e.metadata?.coffee_chat_slots, true)
+      if (career && slots) return `${career} · ${slots}`
+      return career || slots || 'Community member'
     },
     cta: 'Connect',
     ctaStyle: 'solid',
