@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { apiFetch } from '@/lib/apiFetch';
 import { getRecapTranscriptFromStorage } from '@/lib/callRecapHelpers';
-import { useSupabaseQuery } from '@/hooks/useSupabaseQuery';
+import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 import {
   ChevronLeft,
   Calendar,
@@ -290,6 +290,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
   const [connectionStatus, setConnectionStatus] = useState({});
   const [isHost, setIsHost] = useState(false);
   const [lazyParsed, setLazyParsed] = useState(null); // override from lazy AI generation
+  const [generatingSummary, setGeneratingSummary] = useState(false);
   const parsed = lazyParsed || primaryData?.parsed || null;
   const secondaryLoadedRef = useRef(null);
 
@@ -383,6 +384,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
         }
 
         if (transcriptForGeneration.length > 0) {
+          setGeneratingSummary(true);
           try {
             const participantNames = Object.values(profileMap).map(p => p.name).filter(Boolean);
             const { data: circles } = await supabase
@@ -403,15 +405,29 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
             if (response.ok) {
               const summaryData = await response.json();
               const aiSummaryJson = JSON.stringify(summaryData);
+              const newParsed = parseAISummary(aiSummaryJson);
+              setLazyParsed(newParsed);
+              setGeneratingSummary(false);
+              // Update SWR cache so revisits show the summary instantly
+              invalidateQuery(`recap-detail-${recapId}`, (cached) => cached ? {
+                ...cached,
+                parsed: newParsed,
+                recap: { ...cached.recap, ai_summary: aiSummaryJson },
+              } : cached, { revalidate: false });
+              // Save to storage + invalidate past meetups cache
               apiFetch('/api/save-recap-summary', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ recapId: data.id, aiSummary: aiSummaryJson })
+              }).then(() => {
+                if (authUser?.id) invalidateQuery(`meetups-past-${authUser.id}`);
               }).catch(err => console.error('[RecapDetail] Failed to save AI summary:', err));
-              setLazyParsed(parseAISummary(aiSummaryJson));
+            } else {
+              setGeneratingSummary(false);
             }
           } catch (genErr) {
             console.error('[RecapDetail] Lazy generation failed:', genErr);
+            setGeneratingSummary(false);
           }
         }
       }
@@ -476,6 +492,7 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
 
   return (
     <div style={{ fontFamily: fonts.sans, paddingBottom: '20px' }}>
+      {generatingSummary && <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>}
       {/* Back button + Title row */}
       <div style={{
         display: 'flex',
@@ -794,9 +811,16 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
             color: colors.textLight,
             lineHeight: '1.6',
           }}>
-            {parsed.summary || recap.ai_summary || (
+            {parsed.summary || recap.ai_summary || (generatingSummary ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ height: '14px', borderRadius: '6px', background: 'linear-gradient(90deg, rgba(139,111,92,0.08) 25%, rgba(139,111,92,0.15) 50%, rgba(139,111,92,0.08) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
+                <div style={{ height: '14px', borderRadius: '6px', width: '85%', background: 'linear-gradient(90deg, rgba(139,111,92,0.08) 25%, rgba(139,111,92,0.15) 50%, rgba(139,111,92,0.08) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
+                <div style={{ height: '14px', borderRadius: '6px', width: '60%', background: 'linear-gradient(90deg, rgba(139,111,92,0.08) 25%, rgba(139,111,92,0.15) 50%, rgba(139,111,92,0.08) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease-in-out infinite' }} />
+                <p style={{ color: colors.textSoft, fontSize: isMobile ? '11px' : '12px', fontStyle: 'italic', margin: '4px 0 0' }}>Generating AI summary...</p>
+              </div>
+            ) : (
               <span style={{ color: colors.textSoft, fontStyle: 'italic' }}>No summary available</span>
-            )}
+            ))}
           </div>
         </div>
 
@@ -887,6 +911,10 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                 </li>
               ))}
             </ul>
+          ) : generatingSummary ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2].map(i => <div key={i} style={{ height: '14px', borderRadius: '6px', width: `${85 - i * 15}%`, background: 'linear-gradient(90deg, rgba(139,111,92,0.08) 25%, rgba(139,111,92,0.15) 50%, rgba(139,111,92,0.08) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease-in-out infinite' }} />)}
+            </div>
           ) : (
             <p style={{ fontSize: bodyFontSize, color: colors.textSoft, fontStyle: 'italic', margin: 0 }}>
               No key takeaways from this session
@@ -945,6 +973,10 @@ export default function CoffeeChatRecapView({ recapId, onNavigate, previousView 
                 </div>
               );
             })
+          ) : generatingSummary ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2].map(i => <div key={i} style={{ height: '14px', borderRadius: '6px', width: `${90 - i * 20}%`, background: 'linear-gradient(90deg, rgba(139,111,92,0.08) 25%, rgba(139,111,92,0.15) 50%, rgba(139,111,92,0.08) 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s ease-in-out infinite' }} />)}
+            </div>
           ) : (
             <p style={{ fontSize: bodyFontSize, color: colors.textSoft, fontStyle: 'italic', margin: 0 }}>
               No action items from this session
