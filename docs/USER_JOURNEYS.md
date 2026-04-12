@@ -1,6 +1,6 @@
 # CircleW User Journeys & Navigation Map
 
-**Last updated:** 2026-04-01
+**Last updated:** 2026-04-12 (Journeys 5, 8, 9, and 10 updated with detailed component behavior for E2E test assertions)
 **Purpose:** Document all user workflows, navigation paths, state transitions, and failure points for E2E testing.
 
 ---
@@ -240,20 +240,107 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 **User goal:** See what's happening in the community
 **Suggested URL:** `/home`
 
+**Page section order (top to bottom):**
+1. Welcome card (new users only, dismissible)
+2. Greeting ("Good morning/afternoon/evening, {firstName}")
+3. **Requests waiting for you** (conditional — only if there are pending requests)
+4. Your Coffee Chats (upcoming meetups + coffee chats)
+5. People to Meet (recommended connections)
+6. Circle to Join (recommended circles)
+7. Live Feed (recent community activity)
+
 **Steps:**
-1. `/home` loads with greeting + stats
+1. `/home` loads with greeting
 2. Upcoming Meetups section → card click → `/events/{id}`
 3. People to Meet section → card click → `/people/{userId}`
-4. People to Meet → "Say hi" → sends connection request (inline, no navigation)
+4. People to Meet → "Say hi" button → sends connection request (inline, no navigation)
 5. Circle to Join section → card click → `/circles/{circleId}`
-6. Circle to Join → "Join" → sends join request (inline)
+6. Circle to Join → "Join" button → sends join request (inline)
 7. Live Feed → "Connect" → navigates to profile (shows "Request Sent" if already requested)
 8. Live Feed → "Join" → `/circles/{circleId}`
 9. Live Feed → "RSVP" → `/events/{meetupId}`
-10. Requests section → Accept/Decline (inline, no navigation)
+10. Requests section → Accept/Decline/Ignore (inline, no navigation)
 11. "View all" (meetups) → `/coffee`
 12. "See all" (people) → `/people`
 13. "See all" (circles) → `/circles/browse`
+
+---
+
+#### Section detail: "Requests waiting for you"
+
+**Section title (H3):** `Requests waiting for you` (serif font, color #3F1906, opacity 0.73)
+
+**Data sources (mixed into one list, sorted by `requested_at`/`created_at` descending):**
+- `connectionRequests` — people who sent me a connection request
+- `circleJoinRequests` — people requesting to join circles I created
+- `circleInvitations` — circles inviting me to join
+- `remainingCoffeeRequests` — coffee chat requests not already in Upcoming Meetups (filtered by `coffeeChatRequests.filter(r => !visibleCoffeeChatIds.has(r.id))`)
+
+**Display limit:** First 5 items. If more than 5, shows "View all {N} requests →" button that navigates to `/discover`.
+
+**Hidden when:** `allRequests.length === 0` (entire section returns null).
+
+**Per-card layout (each request):**
+- Avatar (profile picture or initials-in-circle fallback, 48px desktop / 40px mobile)
+- Name (h4, serif, bold)
+- Description line (varies by request type, see below)
+- Optional career/city line (smaller, color #B8A089)
+- Time ago (desktop: inline as "· {timeAgo}"; mobile: below)
+- Action buttons (right side)
+
+**Time ago format:**
+- Today → "new"
+- Yesterday → "Yesterday"
+- Older → "{N} days ago"
+
+**Card click behavior:** Clicking the avatar/name area navigates to `/people/{userId}` (except for coffee chat requests — `user.id` is on `request.requester`).
+
+---
+
+**Request type: Connection request**
+- **Description line:** `{user.career || 'Professional'}`
+- **Second line:** `{user.city}, {user.state}` (if present)
+- **Single action button:** `Review` (with Heart icon) → navigates to `/people/{request.id}` (user's profile)
+- **No direct Accept/Decline on home card** — user must go to profile page to accept
+- After clicking Review → Journey 10 (User Profile) "incoming request" state applies
+
+**Request type: Circle join request (someone requesting to join MY circle)**
+- **Description line:** `wants to join **{circleName}**`
+- **Second line:** `{user.career}` (if present)
+- **Action buttons:**
+  - `Decline` (outlined, italic) → `handleDeclineCircleJoin(request.id)` → optimistic removal from list
+  - `Approve` (filled, with Users icon, italic) → `handleAcceptCircleJoin(request.id)` → optimistic removal from list
+- Both actions invalidate `circles-page-{userId}` cache
+
+**Request type: Circle invitation (I was invited to a circle)**
+- **Description line:** `invited you to **{circleName}**`
+- **Second line:** `{user.career}` (if present — where `user` is the circle creator)
+- **Action buttons:**
+  - `Decline` (outlined, italic) → `handleDeclineCircleInvitation(request.id)` → optimistic removal
+  - `Join` (filled, with Users icon, italic) → `handleAcceptCircleInvitation(request.id)` → optimistic removal, calls `mutatePrimary()`
+
+**Request type: Coffee chat request**
+- **Description line:** `wants a coffee chat · {month day} at {time}` (if `scheduled_time` present)
+- **Second line:** `{user.career}` (if present)
+- **Third line (optional):** `"{request.notes}"` (italic, if notes present)
+- **Action buttons:**
+  - `Decline` (outlined, italic) → `handleDeclineCoffeeChat(request.id)`
+  - `Accept` (filled, with Coffee icon, italic) → `handleAcceptCoffeeChat(request.id)`
+
+---
+
+#### Section detail: "People to Meet"
+
+**Section title:** "People to Meet" with "See all →" link navigating to `/people`
+
+**Display limit:** First 4-5 people (via SWR query `home-people-recs`)
+
+**Per-card layout:**
+- Avatar + name + career
+- "Say hi" button (primary) — sends connection request inline
+- Button state after click: changes to show "Sent" or similar (uses local state `setSentRequests`)
+
+**Empty state:** Section hidden entirely (no CTA)
 
 **Failure points:**
 - People to Meet loads slowly (~1 min without SWR cache, fixed with separate SWR query)
@@ -268,8 +355,9 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 - "No upcoming events / Check back soon for new events!"
 - People to Meet: hidden when empty (no CTA)
 - Live Feed: "No activity yet. Be the first to connect!"
+- "Requests waiting for you": section hidden entirely when no requests
 
-**Data dependencies:** `get_home_page_data` RPC, `connection_recommendations`, `circle_match_scores`, `event_recommendations`, `feed_events`
+**Data dependencies:** `get_home_page_data` RPC, `connection_recommendations`, `circle_match_scores`, `event_recommendations`, `feed_events`, `user_interests`, `connection_group_members`, `coffee_chats`
 
 ---
 
@@ -343,36 +431,128 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 **User goal:** See connections, circles, and manage requests
 **Suggested URL:** `/circles`
 
-**Steps:**
-1. `/circles` loads
-2. My Connections → avatar click → `/people/{userId}`
-3. My Connections → Message button → `/messages?id={userId}&type=user`
-4. My Connections → Schedule Coffee → `/schedule?type=coffee&connectionId=...`
-5. My Active Circles → "Discover" → `/circles/browse`
-6. My Active Circles → circle card click → `/circles/{circleId}`
-7. My Active Circles → Chat button → `/messages?id={circleId}&type=circle`
-8. My Active Circles → "Get Started" / "Open Circle" → `/circles/{circleId}`
-9. Recommend to Connect → "See all" → `/people`
-10. Recommend to Connect → person card → `/people/{userId}`
-11. Recommend to Connect → "Connect" → sends request inline
-12. "Create a Circle" → `/circles/new`
-13. Sent Requests → connection requests with Withdraw
-14. Sent Requests → circle invites sent with Withdraw
-15. Sent Requests → circle join requests with Withdraw
+**Page header:**
+- H1: `Circles` (serif, color #3F1906)
+- Subtitle: `Your deep and meaningful connections`
+
+**Page section order (top to bottom):**
+1. **Pending invitations** (only if any exist)
+2. My Connections
+3. My Active Circles (or "Create a Circle" prompt if none)
+4. Recommend to Connect (inline discover, toggle via button)
+5. Recent Chats (only if any)
+6. **Sent Requests** (only if any exist)
+
+---
+
+#### Section: Pending invitations (top of page)
+
+**Condition:** `groupInvites.length > 0`
+
+**Layout:**
+- White card with border
+- Header row: Clock icon + "Pending" label + count badge (orange #D4864A on #F5E6D3 background)
+- List of invitation rows
+
+**Per-invitation row:**
+- Circle name (bold, color #2C1810)
+- Subtitle: `Invited by {creator.name || 'someone'}`
+- Right side: **Join** button (filled brown #5C4033, white text, pill shape)
+
+**Action: Click "Join"**
+- Calls `handleAcceptInvite(invite.id, invite.group?.name)`
+- On success: toast `You joined "{groupName}"!`
+- Optimistic: removes from `groupInvites`, refreshes circles data
+
+**Note:** There's no visible Decline button in this section — decline flow goes through a different path (not confirmed, may be a gap).
+
+---
+
+#### Section: My Connections
+
+**H2:** `My Connections`
+
+**Empty state:** (when `connections.length === 0`)
+- Dashed border card with UserPlus icon
+- Title: `No connections yet` (bold)
+- Subtitle: `Connect with people to start building meaningful relationships`
+- CTA button: `Recommend to Connect` (toggles `showDiscoverInline` state)
+
+**With connections:** Horizontal slide bar of connection cards, each with:
+- Avatar + name + career
+- Message button → `/messages?id={userId}&type=user`
+- Schedule Coffee button → `/schedule?type=coffee&connectionId={userId}`
+- Card click → `/people/{userId}`
+
+---
+
+#### Section: My Active Circles
+
+**Per-card layout:**
+- Circle name, emoji, category badge
+- Member count + next meetup date/time (if upcoming)
+- Last message preview OR "No activity yet" placeholder
+- Member avatars (first 3-4 + count overflow badge)
+- Action buttons:
+  - Message button (icon only) → `/messages?id={circleId}&type=circle`
+  - Primary CTA button (varies by state):
+    - `Join Now` (green) — if `daysUntilMeetup === 0`
+    - `View Session` — if has upcoming meetup
+    - `Get Started` — if no activity yet
+    - `Open Circle` — default
+- Card click → `/circles/{circleId}`
+
+**Expand:** If more than 3 circles, shows "Show N more circles" button
+
+**Empty state (no circles):** Shows "Create a Circle" prompt card
+
+---
+
+#### Section: Sent Requests
+
+**Condition:** `sentRequestProfiles.length + sentCircleInvites.length + pendingJoinRequests.length > 0`
+
+**H2:** `Sent Requests` with count badge (brown #8B6F5C background, white text, pill shape)
+
+**Three item types, rendered in this order:**
+
+**1. Sent connection requests** (from `sentRequestProfiles`):
+- Avatar + name
+- Subtitle: `Connection request · {timeAgo}`
+- `Withdraw` button (outlined brown)
+- Action: `handleWithdrawRequest(personId)` — removes from `user_interests`
+
+**2. Sent circle invites** (from `sentCircleInvites`, filtered by `status = 'invited'` only):
+- Avatar + name of invitee
+- Subtitle: `Invited to **{circleName}** · {timeAgo || 'pending'}`
+- `Withdraw` button
+- Action: `handleWithdrawCircleInvite(membershipId)` — optimistic removal, deletes from `connection_group_members`
+
+**3. My pending join requests** (from `pendingJoinRequests`):
+- Users icon (not avatar) in brown circle
+- Title: `{groupName}` (the circle I want to join)
+- Subtitle: `Join request pending · {timeAgo}` (or just "Join request pending" if no timestamp)
+- `Withdraw` button
+- Action: Inline `supabase.from('connection_group_members').delete().eq('id', req.id)` then invalidates `circles-page-{userId}` cache
+
+**CRITICAL — Bug fixed 2026-04-12:**
+`sentCircleInvites` query **MUST** filter by `status = 'invited'` ONLY, NOT include `'pending'`. Including `'pending'` would pull in join requests TO the admin's circles and display them as "Invited to" which is wrong — those are received requests, not sent invites.
 
 **Failure points:**
 - Empty connections section when new user has 0 connections
 - SWR cache not invalidated after actions on other pages
+- Pending join requests mislabeled as "Invited to" if query filter is wrong (see fix above)
 
 **Back navigation risks:**
 - Circles is a main tab, back works normally
 - Message/Schedule navigate away; back returns to circles (browser history)
 
 **Empty states:**
-- "No connections yet"
+- "No connections yet" (with CTA)
 - No active circles → shows "Create a Circle" CTA
+- Sent Requests section hidden entirely when empty
 
-**Data dependencies:** `get_circles_page_data` RPC, `get_mutual_matches` RPC, `connection_group_members`, `user_interests`
+**Data dependencies:** `get_circles_page_data` RPC, `get_mutual_matches` RPC, `connection_group_members`, `user_interests`, `connection_groups`
 
 ---
 
@@ -382,35 +562,146 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 **Suggested URL:** `/circles/{circleId}`
 **Required dynamic route:** Yes (`[id]`)
 
-**Steps (non-member):**
-1. `/circles/{id}` loads circle info
-2. "Request to Join" → confirmation modal → sends request (status: pending)
-3. After request → "Request Pending" banner with "Cancel Request"
+**State detection (computed from `members` array and `currentUser`):**
+- `membership = members.find(m => m.user_id === currentUser?.id)`
+- `isMember = membership?.status === 'accepted'`
+- `isPending = membership?.status === 'invited' || membership?.status === 'pending'`
+- `isInvited = membership?.status === 'invited'` (admin invited me)
+- `isRequested = membership?.status === 'pending'` (I requested to join)
+- `isHost = circle.creator_id === currentUser?.id`
+- `memberCount = members.filter(m => m.status === 'accepted').length`
+- `maxMembers = circle.max_members || 10`
+- `spotsLeft = maxMembers - memberCount`
+- `isFull = spotsLeft <= 0`
 
-**Steps (invited):**
-1. "You're Invited" banner → Accept / Decline
-2. Accept → becomes member, page reloads
-3. Decline → navigates to previous page
+**Loading state:** Shows spinner with text "Loading circle..."
+**Not found state:** Shows 😕 emoji + "Circle not found" + "Go back" button
 
-**Steps (member):**
-1. Full circle info, schedule, members, past sessions
-2. "Invite" → invite modal → select connections → send
-3. "Chat" → `/messages?id={circleId}&type=circle`
-4. Member avatar click → `/people/{userId}`
-5. Past session card → `/recaps/{recapId}`
-6. Schedule meetup → `/schedule?type=circle&circleId=...`
-7. "Leave" → confirmation modal → leave → navigates to /circles
+**Layout (top to bottom):**
+1. **Header** (gradient background or image cover) with back chevron, circle image upload camera icon (host only), category badge
+2. **Title section**: Circle name (H1) + Edit button (host only, pencil icon)
+3. **Next meetup section** (if exists): Meetup topic, date, time, Edit/Delete buttons (host), RSVP button (member)
+4. **Hosted by** section: Host avatar + name + career + "You" badge (if host)
+5. **Members** section (see below)
+6. **What to expect** section (static copy)
+7. **Past Sessions** section (if any)
+8. **Status banner** (invited OR requested, see below)
+9. **Action button** (bottom): varies by state (see below)
+10. **Floating action buttons** and modals
 
-**Steps (host, additional):**
-1. "Join Requests" section → Accept/Decline pending requests
-2. "Pending Invites" section → shows invited users
-3. Edit circle modal
-4. Delete meetup confirmation
+---
+
+#### Members Section
+
+**Header:** `Members` + count display: `{memberCount}/{maxMembers}`
+- If `spotsLeft > 0 && spotsLeft <= 3`: adds ` · {N} spots left` warning
+
+**Invite button:** Visible when `isMember && !isFull`
+- Label: `Invite` (or similar, with "+" icon)
+- Opens invite modal → select connections → click Send
+- Insert status depends on `isHost`: creator sends `'invited'`, non-creator members send `'pending'` (requires admin approval)
+
+**Accepted members list:** Shows all members with `status === 'accepted'`
+- Avatar + name + career
+- Click avatar → `/people/{userId}`
+
+**Host-only: Join Requests section** (visible when `isHost && members.filter(m => m.status === 'pending').length > 0`):
+- Subtitle: `Join Requests`
+- List of pending members with avatar + name
+- **Decline** button (outlined) — calls `.update({ status: 'declined' })`, optimistic removal from list
+- **Accept** button (filled brown) — calls `.update({ status: 'accepted' })`, optimistic status update
+
+**Host-only: Pending Invites section** (visible when `members.filter(m => m.status === 'invited').length > 0`):
+- Subtitle: `Pending Invites`
+- List of invited members with "Pending" badge (orange)
+- No action buttons (read-only)
+
+---
+
+#### Non-member state (!isMember && !isPending)
+
+**Bottom action button:**
+- Label: `Request to Join` (or `Join Waitlist` if `isFull`)
+- Filled brown primary button
+- Click: Opens `showJoinConfirm` modal
+- Modal confirm: Inserts row with `status: 'pending'` into `connection_group_members`
+  - First deletes any old row (to avoid 409 conflict from previous declined/removed state)
+- On success: shows `setJoinSuccess(true)` state, optimistically adds self to members
+
+---
+
+#### Invited state (isInvited = membership.status = 'invited')
+
+**Status banner** (above bottom action button):
+- Background with ✉️ icon
+- Title: `You're Invited`
+- Text: `{host.name} invited you to this circle`
+- **Decline** button — `.update({ status: 'declined', responded_at })`, navigates to `previousView || 'allCircles'`
+- **Accept** button — `.update({ status: 'accepted', responded_at })`, becomes member, page reloads
+
+**Bottom action button (below banner):** `Request Pending` (disabled)
+- Note: `isPending` is true for both invited and pending, so this button shows for both — the banner differentiates them
+
+---
+
+#### Requested state (isRequested = membership.status = 'pending')
+
+**Status banner:**
+- Background with ⏳ icon
+- Title: `Request Pending`
+- Text: `Waiting for {host.name || 'the host'} to approve your request`
+- **Cancel Request** button — `.delete().eq('id', membership.id).eq('user_id', currentUser.id)`, refreshes circle details
+
+**Bottom action button:** `Request Pending` (disabled, same as invited state)
+
+---
+
+#### Member state (isMember = status = 'accepted')
+
+**Bottom action buttons (side by side):**
+- **Chat** button (with MessageCircle icon) → `/messages?id={circleId}&type=circle`
+- **Leave** button (with LogOut icon, red styling) → opens `showLeaveConfirm` modal
+
+**Leave confirmation modal:**
+- Title: `Leave "{circle.name}"?` with 👋 emoji
+- Stay / Leave buttons
+- Leave action: `.delete()` from `connection_group_members` with `count: 'exact'`
+- On success: invalidates `circles-page-{userId}` and `home-primary-{userId}`, navigates to `previousView || 'allCircles'`
+
+**Host-only additional actions:**
+- Edit circle button (pencil icon in title section) — opens edit modal
+- Circle photo upload (camera icon in header) — uploads to storage
+- Schedule meetup button — navigates to `/schedule?type=circle&circleId=...`
+- Edit/Delete meetup buttons (in next meetup section)
+
+---
+
+#### Invite Modal (when isMember clicks Invite)
+
+**Content:**
+- Title: `Invite to {circle.name}`
+- Capacity check: If `memberCount + selectedInvites.length > maxMembers`, shows error: `This circle can have at most {max} members. Only {N} spot(s) left.`
+- List of invitable connections (checkbox list)
+- Cancel / Send buttons
+
+**Send action:**
+- Insert batch into `connection_group_members`
+- **Status depends on role:**
+  - If `isHost`: `status: 'invited'` (invitee can accept/decline directly)
+  - If not host (regular member): `status: 'pending'` (admin must approve)
+- Optimistic: adds invitees to local `members` state
+- Reloads circle details
+
+**CRITICAL — Behavior fixed 2026-04-12:**
+Non-creator member invites insert as `'pending'`, not `'invited'`, so they flow through admin approval. RLS policy enforces this at the DB level via `migrations/fix-circle-member-invite-status.sql`.
+
+---
 
 **Failure points:**
 - Join request 409 conflict if old membership row exists (fixed: delete + re-insert)
 - `getOrCreateCircleMeetups` throws "Not authenticated" if session not ready
 - Circle detail uses loading spinner instead of skeleton [from QA report]
+- Invite modal capacity check shows toast error, does not submit
 
 **Back navigation risks:**
 - `previousView` hardcoded to "circles" [NAV-004]
@@ -421,49 +712,121 @@ All navigation uses `router.push()` so browser history IS created. The issue is 
 
 **Empty states:**
 - "Loading circle..." spinner (should be skeleton)
+- "Circle not found" with 😕 emoji and "Go back" button
 - No past sessions → section hidden
 - No members to invite → "No connections available to invite"
 
-**Data dependencies:** `connection_groups`, `connection_group_members`, `profiles`, `meetups` (circle meetups)
+**Data dependencies:** `connection_groups`, `connection_group_members`, `profiles`, `meetups` (circle meetups), `call_recaps`
 
 ---
 
 ### Journey 10: User Profile (Other)
-**Trigger:** Click person card from Home, Circles, People, or Search
+**Trigger:** Click person card from Home, Circles, People, Search, or "Review" button in Home requests section
 **User goal:** View someone's profile, connect, message, or schedule
 **Suggested URL:** `/people/{userId}`
 **Required dynamic route:** Yes (`[id]`)
 
-**Steps (not connected):**
-1. Profile info loads (name, bio, career, stats)
-2. "Connect" → sends connection request
-3. After request → button shows "Request Sent"
+**State detection (computed on page load):**
+- `isOwnProfile = userId === currentUser.id`
+- `isConnected` — from `profileData.isConnected` (mutual connection exists in `user_interests` both directions)
+- `hasIncomingRequest` — target user has sent a connection request to me (exists in `user_interests` where `user_id = userId` AND `interested_in_user_id = currentUser.id`)
+- `hasSentRequest` — I sent a request to them (exists in `user_interests` where `user_id = currentUser.id` AND `interested_in_user_id = userId`)
+- `visibility` — from `profile.profile_visibility`: `'public'`, `'connections'`, or `'hidden'`
 
-**Steps (incoming request):**
-1. "Accept" button → creates mutual connection
-2. Page reloads with connected state
+**Visibility gating:**
+- If `visibility === 'hidden'` and not own profile → shows "This profile is private" message, no Connect button
+- If `visibility === 'connections'` and not own profile and not connected → shows "Connect to see their full profile" gate
 
-**Steps (connected):**
-1. "Message" → `/messages?id={userId}&type=user`
-2. "Schedule Coffee" → `/schedule?type=coffee&connectionId=...`
-3. "Remove Connection" → confirmation → removes, navigates to previous
-4. Shared Circles → circle card → `/circles/{circleId}`
+---
 
-**Steps (any):**
-1. "Report" → report modal → submit
+#### State: Not connected, no incoming request, no sent request
+
+**Layout:**
+1. Profile header (avatar, name, `@username`, active status, career)
+2. Interest chips (e.g., "Early Career", "Wants to grow")
+3. Stats row: Meetups count | Connections count | Shared Circles count (all show 0 for new user)
+4. **Connect CTA button** (centered, filled brown #9E7868, with Users icon)
+   - Text: `Connect`
+   - Disabled state: `connecting || hasSentRequest`
+5. "Report" link below (text button, for reporting the user)
+6. Shared Circles section (if any exist)
+
+**Action: Click "Connect"**
+- Calls `handleSendConnectionRequest()`
+- Inserts row into `user_interests` (`user_id` = me, `interested_in_user_id` = them)
+- On duplicate (code 23505): sets `setLocalSentRequest(true)` silently
+- On success:
+  - `setLocalSentRequest(true)` (button state updates instantly)
+  - `refreshProfile()` (re-fetches profile data)
+  - `invalidateQuery('circles-sent-requests-{currentUser.id}')` (syncs Circles page)
+- **Button transitions to "Request Sent" state** (see next)
+
+#### State: Sent request pending (hasSentRequest = true)
+
+**Connect button becomes:**
+- Text: `Request Sent` (with Check icon instead of Users icon)
+- Background: `COLORS.greenLight` instead of brown
+- Color: `COLORS.green`
+- Border: `1.5px solid {green}40`
+- `cursor: 'default'` (no longer clickable from profile page)
+- To withdraw: user must go to Circles page → Sent Requests section → Withdraw button
+
+#### State: Incoming request (hasIncomingRequest = true)
+
+**Shows banner above profile content** (in addition to the normal profile info):
+- Text: `{firstName} wants to connect with you`
+- **Accept button** (filled green, with Check icon): `Accept` / during processing: `Accepting...`
+  - Calls `handleAcceptConnection()`
+  - Inserts reciprocal row into `user_interests`
+  - `refreshProfile()`, invalidates 3 cache keys (`circles-page`, `circles-peers`, `home-primary`)
+  - Page state updates to "connected" (see next)
+- **Ignore button** (outlined): `Ignore`
+  - Calls `handleIgnoreConnection()`
+  - Inserts row into `ignored_connection_requests`
+  - Invalidates `home-primary-{userId}` cache (removes from Home requests section)
+
+#### State: Connected (isConnected = true)
+
+**Replaces Connect button with two buttons side by side:**
+- **Message button** (filled brown, with MessageCircle icon): `Message`
+  - Navigates to `/messages?id={userId}&type=user`
+- **Coffee Chat button** (outlined, with Coffee icon): `Coffee Chat`
+  - Navigates to `/schedule?type=coffee&connectionId={userId}&connectionName={name}`
+
+**Additional "Remove Connection" option** (usually in a menu or further down):
+- Opens confirmation modal with text: `Remove connection with {name}? You'll no longer see each other in your connections.`
+- Cancel button → closes modal
+- "Yes, Remove" button (red) → `handleRemoveConnection()`
+  - Calls RPC `remove_mutual_connection({ other_user_id: userId })`
+  - Optimistic update: removes user from `circles-page-{userId}` connections
+  - Invalidates `circles-peers`, `home-primary`
+  - Navigates to `previousView || 'connectionGroups'`
+
+#### State: Own profile (isOwnProfile = true)
+
+- No Connect/Message/Schedule buttons
+- Edit Profile button visible (if `onEditProfile` callback provided)
+- Can see own Settings section
+- Back button goes to `previousView || 'home'`
+
+---
 
 **Failure points:**
 - Profile may load slowly on first visit (SWR now caches)
 - Skeleton shows on first load, cached data on return
+- Hidden profiles blocked by visibility gate
+- Self-request (attempting to connect with own profile) — not prevented in UI, will fail at DB level
 
 **Back navigation risks:**
-- `previousView` hardcoded to "discover" [NAV-003]
-- Coming from Home (People to Meet) → back goes to /discover (should go to /home)
-- Coming from Circles (connection card) → back goes to /discover (should go to /circles)
-- Coming from Search → back goes to /discover (should go to search results)
-- Page refresh → back always goes to /discover
+- `previousView` hardcoded to "discover" [NAV-003] — **Fixed** with `from=` param for dynamic routes
+- Coming from Home (People to Meet) → uses `from=` param, works correctly
+- Page refresh → loses `from=` param, falls back to "discover"
 
-**Data dependencies:** `profiles`, `get_mutual_matches` RPC, `user_interests`, `connection_group_members`, `call_recaps`, `feed_events`
+**Empty states:**
+- No mutual circles → Shared Circles section hidden
+- No past meetups together → hidden
+
+**Data dependencies:** `profiles`, `get_mutual_matches` RPC, `user_interests`, `connection_group_members`, `call_recaps`, `feed_events`, `ignored_connection_requests`
 
 ---
 
