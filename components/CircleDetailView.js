@@ -252,7 +252,7 @@ export default function CircleDetailView({
       const inserts = selectedInvites.map(userId => ({
         group_id: circleId,
         user_id: userId,
-        status: 'invited',
+        status: isHost ? 'invited' : 'pending',
       }));
 
       const { error } = await supabase
@@ -261,6 +261,14 @@ export default function CircleDetailView({
 
       if (error) throw error;
 
+      // Optimistic: add invitees to members list
+      const newMembers = inserts.map(i => ({
+        id: `temp-${i.user_id}`,
+        user_id: i.user_id,
+        status: i.status,
+        profile: invitableConnections.find(c => c.id === i.user_id) || { id: i.user_id, name: 'Unknown' },
+      }));
+      setMembers(prev => [...prev, ...newMembers]);
       setShowInviteModal(false);
       setSelectedInvites([]);
       loadCircleDetails();
@@ -507,7 +515,13 @@ export default function CircleDetailView({
 
       setShowJoinConfirm(false);
       setJoinSuccess(true);
-      await loadCircleDetails();
+      // Optimistic: add self as pending member
+      setMembers(prev => [...prev, {
+        id: `temp-${Date.now()}`,
+        user_id: currentUser.id,
+        status: 'pending',
+        profile: { id: currentUser.id, name: currentUser.name },
+      }]);
       invalidateQuery(`circles-page-${currentUser.id}`);
     } catch (error) {
       console.error('Error requesting to join:', error);
@@ -1147,8 +1161,9 @@ export default function CircleDetailView({
                             await supabase.from('connection_group_members')
                               .update({ status: 'declined', responded_at: new Date().toISOString() })
                               .eq('id', member.id)
+                            // Optimistic: remove from members list
+                            setMembers(prev => prev.filter(m => m.id !== member.id))
                             invalidateQuery(`circles-page-${currentUser.id}`)
-                            await loadCircleDetails()
                           } catch (err) { console.error('Error declining request:', err) }
                         }}
                         style={{
@@ -1163,8 +1178,9 @@ export default function CircleDetailView({
                             await supabase.from('connection_group_members')
                               .update({ status: 'accepted', responded_at: new Date().toISOString() })
                               .eq('id', member.id)
+                            // Optimistic: update member status to accepted
+                            setMembers(prev => prev.map(m => m.id === member.id ? { ...m, status: 'accepted' } : m))
                             invalidateQuery(`circles-page-${currentUser.id}`)
-                            await loadCircleDetails()
                           } catch (err) { console.error('Error accepting request:', err) }
                         }}
                         style={{

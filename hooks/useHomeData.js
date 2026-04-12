@@ -607,11 +607,12 @@ export default function useHomeData(currentUser) {
 
       if (error) throw error
       setCircleJoinRequests(prev => prev.filter(r => r.id !== membershipId))
+      invalidateQuery(`circles-page-${currentUser.id}`)
       console.log('✅ Accepted circle join request:', membershipId)
     } catch (err) {
       console.error('💥 Error accepting circle join request:', err)
     }
-  }, [supabase])
+  }, [supabase, currentUser.id])
 
   // Decline a circle join request
   const handleDeclineCircleJoin = useCallback(async (membershipId) => {
@@ -623,11 +624,12 @@ export default function useHomeData(currentUser) {
 
       if (error) throw error
       setCircleJoinRequests(prev => prev.filter(r => r.id !== membershipId))
+      invalidateQuery(`circles-page-${currentUser.id}`)
       console.log('✅ Declined circle join request:', membershipId)
     } catch (err) {
       console.error('💥 Error declining circle join request:', err)
     }
-  }, [supabase])
+  }, [supabase, currentUser.id])
 
   // Accept a circle invitation (invitee perspective)
   const handleAcceptCircleInvitation = useCallback(async (membershipId) => {
@@ -657,6 +659,7 @@ export default function useHomeData(currentUser) {
 
       if (error) throw error
       setCircleInvitations(prev => prev.filter(r => r.id !== membershipId))
+      invalidateQuery(`circles-page-${currentUser.id}`)
       console.log('✅ Declined circle invitation:', membershipId)
     } catch (err) {
       console.error('💥 Error declining circle invitation:', err)

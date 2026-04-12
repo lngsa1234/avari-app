@@ -442,7 +442,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
   );
 
   // --- SWR: Sent circle invites (deferred) ---
-  const { data: sentCircleInvites = [] } = useSupabaseQuery(
+  const { data: sentCircleInvites = [], mutate: mutateSentInvites } = useSupabaseQuery(
     circlesData && currentUser ? `circles-sent-invites-${currentUser.id}` : null,
     async (sb) => {
       const { data: myCircles } = await sb
@@ -459,7 +459,7 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
       const { data: pendingMembers } = await sb
         .from('connection_group_members')
         .select('id, user_id, group_id, status, invited_at')
-        .in('status', ['invited', 'pending'])
+        .eq('status', 'invited')
         .in('group_id', circleIds);
 
       if (!pendingMembers || pendingMembers.length === 0) return [];
@@ -650,7 +650,10 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
         .delete()
         .eq('id', membershipId);
       if (error) throw error;
-      invalidateQuery(`circles-sent-invites-${currentUser.id}`);
+      mutateSentInvites(
+        (current) => (current || []).filter(i => i.id !== membershipId),
+        { revalidate: true }
+      );
     } catch (err) {
       console.error('Error withdrawing circle invite:', err);
     }
@@ -731,7 +734,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
     try {
       await acceptGroupInvite(membershipId);
       toast?.success(`You joined "${groupName}"!`);
-      invalidateQuery(`circles-page-${currentUser.id}`);
+      // Optimistic: remove from invites, refresh circles to show new membership
+      refreshCircles(
+        (current) => current ? {
+          ...current,
+          groupInvites: (current.groupInvites || []).filter(i => i.id !== membershipId),
+        } : current,
+        { revalidate: true }
+      );
     } catch (error) {
       toast?.error('Error accepting invite: ' + error.message);
     }
@@ -742,7 +752,14 @@ export default function ConnectionGroupsView({ currentUser, supabase, connection
 
     try {
       await declineGroupInvite(membershipId);
-      invalidateQuery(`circles-page-${currentUser.id}`);
+      // Optimistic: remove from invites
+      refreshCircles(
+        (current) => current ? {
+          ...current,
+          groupInvites: (current.groupInvites || []).filter(i => i.id !== membershipId),
+        } : current,
+        { revalidate: true }
+      );
     } catch (error) {
       toast?.error('Error declining invite: ' + error.message);
     }

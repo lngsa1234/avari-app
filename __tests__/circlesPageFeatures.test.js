@@ -228,6 +228,51 @@ describe('Recommend to Connect toggle', () => {
   })
 })
 
+// ─── Circle invite/join request status correctness ───────────────────────
+
+describe('Sent invites query only fetches invited status', () => {
+  const source = readComponent('ConnectionGroupsView.js')
+
+  test('sentCircleInvites query does NOT include pending status', () => {
+    // Extract the sentCircleInvites SWR block
+    const match = source.match(/circles-sent-invites[\s\S]*?\.filter\(i => i\.user/)
+    expect(match).toBeTruthy()
+    const block = match[0]
+
+    // Must NOT use .in('status', ['invited', 'pending']) — the original bug
+    expect(block).not.toMatch(/\.in\(\s*['"]status['"]/)
+  })
+
+  test('sentCircleInvites query uses eq status invited', () => {
+    const match = source.match(/circles-sent-invites[\s\S]*?\.filter\(i => i\.user/)
+    const block = match[0]
+
+    expect(block).toMatch(/\.eq\(\s*['"]status['"]\s*,\s*['"]invited['"]/)
+  })
+})
+
+describe('Non-creator member invites require admin approval', () => {
+  const source = readComponent('CircleDetailView.js')
+
+  test('handleSendInvites uses isHost to determine status', () => {
+    const match = source.match(/handleSendInvites[\s\S]*?catch/)
+    expect(match).toBeTruthy()
+    const block = match[0]
+
+    // Must use isHost ternary: isHost ? 'invited' : 'pending'
+    expect(block).toMatch(/isHost\s*\?\s*['"]invited['"]\s*:\s*['"]pending['"]/)
+  })
+
+  test('handleSendInvites does not hardcode status to invited', () => {
+    const match = source.match(/handleSendInvites[\s\S]*?catch/)
+    const block = match[0]
+
+    // Must NOT have a plain `status: 'invited'` without the isHost conditional
+    // The ternary form `isHost ? 'invited' : 'pending'` is the correct pattern
+    expect(block).not.toMatch(/status:\s*['"]invited['"],/)
+  })
+})
+
 // ─── Profile visibility ───────────────────────────────────────────────────
 
 describe('Profile visibility setting', () => {

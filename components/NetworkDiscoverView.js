@@ -243,7 +243,7 @@ export default function NetworkDiscoverView({
     }
   );
 
-  const { data: meetupRequests = EMPTY_ARRAY, isLoading: isLoadingRequests } = useSupabaseQuery(
+  const { data: meetupRequests = EMPTY_ARRAY, isLoading: isLoadingRequests, mutate: mutateRequests } = useSupabaseQuery(
     'discover-meetup-requests',
     async (sb) => {
       const { data, error } = await sb
@@ -319,7 +319,7 @@ export default function NetworkDiscoverView({
     }
   );
 
-  const { data: userRsvps = EMPTY_SET, isLoading: isLoadingRsvps } = useSupabaseQuery(
+  const { data: userRsvps = EMPTY_SET, isLoading: isLoadingRsvps, mutate: mutateRsvps } = useSupabaseQuery(
     currentUser?.id ? `discover-user-rsvps-${currentUser.id}` : null,
     async (sb) => {
       const { data, error } = await sb
@@ -456,9 +456,20 @@ export default function NetworkDiscoverView({
         if (error) throw error;
       }
 
-      // Reload data to update attendee counts
+      // Optimistic update: toggle RSVP in cache immediately
+      mutateRsvps(
+        (current) => {
+          const updated = new Set(current || []);
+          if (isRsvped) {
+            updated.delete(meetupId);
+          } else {
+            updated.add(meetupId);
+          }
+          return updated;
+        },
+        { revalidate: true }
+      );
       invalidateQuery('discover-meetup-signups');
-      invalidateQuery(`discover-user-rsvps-${currentUser.id}`);
     } catch (err) {
       console.error('Error handling RSVP:', err);
       toast?.error('Failed to update RSVP. Please try again.');
@@ -508,7 +519,19 @@ export default function NetworkDiscoverView({
       }
 
       await supabase.rpc('increment_request_supporters', { request_id: requestId });
-      invalidateQuery('discover-meetup-requests');
+      // Optimistic update: add current user as supporter immediately
+      mutateRequests(
+        (current) => (current || []).map(r =>
+          r.id === requestId
+            ? {
+                ...r,
+                supporter_count: (r.supporter_count || 0) + 1,
+                supporters: [...(r.supporters || []), { user_id: currentUser.id, request_id: requestId, profile: { id: currentUser.id, name: currentUser.name, profile_picture: currentUser.profile_picture } }],
+              }
+            : r
+        ),
+        { revalidate: true }
+      );
     } catch (error) {
       console.error('Error supporting request:', error);
     }
@@ -519,7 +542,11 @@ export default function NetworkDiscoverView({
       await supabase.from('meetup_request_supporters').delete().eq('request_id', requestId);
       await supabase.from('meetup_requests').delete().eq('id', requestId);
       setDeletingRequestId(null);
-      invalidateQuery('discover-meetup-requests');
+      // Optimistic update: remove request from cache immediately
+      mutateRequests(
+        (current) => (current || []).filter(r => r.id !== requestId),
+        { revalidate: true }
+      );
     } catch (error) {
       console.error('Error deleting request:', error);
     }
@@ -555,12 +582,34 @@ export default function NetworkDiscoverView({
 
       if (error) throw error;
 
+      const newTopic = requestTopic.trim();
+      const newDesc = requestDescription.trim() || null;
+      const newVibe = requestVibe;
+
       setShowRequestModal(false);
       setRequestTopic('');
       setRequestDescription('');
       setRequestVibe('grow');
 
-      invalidateQuery('discover-meetup-requests');
+      // Optimistic update: add new request to cache immediately
+      mutateRequests(
+        (current) => {
+          const optimistic = {
+            id: `temp-${Date.now()}`,
+            user_id: currentUser.id,
+            topic: newTopic,
+            description: newDesc,
+            vibe_category: newVibe,
+            status: 'open',
+            supporter_count: 1,
+            created_at: new Date().toISOString(),
+            user: { id: currentUser.id, name: currentUser.name },
+            supporters: [{ user_id: currentUser.id, profile: { id: currentUser.id, name: currentUser.name, profile_picture: currentUser.profile_picture } }],
+          };
+          return [optimistic, ...(current || [])];
+        },
+        { revalidate: true }
+      );
       toast?.success('Request submitted! Others can now support your idea.');
     } catch (error) {
       console.error('Error submitting request:', error);

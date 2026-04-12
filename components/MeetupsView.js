@@ -9,7 +9,6 @@ import { Video, Calendar, MapPin, Clock, Users, Plus, X, Sparkles, Edit3, Trash2
 import { parseLocalDate, isEventPast, isEventLive, formatEventTime, eventDateTimeToUTC, SESSION_GRACE_MINUTES, isCoffeeChatUpcoming } from '../lib/dateUtils';
 import { colors as tokens, fonts } from '@/lib/designTokens';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
-import { apiFetch } from '@/lib/apiFetch';
 
 
 const formatDate = (isoStr) => {
@@ -633,34 +632,7 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         }
       }
 
-      // 5. Backfill ai_summary from storage for recaps that have transcript but no DB summary
-      //    (one-time self-healing after storage migration — writes back to DB so future loads are instant)
-      const needsBackfill = allPastMeetups.filter(m => m.recapData?.transcript_path && !m.recapData?.ai_summary);
-      if (needsBackfill.length > 0) {
-        try {
-          const { getRecapTranscriptFromStorage } = await import('@/lib/callRecapHelpers');
-          const results = await Promise.all(
-            needsBackfill.map(m =>
-              getRecapTranscriptFromStorage(m.recapData.transcript_path)
-                .then(r => ({ recapId: m.recapData.id, itemId: m.id, aiSummary: r.aiSummary }))
-                .catch(() => ({ recapId: m.recapData.id, itemId: m.id, aiSummary: null }))
-            )
-          );
-          results.forEach(r => {
-            if (!r.aiSummary) return;
-            const item = allPastMeetups.find(m => m.id === r.itemId);
-            if (item) item.recapData = { ...item.recapData, ai_summary: r.aiSummary };
-            // Write back to DB so this only happens once per recap
-            apiFetch('/api/save-recap-summary', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recapId: r.recapId, aiSummary: r.aiSummary }),
-            }).catch(() => {});
-          });
-        } catch (e) {
-          console.error('Backfill AI summaries failed:', e);
-        }
-      }
+
 
       // Sort by date descending
       allPastMeetups.sort((a, b) => b.rawDate - a.rawDate);
@@ -771,7 +743,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', chat.id);
 
       if (!error) {
-        invalidateQuery(`meetups-coffee-${currentUser.id}`);
+        // Optimistic: update chat status in cache
+        refreshCoffeeChats(
+          (current) => (current || []).map(c => c.id === chat.id ? { ...c, status: 'accepted' } : c),
+          { revalidate: true }
+        );
         invalidateQuery(`meetups-pending-${currentUser.id}`);
       }
     } catch (err) {
@@ -787,7 +763,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', chat.id);
 
       if (!error) {
-        invalidateQuery(`meetups-coffee-${currentUser.id}`);
+        // Optimistic: remove declined chat from list
+        refreshCoffeeChats(
+          (current) => (current || []).filter(c => c.id !== chat.id),
+          { revalidate: true }
+        );
         invalidateQuery(`meetups-pending-${currentUser.id}`);
       }
     } catch (err) {
@@ -802,7 +782,15 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .insert({ meetup_id: meetup.id, user_id: currentUser.id });
 
       if (!error) {
-        invalidateQuery(`meetups-group-${currentUser.id}`);
+        // Optimistic: add current user to attendees
+        refreshGroupEvents(
+          (current) => (current || []).map(e =>
+            e.id === meetup.id
+              ? { ...e, attendeeCount: (e.attendeeCount || 0) + 1, isAttending: true }
+              : e
+          ),
+          { revalidate: true }
+        );
       }
     } catch (err) {
       console.error('Error RSVPing to meetup:', err);
@@ -862,7 +850,15 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .select();
 
       if (!error) {
-        invalidateQuery(`meetups-group-${currentUser.id}`);
+        // Optimistic: update meetup in list
+        refreshGroupEvents(
+          (current) => (current || []).map(e =>
+            e.id === editingMeetup.id
+              ? { ...e, topic: editingMeetup.topic, title: editingMeetup.topic, date: editingMeetup.date, time: editingMeetup.time, location: editingMeetup.location, meeting_format: editingMeetup.meeting_format, image_url: imageUrl }
+              : e
+          ),
+          { revalidate: true }
+        );
         setShowEditModal(false);
         setEditingMeetup(null);
       }
@@ -881,7 +877,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', meetupId);
 
       if (!error) {
-        invalidateQuery(`meetups-group-${currentUser.id}`);
+        // Optimistic: remove meetup from list
+        refreshGroupEvents(
+          (current) => (current || []).filter(e => e.id !== meetupId),
+          { revalidate: true }
+        );
         setShowDeleteConfirm(false);
         setDeletingMeetupId(null);
       }
@@ -898,7 +898,11 @@ export default function MeetupsView({ currentUser, supabase, connections = [], m
         .eq('id', chatId);
 
       if (!error) {
-        invalidateQuery(`meetups-coffee-${currentUser.id}`);
+        // Optimistic: remove cancelled chat from list
+        refreshCoffeeChats(
+          (current) => (current || []).filter(c => c.id !== chatId),
+          { revalidate: true }
+        );
         invalidateQuery(`meetups-pending-${currentUser.id}`);
         setShowCancelChatConfirm(false);
         setCancellingChatId(null);

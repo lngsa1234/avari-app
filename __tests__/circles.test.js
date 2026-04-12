@@ -117,6 +117,164 @@ describe('Circle Logic', () => {
     })
   })
 
+  describe('Join request vs invite status', () => {
+    test('self-initiated join request uses pending status', () => {
+      const currentUser = { id: 'echo' }
+      const circleId = 'circle-1'
+      const membership = {
+        group_id: circleId,
+        user_id: currentUser.id,
+        status: 'pending',
+      }
+
+      expect(membership.status).toBe('pending')
+      expect(membership.user_id).toBe(currentUser.id)
+    })
+
+    test('creator invite uses invited status', () => {
+      const creator = { id: 'admin' }
+      const circle = { id: 'circle-1', creator_id: 'admin' }
+      const isHost = circle.creator_id === creator.id
+
+      const inserts = ['echo', 'xueting'].map(userId => ({
+        group_id: circle.id,
+        user_id: userId,
+        status: isHost ? 'invited' : 'pending',
+      }))
+
+      expect(inserts[0].status).toBe('invited')
+      expect(inserts[1].status).toBe('invited')
+    })
+
+    test('non-creator member invite uses pending status (requires admin approval)', () => {
+      const member = { id: 'xueting' }
+      const circle = { id: 'circle-1', creator_id: 'admin' }
+      const isHost = circle.creator_id === member.id
+
+      const inserts = ['echo'].map(userId => ({
+        group_id: circle.id,
+        user_id: userId,
+        status: isHost ? 'invited' : 'pending',
+      }))
+
+      expect(inserts[0].status).toBe('pending')
+    })
+
+    test('pending status triggers admin approval flow, not direct acceptance', () => {
+      const members = [
+        { user_id: 'echo', status: 'pending', group_id: 'circle-1' },
+        { user_id: 'bob', status: 'invited', group_id: 'circle-1' },
+      ]
+
+      const pendingRequests = members.filter(m => m.status === 'pending')
+      const directInvites = members.filter(m => m.status === 'invited')
+
+      expect(pendingRequests).toHaveLength(1)
+      expect(pendingRequests[0].user_id).toBe('echo')
+      expect(directInvites).toHaveLength(1)
+      expect(directInvites[0].user_id).toBe('bob')
+    })
+  })
+
+  describe('Sent requests filtering', () => {
+    test('sent circle invites only includes invited status, not pending', () => {
+      const myCircleMembers = [
+        { id: 'm1', user_id: 'echo', status: 'pending', group_id: 'circle-1' },
+        { id: 'm2', user_id: 'bob', status: 'invited', group_id: 'circle-1' },
+        { id: 'm3', user_id: 'charlie', status: 'accepted', group_id: 'circle-1' },
+      ]
+
+      // Fixed: only 'invited' status should appear in sent invites
+      const sentCircleInvites = myCircleMembers.filter(m => m.status === 'invited')
+
+      expect(sentCircleInvites).toHaveLength(1)
+      expect(sentCircleInvites[0].user_id).toBe('bob')
+    })
+
+    test('pending join requests should NOT appear as sent invites', () => {
+      const myCircleMembers = [
+        { id: 'm1', user_id: 'echo', status: 'pending', group_id: 'circle-1' },
+      ]
+
+      const sentCircleInvites = myCircleMembers.filter(m => m.status === 'invited')
+
+      expect(sentCircleInvites).toHaveLength(0)
+    })
+
+    test('user own pending join requests show separately', () => {
+      const currentUser = { id: 'echo' }
+      const allMemberships = [
+        { id: 'm1', user_id: 'echo', status: 'pending', group_id: 'circle-1', groupName: 'UX Refinement' },
+        { id: 'm2', user_id: 'echo', status: 'accepted', group_id: 'circle-2', groupName: 'Book Club' },
+      ]
+
+      const pendingJoinRequests = allMemberships.filter(
+        m => m.user_id === currentUser.id && m.status === 'pending'
+      )
+
+      expect(pendingJoinRequests).toHaveLength(1)
+      expect(pendingJoinRequests[0].groupName).toBe('UX Refinement')
+    })
+  })
+
+  describe('CircleDetail membership states', () => {
+    test('isMember is true only for accepted status', () => {
+      const statuses = ['invited', 'accepted', 'declined', 'pending']
+      const results = statuses.map(s => ({ status: s, isMember: s === 'accepted' }))
+
+      expect(results.find(r => r.status === 'accepted').isMember).toBe(true)
+      expect(results.find(r => r.status === 'invited').isMember).toBe(false)
+      expect(results.find(r => r.status === 'pending').isMember).toBe(false)
+      expect(results.find(r => r.status === 'declined').isMember).toBe(false)
+    })
+
+    test('isPending covers both invited and pending statuses', () => {
+      const isPending = (status) => status === 'invited' || status === 'pending'
+
+      expect(isPending('invited')).toBe(true)
+      expect(isPending('pending')).toBe(true)
+      expect(isPending('accepted')).toBe(false)
+      expect(isPending('declined')).toBe(false)
+    })
+
+    test('isHost check gates join request visibility on detail page', () => {
+      const circle = { creator_id: 'admin' }
+      const members = [
+        { user_id: 'echo', status: 'pending' },
+        { user_id: 'bob', status: 'accepted' },
+      ]
+
+      // Admin sees join requests
+      const adminIsHost = circle.creator_id === 'admin'
+      expect(adminIsHost).toBe(true)
+      const pendingForAdmin = adminIsHost ? members.filter(m => m.status === 'pending') : []
+      expect(pendingForAdmin).toHaveLength(1)
+
+      // Non-creator member does NOT see join requests
+      const memberIsHost = circle.creator_id === 'bob'
+      expect(memberIsHost).toBe(false)
+      const pendingForMember = memberIsHost ? members.filter(m => m.status === 'pending') : []
+      expect(pendingForMember).toHaveLength(0)
+    })
+
+    test('invite button visible to any accepted member, not just creator', () => {
+      const members = [
+        { user_id: 'admin', status: 'accepted' },
+        { user_id: 'xueting', status: 'accepted' },
+        { user_id: 'echo', status: 'pending' },
+      ]
+
+      const canInvite = (userId) => {
+        const membership = members.find(m => m.user_id === userId)
+        return membership?.status === 'accepted'
+      }
+
+      expect(canInvite('admin')).toBe(true)
+      expect(canInvite('xueting')).toBe(true)
+      expect(canInvite('echo')).toBe(false)
+    })
+  })
+
   describe('Circle data enrichment', () => {
     test('sorts circles by created_at descending', () => {
       const circles = [
