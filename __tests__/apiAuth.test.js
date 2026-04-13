@@ -164,12 +164,33 @@ describe('cronUnauthorized', () => {
 })
 
 describe('createAdminClient', () => {
-  test('returns a Supabase client', () => {
+  beforeEach(() => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
+  })
+
+  test('returns a Supabase client when service role key is set', () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key'
 
     const client = createAdminClient()
     expect(client).toBeDefined()
     expect(client.auth).toBeDefined()
+  })
+
+  test('throws when SUPABASE_SERVICE_ROLE_KEY is missing', () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    expect(() => createAdminClient()).toThrow(/SUPABASE_SERVICE_ROLE_KEY/)
+  })
+
+  test('throws when SUPABASE_SERVICE_ROLE_KEY is empty string', () => {
+    process.env.SUPABASE_SERVICE_ROLE_KEY = ''
+
+    expect(() => createAdminClient()).toThrow(/SUPABASE_SERVICE_ROLE_KEY/)
+  })
+
+  test('throw message refuses to fall back to anon key', () => {
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    expect(() => createAdminClient()).toThrow(/anon key/)
   })
 })
