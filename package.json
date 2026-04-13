@@ -20,6 +20,8 @@
     "@mediapipe/camera_utils": "^0.3.1675466862",
     "@mediapipe/selfie_segmentation": "^0.1.1675465747",
     "@supabase/supabase-js": "^2.39.0",
+    "@upstash/ratelimit": "^2.0.5",
+    "@upstash/redis": "^1.34.3",
     "agora-extension-virtual-background": "^2.1.0",
     "agora-rtc-sdk-ng": "^4.24.2",
     "eruda": "^3.4.3",

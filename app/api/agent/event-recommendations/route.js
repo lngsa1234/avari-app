@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { logAgentExecution, callAI, parseJSONFromAI, calculateInterestOverlap } from '@/lib/agentHelpers';
 import { parseLocalDate } from '@/lib/dateUtils';
 import { authenticateRequest, verifyCronAuth, cronUnauthorized, createAdminClient } from '@/lib/apiAuth';
+import { rateLimit, limits } from '@/lib/rateLimit';
 
 /**
  * Generate event recommendations for a user
@@ -21,6 +22,9 @@ export async function POST(request) {
 
     const { user, response } = await authenticateRequest(request);
     if (!user) return response;
+
+    const limited = await rateLimit(request, limits.ai, user.id);
+    if (limited) return limited;
 
     const supabase = createAdminClient();
     return await generateUserEventRecs(supabase, user.id);

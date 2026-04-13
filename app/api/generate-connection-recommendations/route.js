@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
+import { rateLimit, limits } from '@/lib/rateLimit';
 
 /**
  * Generate AI-powered connection and group recommendations
@@ -18,6 +19,9 @@ export async function POST(request) {
   try {
     const { user, response } = await authenticateRequest(request);
     if (!user) return response;
+
+    const limited = await rateLimit(request, limits.ai, user.id);
+    if (limited) return limited;
 
     const {
       callRecapId,

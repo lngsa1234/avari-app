@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logAgentExecution, callAI, parseJSONFromAI } from '@/lib/agentHelpers';
 import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
+import { rateLimit, limits } from '@/lib/rateLimit';
 
 /**
  * Generate icebreakers for a meetup
@@ -12,6 +13,9 @@ export async function POST(request) {
   try {
     const { user, response } = await authenticateRequest(request);
     if (!user) return response;
+
+    const limited = await rateLimit(request, limits.ai, user.id);
+    if (limited) return limited;
 
     const { meetupId, callType, title, description, attendees } = await request.json();
 

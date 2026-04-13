@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logAgentExecution, callAI, parseJSONFromAI } from '@/lib/agentHelpers';
 import { authenticateRequest, verifyCronAuth, cronUnauthorized, createAdminClient } from '@/lib/apiAuth';
+import { rateLimit, limits } from '@/lib/rateLimit';
 
 /**
  * Generate suggested discussion topics for a meetup based on attendee profiles.
@@ -21,6 +22,9 @@ export async function POST(request) {
 
     const { user, response } = await authenticateRequest(request);
     if (!user) return response;
+
+    const limited = await rateLimit(request, limits.ai, user.id);
+    if (limited) return limited;
 
     return handleSingle(body);
   } catch (error) {

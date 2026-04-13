@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/apiAuth';
+import { rateLimit, limits } from '@/lib/rateLimit';
 
 /**
  * Generate AI summary for call recap
@@ -20,6 +21,9 @@ export async function POST(request) {
   try {
     const { user, response } = await authenticateRequest(request);
     if (!user) return response;
+
+    const limited = await rateLimit(request, limits.ai, user.id);
+    if (limited) return limited;
 
     const { transcript, messages, participants, duration, meetingTitle, meetingType, existingCircles } = await request.json();
 

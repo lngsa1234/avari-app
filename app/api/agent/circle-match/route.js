@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logAgentExecution, callAI, parseJSONFromAI, calculateInterestOverlap } from '@/lib/agentHelpers';
 import { authenticateRequest, createAdminClient } from '@/lib/apiAuth';
+import { rateLimit, limits } from '@/lib/rateLimit';
 
 /**
  * Match user to circles
@@ -12,6 +13,9 @@ export async function POST(request) {
   try {
     const { user: authUser, response } = await authenticateRequest(request);
     if (!authUser) return response;
+
+    const limited = await rateLimit(request, limits.ai, authUser.id);
+    if (limited) return limited;
 
     const userId = authUser.id;
     const supabase = createAdminClient();
