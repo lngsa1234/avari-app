@@ -368,6 +368,8 @@ const handleSignOut = async () => {
 
 ## Authorization Model
 
+> For the detailed per-resource authorization model — roles, actions, and gating for coffee chats, meetups, and circles — see [AUTHORIZATION.md](./AUTHORIZATION.md).
+
 ### User States
 ```javascript
 const [status, setStatus] = useState('initializing');
