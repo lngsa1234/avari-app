@@ -964,46 +964,38 @@ export default function UnifiedCallPage() {
       newPc.onconnectionstatechange = () => {
         console.log('[WebRTC] Connection state:', newPc.connectionState);
         if (newPc.connectionState === 'disconnected') {
-          // Wait 5s for natural recovery. If still stuck:
-          // - Impolite peer: restart ICE (they own the offer)
-          // - Polite peer: wait for remote's restart offer (don't both restart simultaneously)
+          // DO NOT restart ICE on 'disconnected'. Per the WebRTC spec,
+          // this is a transient non-terminal state — the browser is
+          // actively trying to recover. Restarting ICE fights against
+          // that recovery by sending a fresh offer that tears down the
+          // candidate pair WebRTC was about to stabilize on, causing
+          // the renegotiation storms documented in the 2026-04-06
+          // WebRTC debugging memory (Bug 6).
+          //
+          // The correct trigger for ICE restart is the 'failed' branch
+          // below, which fires when the browser has actually exhausted
+          // all candidate pairs. This branch just shows "Reconnecting"
+          // UI and waits for either natural recovery or 'failed'.
+          console.log('[WebRTC] Disconnected — letting browser recover naturally, no ICE restart');
+
+          // Show "Reconnecting..." UI immediately (previously this was
+          // delayed 5s inside the old setTimeout block)
+          setRemoteParticipants(prev => prev.map(p => ({
+            ...p, isDisconnected: true, _lastUpdate: Date.now(),
+          })));
+
+          // Safety-net timer: if the browser stays in 'disconnected' for
+          // 30s without transitioning to 'failed' (rare stuck-ICE edge
+          // case), log a warning for observability. No ICE restart here
+          // — that would race with any lingering recovery attempt. The
+          // user will see "Reconnecting..." and can manually leave/retry.
           if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
           disconnectGraceRef.current = setTimeout(() => {
             if (peerConnectionRef.current !== newPc) return;
             if (peerLeftIntentionallyRef.current) return;
             if (newPc.connectionState !== 'disconnected') return;
-            const isImpolite = remotePeerIdRef.current && !((user?.id || '') > remotePeerIdRef.current);
-            if (isImpolite) {
-              // Impolite peer restarts ICE
-              const attempts = (newPc._iceRestartAttempts || 0) + 1;
-              newPc._iceRestartAttempts = attempts;
-              if (attempts <= 3 && signalingSocketRef.current?.connected) {
-                console.log(`[WebRTC] ICE restart from stale disconnect, attempt ${attempts}/3`);
-                (async () => {
-                  try {
-                    if (newPc.signalingState !== 'stable') {
-                      console.log('[WebRTC] Skipping ICE restart — signaling state:', newPc.signalingState);
-                      return;
-                    }
-                    const offer = await newPc.createOffer({ iceRestart: true });
-                    if (newPc.signalingState !== 'stable') return; // state changed during async
-                    await newPc.setLocalDescription(offer);
-                    signalingSocketRef.current?.emit('offer', { offer, to: remotePeerIdRef.current });
-                  } catch (e) { console.warn('[WebRTC] ICE restart error:', e.message); }
-                })();
-              } else {
-                setRemoteParticipants(prev => prev.map(p => ({
-                  ...p, isDisconnected: true, _lastUpdate: Date.now(),
-                })));
-              }
-            } else {
-              // Polite peer waits for remote's restart — just show UI
-              console.log('[WebRTC] Polite peer waiting for remote ICE restart');
-              setRemoteParticipants(prev => prev.map(p => ({
-                ...p, isDisconnected: true, _lastUpdate: Date.now(),
-              })));
-            }
-          }, 5000);
+            console.warn('[WebRTC] Still disconnected after 30s without transitioning to failed — stuck ICE state, user should manually reconnect');
+          }, 30000);
         } else if (newPc.connectionState === 'failed') {
           if (disconnectGraceRef.current) clearTimeout(disconnectGraceRef.current);
           // Check if this PC is still the current one
