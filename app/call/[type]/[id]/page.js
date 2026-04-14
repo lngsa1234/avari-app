@@ -2933,8 +2933,19 @@ export default function UnifiedCallPage() {
 
   // Submit a call issue report. Fire-and-forget: closes the sheet and
   // shows the toast immediately, then posts to /api/feedback in the
-  // background. Uses the existing feedback endpoint with category='report'
-  // and the diagnostic snapshot in page_context — no new backend needed.
+  // background.
+  //
+  // Schema notes: the user_feedback table's CHECK constraint currently
+  // only allows category IN ('bug', 'feature', 'improvement', 'other')
+  // and page_context is TEXT (not JSONB). So we:
+  //   1. Use category='bug' with a '[Call Report]' subject prefix so
+  //      admins can visually filter call reports from real bug reports
+  //      in the existing /admin/feedback UI.
+  //   2. JSON.stringify the diagnostic snapshot into page_context so
+  //      it fits cleanly in the TEXT column.
+  // After migrations/add-feedback-report-category-and-jsonb.sql is
+  // applied, we can swap back to category='report' and pass the
+  // snapshot as a JS object — both changes will be a one-line follow-up.
   const handleSubmitReport = async (issueType) => {
     const diagnostics = captureCallDiagnostics();
     setShowReportSheet(false);
@@ -2951,14 +2962,15 @@ export default function UnifiedCallPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          category: 'report',
-          subject: `Call issue: ${issueType}`,
+          category: 'bug',
+          subject: `[Call Report] ${issueType}`,
           message: `User tapped "Report issue" during a live ${callType} call. Issue type: ${issueType}. See page_context for the full diagnostic snapshot captured at the moment of reporting.`,
-          pageContext: diagnostics,
+          pageContext: JSON.stringify(diagnostics),
         }),
       });
       if (!res.ok) {
-        console.error('[Report] Submit failed:', res.status);
+        const errBody = await res.json().catch(() => ({}));
+        console.error('[Report] Submit failed:', res.status, errBody);
         setReportToast('failed');
         setTimeout(() => setReportToast(null), 3500);
       } else {
