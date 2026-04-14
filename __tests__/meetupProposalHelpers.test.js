@@ -102,12 +102,56 @@ describe('getMyProposals', () => {
 })
 
 describe('getAllProposals', () => {
-  test('returns all proposals with profiles', async () => {
-    const proposals = [{ id: 'p1', user_id: 'u1' }]
+  test('returns all proposals with proposer attached', async () => {
+    const proposals = [
+      { id: 'p1', user_id: 'u1', topic: 'A' },
+      { id: 'p2', user_id: 'u2', topic: 'B' },
+      { id: 'p3', user_id: 'u1', topic: 'C' }, // same proposer as p1
+    ]
     const sb = makeSB({ list: { data: proposals, error: null } })
 
     const result = await getAllProposals(sb)
-    expect(result).toBeDefined()
+
+    expect(result).toHaveLength(3)
+    // Each proposal should have a `proposer` field (null is OK — the mock
+    // returns proposals data for the second query, but the code still
+    // attaches a `proposer` key on every row).
+    result.forEach(r => {
+      expect(r).toHaveProperty('proposer')
+    })
+  })
+
+  test('batch-queries profiles once, not per proposal (N+1 regression guard)', async () => {
+    const proposals = [
+      { id: 'p1', user_id: 'u1' },
+      { id: 'p2', user_id: 'u2' },
+      { id: 'p3', user_id: 'u1' }, // duplicate proposer — should not cause extra queries
+    ]
+    const sb = makeSB({ list: { data: proposals, error: null } })
+
+    await getAllProposals(sb)
+
+    // Must call from('profiles') exactly once, regardless of proposal count.
+    // The old implementation called it N times inside a for loop.
+    const profilesCalls = sb.from.mock.calls.filter(c => c[0] === 'profiles').length
+    expect(profilesCalls).toBe(1)
+
+    // Must batch via .in(), not .eq() per id
+    expect(sb._chain.in).toHaveBeenCalledWith('id', expect.arrayContaining(['u1', 'u2']))
+    // And the id list must be deduplicated (u1 appears twice in proposals → once in query)
+    const inCall = sb._chain.in.mock.calls.find(c => c[0] === 'id')
+    expect(inCall[1]).toHaveLength(2)
+  })
+
+  test('skips profile fetch entirely when there are no proposals', async () => {
+    const sb = makeSB({ list: { data: [], error: null } })
+
+    const result = await getAllProposals(sb)
+
+    expect(result).toEqual([])
+    // No call to from('profiles') — no ids to look up
+    const profilesCalls = sb.from.mock.calls.filter(c => c[0] === 'profiles').length
+    expect(profilesCalls).toBe(0)
   })
 
   test('returns empty on error', async () => {
