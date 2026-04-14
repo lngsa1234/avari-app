@@ -208,7 +208,13 @@ const RemoteVideo = memo(function RemoteVideo({
           size={size}
           accentColor="mocha"
           showName={size !== 'thumbnail'}
-          subtitle={size !== 'thumbnail' ? (participant.isDisconnected ? (participant.hasLeft ? 'Left the call' : 'Reconnecting...') : 'Camera off') : undefined}
+          subtitle={size !== 'thumbnail'
+            ? (participant.isDisconnected
+                ? (participant.hasLeft
+                    ? 'Left the call'
+                    : (participant.hasEverConnected === false ? 'Connecting...' : 'Reconnecting...'))
+                : 'Camera off')
+            : undefined}
         />
       </div>
 

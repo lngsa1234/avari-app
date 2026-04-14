@@ -950,15 +950,24 @@ export default function UnifiedCallPage() {
           hasAudio: !!remoteTracksRef.current.audio,
           partnerId,
         });
-        setRemoteParticipants([{
-          id: partnerId,
-          name: rd?.partner_name || 'Partner',
-          videoTrack: remoteTracksRef.current.video,
-          audioTrack: remoteTracksRef.current.audio,
-          hasVideo: !!remoteTracksRef.current.video,
-          hasAudio: !!remoteTracksRef.current.audio,
-          _lastUpdate: Date.now(),
-        }]);
+        // Preserve hasEverConnected across ontrack calls (it's set to
+        // true only after the connection has been stable for 2s in the
+        // onconnectionstatechange handler below). Default to false on
+        // first creation so a brief setup flap shows "Connecting..."
+        // not "Reconnecting..." in the UI.
+        setRemoteParticipants(prev => {
+          const existing = prev[0];
+          return [{
+            id: partnerId,
+            name: rd?.partner_name || 'Partner',
+            videoTrack: remoteTracksRef.current.video,
+            audioTrack: remoteTracksRef.current.audio,
+            hasVideo: !!remoteTracksRef.current.video,
+            hasAudio: !!remoteTracksRef.current.audio,
+            hasEverConnected: existing?.hasEverConnected || false,
+            _lastUpdate: Date.now(),
+          }];
+        });
       };
 
       newPc.onconnectionstatechange = () => {
@@ -1044,6 +1053,20 @@ export default function UnifiedCallPage() {
             isDisconnected: false,
             _lastUpdate: Date.now(),
           })));
+          // After 2s of continuous 'connected' state, mark the remote
+          // participant as hasEverConnected. This is the "has the user
+          // really seen/heard the other person" threshold — brief setup
+          // flickers (<2s) won't flip this flag, so a flap during
+          // initial negotiation keeps the UI on "Connecting..." rather
+          // than misleadingly jumping to "Reconnecting...".
+          setTimeout(() => {
+            if (peerConnectionRef.current !== newPc) return;
+            if (newPc.connectionState !== 'connected') return;
+            setRemoteParticipants(prev => prev.map(p => ({
+              ...p, hasEverConnected: true, _lastUpdate: Date.now(),
+            })));
+            console.log('[WebRTC] Stable connection confirmed (2s), hasEverConnected = true');
+          }, 2000);
           newPc.getStats().then(stats => {
             stats.forEach(report => {
               if (report.type === 'candidate-pair' && report.state === 'succeeded') {
@@ -2842,7 +2865,20 @@ export default function UnifiedCallPage() {
       const partnerLeft = remoteParticipants.some(p => p.hasLeft);
       const partnerDisconnected = remoteParticipants.some(p => p.isDisconnected && !p.hasLeft);
       if (partnerLeft) return `${partnerName} left the call`;
-      if (partnerDisconnected) return `Reconnecting with ${partnerName}...`;
+      if (partnerDisconnected) {
+        // WebRTC only: if the user has never had a stable connection
+        // (hasEverConnected explicitly false), show "Connecting..." —
+        // they haven't really met the remote yet, so "Reconnecting"
+        // would be misleading. LiveKit/Agora participants don't set
+        // hasEverConnected at all (undefined), so the strict === false
+        // check preserves the current "Reconnecting..." behavior for
+        // those providers.
+        const disconnectedPartner = remoteParticipants.find(p => p.isDisconnected && !p.hasLeft);
+        if (disconnectedPartner?.hasEverConnected === false) {
+          return `Connecting with ${partnerName}...`;
+        }
+        return `Reconnecting with ${partnerName}...`;
+      }
       if (!hasRemote) return `Waiting for ${partnerName} to join...`;
       return `Connected with ${partnerName}`;
     } else if (callType === 'meetup' && relatedData) {
