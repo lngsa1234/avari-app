@@ -272,8 +272,7 @@ Edit the scoring functions in each API route:
   └── agent/route.js
 
 /lib/
-  ├── agentHelpers.js
-  └── eventRecommendationHelpers.js
+  └── agentHelpers.js
 
 /components/
   ├── NudgeBanner.js
