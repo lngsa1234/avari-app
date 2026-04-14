@@ -189,6 +189,14 @@ export default function UnifiedCallPage() {
   const isInitializing = useRef(false);
   const messagesEndRef = useRef(null);
   const callStartTimeRef = useRef(null);
+  // Fix A: persist remote tracks across PC recreations.
+  // createPeerConnection is called on initial setup AND on reconnect/ICE restart.
+  // Previously this object lived in the createPeerConnection closure as a const,
+  // so a new PC started with empty { video: null, audio: null } and would
+  // temporarily report hasVideo=false/hasAudio=false until both tracks re-arrived.
+  // Lifting it to a ref keeps the accumulated track state across recreations.
+  // Cleared only on final leave (handleLeaveCall), NOT on PC recreation.
+  const remoteTracksRef = useRef({ video: null, audio: null });
   // Refs for keyboard shortcuts (to avoid stale closures)
   const handleToggleMuteRef = useRef(null);
   const handleToggleVideoRef = useRef(null);
@@ -600,19 +608,29 @@ export default function UnifiedCallPage() {
     };
   }, [roomId]);
 
-  // Call duration timer
+  // Call duration timer.
+  // Fix B: read callStartTimeRef.current inside the tick, not the state closure.
+  // Using the ref makes the tick robust against stale effect closures — if the
+  // state flickers or the effect re-runs mid-call, the ref is still correct.
+  // Dependency list is [isJoined] only; the interval starts on join and stops
+  // on leave, and ticks gracefully skip until the ref is populated.
   useEffect(() => {
-    if (!isJoined || !callStartTime) return;
+    if (!isJoined) return;
 
     const interval = setInterval(() => {
-      const start = new Date(callStartTime);
-      const now = new Date();
-      const seconds = Math.floor((now - start) / 1000);
+      const startIso = callStartTimeRef.current || callStartTime;
+      if (!startIso) return; // Skip tick if start time isn't set yet
+      const seconds = Math.floor((Date.now() - new Date(startIso).getTime()) / 1000);
+      // Debug: log the tick state on the first second and then every 10 seconds
+      if (seconds <= 1 || seconds % 10 === 0) {
+        console.log('[CallState] timer tick', { isJoined, startIso, seconds });
+      }
       setCallDuration(seconds);
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isJoined, callStartTime]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isJoined]);
 
   // Keep roomParticipantsRef updated for use in event handler closures
   // Also re-update remote participant names when roomParticipants loads
@@ -788,6 +806,11 @@ export default function UnifiedCallPage() {
 
       hasInitialized.current = true;
       setIsJoined(true);
+      console.log('[CallState] setIsJoined(true)', {
+        provider: config.provider,
+        isConnecting,
+        time: Date.now(),
+      });
       // Keep isConnecting true for WebRTC until the peer connection actually establishes.
       // For LiveKit/Agora, the room join means we're connected.
       if (config.provider !== 'webrtc') {
@@ -797,6 +820,10 @@ export default function UnifiedCallPage() {
       const startTime = new Date().toISOString();
       setCallStartTime(startTime);
       callStartTimeRef.current = startTime;
+      console.log('[CallState] setCallStartTime', {
+        startTime,
+        refNow: callStartTimeRef.current,
+      });
 
       // Write join signal for live call detection
       // Strip call-type prefix from roomId for UUID columns (e.g. coffee-{uuid} → {uuid})
@@ -861,6 +888,16 @@ export default function UnifiedCallPage() {
 
     // Create (or recreate) a peer connection with all event handlers wired up
     const createPeerConnection = () => {
+      console.log('[CallState] createPeerConnection called', {
+        isReplacement: !!peerConnectionRef.current,
+        prevRemoteCount: remoteParticipants.length,
+        // remoteTracksRef persists across recreations (Fix A) — this shows
+        // whether the previous PC had accumulated any tracks we should keep
+        prevRemoteTracks: {
+          hasVideo: !!remoteTracksRef.current.video,
+          hasAudio: !!remoteTracksRef.current.audio,
+        },
+      });
       // Clean up old connection if any
       if (peerConnectionRef.current) {
         if (qualityMonitorRef.current) {
@@ -871,6 +908,8 @@ export default function UnifiedCallPage() {
       }
       // Do NOT clear iceCandidateQueueRef here — candidates may have arrived
       // before the offer. The queue is flushed after setRemoteDescription().
+      // Do NOT clear remoteTracksRef here — accumulated track state must
+      // persist across recreations so a reconnect doesn't blank the UI.
 
       const newPc = new RTCPeerConnection({ iceServers });
       peerConnectionRef.current = newPc;
@@ -891,26 +930,33 @@ export default function UnifiedCallPage() {
         }
       });
 
-      // Collect remote tracks — ontrack fires once per track (audio + video)
-      const remoteTracks = { video: null, audio: null };
+      // Collect remote tracks — ontrack fires once per track (audio + video).
+      // Fix A: remoteTracksRef persists across PC recreations so a reconnect
+      // doesn't temporarily blank hasVideo/hasAudio until both tracks re-arrive.
       newPc.ontrack = (event) => {
         console.log('[WebRTC] ontrack fired, track kind:', event.track.kind, 'readyState:', event.track.readyState, 'enabled:', event.track.enabled);
         if (event.track.kind === 'video') {
-          remoteTracks.video = new MediaStream([event.track]);
+          remoteTracksRef.current.video = new MediaStream([event.track]);
         } else if (event.track.kind === 'audio') {
-          remoteTracks.audio = new MediaStream([event.track]);
+          remoteTracksRef.current.audio = new MediaStream([event.track]);
         }
         const rd = relatedDataRef.current || relatedData;
         const partnerId = rd && user?.id
           ? (rd.requester_id === user.id ? rd.recipient_id : rd.requester_id) || 'remote'
           : 'remote';
+        console.log('[CallState] setRemoteParticipants from ontrack', {
+          trackKind: event.track.kind,
+          hasVideo: !!remoteTracksRef.current.video,
+          hasAudio: !!remoteTracksRef.current.audio,
+          partnerId,
+        });
         setRemoteParticipants([{
           id: partnerId,
           name: rd?.partner_name || 'Partner',
-          videoTrack: remoteTracks.video,
-          audioTrack: remoteTracks.audio,
-          hasVideo: !!remoteTracks.video,
-          hasAudio: !!remoteTracks.audio,
+          videoTrack: remoteTracksRef.current.video,
+          audioTrack: remoteTracksRef.current.audio,
+          hasVideo: !!remoteTracksRef.current.video,
+          hasAudio: !!remoteTracksRef.current.audio,
           _lastUpdate: Date.now(),
         }]);
       };
@@ -933,13 +979,18 @@ export default function UnifiedCallPage() {
               newPc._iceRestartAttempts = attempts;
               if (attempts <= 3 && signalingSocketRef.current?.connected) {
                 console.log(`[WebRTC] ICE restart from stale disconnect, attempt ${attempts}/3`);
-                newPc.createOffer({ iceRestart: true }).then(offer => {
-                  newPc.setLocalDescription(offer);
-                  signalingSocketRef.current.emit('offer', {
-                    offer,
-                    to: remotePeerIdRef.current,
-                  });
-                }).catch(() => {});
+                (async () => {
+                  try {
+                    if (newPc.signalingState !== 'stable') {
+                      console.log('[WebRTC] Skipping ICE restart — signaling state:', newPc.signalingState);
+                      return;
+                    }
+                    const offer = await newPc.createOffer({ iceRestart: true });
+                    if (newPc.signalingState !== 'stable') return; // state changed during async
+                    await newPc.setLocalDescription(offer);
+                    signalingSocketRef.current?.emit('offer', { offer, to: remotePeerIdRef.current });
+                  } catch (e) { console.warn('[WebRTC] ICE restart error:', e.message); }
+                })();
               } else {
                 setRemoteParticipants(prev => prev.map(p => ({
                   ...p, isDisconnected: true, _lastUpdate: Date.now(),
@@ -962,20 +1013,25 @@ export default function UnifiedCallPage() {
           newPc._iceRestartAttempts = attempts;
           if (attempts <= 3 && signalingSocketRef.current?.connected) {
             console.log(`[WebRTC] ICE restart attempt ${attempts}/3`);
-            newPc.createOffer({ iceRestart: true }).then(offer => {
-              newPc.setLocalDescription(offer);
-              signalingSocketRef.current.emit('offer', {
-                offer,
-                to: remotePeerIdRef.current,
-              });
-            }).catch(err => {
-              console.error('[WebRTC] ICE restart failed:', err);
-              setRemoteParticipants(prev => prev.map(p => ({
-                ...p,
-                isDisconnected: true,
-                _lastUpdate: Date.now(),
-              })));
-            });
+            (async () => {
+              try {
+                if (newPc.signalingState !== 'stable') {
+                  console.log('[WebRTC] Skipping ICE restart — signaling state:', newPc.signalingState);
+                  return;
+                }
+                const offer = await newPc.createOffer({ iceRestart: true });
+                if (newPc.signalingState !== 'stable') return; // state changed during async
+                await newPc.setLocalDescription(offer);
+                signalingSocketRef.current?.emit('offer', { offer, to: remotePeerIdRef.current });
+              } catch (err) {
+                console.error('[WebRTC] ICE restart failed:', err);
+                setRemoteParticipants(prev => prev.map(p => ({
+                  ...p,
+                  isDisconnected: true,
+                  _lastUpdate: Date.now(),
+                })));
+              }
+            })();
           } else {
             console.log('[WebRTC] Connection failed after ICE restart attempts');
             setRemoteParticipants(prev => prev.map(p => ({
@@ -2444,6 +2500,9 @@ export default function UnifiedCallPage() {
     setLocalVideoTrack(null);
     setLocalAudioTrack(null);
     setRemoteParticipants([]);
+    // Fix A: clear the persistent remote tracks ref on final leave
+    // (it was intentionally kept across PC recreations during the call)
+    remoteTracksRef.current = { video: null, audio: null };
     setLocalScreenTrack(null);
     setRemoteScreenTrack(null);
     setIsScreenSharing(false);
