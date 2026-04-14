@@ -434,15 +434,23 @@ export default function useHomeData(currentUser) {
                   ])
                   if (circleDetail) {
                     const memberUserIds = (circleMembers || []).map(m => m.user_id)
-                    let memberProfiles = []
-                    if (memberUserIds.length > 0) {
-                      const { data: profiles } = await supabase.from('profiles').select('id, name, profile_picture').in('id', memberUserIds)
-                      memberProfiles = profiles || []
+                    // Include the creator_id in the profile fetch so we resolve the
+                    // creator's name even for legacy circles where the creator row
+                    // isn't in connection_group_members with status='accepted'.
+                    const idsToFetch = [...new Set([...memberUserIds, circleDetail.creator_id].filter(Boolean))]
+                    let fetchedProfiles = []
+                    if (idsToFetch.length > 0) {
+                      const { data: profiles } = await supabase.from('profiles').select('id, name, profile_picture').in('id', idsToFetch)
+                      fetchedProfiles = profiles || []
                     }
+                    // Attach the creator as a dedicated field — UI should prefer
+                    // this over finding the creator inside members.
+                    const creatorProfile = fetchedProfiles.find(p => p.id === circleDetail.creator_id) || null
                     circleRecs[0].circle = {
                       ...circleRecs[0].circle,
                       ...circleDetail,
-                      members: (circleMembers || []).map(m => ({ ...m, user: memberProfiles.find(p => p.id === m.user_id) || null })),
+                      members: (circleMembers || []).map(m => ({ ...m, user: fetchedProfiles.find(p => p.id === m.user_id) || null })),
+                      creator: creatorProfile,
                     }
                   }
                 }

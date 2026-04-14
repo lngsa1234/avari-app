@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Calendar, Clock, Coffee, Users, User, Heart, Video, Sparkles, ChevronRight, Share2, Search } from 'lucide-react'
 import { parseLocalDate, formatEventTime, isEventLive, eventDateTimeToUTC } from '@/lib/dateUtils'
 import { colors as designColors, fonts } from '@/lib/designTokens'
+import { resolveCircleHost } from '@/lib/circleMeetupHelpers'
 import NudgeBanner from './NudgeBanner'
 
 // --- Helper functions ---
@@ -1734,8 +1735,11 @@ export default function HomeView({
                 {/* Host + Join */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '4px' : '6px' }}>
                   {(() => {
-                    const creator = circle.members?.find(m => m.user_id === circle.creator_id);
-                    const creatorName = creator?.user?.name || 'Host';
+                    // resolveCircleHost prefers circle.creator (fetched directly by
+                    // useHomeData) and falls back to finding the creator inside
+                    // circle.members. If neither resolves, the avatar shows the
+                    // circle name's initial instead of "H" from "Host".
+                    const host = resolveCircleHost(circle);
                     return (
                       <>
                         <div style={{
@@ -1744,11 +1748,11 @@ export default function HomeView({
                           fontSize: isMobile ? '8px' : '9.5px', fontWeight: '600', color: '#5C3318', flexShrink: 0,
                           overflow: 'hidden',
                         }}>
-                          {creator?.user?.profile_picture ? (
-                            <img loading="lazy" src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : creatorName.charAt(0)}
+                          {host.profile_picture ? (
+                            <img loading="lazy" src={host.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : host.initial}
                         </div>
-                        <span style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: '500', color: '#6B4F35' }}>{creatorName.split(' ')[0]}</span>
+                        <span style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: '500', color: '#6B4F35' }}>{host.name.split(' ')[0]}</span>
                         <span style={{ fontSize: isMobile ? '9px' : '10px', color: '#B09A8A' }}>{'\u00b7'} host</span>
                       </>
                     );
