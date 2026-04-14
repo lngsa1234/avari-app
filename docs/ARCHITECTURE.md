@@ -106,8 +106,7 @@ avari-app/
 ├── lib/                              # Helper utilities
 │   ├── supabase.js                  # Supabase client singleton
 │   ├── agoraHelpers.js              # Agora room CRUD
-│   ├── coffeeChatHelpers.js         # Coffee chat logic
-│   └── videoMeeting.js              # Video room management
+│   └── coffeeChatHelpers.js         # Coffee chat logic
 │
 ├── docs/                             # Documentation
 │   ├── ARCHITECTURE.md              # This file
