@@ -62,6 +62,13 @@ export default function UnifiedCallPage() {
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
   const [remoteParticipants, setRemoteParticipants] = useState([]);
+  // WebRTC only: tracks whether the remote peer is present in the
+  // signaling room (announced via socket 'joined' or 'user-joined'
+  // events), independent of whether their media tracks have arrived
+  // yet. Used by getSubtitle to distinguish "Waiting for Lynn to
+  // join..." (not in room yet) from "Connecting with Lynn..." (in
+  // room, PC negotiating, no tracks yet).
+  const [remotePeerInRoom, setRemotePeerInRoom] = useState(false);
   const allParticipantIdsRef = useRef(new Set()); // Track everyone who ever joined
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const activeSpeakerTimeoutRef = useRef(null);
@@ -1220,6 +1227,7 @@ export default function UnifiedCallPage() {
         remotePeerId = others[0];
         remotePeerIdRef.current = others[0];
         allParticipantIdsRef.current.add(others[0]);
+        setRemotePeerInRoom(true);
         const polite = amIPolite(remotePeerId);
         console.log('[WebRTC] Peer already present, I am', polite ? 'polite' : 'impolite');
         if (!polite) {
@@ -1237,6 +1245,7 @@ export default function UnifiedCallPage() {
       remotePeerId = joinedUserId;
       remotePeerIdRef.current = joinedUserId;
       allParticipantIdsRef.current.add(joinedUserId);
+      setRemotePeerInRoom(true);
 
       // Clear disconnected/left state — peer is back
       setRemoteParticipants(prev => prev.map(p => ({
@@ -1262,6 +1271,7 @@ export default function UnifiedCallPage() {
     socket.on('user-left', ({ userId: leftUserId }) => {
       console.log('[WebRTC] Peer left:', leftUserId);
       peerLeftIntentionallyRef.current = true;
+      setRemotePeerInRoom(false);
       // Peer intentionally left — close PC, clear timers, stop quality monitor
       if (disconnectGraceRef.current) {
         clearTimeout(disconnectGraceRef.current);
@@ -2859,28 +2869,44 @@ export default function UnifiedCallPage() {
   // Get subtitle based on call type
   const getSubtitle = () => {
     if (callType === 'coffee') {
-      if (!isJoined) return 'Connecting...';
-      const partnerName = relatedData?.partner_name || 'Partner';
+      // Clean state machine for the 1:1 subtitle. The goal is to describe
+      // the actual state of the partner, not the state of our signaling
+      // layer, so the user always knows what they're looking at.
+      const partnerName = relatedData?.partner_name || null;
+      if (!partnerName) {
+        // We don't know who the partner is yet (relatedData still loading).
+        // Fall back to a generic label.
+        return 'Connecting...';
+      }
+
       const hasRemote = remoteParticipants.length > 0;
       const partnerLeft = remoteParticipants.some(p => p.hasLeft);
-      const partnerDisconnected = remoteParticipants.some(p => p.isDisconnected && !p.hasLeft);
+      const disconnectedPartner = remoteParticipants.find(p => p.isDisconnected && !p.hasLeft);
+
       if (partnerLeft) return `${partnerName} left the call`;
-      if (partnerDisconnected) {
-        // WebRTC only: if the user has never had a stable connection
-        // (hasEverConnected explicitly false), show "Connecting..." —
-        // they haven't really met the remote yet, so "Reconnecting"
-        // would be misleading. LiveKit/Agora participants don't set
-        // hasEverConnected at all (undefined), so the strict === false
-        // check preserves the current "Reconnecting..." behavior for
-        // those providers.
-        const disconnectedPartner = remoteParticipants.find(p => p.isDisconnected && !p.hasLeft);
-        if (disconnectedPartner?.hasEverConnected === false) {
-          return `Connecting with ${partnerName}...`;
-        }
-        return `Reconnecting with ${partnerName}...`;
+
+      if (disconnectedPartner) {
+        // Disconnected mid-call. Was the connection ever stable?
+        //  - hasEverConnected === false: setup flap, never really seen
+        //    partner → "Connecting with Lynn..."
+        //  - hasEverConnected true or undefined (LiveKit/Agora): genuine
+        //    reconnect after a stable call → "Reconnecting with Lynn..."
+        return disconnectedPartner.hasEverConnected === false
+          ? `Connecting with ${partnerName}...`
+          : `Reconnecting with ${partnerName}...`;
       }
-      if (!hasRemote) return `Waiting for ${partnerName} to join...`;
-      return `Connected with ${partnerName}`;
+
+      if (hasRemote) return `Connected with ${partnerName}`;
+
+      // No remote tracks yet. Two sub-cases:
+      //  - Lynn is already in the signaling room, PC is negotiating
+      //    (or local user hasn't quite finished joining but we already
+      //    know Lynn is there) → "Connecting with Lynn..."
+      //  - Lynn hasn't joined the signaling room yet (also covers the
+      //    !isJoined case — we haven't checked the room yet, so
+      //    default assumption is that she's not there) → "Waiting..."
+      if (remotePeerInRoom) return `Connecting with ${partnerName}...`;
+      return `Waiting for ${partnerName} to join...`;
     } else if (callType === 'meetup' && relatedData) {
       return `${relatedData.date} at ${relatedData.time}`;
     } else if (callType === 'circle' && relatedData) {
