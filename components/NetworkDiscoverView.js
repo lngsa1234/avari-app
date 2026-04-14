@@ -217,14 +217,22 @@ export default function NetworkDiscoverView({
         .in('group_id', groupIds)
         .eq('status', 'accepted');
 
-      const memberUserIds = [...new Set((allMembers || []).map(m => m.user_id))];
+      const memberUserIds = (allMembers || []).map(m => m.user_id);
+      // Include each circle's creator_id in the profile fetch so the
+      // creator's profile is resolved even when their membership row
+      // isn't in the accepted list (legacy circles) or their profile is
+      // filtered out via profile visibility policy for non-connections.
+      // Matches the pattern in hooks/useHomeData.js.
+      const creatorIds = groups.map(g => g.creator_id).filter(Boolean);
+      const allUserIds = [...new Set([...memberUserIds, ...creatorIds])];
+
       let profileMap = {};
 
-      if (memberUserIds.length > 0) {
+      if (allUserIds.length > 0) {
         const { data: profiles } = await sb
           .from('profiles')
           .select('id, name, career, profile_picture')
-          .in('id', memberUserIds);
+          .in('id', allUserIds);
 
         profileMap = (profiles || []).reduce((acc, p) => {
           acc[p.id] = p;
@@ -239,7 +247,12 @@ export default function NetworkDiscoverView({
           .map(m => ({
             ...m,
             user: profileMap[m.user_id] || null
-          }))
+          })),
+        // Attach the creator profile as a dedicated field. resolveCircleHost
+        // in lib/circleMeetupHelpers.js prefers this over finding the creator
+        // inside members, so the host displays correctly even for legacy
+        // circles where the creator isn't in connection_group_members.
+        creator: g.creator_id ? (profileMap[g.creator_id] || null) : null,
       }));
     }
   );
