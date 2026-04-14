@@ -1740,6 +1740,22 @@ export default function HomeView({
                     // circle.members. If neither resolves, the avatar shows the
                     // circle name's initial instead of "H" from "Host".
                     const host = resolveCircleHost(circle);
+                    // Diagnostic: if the user doesn't see this log in the console,
+                    // the new bundle isn't loaded (browser cache / stale deploy).
+                    // Safe to leave in — runs only when the card actually renders.
+                    console.log('[HomeCircleCard] render v2', {
+                      circleId: circle.id,
+                      circleName: circle.name,
+                      creatorId: circle.creator_id,
+                      hasCreatorField: !!circle.creator,
+                      creatorName: circle.creator?.name,
+                      memberCount: circle.members?.length,
+                      memberIds: circle.members?.map(m => m.user_id),
+                      memberHasCreator: circle.members?.some(m => m.user_id === circle.creator_id),
+                      resolved: host.resolved,
+                      hostDisplayName: host.name,
+                      hostInitial: host.initial,
+                    });
                     return (
                       <>
                         <div style={{

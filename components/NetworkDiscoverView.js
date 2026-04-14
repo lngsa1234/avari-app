@@ -5,6 +5,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { parseLocalDate, isEventPast, formatEventTime, formatEventDate } from '../lib/dateUtils';
 import { requestToJoinGroup } from '@/lib/connectionRecommendationHelpers';
+import { resolveCircleHost } from '@/lib/circleMeetupHelpers';
 import { useSupabaseQuery, invalidateQuery } from '@/hooks/useSupabaseQuery';
 import {
   Search,
@@ -1401,8 +1402,10 @@ export default function NetworkDiscoverView({
                   : circle.vibe_category === 'grow' ? 'Career growth & skills'
                   : 'Connect & grow together');
 
-                const creator = circle.members?.find(m => m.user_id === circle.creator_id);
-                const creatorName = creator?.user?.name || 'CircleW';
+                const host = resolveCircleHost(circle);
+                // Kept as separate bindings so the existing JSX below is a minimal diff.
+                const creator = host.profile_picture ? { user: { profile_picture: host.profile_picture } } : null;
+                const creatorName = host.name;
 
                 const cadence = circle.cadence || '';
                 const meetingDay = circle.meeting_day || '';
@@ -1600,9 +1603,9 @@ export default function NetworkDiscoverView({
                           fontSize: isMobile ? '8px' : '9.5px', fontWeight: '600', color: '#5C3318', flexShrink: 0,
                           overflow: 'hidden',
                         }}>
-                          {creator?.user?.profile_picture ? (
-                            <img loading="lazy" src={creator.user.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          ) : creatorName.charAt(0)}
+                          {host.profile_picture ? (
+                            <img loading="lazy" src={host.profile_picture} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : host.initial}
                         </div>
                         <span style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: '500', color: '#6B4F35' }}>{creatorName.split(' ')[0]}</span>
                         <span style={{ fontSize: isMobile ? '9px' : '10px', color: '#B09A8A' }}>{'\u00b7'} host</span>

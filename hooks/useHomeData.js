@@ -446,6 +446,19 @@ export default function useHomeData(currentUser) {
                     // Attach the creator as a dedicated field — UI should prefer
                     // this over finding the creator inside members.
                     const creatorProfile = fetchedProfiles.find(p => p.id === circleDetail.creator_id) || null
+                    // Diagnostic: log whether creator resolution worked so we can
+                    // distinguish "no profile row" from "profile filtered by RLS"
+                    // from "creator_id missing" on the next repro.
+                    console.log('[HomeRecs] Circle enrich v2', {
+                      topCircleId,
+                      circleName: circleDetail.name,
+                      creatorId: circleDetail.creator_id,
+                      idsFetched: idsToFetch,
+                      profilesReturned: fetchedProfiles.length,
+                      profileIdsReturned: fetchedProfiles.map(p => p.id),
+                      creatorProfileFound: !!creatorProfile,
+                      creatorProfileName: creatorProfile?.name,
+                    })
                     circleRecs[0].circle = {
                       ...circleRecs[0].circle,
                       ...circleDetail,
