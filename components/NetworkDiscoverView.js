@@ -240,25 +240,6 @@ export default function NetworkDiscoverView({
         }, {});
       }
 
-      // Diagnostic: confirms the new query function is running AND shows
-      // whether the profile fetch returned the creator rows we asked for.
-      // Safe to leave in for one debug cycle. Remove in follow-up once
-      // discover is confirmed working.
-      console.log('[DiscoverCircles] fetch v3', {
-        groupCount: groups.length,
-        memberUserIdCount: memberUserIds.length,
-        creatorIdCount: creatorIds.length,
-        allUserIdCount: allUserIds.length,
-        profilesReturned: Object.keys(profileMap).length,
-        profileIds: Object.keys(profileMap),
-        creatorsByGroup: groups.map(g => ({
-          name: g.name,
-          creatorId: g.creator_id,
-          creatorFoundInMap: !!profileMap[g.creator_id],
-          creatorName: profileMap[g.creator_id]?.name,
-        })),
-      });
-
       return groups.map(g => ({
         ...g,
         members: (allMembers || [])
