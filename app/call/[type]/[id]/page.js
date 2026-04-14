@@ -71,9 +71,8 @@ export default function UnifiedCallPage() {
   // room, PC negotiating, no tracks yet).
   const [remotePeerInRoom, setRemotePeerInRoom] = useState(false);
 
-  // Report issue sheet state
-  const [showReportSheet, setShowReportSheet] = useState(false);
-  const [reportToast, setReportToast] = useState(null); // 'sent' | 'failed' | null
+  // ReportIssueSheet manages its own open / status state internally;
+  // the parent only needs to provide the onSubmit callback.
   const allParticipantIdsRef = useRef(new Set()); // Track everyone who ever joined
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
   const activeSpeakerTimeoutRef = useRef(null);
@@ -2931,9 +2930,9 @@ export default function UnifiedCallPage() {
     };
   };
 
-  // Submit a call issue report. Fire-and-forget: closes the sheet and
-  // shows the toast immediately, then posts to /api/feedback in the
-  // background.
+  // Submit a call issue report. Async — returns on success, throws on
+  // failure. The ReportIssueSheet component awaits this and manages all
+  // status UI (sending / sent / error) internally.
   //
   // Schema notes: the user_feedback table's CHECK constraint currently
   // only allows category IN ('bug', 'feature', 'improvement', 'other')
@@ -2945,42 +2944,30 @@ export default function UnifiedCallPage() {
   //      it fits cleanly in the TEXT column.
   // After migrations/add-feedback-report-category-and-jsonb.sql is
   // applied, we can swap back to category='report' and pass the
-  // snapshot as a JS object — both changes will be a one-line follow-up.
+  // snapshot as a JS object.
   const handleSubmitReport = async (issueType) => {
     const diagnostics = captureCallDiagnostics();
-    setShowReportSheet(false);
-    setReportToast('sent');
-    setTimeout(() => setReportToast(null), 3500);
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      const res = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          category: 'bug',
-          subject: `[Call Report] ${issueType}`,
-          message: `User tapped "Report issue" during a live ${callType} call. Issue type: ${issueType}. See page_context for the full diagnostic snapshot captured at the moment of reporting.`,
-          pageContext: JSON.stringify(diagnostics),
-        }),
-      });
-      if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        console.error('[Report] Submit failed:', res.status, errBody);
-        setReportToast('failed');
-        setTimeout(() => setReportToast(null), 3500);
-      } else {
-        console.log('[Report] Submitted:', issueType);
-      }
-    } catch (err) {
-      console.error('[Report] Network error:', err);
-      setReportToast('failed');
-      setTimeout(() => setReportToast(null), 3500);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    const res = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        category: 'bug',
+        subject: `[Call Report] ${issueType}`,
+        message: `User tapped "Report issue" during a live ${callType} call. Issue type: ${issueType}. See page_context for the full diagnostic snapshot captured at the moment of reporting.`,
+        pageContext: JSON.stringify(diagnostics),
+      }),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      console.error('[Report] Submit failed:', res.status, errBody);
+      throw new Error(`Submit failed: ${res.status}`);
     }
+    console.log('[Report] Submitted:', issueType);
   };
 
   // Get subtitle based on call type
@@ -3039,76 +3026,12 @@ export default function UnifiedCallPage() {
         background: 'linear-gradient(165deg, #1E1410 0%, #2D1E14 40%, #1A120E 100%)',
       }}
     >
-      {/* Report issue floating button — visible once the call is joined.
-          Unobtrusive top-right pill, low z-index so it doesn't overlap
-          modals. Tap opens the ReportIssueSheet below. */}
-      {isJoined && (
-        <button
-          type="button"
-          onClick={() => setShowReportSheet(true)}
-          aria-label="Report a call issue"
-          style={{
-            position: 'fixed',
-            top: '68px',
-            right: '12px',
-            zIndex: 45,
-            padding: '6px 12px',
-            borderRadius: '16px',
-            background: 'rgba(30, 20, 16, 0.72)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(245, 237, 228, 0.18)',
-            color: 'rgba(245, 237, 228, 0.85)',
-            fontSize: '12px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            letterSpacing: '0.1px',
-          }}
-        >
-          Report issue
-        </button>
-      )}
-
-      {/* Report sheet — opens when the button is tapped. Fire-and-forget
-          submit via handleSubmitReport, which posts to /api/feedback with
-          the full diagnostic snapshot in page_context. */}
-      <ReportIssueSheet
-        open={showReportSheet}
-        onClose={() => setShowReportSheet(false)}
-        onSubmit={handleSubmitReport}
-      />
-
-      {/* Report submission toast */}
-      {reportToast && (
-        <div
-          role="status"
-          style={{
-            position: 'fixed',
-            top: '76px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 85,
-            padding: '10px 20px',
-            borderRadius: '12px',
-            background: reportToast === 'sent'
-              ? 'rgba(46, 107, 64, 0.94)'
-              : 'rgba(178, 60, 48, 0.94)',
-            color: '#FAF7F4',
-            fontSize: '13px',
-            fontWeight: 500,
-            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-          }}
-        >
-          {reportToast === 'sent'
-            ? 'Thanks — report sent. Your call will continue.'
-            : "Couldn't submit the report. Check your connection."}
-        </div>
-      )}
+      {/* Report issue button + popup panel. Self-contained component:
+          renders its own floating trigger (bottom-right, above the
+          ControlBar) and the popup panel above it. Manages all open /
+          status / selection state internally. The handleSubmitReport
+          callback captures call diagnostics and posts to /api/feedback. */}
+      {isJoined && <ReportIssueSheet onSubmit={handleSubmitReport} />}
 
       {/* Agora global styles — cover for camera feeds, contain for screen shares */}
       {config.provider === 'agora' && (

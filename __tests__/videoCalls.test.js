@@ -149,4 +149,56 @@ describe('Call Recap Logic', () => {
       expect(metrics.fps).toBeGreaterThan(0)
     })
   })
+
+  describe('ICE restart signaling state guard', () => {
+    // Simulate the guard logic from the ICE restart code in page.js
+    function shouldAttemptIceRestart({ signalingState, connectionState, attempts, maxAttempts, socketConnected, isPeerLeft }) {
+      if (isPeerLeft) return { restart: false, reason: 'peer left' }
+      if (attempts >= maxAttempts) return { restart: false, reason: 'max attempts' }
+      if (!socketConnected) return { restart: false, reason: 'socket disconnected' }
+      if (signalingState !== 'stable') return { restart: false, reason: `signaling state: ${signalingState}` }
+      if (connectionState !== 'failed' && connectionState !== 'disconnected') return { restart: false, reason: 'connection ok' }
+      return { restart: true }
+    }
+
+    test('allows restart when signaling state is stable and connection failed', () => {
+      const result = shouldAttemptIceRestart({ signalingState: 'stable', connectionState: 'failed', attempts: 0, maxAttempts: 3, socketConnected: true, isPeerLeft: false })
+      expect(result.restart).toBe(true)
+    })
+
+    test('blocks restart when signaling state is have-remote-offer', () => {
+      const result = shouldAttemptIceRestart({ signalingState: 'have-remote-offer', connectionState: 'failed', attempts: 0, maxAttempts: 3, socketConnected: true, isPeerLeft: false })
+      expect(result.restart).toBe(false)
+      expect(result.reason).toBe('signaling state: have-remote-offer')
+    })
+
+    test('blocks restart when signaling state is have-local-offer', () => {
+      const result = shouldAttemptIceRestart({ signalingState: 'have-local-offer', connectionState: 'failed', attempts: 0, maxAttempts: 3, socketConnected: true, isPeerLeft: false })
+      expect(result.restart).toBe(false)
+      expect(result.reason).toBe('signaling state: have-local-offer')
+    })
+
+    test('blocks restart when peer left intentionally', () => {
+      const result = shouldAttemptIceRestart({ signalingState: 'stable', connectionState: 'failed', attempts: 0, maxAttempts: 3, socketConnected: true, isPeerLeft: true })
+      expect(result.restart).toBe(false)
+      expect(result.reason).toBe('peer left')
+    })
+
+    test('blocks restart after max attempts', () => {
+      const result = shouldAttemptIceRestart({ signalingState: 'stable', connectionState: 'failed', attempts: 3, maxAttempts: 3, socketConnected: true, isPeerLeft: false })
+      expect(result.restart).toBe(false)
+      expect(result.reason).toBe('max attempts')
+    })
+
+    test('blocks restart when socket disconnected', () => {
+      const result = shouldAttemptIceRestart({ signalingState: 'stable', connectionState: 'failed', attempts: 0, maxAttempts: 3, socketConnected: false, isPeerLeft: false })
+      expect(result.restart).toBe(false)
+      expect(result.reason).toBe('socket disconnected')
+    })
+
+    test('allows restart on disconnected (stale) state', () => {
+      const result = shouldAttemptIceRestart({ signalingState: 'stable', connectionState: 'disconnected', attempts: 0, maxAttempts: 3, socketConnected: true, isPeerLeft: false })
+      expect(result.restart).toBe(true)
+    })
+  })
 })
