@@ -3161,6 +3161,7 @@ export default function UnifiedCallPage() {
           setShowTopics(!showTopics);
           if (!showTopics) setActiveTab('topics');
         } : undefined}
+        showSidebar={showSidebar}
       />
 
       {/* Toast notification */}
@@ -3228,19 +3229,6 @@ export default function UnifiedCallPage() {
           isVisible={consentStatus === 'incoming'}
         />
 
-        {/* Transcript Consent Indicator */}
-        <TranscriptIndicator
-          status={consentStatus}
-          mode={config?.consentMode || 'host'}
-          onStop={() => {
-            transcriptStoppedRef.current = true;
-            stopListening();
-            setIsTranscribing(false);
-            stopConsentTranscription();
-          }}
-          isHost={callType !== 'coffee'}
-        />
-
         {/* Transcript Overlay */}
         <TranscriptOverlay
           transcript={transcript}
@@ -3286,6 +3274,13 @@ export default function UnifiedCallPage() {
           isAudioDeviceSwitching={isAudioDeviceSwitching}
           consentStatus={consentStatus}
           consentMode={config?.consentMode}
+          isHost={isHost}
+          onStopTranscription={() => {
+            transcriptStoppedRef.current = true;
+            stopListening();
+            setIsTranscribing(false);
+            stopConsentTranscription();
+          }}
           features={config.features}
           onToggleHand={handleToggleHand}
           onToggleMute={handleToggleMute}

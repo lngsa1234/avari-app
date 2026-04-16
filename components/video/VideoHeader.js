@@ -222,6 +222,8 @@ export default function VideoHeader({
   // Topics
   showTopics = false,
   onToggleTopics,
+  // Sidebar state — shift right controls when panel is open
+  showSidebar = false,
 }) {
   const [copied, setCopied] = useState(false);
   const [showViewMenu, setShowViewMenu] = useState(false);
@@ -376,7 +378,7 @@ export default function VideoHeader({
       </div>
 
       {/* Right: Status indicators + View toggle */}
-      <div className="flex items-center gap-3">
+      <div className={`flex items-center gap-3 transition-all duration-300 ${showSidebar ? 'md:mr-80' : ''}`}>
         {/* Status indicators - desktop */}
         <div className="hidden sm:flex items-center gap-3">
           {isConnecting && (

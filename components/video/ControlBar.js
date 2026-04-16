@@ -341,11 +341,13 @@ export default function ControlBar({
   // Consent state
   consentStatus,
   consentMode,
+  isHost = false,
 
   // Feature flags
   features = {},
 
   // Handlers
+  onStopTranscription,
   onToggleMute,
   onToggleVideo,
   onToggleBlur,
@@ -381,7 +383,7 @@ export default function ControlBar({
   return (
     <div className="flex flex-col items-center gap-2 py-3 px-4 relative z-50" style={{ background: 'rgba(30, 20, 16, 0.6)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
       {/* Status indicators row */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap justify-center">
         {isRecording && (
           <div className="flex items-center gap-1.5 bg-red-500/15 px-3 py-1 rounded-full">
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -391,9 +393,15 @@ export default function ControlBar({
           </div>
         )}
         {isTranscribing && (
-          <div className="flex flex-col items-center gap-1">
-            <span className="text-stone-400 text-[11px]">Transcript enabled for recap. Select your language for better recognition:</span>
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            {/* Consolidated transcript status + language selector + stop */}
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+              <span className="text-stone-300 text-[11px] font-medium">
+                {consentMode === 'host' ? 'Transcript & recap enabled by host' : 'Transcript & recap enabled'}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => onLanguageChange?.('en-US')}
                 className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
@@ -414,6 +422,17 @@ export default function ControlBar({
               >
                 中文
               </button>
+              {onStopTranscription && (
+                (consentMode === 'mutual' && consentStatus === 'accepted') ||
+                (consentMode === 'host' && isHost && consentStatus === 'accepted')
+              ) && (
+                <button
+                  onClick={onStopTranscription}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium transition-all border border-stone-600/40 text-stone-400 hover:text-stone-200 hover:border-stone-500/60"
+                >
+                  Stop
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -481,6 +500,14 @@ export default function ControlBar({
             active={showChat}
             onClick={onToggleChat}
             badge={!showChat ? messagesCount : undefined}
+          />
+        )}
+        {features.participants && (
+          <ControlBtn
+            icon={<PeopleIcon />}
+            active={showParticipants}
+            onClick={onToggleParticipants}
+            badge={!showParticipants && raisedHandCount > 0 ? raisedHandCount : undefined}
           />
         )}
         <ControlBtn
