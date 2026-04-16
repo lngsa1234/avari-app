@@ -2418,10 +2418,14 @@ export default function UnifiedCallPage() {
   // Track whether user intentionally stopped transcription (prevents auto-restart)
   const transcriptStoppedRef = useRef(false);
 
-  // Start transcription when mutual consent is accepted (only on consent transition, not restarts)
+  // Start/stop transcription on consent status transitions
   const prevConsentStatusRef = useRef(null);
   useEffect(() => {
-    const justAccepted = consentStatus === 'accepted' && prevConsentStatusRef.current !== 'accepted';
+    const prev = prevConsentStatusRef.current;
+    const justAccepted = consentStatus === 'accepted' && prev !== 'accepted';
+    const justRevoked = consentStatus == null && prev === 'accepted';
+
+    // Update ref after reading previous value
     prevConsentStatusRef.current = consentStatus;
 
     if (justAccepted && !isTranscribing && !transcriptStoppedRef.current) {
@@ -2430,8 +2434,6 @@ export default function UnifiedCallPage() {
     }
 
     // When host stops transcription, consent goes from 'accepted' → null
-    // Stop local transcription for participants
-    const justRevoked = consentStatus == null && prevConsentStatusRef.current === 'accepted';
     if (justRevoked && isTranscribing) {
       stopListening();
       setIsTranscribing(false);
