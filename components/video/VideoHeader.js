@@ -322,18 +322,6 @@ export default function VideoHeader({
             {formatDuration(callDuration)}
           </div>
 
-          {/* Participants */}
-          <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium"
-            style={{
-              background: 'rgba(245,237,228,0.06)',
-              color: 'rgba(245,237,228,0.5)',
-            }}
-          >
-            <PeopleIcon />
-            {participantCount}
-          </div>
-
           {/* Connection quality */}
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium"
@@ -369,10 +357,21 @@ export default function VideoHeader({
 
         {/* Status indicators - mobile visible */}
         <div className="flex items-center gap-2 sm:hidden">
-          {isConnecting && (
+          {isConnecting ? (
             <span className="text-white/70 text-xs animate-pulse">
               Connecting...
             </span>
+          ) : (
+            <div
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-medium tabular-nums"
+              style={{
+                background: 'rgba(245,237,228,0.06)',
+                color: 'rgba(245,237,228,0.5)',
+              }}
+            >
+              <ClockIcon />
+              {formatDuration(callDuration)}
+            </div>
           )}
         </div>
       </div>

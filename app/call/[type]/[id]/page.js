@@ -140,8 +140,15 @@ export default function UnifiedCallPage() {
 
     const loadTopics = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const authHeaders = session?.access_token
+          ? { 'Authorization': `Bearer ${session.access_token}` }
+          : {};
+
         // Try cache first
-        const cacheRes = await fetch(`/api/agent/discussion-topics?meetupId=${meetupUUID}`);
+        const cacheRes = await fetch(`/api/agent/discussion-topics?meetupId=${meetupUUID}`, {
+          headers: authHeaders,
+        });
         const cacheData = await cacheRes.json();
         if (cacheData.found && cacheData.topics) {
           setDiscussionTopics(cacheData.topics);
@@ -151,7 +158,7 @@ export default function UnifiedCallPage() {
         // No cache — generate on demand
         const res = await fetch('/api/agent/discussion-topics', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeaders },
           body: JSON.stringify({
             meetupId: meetupUUID,
             title: relatedData?.topic || relatedData?.name || '',
