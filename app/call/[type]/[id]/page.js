@@ -3441,145 +3441,60 @@ export default function UnifiedCallPage() {
 
           {/* Topics Content */}
           {showTopics && (enabledPanels.length === 1 || activeTab === 'topics') && (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Discussion Topics */}
-              <div className="p-3.5 flex flex-col gap-2.5">
-                <span
-                  className="text-[10px] font-bold uppercase"
-                  style={{ color: '#D4A574', letterSpacing: '1.2px' }}
+            <div className="flex-1 overflow-y-auto p-3.5 flex flex-col gap-2.5 scrollbar-thin">
+              <span
+                className="text-[10px] font-bold uppercase"
+                style={{ color: '#D4A574', letterSpacing: '1.2px' }}
+              >
+                Suggested Topics
+              </span>
+              {!discussionTopics ? (
+                <div
+                  className="rounded-2xl p-4"
+                  style={{
+                    background: 'linear-gradient(135deg, rgba(212,165,116,0.15) 0%, rgba(139,94,60,0.12) 100%)',
+                    border: '1px solid rgba(212,165,116,0.25)',
+                  }}
                 >
-                  Suggested Topics
-                </span>
-                {!discussionTopics ? (
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    <span style={{ color: '#D4A574' }} className="text-sm">Loading topics...</span>
+                  </div>
+                </div>
+              ) : discussionTopics.length > 0 ? (
+                discussionTopics.map((item, i) => (
                   <div
-                    className="rounded-2xl p-4"
+                    key={i}
+                    className="flex gap-3 items-start rounded-xl p-3"
                     style={{
-                      background: 'linear-gradient(135deg, rgba(212,165,116,0.15) 0%, rgba(139,94,60,0.12) 100%)',
-                      border: '1px solid rgba(212,165,116,0.25)',
+                      background: 'rgba(245,237,228,0.06)',
+                      border: '1px solid rgba(245,237,228,0.05)',
                     }}
                   >
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                      <span style={{ color: '#D4A574' }} className="text-sm">Loading topics...</span>
+                    <span className="text-base flex-shrink-0 mt-0.5">{item.emoji || '💡'}</span>
+                    <div className="flex-1 min-w-0">
+                      <p
+                        className="text-sm font-semibold"
+                        style={{ color: '#F5EDE4', margin: 0, lineHeight: 1.4 }}
+                      >
+                        {item.topic}
+                      </p>
+                      {item.reason && (
+                        <p
+                          className="text-xs mt-1"
+                          style={{ color: 'rgba(245,237,228,0.45)', margin: 0, lineHeight: 1.4 }}
+                        >
+                          {item.reason}
+                        </p>
+                      )}
                     </div>
                   </div>
-                ) : discussionTopics.length > 0 ? (
-                  discussionTopics.map((item, i) => (
-                    <div
-                      key={i}
-                      className="flex gap-3 items-start rounded-xl p-3"
-                      style={{
-                        background: 'rgba(245,237,228,0.06)',
-                        border: '1px solid rgba(245,237,228,0.05)',
-                      }}
-                    >
-                      <span className="text-base flex-shrink-0 mt-0.5">{item.emoji || '💡'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p
-                          className="text-sm font-semibold"
-                          style={{ color: '#F5EDE4', margin: 0, lineHeight: 1.4 }}
-                        >
-                          {item.topic}
-                        </p>
-                        {item.reason && (
-                          <p
-                            className="text-xs mt-1"
-                            style={{ color: 'rgba(245,237,228,0.45)', margin: 0, lineHeight: 1.4 }}
-                          >
-                            {item.reason}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm" style={{ color: 'rgba(245,237,228,0.5)' }}>
-                    No topics available for this event.
-                  </p>
-                )}
-              </div>
-
-              {/* Live Transcript */}
-              <div className="flex-1 flex flex-col min-h-0">
-                <div className="mx-3.5 mb-2 flex items-center gap-2">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{
-                      background: isTranscribing ? '#6BBF6A' : 'rgba(245,237,228,0.3)',
-                      animation: isTranscribing ? 'pulse 2s ease infinite' : 'none',
-                    }}
-                  />
-                  <span className="text-xs font-semibold" style={{ color: '#F5EDE4', letterSpacing: '0.02em' }}>
-                    Live Transcript
-                  </span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto px-3.5 pb-3 space-y-2.5 scrollbar-thin">
-                  {transcript.length === 0 && !interimText ? (
-                    <div className="flex flex-col items-center justify-center pt-12 gap-3">
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(245,237,228,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                        <line x1="12" y1="19" x2="12" y2="23" />
-                        <line x1="8" y1="23" x2="16" y2="23" />
-                      </svg>
-                      <span className="text-sm font-medium" style={{ color: 'rgba(245,237,228,0.5)' }}>
-                        {isTranscribing ? 'Listening... Start speaking!' : 'Transcript will appear here'}
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      {transcript.map((entry, idx) => (
-                        <div key={idx} className="animate-slide-up" style={{ animationDelay: `${idx * 0.1}s` }}>
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-xs font-semibold" style={{ color: '#D4A574' }}>
-                              {entry.speakerName}
-                            </span>
-                            <span className="text-[10px]" style={{ color: 'rgba(245,237,228,0.3)' }}>
-                              {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <div
-                            className="rounded-xl px-3 py-2 text-sm"
-                            style={{
-                              background: 'rgba(245,237,228,0.08)',
-                              borderLeft: '2px solid rgba(212,165,116,0.25)',
-                              color: 'rgba(245,237,228,0.8)',
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {entry.text}
-                          </div>
-                        </div>
-                      ))}
-                      {/* Show interim text while speaking */}
-                      {interimText && (
-                        <div className="animate-slide-up opacity-70">
-                          <div className="flex items-center gap-1.5 mb-1">
-                            <span className="text-xs font-semibold" style={{ color: '#D4A574' }}>
-                              {user?.name || 'You'}
-                            </span>
-                            <span className="text-[10px]" style={{ color: '#6BBF6A' }}>
-                              speaking...
-                            </span>
-                          </div>
-                          <div
-                            className="rounded-xl px-3 py-2 text-sm italic"
-                            style={{
-                              background: 'rgba(245,237,228,0.08)',
-                              borderLeft: '2px solid rgba(107,191,106,0.4)',
-                              color: 'rgba(245,237,228,0.7)',
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {interimText}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
+                ))
+              ) : (
+                <p className="text-sm" style={{ color: 'rgba(245,237,228,0.5)' }}>
+                  No topics available for this event.
+                </p>
+              )}
             </div>
           )}
 
