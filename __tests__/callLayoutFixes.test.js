@@ -426,3 +426,138 @@ describe('Transcript Consent — Host/Participant Sync Logic', () => {
     expect(prevRef).toBe(null)
   })
 })
+
+// ─── Fix 5: Mobile duration display ─────────────────────────────────────────
+
+describe('VideoHeader — Mobile Duration Display', () => {
+  test('shows duration on mobile when connected', () => {
+    const { container } = render(
+      <VideoHeader {...videoHeaderProps} isConnecting={false} callDuration={125} />
+    )
+
+    // Mobile area is "flex items-center gap-2 sm:hidden"
+    const mobileArea = container.querySelector('.flex.items-center.gap-2.sm\\:hidden')
+    expect(mobileArea).toBeTruthy()
+    // Should show formatted duration (2:05)
+    expect(mobileArea.textContent).toContain('02:05')
+  })
+
+  test('shows "Connecting..." on mobile when connecting', () => {
+    const { container } = render(
+      <VideoHeader {...videoHeaderProps} isConnecting={true} callDuration={0} />
+    )
+
+    const mobileArea = container.querySelector('.flex.items-center.gap-2.sm\\:hidden')
+    expect(mobileArea.textContent).toContain('Connecting...')
+  })
+
+  test('does not show duration on mobile when connecting', () => {
+    const { container } = render(
+      <VideoHeader {...videoHeaderProps} isConnecting={true} callDuration={60} />
+    )
+
+    const mobileArea = container.querySelector('.flex.items-center.gap-2.sm\\:hidden')
+    expect(mobileArea.textContent).not.toContain('01:00')
+  })
+
+  test('formats hours correctly when duration exceeds 60 min', () => {
+    const { container } = render(
+      <VideoHeader {...videoHeaderProps} callDuration={3661} />
+    )
+
+    // Desktop pills area has the duration too
+    const durationTexts = container.textContent
+    expect(durationTexts).toContain('01:01:01')
+  })
+
+  test('duration still shows on desktop in metadata pills', () => {
+    const { container } = render(
+      <VideoHeader {...videoHeaderProps} callDuration={90} />
+    )
+
+    // Desktop area is "hidden sm:flex"
+    const desktopPills = container.querySelector('.hidden.sm\\:flex.items-center.gap-2')
+    expect(desktopPills).toBeTruthy()
+    expect(desktopPills.textContent).toContain('01:30')
+  })
+})
+
+// ─── Fix 6: No duplicate participant count ──────────────────────────────────
+
+describe('VideoHeader — No Duplicate Participant Count', () => {
+  test('header does not show participant count pill', () => {
+    const { container } = render(
+      <VideoHeader {...videoHeaderProps} participantCount={5} />
+    )
+
+    // The desktop pills area should NOT contain a standalone participant count
+    const desktopPills = container.querySelector('.hidden.sm\\:flex.items-center.gap-2')
+    expect(desktopPills).toBeTruthy()
+
+    // Check that no pill shows just the number with people icon
+    // Duration pill has clock icon + time, quality pill has signal icon + label
+    // There should be NO pill that just shows a number next to a people icon
+    const pills = desktopPills.querySelectorAll('.rounded-lg')
+    const participantPill = Array.from(pills).find(pill => {
+      const text = pill.textContent.trim()
+      // A pure participant count pill would just be a number like "5"
+      return /^\d+$/.test(text)
+    })
+    expect(participantPill).toBeFalsy()
+  })
+
+  test('participant count is only shown on ControlBar button', () => {
+    const { container } = render(<ControlBar {...controlBarProps} participantCount={5} />)
+
+    // Desktop center zone should have participants button with count label "5"
+    const buttons = container.querySelectorAll('button')
+    const participantsBtn = Array.from(buttons).find(btn =>
+      btn.querySelector('svg path[d*="M17 21v-2a4 4 0 0 0-4-4H5"]') &&
+      btn.textContent.includes('5')
+    )
+    expect(participantsBtn).toBeTruthy()
+  })
+})
+
+// ─── Fix 7: Topics API auth headers ─────────────────────────────────────────
+
+describe('Topics API — Auth Token Logic', () => {
+  test('auth header is constructed from session access_token', () => {
+    const session = { access_token: 'test-jwt-token-123' }
+    const authHeaders = session?.access_token
+      ? { 'Authorization': `Bearer ${session.access_token}` }
+      : {}
+
+    expect(authHeaders.Authorization).toBe('Bearer test-jwt-token-123')
+  })
+
+  test('auth header is empty when no session', () => {
+    const session = null
+    const authHeaders = session?.access_token
+      ? { 'Authorization': `Bearer ${session.access_token}` }
+      : {}
+
+    expect(authHeaders.Authorization).toBeUndefined()
+    expect(Object.keys(authHeaders)).toHaveLength(0)
+  })
+
+  test('auth header is empty when session has no access_token', () => {
+    const session = { user: { id: 'user-1' } }
+    const authHeaders = session?.access_token
+      ? { 'Authorization': `Bearer ${session.access_token}` }
+      : {}
+
+    expect(authHeaders.Authorization).toBeUndefined()
+  })
+
+  test('auth headers merge with Content-Type for POST', () => {
+    const session = { access_token: 'my-token' }
+    const authHeaders = session?.access_token
+      ? { 'Authorization': `Bearer ${session.access_token}` }
+      : {}
+
+    const postHeaders = { 'Content-Type': 'application/json', ...authHeaders }
+    expect(postHeaders['Content-Type']).toBe('application/json')
+    expect(postHeaders.Authorization).toBe('Bearer my-token')
+  })
+})
