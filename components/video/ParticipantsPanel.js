@@ -121,7 +121,7 @@ const Avatar = ({ name, color, size = 40, online }) => {
 /**
  * Participant Row Component
  */
-const ParticipantRow = ({ name, role, isHost, mic, cam, screen, color, online, index }) => {
+const ParticipantRow = ({ name, role, isHost, mic, cam, screen, color, online, index, isRaised, canLowerHand, onLowerHand }) => {
   return (
     <div
       className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors hover:bg-white/5 animate-slide-up"
@@ -151,6 +151,7 @@ const ParticipantRow = ({ name, role, isHost, mic, cam, screen, color, online, i
               {role}
             </span>
           )}
+          {isRaised && <span className="text-base flex-shrink-0">✋</span>}
         </div>
         {isHost && (
           <span className="text-xs font-medium" style={{ color: C.textFaint }}>
@@ -161,6 +162,19 @@ const ParticipantRow = ({ name, role, isHost, mic, cam, screen, color, online, i
 
       {/* Status icons */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
+        {isRaised && canLowerHand && (
+          <button
+            onClick={onLowerHand}
+            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+            style={{ background: C.redSoft, color: C.red }}
+            title="Lower hand"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
         {screen && (
           <div
             className="w-7 h-7 rounded-lg flex items-center justify-center"
@@ -204,6 +218,9 @@ export default function ParticipantsPanel({
   onVideoOnAll,
   transcriptionLanguage = 'en-US',
   onSetLanguageAll,
+  raisedHands = [],
+  onLowerHand,
+  onLowerAllHands,
 }) {
   const allConnected = remoteParticipants.every((p) => p.connectionQuality !== 'poor');
 
@@ -259,6 +276,24 @@ export default function ParticipantsPanel({
         </div>
       )}
 
+      {/* Lower all hands — host only, visible when hands are raised */}
+      {isHost && raisedHands.length > 0 && (
+        <div className="mb-3">
+          <button
+            onClick={onLowerAllHands}
+            className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[12px] font-semibold transition-colors"
+            style={{
+              background: 'rgba(245,237,228,0.06)',
+              color: C.text,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            ✋ Lower All Hands ({raisedHands.length})
+          </button>
+        </div>
+      )}
+
       {/* Host language control */}
       {isHost && onSetLanguageAll && (
         <div className="mb-3">
@@ -310,23 +345,39 @@ export default function ParticipantsPanel({
           color="linear-gradient(135deg, #D4A574, #8B5E3C)"
           online={true}
           index={0}
+          isRaised={raisedHands.some(h => h.userId === currentUser?.id)}
         />
 
-        {/* Remote Participants */}
-        {remoteParticipants.map((participant, i) => (
-          <ParticipantRow
-            key={participant.id || participant.uid}
-            name={participant.name || participant.identity || 'Anonymous'}
-            role={null}
-            isHost={false}
-            mic={participant.hasAudio}
-            cam={participant.hasVideo}
-            screen={participant.hasScreen}
-            color="linear-gradient(135deg, #C49A6C, #7B5E3C)"
-            online={participant.connectionQuality !== 'poor'}
-            index={i + 1}
-          />
-        ))}
+        {/* Remote Participants — raised hands sorted to top in queue order */}
+        {[...remoteParticipants]
+          .sort((a, b) => {
+            const aIdx = raisedHands.findIndex(h => h.userId === (a.id || a.uid));
+            const bIdx = raisedHands.findIndex(h => h.userId === (b.id || b.uid));
+            if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+            if (aIdx !== -1) return -1;
+            if (bIdx !== -1) return 1;
+            return 0;
+          })
+          .map((participant, i) => {
+            const pid = participant.id || participant.uid;
+            return (
+              <ParticipantRow
+                key={pid}
+                name={participant.name || participant.identity || 'Anonymous'}
+                role={null}
+                isHost={false}
+                mic={participant.hasAudio}
+                cam={participant.hasVideo}
+                screen={participant.hasScreen}
+                color="linear-gradient(135deg, #C49A6C, #7B5E3C)"
+                online={participant.connectionQuality !== 'poor'}
+                index={i + 1}
+                isRaised={raisedHands.some(h => h.userId === pid)}
+                canLowerHand={isHost}
+                onLowerHand={() => onLowerHand?.(pid)}
+              />
+            );
+          })}
       </div>
 
       {/* Empty state */}

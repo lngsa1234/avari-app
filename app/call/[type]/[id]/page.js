@@ -63,6 +63,7 @@ export default function UnifiedCallPage() {
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
   const [remoteParticipants, setRemoteParticipants] = useState([]);
+  const [raisedHands, setRaisedHands] = useState([]);
   // WebRTC only: tracks whether the remote peer is present in the
   // signaling room (announced via socket 'joined' or 'user-joined'
   // events), independent of whether their media tracks have arrived
@@ -1352,7 +1353,12 @@ export default function UnifiedCallPage() {
       if (participant?.identity) allParticipantIdsRef.current.add(participant.identity);
       updateLiveKitParticipants(room);
     });
-    room.on(RoomEvent.ParticipantDisconnected, () => updateLiveKitParticipants(room));
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      if (participant?.identity) {
+        setRaisedHands(prev => prev.filter(h => h.userId !== participant.identity));
+      }
+      updateLiveKitParticipants(room);
+    });
     room.on(RoomEvent.TrackSubscribed, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackUnsubscribed, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackMuted, () => updateLiveKitParticipants(room));
@@ -1474,6 +1480,8 @@ export default function UnifiedCallPage() {
       if (setRemoteSpeakingRef.current) {
         setRemoteSpeakingRef.current(String(remoteUser.uid), false);
       }
+      // Auto-lower hand on leave
+      setRaisedHands(prev => prev.filter(h => h.userId !== String(remoteUser.uid)));
       updateAgoraParticipants(client);
     });
 
@@ -1976,6 +1984,27 @@ export default function UnifiedCallPage() {
       } else if (payload?.command === 'set-language' && payload?.language) {
         handleLanguageChange(payload.language);
       }
+    }).on('broadcast', { event: 'hand-status' }, ({ payload }) => {
+      if (!payload) return;
+      switch (payload.type) {
+        case 'hand:raise':
+          setRaisedHands(prev => {
+            if (prev.some(h => h.userId === payload.userId)) return prev;
+            return [...prev, {
+              userId: payload.userId,
+              name: payload.name,
+              avatarUrl: payload.avatarUrl,
+              raisedAt: payload.raisedAt,
+            }];
+          });
+          break;
+        case 'hand:lower':
+          setRaisedHands(prev => prev.filter(h => h.userId !== payload.userId));
+          break;
+        case 'hand:lower-all':
+          setRaisedHands([]);
+          break;
+      }
     }).subscribe();
 
     hostChannelRef.current = channel;
@@ -2020,6 +2049,41 @@ export default function UnifiedCallPage() {
       payload: { command: 'set-language', language, from: user?.id },
     });
     handleLanguageChange(language);
+  };
+
+  // Raise hand controls
+  const isHandRaised = raisedHands.some(h => h.userId === user?.id);
+
+  const handleToggleHand = () => {
+    hostChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'hand-status',
+      payload: isHandRaised
+        ? { type: 'hand:lower', userId: user?.id }
+        : {
+            type: 'hand:raise',
+            userId: user?.id,
+            name: user?.user_metadata?.full_name || user?.email?.split('@')[0],
+            avatarUrl: user?.user_metadata?.avatar_url || null,
+            raisedAt: Date.now(),
+          },
+    });
+  };
+
+  const handleLowerHand = (userId) => {
+    hostChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'hand-status',
+      payload: { type: 'hand:lower', userId },
+    });
+  };
+
+  const handleLowerAllHands = () => {
+    hostChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'hand-status',
+      payload: { type: 'hand:lower-all' },
+    });
   };
 
   // Detect screen share support (iOS browsers don't support getDisplayMedia)
@@ -2529,6 +2593,7 @@ export default function UnifiedCallPage() {
     setLocalVideoTrack(null);
     setLocalAudioTrack(null);
     setRemoteParticipants([]);
+    setRaisedHands([]);
     // Fix A: clear the persistent remote tracks ref on final leave
     // (it was intentionally kept across PC recreations during the call)
     remoteTracksRef.current = { video: null, audio: null };
@@ -3193,6 +3258,8 @@ export default function UnifiedCallPage() {
           showParticipants={showParticipants}
           messagesCount={unreadCount}
           participantCount={remoteParticipants.length + 1}
+          raisedHandCount={raisedHands.length}
+          isHandRaised={isHandRaised}
           transcriptionLanguage={transcriptionLanguage}
           videoDevices={videoDevices}
           audioDevices={audioDevices}
@@ -3205,6 +3272,7 @@ export default function UnifiedCallPage() {
           consentStatus={consentStatus}
           consentMode={config?.consentMode}
           features={config.features}
+          onToggleHand={handleToggleHand}
           onToggleMute={handleToggleMute}
           onToggleVideo={handleToggleVideo}
           onToggleBlur={handleToggleBlur}
@@ -3504,6 +3572,9 @@ export default function UnifiedCallPage() {
               onVideoOnAll={handleVideoOnAll}
               transcriptionLanguage={transcriptionLanguage}
               onSetLanguageAll={handleSetLanguageAll}
+              raisedHands={raisedHands}
+              onLowerHand={handleLowerHand}
+              onLowerAllHands={handleLowerAllHands}
             />
           )}
 
