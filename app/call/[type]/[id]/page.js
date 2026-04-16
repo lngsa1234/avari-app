@@ -2424,11 +2424,19 @@ export default function UnifiedCallPage() {
     const justAccepted = consentStatus === 'accepted' && prevConsentStatusRef.current !== 'accepted';
     prevConsentStatusRef.current = consentStatus;
 
-    if (justAccepted && !isTranscribing && !transcriptStoppedRef.current && config?.consentMode === 'mutual') {
+    if (justAccepted && !isTranscribing && !transcriptStoppedRef.current) {
       const started = startListening();
       if (started) setIsTranscribing(true);
     }
-  }, [consentStatus, isTranscribing, startListening, config?.consentMode]);
+
+    // When host stops transcription, consent goes from 'accepted' → null
+    // Stop local transcription for participants
+    const justRevoked = consentStatus == null && prevConsentStatusRef.current === 'accepted';
+    if (justRevoked && isTranscribing) {
+      stopListening();
+      setIsTranscribing(false);
+    }
+  }, [consentStatus, isTranscribing, startListening, stopListening]);
 
   // Send message
   const handleSendMessage = async (e) => {
