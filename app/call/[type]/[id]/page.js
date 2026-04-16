@@ -1985,7 +1985,7 @@ export default function UnifiedCallPage() {
         handleLanguageChange(payload.language);
       }
     }).on('broadcast', { event: 'hand-status' }, ({ payload }) => {
-      if (!payload) return;
+      if (!payload || payload.from === user?.id) return; // sender already updated local state
       switch (payload.type) {
         case 'hand:raise':
           setRaisedHands(prev => {
@@ -2055,34 +2055,49 @@ export default function UnifiedCallPage() {
   const isHandRaised = raisedHands.some(h => h.userId === user?.id);
 
   const handleToggleHand = () => {
-    hostChannelRef.current?.send({
-      type: 'broadcast',
-      event: 'hand-status',
-      payload: isHandRaised
-        ? { type: 'hand:lower', userId: user?.id }
-        : {
-            type: 'hand:raise',
-            userId: user?.id,
-            name: user?.user_metadata?.full_name || user?.email?.split('@')[0],
-            avatarUrl: user?.user_metadata?.avatar_url || null,
-            raisedAt: Date.now(),
-          },
-    });
+    if (isHandRaised) {
+      // Lower own hand — update local state + broadcast
+      setRaisedHands(prev => prev.filter(h => h.userId !== user?.id));
+      hostChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'hand-status',
+        payload: { type: 'hand:lower', userId: user?.id, from: user?.id },
+      });
+    } else {
+      // Raise hand — update local state + broadcast
+      const entry = {
+        userId: user?.id,
+        name: user?.user_metadata?.full_name || user?.email?.split('@')[0],
+        avatarUrl: user?.user_metadata?.avatar_url || null,
+        raisedAt: Date.now(),
+      };
+      setRaisedHands(prev => {
+        if (prev.some(h => h.userId === user?.id)) return prev;
+        return [...prev, entry];
+      });
+      hostChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'hand-status',
+        payload: { type: 'hand:raise', ...entry, from: user?.id },
+      });
+    }
   };
 
   const handleLowerHand = (userId) => {
+    setRaisedHands(prev => prev.filter(h => h.userId !== userId));
     hostChannelRef.current?.send({
       type: 'broadcast',
       event: 'hand-status',
-      payload: { type: 'hand:lower', userId },
+      payload: { type: 'hand:lower', userId, from: user?.id },
     });
   };
 
   const handleLowerAllHands = () => {
+    setRaisedHands([]);
     hostChannelRef.current?.send({
       type: 'broadcast',
       event: 'hand-status',
-      payload: { type: 'hand:lower-all' },
+      payload: { type: 'hand:lower-all', from: user?.id },
     });
   };
 
