@@ -90,6 +90,7 @@ export default function CircleDetailView({
     description: '',
     location: '',
     vibe_category: '',
+    what_to_expect: '',
   });
   const [saving, setSaving] = useState(false);
   const [circleMeetups, setCircleMeetups] = useState([]);
@@ -596,6 +597,7 @@ export default function CircleDetailView({
       description: circle?.description || '',
       location: circle?.location || '',
       vibe_category: circle?.vibe_category || '',
+      what_to_expect: circle?.what_to_expect || '',
     });
     setShowEditModal(true);
   };
@@ -626,6 +628,7 @@ export default function CircleDetailView({
         ...updateData,
         description: editForm.description?.trim() || null,
         location: editForm.location?.trim() || null,
+        what_to_expect: editForm.what_to_expect?.trim() || null,
       };
 
       const { error } = await supabase
@@ -1246,21 +1249,57 @@ export default function CircleDetailView({
 
         {/* What to Expect */}
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>What to expect</h3>
-          <div style={styles.expectList}>
-            <div style={styles.expectItem}>
-              <span style={styles.expectEmoji}>🤝</span>
-              <span style={styles.expectText}>A safe, judgment-free space to share and connect</span>
-            </div>
-            <div style={styles.expectItem}>
-              <span style={styles.expectEmoji}>💬</span>
-              <span style={styles.expectText}>Regular meetups with meaningful conversations</span>
-            </div>
-            <div style={styles.expectItem}>
-              <span style={styles.expectEmoji}>🌱</span>
-              <span style={styles.expectText}>Lasting connections that grow over time</span>
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={styles.sectionTitle}>What to expect</h3>
+            {isHost && (
+              <button
+                onClick={handleOpenEdit}
+                style={{
+                  background: 'none', border: '1px solid ' + colors.border,
+                  borderRadius: '8px', padding: '6px 10px',
+                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
+                  color: colors.textLight, fontSize: '12px', fontWeight: '600',
+                  flexShrink: 0,
+                }}
+              >
+                <Edit3 size={13} /> Edit
+              </button>
+            )}
           </div>
+          {circle?.what_to_expect?.trim() ? (
+            <div style={styles.expectList}>
+              {circle.what_to_expect
+                .split('\n')
+                .map(line => line.trim())
+                .filter(Boolean)
+                .map((line, i) => {
+                  const emojiMatch = line.match(/^(\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\u200D\p{Extended_Pictographic})*)\s*(.*)$/u);
+                  const emoji = emojiMatch ? emojiMatch[1] : '•';
+                  const text = emojiMatch ? emojiMatch[2] : line.replace(/^[-•*]\s*/, '');
+                  return (
+                    <div key={i} style={styles.expectItem}>
+                      <span style={styles.expectEmoji}>{emoji}</span>
+                      <span style={styles.expectText}>{text}</span>
+                    </div>
+                  );
+                })}
+            </div>
+          ) : (
+            <div style={styles.expectList}>
+              <div style={styles.expectItem}>
+                <span style={styles.expectEmoji}>🤝</span>
+                <span style={styles.expectText}>A safe, judgment-free space to share and connect</span>
+              </div>
+              <div style={styles.expectItem}>
+                <span style={styles.expectEmoji}>💬</span>
+                <span style={styles.expectText}>Regular meetups with meaningful conversations</span>
+              </div>
+              <div style={styles.expectItem}>
+                <span style={styles.expectEmoji}>🌱</span>
+                <span style={styles.expectText}>Lasting connections that grow over time</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Past Sessions */}
@@ -1694,6 +1733,19 @@ export default function CircleDetailView({
                   placeholder="What is this circle about?"
                   rows={3}
                   maxLength={500}
+                />
+              </div>
+
+              {/* What to Expect */}
+              <div style={styles.formGroup}>
+                <label style={styles.formLabel}>What to expect</label>
+                <textarea
+                  value={editForm.what_to_expect}
+                  onChange={(e) => setEditForm({ ...editForm, what_to_expect: e.target.value })}
+                  style={styles.formTextarea}
+                  placeholder={'🤝 A safe, judgment-free space to share and connect\n💬 Regular meetups with meaningful conversations\n🌱 Lasting connections that grow over time'}
+                  rows={5}
+                  maxLength={1000}
                 />
               </div>
 
