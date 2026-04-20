@@ -1,0 +1,14 @@
+.next/
+node_modules/
+out/
+build/
+dist/
+coverage/
+playwright-report/
+test-results/
+public/
+*.config.js
+
+# Design mockups and HTML/JSX reference files — not shipped as app code.
+app/UX reference/
+app/New feature reference/
