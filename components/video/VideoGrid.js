@@ -1,13 +1,45 @@
 'use client';
 
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import LocalVideo from './LocalVideo';
 import RemoteVideo from './RemoteVideo';
 import ScreenShareView from './ScreenShareView';
 
+const TILE_ASPECT = 16 / 9;
+const GAP_PX = 8;
+
+// Pick (cols, rows) that maximize each tile's area given container dims,
+// assuming a 16:9 aspect per tile. At equal area we prefer more cols
+// (wider beats taller) since meeting grids read better that way.
+function computeLayout(n, w, h) {
+  if (n <= 0) return { cols: 1, rows: 1, tileW: 0, tileH: 0 };
+  if (!w || !h) {
+    const cols = Math.ceil(Math.sqrt(n));
+    const rows = Math.ceil(n / cols);
+    return { cols, rows, tileW: 0, tileH: 0 };
+  }
+  let best = { cols: 1, rows: n, tileW: 0, tileH: 0, area: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const availW = w - (cols - 1) * GAP_PX;
+    const availH = h - (rows - 1) * GAP_PX;
+    if (availW <= 0 || availH <= 0) continue;
+    const cellW = availW / cols;
+    const cellH = availH / rows;
+    const tileW = Math.min(cellW, cellH * TILE_ASPECT);
+    const tileH = tileW / TILE_ASPECT;
+    const area = tileW * tileH;
+    if (area >= best.area) {
+      best = { cols, rows, tileW, tileH, area };
+    }
+  }
+  return best;
+}
+
 /**
  * Video Grid Layout
- * Displays all participants in a responsive grid
- * Shows screen share as main area when active (or side panel if local user is sharing)
+ * Displays all participants as equal tiles.
+ * Clicking a tile promotes that participant to speaker mode.
  */
 export default function VideoGrid({
   // Local user
@@ -35,29 +67,32 @@ export default function VideoGrid({
   onToggleBlur,
   blurCanvas = null,
 
-  // UI
-  showSidebar = false,
+  // Tile selection — called with 'local' or remote id/uid string
+  onSelectSpeaker,
 }) {
   const participantCount = remoteParticipants.length + 1; // +1 for local
   const hasScreenShare = localScreenTrack || remoteScreenTrack;
   const isLocalSharing = !!localScreenTrack;
 
-  // Calculate grid columns based on participant count (mobile-first responsive)
-  const getGridClasses = () => {
-    // When viewing someone else's screen share, use smaller grid
-    if (remoteScreenTrack && !localScreenTrack) {
-      if (participantCount <= 2) return 'grid-cols-2';
-      return 'grid-cols-2 md:grid-cols-4';
-    }
-    // Normal grid layout
-    if (participantCount === 1) return 'grid-cols-1';
-    if (participantCount === 2) return 'grid-cols-1 sm:grid-cols-2';
-    if (participantCount <= 4) return 'grid-cols-2';
-    if (participantCount <= 6) return 'grid-cols-2 md:grid-cols-3';
-    return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
-  };
+  const containerRef = useRef(null);
+  const [dims, setDims] = useState({ w: 0, h: 0 });
 
-  // Screen share layout: screen as main, cameras on the side
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setDims({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const { cols, rows, tileW, tileH } = useMemo(
+    () => computeLayout(participantCount, dims.w, dims.h),
+    [participantCount, dims.w, dims.h]
+  );
+
+  // Screen share layout: screen as main, cameras on the side (unchanged)
   if (hasScreenShare) {
     return (
       <div className="w-full h-full flex flex-col md:flex-row gap-2">
@@ -111,25 +146,18 @@ export default function VideoGrid({
     );
   }
 
-  // For odd participant counts in a 2-col grid, use flex layout for the last row
-  // so the last item is centered at the same size as others
-  const isOdd = participantCount % 2 !== 0 && participantCount >= 3;
-  const gridCols = getGridClasses();
-  const usesTwoCols = gridCols.includes('grid-cols-2');
-  const centerLast = isOdd && usesTwoCols;
+  // Split tiles into full rows + an incomplete last row, so every tile stays
+  // the same size and the last row is visually centered.
+  const lastRowCount = participantCount - (rows - 1) * cols;
+  const lastRowIncomplete = lastRowCount > 0 && lastRowCount < cols;
+  const fullRowCount = lastRowIncomplete ? rows - 1 : rows;
+  const fullRowTileCount = fullRowCount * cols;
+  const ready = tileW > 0 && tileH > 0;
 
-  // Split participants: paired rows go in grid, last odd one is centered below
-  const pairedRemote = centerLast ? remoteParticipants.slice(0, -1) : remoteParticipants;
-  const lastParticipant = centerLast ? remoteParticipants[remoteParticipants.length - 1] : null;
-
-  return (
-    <div className="w-full h-full flex flex-col gap-2">
-      {/* Grid for paired participants */}
-      <div
-        className={`flex-1 grid gap-2 auto-rows-fr ${gridCols}`}
-        style={centerLast ? { minHeight: 0 } : undefined}
-      >
-        {/* Local Video */}
+  const tiles = [
+    {
+      key: 'local',
+      node: (
         <LocalVideo
           ref={localVideoRef}
           track={localVideoTrack}
@@ -144,29 +172,58 @@ export default function VideoGrid({
           isBlurLoading={isBlurLoading}
           onToggleBlur={onToggleBlur}
           blurCanvas={blurCanvas}
+          onClick={onSelectSpeaker ? () => onSelectSpeaker('local') : undefined}
         />
-
-        {/* Paired Remote Videos */}
-        {pairedRemote.map((participant) => (
+      ),
+    },
+    ...remoteParticipants.map((participant) => {
+      const pid = String(participant.id || participant.uid);
+      return {
+        key: pid,
+        node: (
           <RemoteVideo
-            key={participant.id || participant.uid}
             participant={participant}
             providerType={providerType}
             size="grid"
+            onClick={onSelectSpeaker ? () => onSelectSpeaker(pid) : undefined}
           />
-        ))}
-      </div>
+        ),
+      };
+    }),
+  ];
 
-      {/* Centered last participant for odd count */}
-      {lastParticipant && (
-        <div className="flex-1 flex justify-center min-h-0">
-          <div className="h-full" style={{ aspectRatio: '16/9', maxWidth: '50%' }}>
-            <RemoteVideo
-              participant={lastParticipant}
-              providerType={providerType}
-              size="grid"
-            />
-          </div>
+  const fullRowTiles = tiles.slice(0, fullRowTileCount);
+  const lastRowTiles = lastRowIncomplete ? tiles.slice(fullRowTileCount) : [];
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-full h-full flex flex-col items-center justify-center"
+      style={{ gap: `${GAP_PX}px` }}
+    >
+      {ready && fullRowCount > 0 && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${cols}, ${tileW}px)`,
+            gridTemplateRows: `repeat(${fullRowCount}, ${tileH}px)`,
+            gap: `${GAP_PX}px`,
+          }}
+        >
+          {fullRowTiles.map((t) => (
+            <div key={t.key} style={{ width: tileW, height: tileH }}>
+              {t.node}
+            </div>
+          ))}
+        </div>
+      )}
+      {ready && lastRowIncomplete && (
+        <div style={{ display: 'flex', gap: `${GAP_PX}px` }}>
+          {lastRowTiles.map((t) => (
+            <div key={t.key} style={{ width: tileW, height: tileH }}>
+              {t.node}
+            </div>
+          ))}
         </div>
       )}
     </div>

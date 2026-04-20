@@ -76,15 +76,12 @@ export default function UnifiedCallPage() {
   // the parent only needs to provide the onSubmit callback.
   const allParticipantIdsRef = useRef(new Set()); // Track everyone who ever joined
   const [activeSpeakerId, setActiveSpeakerId] = useState(null);
-  const activeSpeakerTimeoutRef = useRef(null);
 
   // Control state
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [gridView, setGridView] = useState(true); // Start in grid, auto-switch to speaker when someone talks
-  const [autoSwitchedToSpeaker, setAutoSwitchedToSpeaker] = useState(false);
-  const autoSwitchedRef = useRef(false);
+  const [gridView, setGridView] = useState(true); // Grid is the default; user-controlled switch via tile clicks
   const gridViewRef = useRef(true);
   const activeSpeakerIdRef = useRef(null);
   // Keep refs in sync for use in event handler closures
@@ -1370,21 +1367,9 @@ export default function UnifiedCallPage() {
     room.on(RoomEvent.TrackUnsubscribed, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackMuted, () => updateLiveKitParticipants(room));
     room.on(RoomEvent.TrackUnmuted, () => updateLiveKitParticipants(room));
-    room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      const remoteSpeaker = speakers.find(s => s.identity !== user?.id);
-      if (remoteSpeaker) {
-        setActiveSpeakerId(remoteSpeaker.identity);
-        // Auto-switch from grid to speaker mode on first speech
-        if (!autoSwitchedRef.current) {
-          autoSwitchedRef.current = true;
-          setAutoSwitchedToSpeaker(true);
-          setGridView(false);
-        }
-        clearTimeout(activeSpeakerTimeoutRef.current);
-        activeSpeakerTimeoutRef.current = setTimeout(() => {
-          setActiveSpeakerId(null);
-        }, 3000);
-      }
+    room.on(RoomEvent.ActiveSpeakersChanged, () => {
+      // Speaker changes are informational only — grid/speaker switching is
+      // fully user-controlled via tile clicks.
       updateLiveKitParticipants(room);
     });
     room.on(RoomEvent.Disconnected, () => setIsJoined(false));
@@ -1534,42 +1519,16 @@ export default function UnifiedCallPage() {
       videoTrack.play(localVideoRef.current);
     }
 
-    // Enable volume indicator for echo suppression — mutes mic→Deepgram when
-    // remote users are speaking to prevent speaker audio from being transcribed
+    // Enable volume indicator for the per-tile speaking dot and transcript
+    // echo guard. Does NOT drive grid/speaker-mode switching — that's fully
+    // user-controlled via tile clicks.
     client.enableAudioVolumeIndicator();
     client.on('volume-indicator', (volumes) => {
       if (!setRemoteSpeakingRef.current) return;
-      let loudestUid = null;
-      let loudestLevel = 0;
-      let anyRemoteSpeaking = false;
       for (const { uid, level } of volumes) {
         const uidStr = String(uid);
-        // Skip local user (uid 0 or our own UID)
         if (uid === 0 || uidStr === String(agoraUid)) continue;
-        const isSpeaking = level > 5;
-        setRemoteSpeakingRef.current(uidStr, isSpeaking);
-        // Echo guard uses higher threshold — only block transcripts when remote
-        // audio is loud enough to actually leak through speakers into the mic
-        if (level > 30) anyRemoteSpeaking = true;
-        // Track loudest speaker for active speaker mode
-        if (level > loudestLevel && level > 5) {
-          loudestLevel = level;
-          loudestUid = uidStr;
-        }
-      }
-      // Update active speaker with debounce to avoid flicker
-      if (loudestUid) {
-        setActiveSpeakerId(loudestUid);
-        // Auto-switch from grid to speaker mode on first speech
-        if (!autoSwitchedRef.current) {
-          autoSwitchedRef.current = true;
-          setAutoSwitchedToSpeaker(true);
-          setGridView(false);
-        }
-        clearTimeout(activeSpeakerTimeoutRef.current);
-        activeSpeakerTimeoutRef.current = setTimeout(() => {
-          setActiveSpeakerId(null);
-        }, 3000);
+        setRemoteSpeakingRef.current(uidStr, level > 5);
       }
     });
 
@@ -2393,6 +2352,25 @@ export default function UnifiedCallPage() {
     handleToggleScreenShare();
   };
 
+  // Grid ↔ Speaker switching is fully user-driven: tap a tile to promote it,
+  // tap the main tile (or toggle the header button) to return to grid.
+  const handleSelectSpeaker = useCallback((speakerId) => {
+    if (speakerId === 'local') {
+      setIsLocalMain(true);
+      setActiveSpeakerId(null);
+    } else {
+      setIsLocalMain(false);
+      setActiveSpeakerId(speakerId);
+    }
+    setGridView(false);
+  }, []);
+
+  const handleReturnToGrid = useCallback(() => {
+    setGridView(true);
+    setActiveSpeakerId(null);
+    setIsLocalMain(false);
+  }, []);
+
   const toggleTranscription = useCallback(async () => {
     if (isTranscribing) {
       stopListening();
@@ -2511,10 +2489,6 @@ export default function UnifiedCallPage() {
     }
 
     // Cleanup based on provider
-    if (activeSpeakerTimeoutRef.current) {
-      clearTimeout(activeSpeakerTimeoutRef.current);
-      activeSpeakerTimeoutRef.current = null;
-    }
     if (echoGuardTimeoutRef.current) {
       clearTimeout(echoGuardTimeoutRef.current);
       echoGuardTimeoutRef.current = null;
@@ -3169,7 +3143,20 @@ export default function UnifiedCallPage() {
         isRecording={isRecording}
         gridView={gridView}
         showGridToggle={remoteParticipants.length > 0}
-        onToggleView={() => { setGridView(!gridView); autoSwitchedRef.current = true; }}
+        onToggleView={() => {
+          if (gridView) {
+            // Entering speaker mode via header — default to first remote so we
+            // always have something featured and keep the bandwidth-saving
+            // "only subscribe to the main speaker's video" path active.
+            if (!activeSpeakerId && !isLocalMain && remoteParticipants.length > 0) {
+              const first = remoteParticipants[0];
+              setActiveSpeakerId(String(first.id || first.uid));
+            }
+            setGridView(false);
+          } else {
+            handleReturnToGrid();
+          }
+        }}
         meetingId={roomId}
         callDuration={callDuration}
         connectionQuality={connectionQuality}
@@ -3212,6 +3199,7 @@ export default function UnifiedCallPage() {
             isBlurLoading={blurLoading}
             onToggleBlur={handleToggleBlur}
             blurCanvas={blurCanvasEl}
+            onSelectSpeaker={handleSelectSpeaker}
           />
         ) : (
           <VideoSpeakerView
@@ -3226,6 +3214,8 @@ export default function UnifiedCallPage() {
             activeSpeakerId={activeSpeakerId}
             isLocalMain={isLocalMain}
             onSwap={() => setIsLocalMain(!isLocalMain)}
+            onSelectSpeaker={handleSelectSpeaker}
+            onReturnToGrid={handleReturnToGrid}
             localScreenTrack={localScreenTrack}
             remoteScreenTrack={remoteScreenTrack}
             screenSharerName={screenSharerName}

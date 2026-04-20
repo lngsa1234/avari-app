@@ -7,12 +7,9 @@ import ScreenShareView from './ScreenShareView';
 
 /**
  * Speaker View Layout
- * Shows main speaker with thumbnails of other participants
- * Shows screen share as main area when active
- *
- * For 2 participants: PiP layout with swappable main/thumbnail
- * For 3+: Active speaker gets full video, others show as audio-only avatars (saves bandwidth)
- * For 1: Full screen local video
+ * Shows main speaker with thumbnails of other participants.
+ * All switching is user-controlled: tap a thumbnail to promote, tap the
+ * main tile to return to grid.
  */
 export default function VideoSpeakerView({
   // Local user
@@ -27,7 +24,7 @@ export default function VideoSpeakerView({
   remoteParticipants = [],
   providerType,
 
-  // Active speaker
+  // Active speaker (remote id/uid string, or null if local is featured)
   activeSpeakerId = null,
 
   // Screen share
@@ -43,13 +40,37 @@ export default function VideoSpeakerView({
   onToggleBlur,
   blurCanvas = null,
 
-  // For 2-person PiP swap
+  // Main-speaker selection
   isLocalMain = false,
-  onSwap,
+  onSwap,                 // used by the 2-person PiP layout
+  onSelectSpeaker,        // used by 3+ thumbnails — receives 'local' or remote id
+  onReturnToGrid,         // tap the large tile → back to grid
 }) {
-  const participantCount = remoteParticipants.length + 1;
   const hasScreenShare = localScreenTrack || remoteScreenTrack;
   const isLocalSharing = !!localScreenTrack;
+
+  // Computed unconditionally (rules-of-hooks) — only consumed by the 3+ branch
+  // below; the callback handles empty remoteParticipants gracefully.
+  const { mainIsLocal, mainRemote, thumbnailRemotes } = useMemo(() => {
+    if (isLocalMain) {
+      return {
+        mainIsLocal: true,
+        mainRemote: null,
+        thumbnailRemotes: remoteParticipants,
+      };
+    }
+    const speakerIdx = activeSpeakerId
+      ? remoteParticipants.findIndex(p =>
+          String(p.id) === activeSpeakerId || String(p.uid) === activeSpeakerId
+        )
+      : -1;
+    const idx = speakerIdx >= 0 ? speakerIdx : 0;
+    return {
+      mainIsLocal: false,
+      mainRemote: remoteParticipants[idx],
+      thumbnailRemotes: remoteParticipants.filter((_, i) => i !== idx),
+    };
+  }, [remoteParticipants, activeSpeakerId, isLocalMain]);
 
   // Screen share layout: screen as main, cameras on the side
   if (hasScreenShare) {
@@ -132,7 +153,7 @@ export default function VideoSpeakerView({
   if (remoteParticipants.length === 1) {
     return (
       <div className="w-full h-full relative">
-        {/* Main video */}
+        {/* Main video — tap returns to grid */}
         {isLocalMain ? (
           <LocalVideo
             ref={localVideoRef}
@@ -148,16 +169,18 @@ export default function VideoSpeakerView({
             isBlurLoading={isBlurLoading}
             onToggleBlur={onToggleBlur}
             blurCanvas={blurCanvas}
+            onClick={onReturnToGrid}
           />
         ) : (
           <RemoteVideo
             participant={remoteParticipants[0]}
             providerType={providerType}
             size="full"
+            onClick={onReturnToGrid}
           />
         )}
 
-        {/* PiP thumbnail - uses aspect-video for correct 16:9 ratio */}
+        {/* PiP thumbnail — tap swaps who is enlarged */}
         <div
           className="absolute top-4 right-4 w-32 sm:w-40 md:w-48 aspect-video shadow-xl z-10 cursor-pointer hover:ring-2 hover:ring-amber-500 rounded-lg overflow-hidden transition-all"
           onClick={onSwap}
@@ -186,27 +209,52 @@ export default function VideoSpeakerView({
     );
   }
 
-  // 3+ participants - Active speaker gets video, others show as audio-only avatars
-  // Sort so active speaker is first; fall back to first remote participant
-  const { mainSpeaker, otherParticipants } = useMemo(() => {
-    const speakerIdx = activeSpeakerId
-      ? remoteParticipants.findIndex(p =>
-          String(p.id) === activeSpeakerId || String(p.uid) === activeSpeakerId
-        )
-      : -1;
-    const idx = speakerIdx >= 0 ? speakerIdx : 0;
-    return {
-      mainSpeaker: remoteParticipants[idx],
-      otherParticipants: remoteParticipants.filter((_, i) => i !== idx),
-    };
-  }, [remoteParticipants, activeSpeakerId]);
-
+  // 3+ participants — main speaker + thumbnail strip.
+  // mainIsLocal / mainRemote / thumbnailRemotes were computed above.
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Thumbnails strip at top - audio-only avatars for non-speakers */}
+      {/* Thumbnails strip at top */}
       <div className="flex gap-2 h-20 sm:h-24 flex-shrink-0 overflow-x-auto pb-2 px-1">
-        {/* Local thumbnail */}
-        <div className="h-full aspect-video flex-shrink-0">
+        {/* Local thumbnail — shown when a remote is the main speaker */}
+        {!mainIsLocal && (
+          <div className="h-full aspect-video flex-shrink-0">
+            <LocalVideo
+              ref={localVideoRef}
+              track={localVideoTrack}
+              providerType={providerType}
+              isVideoOff={isVideoOff}
+              isMuted={isMuted}
+              userName={userName}
+              size="thumbnail"
+              accentColor={accentColor}
+              blurCanvas={blurCanvas}
+              onClick={onSelectSpeaker ? () => onSelectSpeaker('local') : undefined}
+            />
+          </div>
+        )}
+
+        {/* Remote thumbnails — video unsubscribed at SDK level to save bandwidth */}
+        {thumbnailRemotes.map((participant) => {
+          const pid = String(participant.id || participant.uid);
+          return (
+            <div
+              key={participant.id || participant.uid}
+              className="h-full aspect-video flex-shrink-0"
+            >
+              <RemoteVideo
+                participant={participant}
+                providerType={providerType}
+                size="thumbnail"
+                onClick={onSelectSpeaker ? () => onSelectSpeaker(pid) : undefined}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Main speaker — tap returns to grid */}
+      <div className="flex-1 min-h-0">
+        {mainIsLocal ? (
           <LocalVideo
             ref={localVideoRef}
             track={localVideoTrack}
@@ -214,35 +262,24 @@ export default function VideoSpeakerView({
             isVideoOff={isVideoOff}
             isMuted={isMuted}
             userName={userName}
-            size="thumbnail"
-            accentColor={accentColor}
-            blurCanvas={blurCanvas}
-          />
-        </div>
-
-        {/* Non-speaking participants — video unsubscribed at SDK level to save bandwidth */}
-        {otherParticipants.map((participant) => (
-          <div
-            key={participant.id || participant.uid}
-            className="h-full aspect-video flex-shrink-0"
-          >
-            <RemoteVideo
-              participant={participant}
-              providerType={providerType}
-              size="thumbnail"
-            />
-          </div>
-        ))}
-      </div>
-
-      {/* Main speaker - only this person's video is rendered */}
-      <div className="flex-1 min-h-0">
-        {mainSpeaker && (
-          <RemoteVideo
-            participant={mainSpeaker}
-            providerType={providerType}
             size="full"
+            accentColor={accentColor}
+            isBlurEnabled={isBlurEnabled}
+            isBlurSupported={isBlurSupported}
+            isBlurLoading={isBlurLoading}
+            onToggleBlur={onToggleBlur}
+            blurCanvas={blurCanvas}
+            onClick={onReturnToGrid}
           />
+        ) : (
+          mainRemote && (
+            <RemoteVideo
+              participant={mainRemote}
+              providerType={providerType}
+              size="full"
+              onClick={onReturnToGrid}
+            />
+          )
         )}
       </div>
     </div>

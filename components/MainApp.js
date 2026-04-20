@@ -429,17 +429,6 @@ function MainApp({ currentUser, onSignOut }) {
     }
   }, [currentUser?.id])
 
-  // Safety check - if currentUser is not loaded yet, show skeleton
-  if (!currentUser) {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#FDF8F3', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ width: '48px', height: '48px', border: '3px solid rgba(139, 111, 92, 0.15)', borderTopColor: '#8B6F5C', borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px' }} />
-          <p style={{ color: '#A89080', fontSize: '14px', fontFamily: fonts.sans }}>Loading...</p>
-        </div>
-      </div>
-    )
-  }
 
   // Show events that haven't ended yet, with 30-min grace for meetings running over
   const upcomingMeetups = (() => {
